@@ -6,19 +6,19 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from galaxy_mcp.server import (
+from .test_helpers import (
     galaxy_state,
-    get_invocations,
-    get_iwc_workflows,
-    import_workflow_from_iwc,
-    search_iwc_workflows,
+    get_invocations_fn,
+    get_iwc_workflows_fn,
+    import_workflow_from_iwc_fn,
+    search_iwc_workflows_fn,
 )
 
 
 class TestWorkflowOperations:
     """Test workflow operations"""
 
-    def test_get_iwc_workflows(self):
+    def test_get_iwc_workflows_fn(self):
         """Test getting IWC workflows"""
         mock_response = Mock()
         mock_response.json.return_value = [
@@ -32,13 +32,13 @@ class TestWorkflowOperations:
         mock_response.raise_for_status.return_value = None
 
         with patch("requests.get", return_value=mock_response):
-            result = get_iwc_workflows()
+            result = get_iwc_workflows_fn()
 
             assert "workflows" in result
             assert len(result["workflows"]) == 2
             assert result["workflows"][0]["trs_id"] == "workflow1"
 
-    def test_search_iwc_workflows(self):
+    def test_search_iwc_workflows_fn(self):
         """Test searching IWC workflows"""
         # Mock the get_iwc_workflows function since search calls it
         mock_workflows = {
@@ -60,15 +60,15 @@ class TestWorkflowOperations:
             ]
         }
 
-        with patch("galaxy_mcp.server.get_iwc_workflows", return_value=mock_workflows):
-            result = search_iwc_workflows("rna")
+        with patch("galaxy_mcp.server.get_iwc_workflows.fn", return_value=mock_workflows):
+            result = search_iwc_workflows_fn("rna")
 
             assert "workflows" in result
             assert "count" in result
             assert result["count"] == 1
             assert "RNA-seq" in result["workflows"][0]["definition"]["name"]
 
-    def test_import_workflow_from_iwc(self, mock_galaxy_instance):
+    def test_import_workflow_from_iwc_fn(self, mock_galaxy_instance):
         """Test importing workflow from IWC"""
         # Mock the IWC API response
         mock_response = Mock()
@@ -88,12 +88,12 @@ class TestWorkflowOperations:
                     "name": "Test Workflow",
                 }
 
-                result = import_workflow_from_iwc("test-workflow")
+                result = import_workflow_from_iwc_fn("test-workflow")
 
                 assert result["imported_workflow"]["id"] == "imported_workflow_1"
                 assert result["imported_workflow"]["name"] == "Test Workflow"
 
-    def test_get_invocations(self, mock_galaxy_instance):
+    def test_get_invocations_fn(self, mock_galaxy_instance):
         """Test getting workflow invocations"""
         mock_galaxy_instance.invocations.get_invocations.return_value = [
             {"id": "invocation_1", "state": "scheduled"},
@@ -101,7 +101,7 @@ class TestWorkflowOperations:
         ]
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
-            result = get_invocations()
+            result = get_invocations_fn()
 
             assert isinstance(result, dict)
             assert "invocations" in result
@@ -112,9 +112,9 @@ class TestWorkflowOperations:
         """Test workflow operations fail when not connected"""
         with patch.dict(galaxy_state, {"connected": False}):
             with pytest.raises(Exception):
-                get_invocations()
+                get_invocations_fn()
 
             # IWC operations don't require connection
             # But import_workflow_from_iwc does require connection
             with pytest.raises(Exception):
-                import_workflow_from_iwc("test-workflow")
+                import_workflow_from_iwc_fn("test-workflow")

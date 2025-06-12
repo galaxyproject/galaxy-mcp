@@ -8,7 +8,7 @@ from typing import Any
 import requests
 from bioblend.galaxy import GalaxyInstance
 from dotenv import find_dotenv, load_dotenv
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -47,7 +47,7 @@ if dotenv_path:
     print(f"Loaded environment variables from {dotenv_path}")
 
 # Create an MCP server
-mcp = FastMCP("Galaxy", dependencies=["bioblend", "requests"])
+mcp: FastMCP = FastMCP("Galaxy")
 
 # Galaxy client state
 galaxy_state: dict[str, Any] = {
@@ -715,7 +715,7 @@ def search_iwc_workflows(query: str) -> dict[str, Any]:
     """
     try:
         # Get the full manifest
-        manifest = get_iwc_workflows()["workflows"]
+        manifest = get_iwc_workflows.fn()["workflows"]
 
         # Filter workflows based on the search query
         results = []
@@ -754,7 +754,7 @@ def import_workflow_from_iwc(trs_id: str) -> dict[str, Any]:
 
     try:
         # Get the workflow manifest
-        manifest = get_iwc_workflows()["workflows"]
+        manifest = get_iwc_workflows.fn()["workflows"]
 
         # Find the specified workflow
         workflow = None

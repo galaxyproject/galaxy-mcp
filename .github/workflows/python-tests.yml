@@ -35,22 +35,11 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v1
 
-      - name: Create virtual environment
-        run: |
-          uv venv
-          echo "VIRTUAL_ENV=.venv" >> $GITHUB_ENV
-          echo ".venv/bin" >> $GITHUB_PATH
-
       - name: Install dependencies
-        run: |
-          uv pip install -r requirements.txt
-          uv pip install -r requirements-test.txt
-          uv pip install -e .
+        run: uv sync --all-extras
 
-      - name: Lint with ruff
-        run: |
-          uv run ruff check .
-          uv run ruff format --check .
+      - name: Lint with pre-commit
+        run: uv run pre-commit run --all-files --show-diff-on-failure
 
       - name: Test with pytest
         run: |
@@ -70,17 +59,8 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v1
 
-      - name: Create virtual environment
-        run: |
-          uv venv
-          echo "VIRTUAL_ENV=.venv" >> $GITHUB_ENV
-          echo ".venv/bin" >> $GITHUB_PATH
-
       - name: Install dependencies
-        run: |
-          uv pip install -r requirements.txt
-          uv pip install mypy types-requests
-          uv pip install -e .
+        run: uv sync --all-extras
 
       - name: Type check with mypy
         run: uv run mypy src/galaxy_mcp
@@ -100,16 +80,8 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v1
 
-      - name: Create virtual environment
-        run: |
-          uv venv
-          echo "VIRTUAL_ENV=.venv" >> $GITHUB_ENV
-          echo ".venv/bin" >> $GITHUB_PATH
-
-      - name: Install build dependencies
-        run: |
-          uv pip install build
-          uv pip install twine
+      - name: Install dependencies
+        run: uv sync --all-extras
 
       - name: Build package
         run: uv run python -m build

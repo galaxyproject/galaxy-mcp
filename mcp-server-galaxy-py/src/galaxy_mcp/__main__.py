@@ -1,14 +1,12 @@
 """Command-line entry point for Galaxy MCP server."""
 
-import asyncio
-
 from . import server
 
 
 def run():
     """Run the MCP server."""
-    # Use the FastMCP's built-in stdio handler
-    return asyncio.run(server.mcp.run_stdio_async())
+    # Use FastMCP's simplified run method
+    server.mcp.run()
 
 
 if __name__ == "__main__":

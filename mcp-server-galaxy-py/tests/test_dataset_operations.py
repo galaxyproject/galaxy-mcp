@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from galaxy_mcp.server import galaxy_state, upload_file
+from .test_helpers import galaxy_state, upload_file_fn
 
 
 class TestDatasetOperations:
@@ -20,7 +20,7 @@ class TestDatasetOperations:
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             with patch("os.path.exists", return_value=True):
-                result = upload_file("/path/to/test.txt", "test_history_1")
+                result = upload_file_fn("/path/to/test.txt", "test_history_1")
 
                 assert result["outputs"][0]["id"] == "new_dataset_1"
                 assert result["outputs"][0]["name"] == "test.txt"
@@ -31,7 +31,7 @@ class TestDatasetOperations:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             with patch("os.path.exists", return_value=False):
                 with pytest.raises(ValueError, match="File not found"):
-                    upload_file("/nonexistent/file.txt", "test_history_1")
+                    upload_file_fn("/nonexistent/file.txt", "test_history_1")
 
     def test_download_dataset(self, mock_galaxy_instance):
         """Test dataset download"""
@@ -49,7 +49,7 @@ class TestDatasetOperations:
         """Test dataset operations fail when not connected"""
         with patch.dict(galaxy_state, {"connected": False}):
             with pytest.raises(Exception):
-                upload_file("/path/to/file.txt", "history_1")
+                upload_file_fn("/path/to/file.txt", "history_1")
 
             # Download and get_dataset_details don't exist yet
             pass

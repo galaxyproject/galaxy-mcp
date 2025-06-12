@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from galaxy_mcp.server import ensure_connected, galaxy_state, get_server_info
+from .test_helpers import ensure_connected, galaxy_state, get_server_info_fn
 
 
 @pytest.mark.usefixtures("_test_env")
@@ -81,7 +81,7 @@ class TestConnection:
             galaxy_state,
             {"connected": True, "gi": mock_galaxy_instance, "url": "https://galaxy.test/"},
         ):
-            result = get_server_info()
+            result = get_server_info_fn()
 
             # Verify the structure and content
             assert "url" in result
@@ -101,7 +101,7 @@ class TestConnection:
         """Test server info fails when not connected"""
         with patch.dict(galaxy_state, {"connected": False}):
             with pytest.raises(ValueError, match="Not connected to Galaxy"):
-                get_server_info()
+                get_server_info_fn()
 
     def test_get_server_info_api_error(self, mock_galaxy_instance):
         """Test server info handles API errors gracefully"""
@@ -109,4 +109,4 @@ class TestConnection:
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             with pytest.raises(ValueError, match="Failed to get server information"):
-                get_server_info()
+                get_server_info_fn()

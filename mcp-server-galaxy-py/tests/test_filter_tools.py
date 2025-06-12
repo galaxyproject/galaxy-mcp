@@ -4,19 +4,19 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from galaxy_mcp.server import filter_tools_by_dataset, galaxy_state
+from .test_helpers import filter_tools_by_dataset_fn, galaxy_state
 
 
 class TestFilterTools:
     """Test suite for filter_tools_by_dataset function"""
 
-    @pytest.fixture
+    @pytest.fixture()
     def mock_galaxy_instance(self):
         """Create a mock Galaxy instance"""
         mock_gi = MagicMock()
         return mock_gi
 
-    @pytest.fixture
+    @pytest.fixture()
     def mock_tool_panel(self):
         """Create a mock tool panel structure"""
         return [
@@ -58,7 +58,7 @@ class TestFilterTools:
         }
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
-            result = filter_tools_by_dataset(["csv"])
+            result = filter_tools_by_dataset_fn(["csv"])
 
             assert "recommended_tools" in result
             assert "count" in result
@@ -76,7 +76,7 @@ class TestFilterTools:
         }
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
-            result = filter_tools_by_dataset(["csv", "tabular"])
+            result = filter_tools_by_dataset_fn(["csv", "tabular"])
 
             assert "recommended_tools" in result
             assert "count" in result
@@ -100,7 +100,7 @@ class TestFilterTools:
         mock_galaxy_instance.tools.show_tool.side_effect = mock_show_tool
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
-            result = filter_tools_by_dataset(["csv"])
+            result = filter_tools_by_dataset_fn(["csv"])
 
             # Generic tool should be included due to csv extension
             tool_ids = [tool["id"] for tool in result["recommended_tools"]]
@@ -111,7 +111,7 @@ class TestFilterTools:
         """Test that filtering fails when not connected to Galaxy"""
         with patch.dict(galaxy_state, {"connected": False}):
             with pytest.raises(ValueError, match="Not connected to Galaxy"):
-                filter_tools_by_dataset(["csv"])
+                filter_tools_by_dataset_fn(["csv"])
 
     def test_filter_tools_handles_tool_panel_error(self, mock_galaxy_instance):
         """Test error handling when tool panel retrieval fails"""
@@ -119,7 +119,7 @@ class TestFilterTools:
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             with pytest.raises(ValueError, match="Failed to filter tools based on dataset"):
-                filter_tools_by_dataset(["csv"])
+                filter_tools_by_dataset_fn(["csv"])
 
     def test_filter_tools_skips_label_tools(self, mock_galaxy_instance):
         """Test that tools with IDs ending in _label are skipped"""
@@ -136,7 +136,7 @@ class TestFilterTools:
         mock_galaxy_instance.tools.show_tool.return_value = {"inputs": [{"extensions": ["csv"]}]}
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
-            result = filter_tools_by_dataset(["csv"])
+            result = filter_tools_by_dataset_fn(["csv"])
 
             # Only real_tool should be in results
             tool_ids = [tool["id"] for tool in result["recommended_tools"]]
@@ -163,7 +163,7 @@ class TestFilterTools:
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             # Should not raise, just skip the failing tool
-            result = filter_tools_by_dataset(["csv"])
+            result = filter_tools_by_dataset_fn(["csv"])
 
             # Only tool1 should be in results
             tool_ids = [tool["id"] for tool in result["recommended_tools"]]

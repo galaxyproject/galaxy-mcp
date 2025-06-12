@@ -6,7 +6,14 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from galaxy_mcp.server import galaxy_state
+from .test_helpers import (
+    create_history_fn,
+    galaxy_state,
+    import_workflow_from_iwc_fn,
+    list_history_ids_fn,
+    run_tool_fn,
+    upload_file_fn,
+)
 
 
 class TestIntegration:
@@ -16,36 +23,31 @@ class TestIntegration:
         """Test a complete analysis workflow from upload to results"""
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             # 1. Create a new history
-            from galaxy_mcp.server import create_history
-
             mock_galaxy_instance.histories.create_history.return_value = {
                 "id": "new_history_1",
                 "name": "Analysis History",
             }
 
-            history = create_history("Analysis History")
+            history = create_history_fn("Analysis History")
             assert history["id"] == "new_history_1"
 
             # 2. Upload a file
-            from galaxy_mcp.server import upload_file
-
             mock_galaxy_instance.tools.upload_file.return_value = {
                 "outputs": [{"id": "uploaded_dataset_1", "name": "input.fasta"}]
             }
 
             with patch("os.path.exists", return_value=True):
-                dataset = upload_file("/path/to/input.fasta", history["id"])
+                dataset = upload_file_fn("/path/to/input.fasta", history["id"])
                 assert dataset["outputs"][0]["id"] == "uploaded_dataset_1"
 
             # 3. Run a tool on the uploaded file
-            from galaxy_mcp.server import run_tool
 
             mock_galaxy_instance.tools.run_tool.return_value = {
                 "jobs": [{"id": "job_1", "state": "ok"}],
                 "outputs": [{"id": "output_dataset_1", "name": "aligned.bam"}],
             }
 
-            tool_result = run_tool(
+            tool_result = run_tool_fn(
                 history["id"],
                 "bwa",
                 {"input": {"src": "hda", "id": dataset["outputs"][0]["id"]}, "reference": "hg38"},
@@ -59,7 +61,6 @@ class TestIntegration:
         """Test running a complete workflow pipeline"""
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             # 1. Import a workflow
-            from galaxy_mcp.server import import_workflow_from_iwc
 
             mock_response = Mock()
             mock_response.json.return_value = {
@@ -88,17 +89,16 @@ class TestIntegration:
                     "name": "RNA-seq Pipeline",
                 }
 
-                result = import_workflow_from_iwc("workflows/rnaseq-pe")
+                result = import_workflow_from_iwc_fn("workflows/rnaseq-pe")
                 assert result["imported_workflow"]["id"] == "imported_workflow_1"
 
             # 2. Prepare input datasets
-            from galaxy_mcp.server import list_history_ids
 
             mock_galaxy_instance.histories.get_histories.return_value = [
                 {"id": "history_1", "name": "RNA-seq Data"}
             ]
 
-            histories = list_history_ids()
+            histories = list_history_ids_fn()
             histories[0]["id"]
 
             # 3. Workflow execution not directly available in current MCP implementation
@@ -108,16 +108,14 @@ class TestIntegration:
         """Test proper error handling throughout the stack"""
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             # Test error in tool execution cascades properly
-            from galaxy_mcp.server import run_tool
 
             mock_galaxy_instance.tools.run_tool.side_effect = Exception("Tool not found")
 
             with pytest.raises(ValueError, match="Failed to run tool"):
-                run_tool("history_1", "nonexistent_tool", {})
+                run_tool_fn("history_1", "nonexistent_tool", {})
 
             # Test error in workflow import
-            from galaxy_mcp.server import import_workflow_from_iwc
 
             with patch("requests.get", side_effect=Exception("Network error")):
                 with pytest.raises(ValueError, match="Failed to import workflow from IWC"):
-                    import_workflow_from_iwc("nonexistent-workflow")
+                    import_workflow_from_iwc_fn("nonexistent-workflow")

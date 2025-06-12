@@ -6,15 +6,13 @@ This is the Python implementation of the Galaxy MCP server, providing a Model Co
 
 - Complete Galaxy API integration through BioBlend
 - Interactive Workflow Composer (IWC) integration
-- FastMCP server for high-performance operation
+- FastMCP2 server with remote deployment support
 - Type-annotated Python codebase
 
 ## Requirements
 
-- Python 3.12+
-- BioBlend 1.5.0+
-- MCP SDK 1.6.0+
-- Requests 2.32.3+
+- Python 3.10+
+- FastMCP 2.3.0+
 
 ## Installation
 
@@ -24,8 +22,8 @@ This is the Python implementation of the Galaxy MCP server, providing a Model Co
 # Install from PyPI
 pip install galaxy-mcp
 
-# Or using uv package manager
-uv pip install galaxy-mcp
+# Or using uv (recommended)
+uvx galaxy-mcp
 ```
 
 ### From Source
@@ -35,11 +33,8 @@ uv pip install galaxy-mcp
 git clone https://github.com/galaxyproject/galaxy-mcp.git
 cd galaxy-mcp/mcp-server-galaxy-py
 
-# Install in development mode
-pip install -e .
-
-# Or using uv package manager
-uv pip install -e .
+# Install with uv (recommended)
+uv sync --all-extras
 ```
 
 ## Configuration
@@ -63,11 +58,11 @@ The fastest way to run the Galaxy MCP server is using `uvx`:
 # Run the server directly without installation
 uvx galaxy-mcp
 
-# Run with MCP developer tools for interactive exploration
-uvx --from galaxy-mcp mcp dev galaxy_mcp.server
+# Run with FastMCP2 dev tools
+uvx --from galaxy-mcp fastmcp dev src/galaxy_mcp/server.py
 
-# Run as a deployed MCP server
-uvx --from galaxy-mcp mcp run galaxy_mcp.server
+# Run as remote server
+uvx --from galaxy-mcp fastmcp run src/galaxy_mcp/server.py --transport sse --port 8000
 ```
 
 ### As a standalone MCP server
@@ -83,11 +78,9 @@ galaxy-mcp
 ### With MCP clients
 
 ```bash
-# Use with MCP CLI tools
-mcp connect galaxy-mcp
-
-# Use with MCP developer tools
-mcp dev galaxy-mcp
+# Use with FastMCP2 CLI tools
+fastmcp dev src/galaxy_mcp/server.py
+fastmcp run src/galaxy_mcp/server.py
 
 # Use with other MCP-compatible clients
 your-mcp-client galaxy-mcp
@@ -154,7 +147,7 @@ See [tests/README.md](tests/README.md) for more details on the testing strategy.
 
 ### Code Style Guidelines
 
-- Use Python 3.12+ features
+- Use Python 3.10+ features
 - Employ type hints where appropriate
 - Follow PEP 8 style guidelines
 - Use ruff for code formatting and linting
@@ -181,19 +174,13 @@ We use a Makefile for consistent development commands:
 make help
 
 # Install dependencies
-make install        # Install runtime dependencies
-make install-dev    # Install development dependencies
+make install       # Install all dependencies
 
 # Code quality
-make lint          # Run linting checks (via pre-commit)
-make format        # Auto-format code (via pre-commit)
-make format-quick  # Quick format (ruff + prettier only)
-make check         # Run all checks (lint + test)
+make lint          # Format code and run all checks
 
 # Testing
-make test          # Run tests
-make test-cov      # Run tests with coverage report
-make test-watch    # Run tests in watch mode
+make test          # Run tests with coverage
 
 # Building
 make clean         # Clean build artifacts
@@ -201,7 +188,7 @@ make build         # Build distribution packages
 
 # Running
 make run           # Run the MCP server
-make dev           # Run MCP dev server with explorer
+make dev           # Run FastMCP2 dev server
 ```
 
 ### Using uv directly
@@ -209,17 +196,17 @@ make dev           # Run MCP dev server with explorer
 All commands can also be run directly with uv:
 
 ```bash
-# Lint the code
-uv run ruff check .
+# Install dependencies
+uv sync --all-extras
 
-# Format the code
-uv run ruff format .
+# Format and lint code
+uv run pre-commit run --all-files
 
-# Run tests
-uv run pytest
-
-# Run with coverage
+# Run tests with coverage
 uv run pytest --cov=galaxy_mcp --cov-report=html
+
+# Update dependencies
+uv lock --upgrade
 ```
 
 ### Cross-version Testing

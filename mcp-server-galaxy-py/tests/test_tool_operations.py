@@ -6,17 +6,17 @@ from unittest.mock import patch
 
 import pytest
 
-from galaxy_mcp.server import galaxy_state, run_tool, search_tools
+from .test_helpers import galaxy_state, run_tool_fn, search_tools_fn
 
 
 class TestToolOperations:
     """Test tool operations"""
 
-    def test_search_tools(self, mock_galaxy_instance):
+    def test_search_tools_fn(self, mock_galaxy_instance):
         """Test tool search functionality"""
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             # Search should return dict with 'tools' key
-            result = search_tools("")
+            result = search_tools_fn("")
             assert "tools" in result
             assert len(result["tools"]) == 2
             assert result["tools"][0]["id"] == "tool1"
@@ -26,7 +26,7 @@ class TestToolOperations:
                 {"id": "tool1", "name": "Test Tool 1", "description": "Aligns sequences"}
             ]
 
-            result = search_tools("align")
+            result = search_tools_fn("align")
             assert "tools" in result
             assert len(result["tools"]) == 1
             assert "align" in result["tools"][0]["description"].lower()
@@ -53,14 +53,14 @@ class TestToolOperations:
             mock_galaxy_instance.tools.get_tools.side_effect = mock_get_tools
 
             # Search for aligners
-            result = search_tools("align")
+            result = search_tools_fn("align")
             assert "tools" in result
             aligners = result["tools"]
             assert len(aligners) == 2
             assert any("BWA" in t["name"] for t in aligners)
             assert any("HISAT2" in t["name"] for t in aligners)
 
-    def test_run_tool(self, mock_galaxy_instance):
+    def test_run_tool_fn(self, mock_galaxy_instance):
         """Test running a tool"""
         mock_galaxy_instance.tools.run_tool.return_value = {
             "jobs": [{"id": "job_1", "state": "ok"}],
@@ -70,7 +70,7 @@ class TestToolOperations:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             inputs = {"input1": {"src": "hda", "id": "dataset_1"}, "param1": "value1"}
 
-            result = run_tool("test_history_1", "tool1", inputs)
+            result = run_tool_fn("test_history_1", "tool1", inputs)
 
             assert "jobs" in result
             assert result["jobs"][0]["id"] == "job_1"
@@ -89,13 +89,13 @@ class TestToolOperations:
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             with pytest.raises(ValueError, match="Failed to run tool"):
-                run_tool("test_history_1", "tool1", {})
+                run_tool_fn("test_history_1", "tool1", {})
 
     def test_tool_operations_not_connected(self):
         """Test tool operations fail when not connected"""
         with patch.dict(galaxy_state, {"connected": False}):
             with pytest.raises(Exception):
-                search_tools("query")
+                search_tools_fn("query")
 
             with pytest.raises(Exception):
-                run_tool("history_1", "tool1", {})
+                run_tool_fn("history_1", "tool1", {})
