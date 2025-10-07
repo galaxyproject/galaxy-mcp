@@ -102,6 +102,10 @@ The Python implementation provides the following MCP tools:
 - `list_history_ids`: Get simplified list of history IDs and names
 - `get_history_details`: Get detailed information about a specific history
 - `upload_file`: Upload local files to Galaxy
+- `list_workflows`: List available workflows in Galaxy instance
+- `get_workflow_details`: Get detailed information about a specific workflow
+- `invoke_workflow`: Execute/run a workflow with specified inputs
+- `cancel_workflow_invocation`: Cancel a running workflow invocation
 - `get_invocations`: View workflow executions
 - `get_iwc_workflows`: Access Interactive Workflow Composer workflows
 - `search_iwc_workflows`: Search IWC workflows by keywords

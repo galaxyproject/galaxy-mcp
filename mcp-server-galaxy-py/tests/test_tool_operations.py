@@ -88,7 +88,7 @@ class TestToolOperations:
         mock_galaxy_instance.tools.run_tool.side_effect = Exception("Tool execution failed")
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
-            with pytest.raises(ValueError, match="Failed to run tool"):
+            with pytest.raises(ValueError, match="Run tool failed"):
                 run_tool_fn("test_history_1", "tool1", {})
 
     def test_tool_operations_not_connected(self):

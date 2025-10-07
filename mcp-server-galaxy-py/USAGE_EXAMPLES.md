@@ -6,243 +6,194 @@ This document provides common usage patterns and examples for the Galaxy MCP ser
 
 ### 1. Connect to Galaxy
 
-First, you need to establish a connection to your Galaxy instance:
+**User:** "I want to analyze some genomics data. Can you help me connect to my Galaxy server?"
 
-```python
-# Option 1: Use environment variables (recommended)
-# Set GALAXY_URL and GALAXY_API_KEY in your environment or .env file
-connect()
+**AI Assistant:** Absolutely! I can help you connect to Galaxy. I'll need your Galaxy server URL and API key.
+*Uses `connect()` to establish connection to the specified Galaxy instance*
 
-# Option 2: Provide credentials directly
-connect(url="https://your-galaxy-instance.org", api_key="your-api-key")
-```
+"Great! I've successfully connected to your Galaxy instance at https://your-galaxy-instance.org.
 
-#### Get server information
+Let me get some basic information about your server to make sure everything is working properly."
+*Uses `get_server_info()` to retrieve server details*
 
-Once connected, you can retrieve comprehensive information about the Galaxy server:
+"Perfect! Your Galaxy server is running version 23.1 and has the following features available:
+- User registration: Enabled
+- File upload via FTP: Available at ftp.galaxy.org
+- Support resources: https://help.galaxyproject.org/
 
-```python
-server_info = get_server_info()
-# Returns: {
-#   "url": "https://your-galaxy-instance.org/",
-#   "version": {"version_major": "23.1", "version_minor": "1", ...},
-#   "config": {
-#     "brand": "Galaxy",
-#     "allow_user_creation": true,
-#     "enable_quotas": false,
-#     "ftp_upload_site": "ftp.galaxy.org",
-#     "support_url": "https://help.galaxyproject.org/",
-#     ...
-#   }
-# }
-```
+You're all set to start your analysis! What would you like to do first?"
 
 ### 2. Working with Histories
 
-#### List all histories
+**User:** "What histories do I have in my account?"
 
-```python
-histories = get_histories()
-# Returns: [{"id": "abc123", "name": "My Analysis", ...}, ...]
-```
+**AI Assistant:** Let me check your histories.
+*Uses `get_histories()` to retrieve a list of all user histories.*
 
-#### Get just IDs and names (simplified)
+"You have 5 histories. Here are the most recent three:
+- RNA-seq Analysis - 2023-10-27
+- Unnamed history
+- ChIP-seq inputs
 
-```python
-history_list = list_history_ids()
-# Returns: [{"id": "abc123", "name": "My Analysis"}, ...]
-```
+Would you like to see the contents of any of these?"
 
-#### Get history details
+**User:** "Yeah, show me what's in the 'RNA-seq Analysis' one."
 
-```python
-# IMPORTANT: Pass only the ID string, not the entire history object
-history_id = "abc123"  # or history_list[0]["id"]
-details = get_history_details(history_id)
-# Returns: {"history": {...}, "contents": [...]}
-```
+**AI Assistant:** Okay, I'll get the details for that history.
+*Uses `get_history_details()` with the correct history ID.*
 
-### 3. Working with Tools
+"The 'RNA-seq Analysis - 2023-10-27' history contains 8 datasets:
+- `sample1_R1.fastq.gz` (FASTQ file)
+- `sample1_R2.fastq.gz` (FASTQ file)
+- `FastQC on sample1_R1` (HTML report)
+- `FastQC on sample1_R2` (HTML report)
+- `HISAT2 on sample1` (BAM alignment file)
+- `featureCounts on sample1` (Counts file)
+- `DESeq2 results` (Tabular file)
+- `Volcano plot` (Image)
 
-#### Search for tools
+You can ask me to download any of these files, or use them as inputs for a new analysis."
 
-```python
-tools = search_tools("fastqc")
-# Returns: {"tools": [...]}
-```
+### 3. Tool Discovery and Execution
 
-#### Get tool details
+**User:** "I need to check the quality of a FASTQ file I have on my computer. How can I do that?"
 
-```python
-tool_details = get_tool_details("toolshed.g2.bx.psu.edu/repos/devteam/fastqc/fastqc/0.72")
-# Returns: Detailed tool information including parameters
-```
+**AI Assistant:** I can help with that. The best tool for checking FASTQ quality is `FastQC`. I'll walk you through the process.
 
-#### Run a tool
+First, I need you to upload your FASTQ file.
 
-```python
-# First, create or select a history
-history_id = "abc123"
+*Uses `upload_file()` after the user provides the file.*
 
-# Prepare tool inputs (depends on the specific tool)
-inputs = {
-    "input_file": {"src": "hda", "id": "dataset_id"},
-    "param1": "value1"
-}
+"Okay, I've uploaded your file `my_reads.fastq.gz` to a new history.
 
-# Run the tool
-result = run_tool(history_id, tool_id, inputs)
-```
+Now, I will run FastQC on it."
 
-### 4. File Operations
+*Uses `search_tools('fastqc')` to find the tool ID, then `run_tool()` with the uploaded file as input.*
 
-#### Upload a file
+"I've started the FastQC analysis. This should only take a minute. The job is running, and the results will appear in your current history.
 
-```python
-# Upload to default history
-upload_result = upload_file("/path/to/your/file.txt")
+Is there anything else you'd like to do?"
 
-# Upload to specific history
-upload_result = upload_file("/path/to/your/file.txt", history_id="abc123")
-```
+### 4. Workflow Operations
 
-### 5. Workflow Operations
+**User:** "I need a workflow for ChIP-seq analysis. Can you find one for me from the public workflow registries?"
 
-#### Browse IWC workflows
+**AI Assistant:** Of course. I'll search the Interactive Workflow Composer (IWC) for ChIP-seq workflows.
+*Uses `search_iwc_workflows('ChIP-seq')` to find relevant workflows.*
 
-```python
-# Get all workflows from Interactive Workflow Composer
-iwc_workflows = get_iwc_workflows()
+"I found a popular workflow called 'ChIP-seq analysis for paired-end data'. It seems to be a good match.
 
-# Search for specific workflows
-matching_workflows = search_iwc_workflows("RNA-seq")
-```
+Would you like me to import it into your Galaxy account so you can use it?"
 
-#### Import a workflow
+**User:** "Yes, please import it."
 
-```python
-# Import from IWC using TRS ID
-imported = import_workflow_from_iwc("github.com/galaxyproject/iwc/tree/main/workflows/epigenetics/chipseq-pe")
-```
+**AI Assistant:** Okay, I am importing the workflow now.
+*Uses `import_workflow_from_iwc()` with the appropriate workflow ID.*
 
-## Common Patterns
+"The workflow has been successfully imported into your account. You can now see it in your list of available workflows and run it on your data."
 
-### Pattern 1: Complete Analysis Pipeline
+#### Workflow Discovery and Management
 
-```python
-# 1. Connect to Galaxy
-connect()
+**User:** "What workflows are available in my Galaxy instance?"
 
-# 2. Create a new history for the analysis
-new_history = create_history("RNA-seq Analysis")
-history_id = new_history["id"]
+**AI Assistant:** I'll check your available workflows.
+*Uses `list_workflows()` to retrieve user's workflows*
 
-# 3. Upload data files
-upload_file("/data/sample1_R1.fastq", history_id)
-upload_file("/data/sample1_R2.fastq", history_id)
+"You have 12 workflows available. Here are some highlights:
+- RNA-seq Analysis Pipeline v2.1
+- ChIP-seq Peak Calling Workflow
+- Genome Assembly with Quality Control
 
-# 4. Search and run quality control
-qc_tools = search_tools("fastqc")
-tool_id = qc_tools["tools"][0]["id"]
+Would you like details about any specific workflow?"
 
-# 5. Get history contents to find dataset IDs
-history_details = get_history_details(history_id)
-datasets = history_details["contents"]
+**User:** "Tell me about the RNA-seq workflow"
 
-# 6. Run FastQC on uploaded files
-for dataset in datasets:
-    if dataset["extension"] == "fastq":
-        inputs = {"input_file": {"src": "hda", "id": dataset["id"]}}
-        run_tool(history_id, tool_id, inputs)
-```
+**AI Assistant:** Let me get the details of that workflow for you.
+*Uses `get_workflow_details()` with the RNA-seq workflow ID*
 
-### Pattern 2: Working with Existing Data
+"The RNA-seq Analysis Pipeline v2.1 has 8 steps:
+1. Input: Raw FASTQ files (paired-end reads)
+2. Quality control with FastQC
+3. Trimming with Trim Galore
+4. Alignment with HISAT2
+5. Quantification with featureCounts
+6. Differential expression with DESeq2
+7. Visualization plots
+8. Summary report
 
-```python
-# 1. Connect and list histories
-connect()
-histories = list_history_ids()
+This workflow requires paired-end RNA-seq FASTQ files as input. Would you like to run this workflow?"
 
-# 2. Find a specific history
-target_history = None
-for h in histories:
-    if "Project X" in h["name"]:
-        target_history = h
-        break
+#### Running Workflows
 
-if target_history:
-    # 3. Get history details
-    details = get_history_details(target_history["id"])
+**User:** "I want to run the RNA-seq workflow on my uploaded FASTQ files"
 
-    # 4. Find specific datasets
-    for item in details["contents"]:
-        if item["name"] == "results.txt":
-            print(f"Found results: {item['id']}")
-```
+**AI Assistant:** I'll help you run that workflow. Let me first check your uploaded files and set up the analysis.
+*Uses `get_history_contents()` to find FASTQ files, then `invoke_workflow()` with appropriate inputs*
 
-## Error Handling
+"I found your paired FASTQ files:
+- sample1_R1.fastq.gz
+- sample1_R2.fastq.gz
 
-### Common Issues and Solutions
+I'm now starting the RNA-seq workflow with these inputs. The workflow has been submitted with invocation ID: inv_abc123.
 
-1. **"History ID invalid" error**
+The workflow is currently in 'scheduled' state. I'll monitor its progress for you."
 
-    - Problem: Passing the entire history object instead of just the ID
-    - Solution: Use `history["id"]` not `history`
+**User:** "How is my workflow doing?"
 
-2. **"Not connected to Galaxy" error**
+**AI Assistant:** Let me check the status of your RNA-seq workflow.
+*Uses `get_invocations()` to check workflow progress*
 
-    - Problem: Trying to use tools before connecting
-    - Solution: Always call `connect()` first
+"Your workflow (invocation inv_abc123) is currently 'running':
+- Steps 1-3: Completed ✓
+- Step 4: Currently running (HISAT2 alignment)
+- Steps 5-8: Waiting
 
-3. **"Tool not found" error**
-    - Problem: Using incorrect tool ID format
-    - Solution: Use the full tool ID from `search_tools()` or `get_tool_panel()`
+The workflow is progressing normally. The alignment step typically takes 15-30 minutes depending on data size."
 
-## Best Practices
+#### Workflow Management and Troubleshooting
 
-1. **Always connect first**: Before using any other tools, establish a connection
-2. **Use IDs correctly**: When functions ask for an ID, pass just the ID string, not the entire object
-3. **Check return types**: Some functions return lists, others return dictionaries
-4. **Handle errors gracefully**: Wrap operations in try-except blocks
-5. **Use environment variables**: Store credentials in .env file for security
+**User:** "Something seems wrong with my workflow, it's been running for hours. Can you cancel it?"
 
-## Advanced Usage
+**AI Assistant:** Let me check the workflow status and cancel it if needed.
+*Uses `get_invocations()` to check status, then `cancel_workflow_invocation()` if appropriate*
 
-### Custom Tool Parameters
+"I can see your workflow has been stuck in the alignment step for 3 hours, which is unusual. I've cancelled the workflow invocation (inv_abc123).
 
-Different tools require different input formats. Here's how to determine the correct format:
+The issue might be:
+- Input files are very large
+- Server resources are limited
+- There may be a parameter issue
 
-```python
-# 1. Get tool details to see required parameters
-tool_info = get_tool_details(tool_id, io_details=True)
+Would you like me to help you restart the workflow with adjusted parameters, or would you prefer to check the input data first?"
 
-# 2. Examine the inputs section
-for input_param in tool_info["inputs"]:
-    print(f"Parameter: {input_param['name']}")
-    print(f"Type: {input_param['type']}")
-    print(f"Optional: {input_param.get('optional', False)}")
-```
+#### Complete Analysis Workflow
 
-### Working with Collections
+**User:** "I have some new RNA-seq data. Can you help me run a complete analysis from start to finish?"
 
-Galaxy collections group related datasets. Here's how to work with them:
+**AI Assistant:** Absolutely! I'll guide you through a complete RNA-seq analysis workflow. Let me help you set this up step by step.
 
-```python
-# Check if a history item is a collection
-history_details = get_history_details(history_id)
-for item in history_details["contents"]:
-    if item["history_content_type"] == "dataset_collection":
-        print(f"Collection: {item['name']}")
-        print(f"Collection type: {item['collection_type']}")
-```
+*Uses multiple MCP tools: `create_history()`, `upload_file()`, `search_iwc_workflows()`, `get_workflow_details()`, `invoke_workflow()`, `get_invocations()`*
 
-## Troubleshooting
+"Here's what I'll do:
+1. ✓ Created new history: 'RNA-seq Analysis - [Date]'
+2. ✓ Uploaded your FASTQ files (2 files detected)
+3. ✓ Found optimal workflow: 'RNA-seq differential expression' from IWC
+4. ✓ Started workflow execution (invocation: inv_def456)
 
-If you encounter issues:
+Your analysis is now running! The workflow includes:
+- Quality control and trimming
+- Alignment to reference genome
+- Gene expression quantification
+- Differential expression analysis
+- Result visualization
 
-1. Check the logs for detailed error messages
-2. Verify your Galaxy URL ends with a slash (/)
-3. Ensure your API key has the necessary permissions
-4. Test with simple operations first (e.g., `get_user()`)
+I'll notify you when each major step completes. The full analysis typically takes 1-2 hours."
 
-For more help, consult the Galaxy API documentation or the MCP server logs.
+## General Advice and Troubleshooting
+
+Here are some general tips for building a robust agent using this MCP server:
+
+- **Always Connect First:** Ensure the `connect()` tool is called successfully before any other tools are used.
+- **Use IDs Correctly:** Many tools require an ID for a history, dataset, or workflow. Make sure to extract and use the specific ID string from the objects returned by other tools.
+- **Handle Errors Gracefully:** The tools will return error messages for common problems like invalid IDs, missing data, or connection issues. Your agent should be designed to catch these errors and report them to the user in a helpful way.
+- **Check Server Logs:** If you encounter unexpected issues, the MCP server logs are the best place to look for detailed error messages and clues about what went wrong.

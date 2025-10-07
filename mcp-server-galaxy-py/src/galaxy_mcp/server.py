@@ -177,10 +177,7 @@ def search_tools(query: str) -> dict[str, Any]:
         tools = galaxy_state["gi"].tools.get_tools(name=query)
         return {"tools": tools}
     except Exception as e:
-        raise ValueError(
-            f"Failed to search tools with query '{query}': {str(e)}. "
-            "Check that the Galaxy instance is accessible and the tool name is correct."
-        ) from e
+        raise ValueError(format_error("Search tools", e, {"query": query})) from e
 
 
 @mcp.tool()
@@ -203,9 +200,7 @@ def get_tool_details(tool_id: str, io_details: bool = False) -> dict[str, Any]:
         return tool_info
     except Exception as e:
         raise ValueError(
-            f"Failed to get tool details for ID '{tool_id}': {str(e)}. "
-            "Verify the tool ID is correct and the tool is installed on this "
-            "Galaxy instance."
+            format_error("Get tool details", e, {"tool_id": tool_id, "io_details": io_details})
         ) from e
 
 
@@ -235,7 +230,7 @@ def get_tool_citations(tool_id: str) -> dict[str, Any]:
             "citations": citations,
         }
     except Exception as e:
-        raise ValueError(f"Failed to get tool citations: {str(e)}") from e
+        raise ValueError(format_error("Get tool citations", e, {"tool_id": tool_id})) from e
 
 
 @mcp.tool()
@@ -260,15 +255,11 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> dict[str,
         result = galaxy_state["gi"].tools.run_tool(history_id, tool_id, inputs)
         return result
     except Exception as e:
-        error_msg = f"Failed to run tool '{tool_id}' in history '{history_id}': {str(e)}"
-        if "400" in str(e) or "bad request" in str(e).lower():
-            error_msg += " Check that all required tool parameters are provided correctly."
-        elif "404" in str(e):
-            error_msg += " Verify the tool ID and history ID are valid."
-        else:
-            error_msg += " Check the tool inputs format matches the tool's requirements."
-
-        raise ValueError(error_msg) from e
+        raise ValueError(
+            format_error(
+                "Run tool", e, {"history_id": history_id, "tool_id": tool_id, "inputs": inputs}
+            )
+        ) from e
 
 
 @mcp.tool()
@@ -286,7 +277,7 @@ def get_tool_panel() -> dict[str, Any]:
         tool_panel = galaxy_state["gi"].tools.get_tool_panel()
         return {"tool_panel": tool_panel}
     except Exception as e:
-        raise ValueError(f"Failed to get tool panel: {str(e)}") from e
+        raise ValueError(format_error("Get tool panel", e)) from e
 
 
 @mcp.tool()
@@ -1158,6 +1149,145 @@ def import_workflow_from_iwc(trs_id: str) -> dict[str, Any]:
         return {"imported_workflow": imported_workflow}
     except Exception as e:
         raise ValueError(f"Failed to import workflow from IWC: {str(e)}") from e
+
+
+@mcp.tool()
+def list_workflows(
+    workflow_id: str | None = None, name: str | None = None, published: bool = False
+) -> dict[str, Any]:
+    """
+    List workflows available in the Galaxy instance
+
+    Args:
+        workflow_id: Specific workflow ID to get (optional) - a hexadecimal hash string
+        name: Filter workflows by name (optional)
+        published: Include published workflows (default: False, shows only user workflows)
+
+    Returns:
+        Dictionary containing list of workflows with their IDs, names, and metadata
+    """
+    ensure_connected()
+
+    try:
+        workflows = galaxy_state["gi"].workflows.get_workflows(
+            workflow_id=workflow_id, name=name, published=published
+        )
+        return {"workflows": workflows}
+    except Exception as e:
+        raise ValueError(
+            format_error(
+                "List workflows",
+                e,
+                {"workflow_id": workflow_id, "name": name, "published": published},
+            )
+        ) from e
+
+
+@mcp.tool()
+def get_workflow_details(workflow_id: str, version: int | None = None) -> dict[str, Any]:
+    """
+    Get detailed information about a specific workflow
+
+    Args:
+        workflow_id: ID of the workflow to get details for - a hexadecimal hash string
+        version: Specific version of the workflow (optional, uses latest if not specified)
+
+    Returns:
+        Dictionary containing detailed workflow information including steps, inputs, and parameters
+    """
+    ensure_connected()
+
+    try:
+        workflow = galaxy_state["gi"].workflows.show_workflow(
+            workflow_id=workflow_id, version=version
+        )
+        return {"workflow": workflow}
+    except Exception as e:
+        raise ValueError(
+            format_error(
+                "Get workflow details", e, {"workflow_id": workflow_id, "version": version}
+            )
+        ) from e
+
+
+@mcp.tool()
+def invoke_workflow(
+    workflow_id: str,
+    inputs: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
+    history_id: str | None = None,
+    history_name: str | None = None,
+    inputs_by: str = "step_index",
+    parameters_normalized: bool = False,
+) -> dict[str, Any]:
+    """
+    Invoke (run) a workflow with specified inputs and parameters
+
+    Args:
+        workflow_id: ID of the workflow to invoke - a hexadecimal hash string
+        inputs: Mapping of workflow inputs to datasets. Format:
+               {'step_index': {'id': 'dataset_id', 'src': 'hda'}} where src can be:
+               - 'hda' for HistoryDatasetAssociation
+               - 'hdca' for HistoryDatasetCollectionAssociation
+               - 'ldda' for LibraryDatasetDatasetAssociation
+               - 'ld' for LibraryDataset
+        params: Tool parameter overrides as a nested dictionary
+        history_id: ID of history to store workflow outputs (optional)
+        history_name: Name for new history to create (ignored if history_id provided)
+        inputs_by: How to identify workflow inputs - 'step_index', 'step_uuid', or 'name'
+        parameters_normalized: Whether parameters are already in normalized format
+
+    Returns:
+        Dictionary containing workflow invocation information including invocation ID
+    """
+    ensure_connected()
+
+    try:
+        invocation = galaxy_state["gi"].workflows.invoke_workflow(
+            workflow_id=workflow_id,
+            inputs=inputs,
+            params=params,
+            history_id=history_id,
+            history_name=history_name,
+            inputs_by=inputs_by,
+            parameters_normalized=parameters_normalized,
+        )
+        return {"invocation": invocation}
+    except Exception as e:
+        raise ValueError(
+            format_error(
+                "Invoke workflow",
+                e,
+                {
+                    "workflow_id": workflow_id,
+                    "history_id": history_id,
+                    "history_name": history_name,
+                    "inputs_by": inputs_by,
+                },
+            )
+        ) from e
+
+
+@mcp.tool()
+def cancel_workflow_invocation(invocation_id: str) -> dict[str, Any]:
+    """
+    Cancel a running workflow invocation
+
+    Args:
+        invocation_id: ID of the workflow invocation to cancel - a hexadecimal hash string
+
+    Returns:
+        Dictionary containing cancellation status and updated invocation information
+    """
+    ensure_connected()
+
+    try:
+        result = galaxy_state["gi"].workflows.cancel_invocation(invocation_id)
+        return {"cancelled": True, "invocation": result}
+    except Exception as e:
+        raise ValueError(
+            format_error("Cancel workflow invocation", e, {"invocation_id": invocation_id})
+        ) from e
 
 
 if __name__ == "__main__":

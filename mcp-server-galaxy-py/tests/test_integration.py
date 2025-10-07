@@ -111,7 +111,7 @@ class TestIntegration:
 
             mock_galaxy_instance.tools.run_tool.side_effect = Exception("Tool not found")
 
-            with pytest.raises(ValueError, match="Failed to run tool"):
+            with pytest.raises(ValueError, match="Run tool failed"):
                 run_tool_fn("history_1", "nonexistent_tool", {})
 
             # Test error in workflow import
