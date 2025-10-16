@@ -318,7 +318,8 @@ Create a `.env` file for local development:
 
 ```bash
 GALAXY_URL=https://your-galaxy-instance.org
-GALAXY_API_KEY=your-api-key
+GALAXY_MCP_PUBLIC_URL=https://your-public-hostname
+GALAXY_MCP_SESSION_SECRET=optional-but-recommended-secret
 ```
 
 ### Debug Mode

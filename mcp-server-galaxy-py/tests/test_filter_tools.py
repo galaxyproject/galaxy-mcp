@@ -53,6 +53,7 @@ class TestFilterTools:
     def test_filter_tools_by_dataset_single_keyword(self, mock_galaxy_instance, mock_tool_panel):
         """Test filtering with a single dataset type keyword"""
         mock_galaxy_instance.tools.get_tool_panel.return_value = mock_tool_panel
+        mock_galaxy_instance.tools.show_tool.side_effect = None
         mock_galaxy_instance.tools.show_tool.return_value = {
             "inputs": [{"extensions": ["txt", "data"]}]
         }
@@ -71,6 +72,7 @@ class TestFilterTools:
     def test_filter_tools_by_dataset_multiple_keywords(self, mock_galaxy_instance, mock_tool_panel):
         """Test filtering with multiple dataset type keywords"""
         mock_galaxy_instance.tools.get_tool_panel.return_value = mock_tool_panel
+        mock_galaxy_instance.tools.show_tool.side_effect = None
         mock_galaxy_instance.tools.show_tool.return_value = {
             "inputs": [{"extensions": ["txt", "data"]}]
         }
@@ -133,6 +135,7 @@ class TestFilterTools:
         ]
 
         mock_galaxy_instance.tools.get_tool_panel.return_value = mock_tool_panel
+        mock_galaxy_instance.tools.show_tool.side_effect = None
         mock_galaxy_instance.tools.show_tool.return_value = {"inputs": [{"extensions": ["csv"]}]}
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):

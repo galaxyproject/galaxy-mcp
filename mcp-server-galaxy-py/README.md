@@ -39,14 +39,20 @@ uv sync --all-extras
 
 ## Configuration
 
-The server requires Galaxy credentials to connect to an instance. You can provide these via environment variables:
+The server needs to know which Galaxy instance to target. Configure it via environment variables:
 
 ```bash
 export GALAXY_URL=<galaxy_url>
-export GALAXY_API_KEY=<galaxy_api_key>
+export GALAXY_MCP_PUBLIC_URL=https://your-public-hostname
+# Optional but recommended: persist session encryption across restarts
+export GALAXY_MCP_SESSION_SECRET="random-long-secret"
 ```
 
 Alternatively, create a `.env` file in the project root with these variables.
+
+### OAuth Sign-In (ChatGPT and other MCP clients)
+
+When `GALAXY_URL` and `GALAXY_MCP_PUBLIC_URL` are set, the server exposes OAuth endpoints that prompt users to authenticate with their Galaxy username/password. Successful logins generate short-lived access tokens bound to the Galaxy instance and cached API keys that expire after three days of inactivity. The cached keys never leave the server—tool executions automatically use the active OAuth session.
 
 ## Usage
 
@@ -93,10 +99,11 @@ See [USAGE_EXAMPLES.md](USAGE_EXAMPLES.md) for detailed usage patterns and commo
 The Python implementation provides the following MCP tools:
 
 - `connect`: Establish connection to a Galaxy instance
-- `search_tools`: Find Galaxy tools by name
-- `get_tool_details`: Retrieve detailed tool information
+- `search`: Discover Galaxy resources (tools, histories, workflows, datasets, etc.)
+- `fetch`: Retrieve metadata for a resource returned by `search`
+- `get_tool_citations`: Fetch citation details for a tool using its search-scoped identifier
 - `run_tool`: Execute a Galaxy tool with parameters
-- `get_tool_panel`: Retrieve the Galaxy tool panel structure
+- `filter_tools_by_dataset`: Recommend tools based on dataset characteristics
 - `get_user`: Get current user information
 - `get_histories`: List available Galaxy histories
 - `list_history_ids`: Get simplified list of history IDs and names

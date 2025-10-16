@@ -6,15 +6,10 @@ This document provides common usage patterns and examples for the Galaxy MCP ser
 
 ### 1. Connect to Galaxy
 
-First, you need to establish a connection to your Galaxy instance:
+First, make sure you have authenticated via the MCP client's OAuth flow (e.g., ChatGPT will prompt you). With an active session you can confirm connectivity:
 
 ```python
-# Option 1: Use environment variables (recommended)
-# Set GALAXY_URL and GALAXY_API_KEY in your environment or .env file
 connect()
-
-# Option 2: Provide credentials directly
-connect(url="https://your-galaxy-instance.org", api_key="your-api-key")
 ```
 
 #### Get server information
@@ -67,15 +62,31 @@ details = get_history_details(history_id)
 #### Search for tools
 
 ```python
-tools = search_tools("fastqc")
-# Returns: {"tools": [...]}
+tool_search = search(term="fastqc", sources=["tools"])
+tool_hits = [item for item in tool_search["results"] if item["source"] == "tools"]
+first_tool = tool_hits[0]
+tool_versions = first_tool["metadata"]["versions"]
+# Each version entry holds the Galaxy tool ID and a resource_id for fetch calls.
 ```
 
-#### Get tool details
+#### Get tool metadata
 
 ```python
-tool_details = get_tool_details("toolshed.g2.bx.psu.edu/repos/devteam/fastqc/fastqc/0.72")
-# Returns: Detailed tool information including parameters
+# Fetch aggregated metadata (all versions)
+tool_metadata = fetch(first_tool["id"])
+all_versions = tool_metadata["metadata"]["versions"]
+
+# Fetch metadata for a specific version
+latest_version = tool_versions[0]
+latest_version_metadata = fetch(latest_version["resource_id"])
+# Per-version details are returned under metadata["versions"][0]["details"]
+```
+
+#### Get tool citations
+
+```python
+tool_citations = get_tool_citations(first_tool["id"])
+# Returns: {"tool_name": "FastQC", "tool_version": "0.72", "citations": [...]}
 ```
 
 #### Run a tool
@@ -89,6 +100,11 @@ inputs = {
     "input_file": {"src": "hda", "id": "dataset_id"},
     "param1": "value1"
 }
+
+# Find the Galaxy tool ID for the desired version
+tool_search = search(term="fastqc", sources=["tools"])
+tool_versions = tool_search["results"][0]["metadata"]["versions"]
+tool_id = tool_versions[0]["id"]  # e.g. 'toolshed.../fastqc/fastqc/0.72'
 
 # Run the tool
 result = run_tool(history_id, tool_id, inputs)
@@ -142,8 +158,9 @@ upload_file("/data/sample1_R1.fastq", history_id)
 upload_file("/data/sample1_R2.fastq", history_id)
 
 # 4. Search and run quality control
-qc_tools = search_tools("fastqc")
-tool_id = qc_tools["tools"][0]["id"]
+search_response = search(term="fastqc", sources=["tools"])
+qc_hit = next(item for item in search_response["results"] if item["source"] == "tool")
+tool_id = qc_hit["id"].split(":", 1)[1]
 
 # 5. Get history contents to find dataset IDs
 history_details = get_history_details(history_id)
@@ -196,7 +213,7 @@ if target_history:
 
 3. **"Tool not found" error**
     - Problem: Using incorrect tool ID format
-    - Solution: Use the full tool ID from `search_tools()` or `get_tool_panel()`
+    - Solution: Use `search(term=..., sources=["tools"])` and take the Galaxy tool ID from `result["metadata"]["versions"][0]["id"]`
 
 ## Best Practices
 
@@ -213,8 +230,10 @@ if target_history:
 Different tools require different input formats. Here's how to determine the correct format:
 
 ```python
-# 1. Get tool details to see required parameters
-tool_info = get_tool_details(tool_id, io_details=True)
+# 1. Find the tool via search and fetch metadata for the desired version
+tool_hit = search(term="bwa", sources=["tools"])["results"][0]
+selected_version = tool_hit["metadata"]["versions"][0]
+tool_info = fetch(selected_version["resource_id"])["metadata"]["versions"][0]["details"]
 
 # 2. Examine the inputs section
 for input_param in tool_info["inputs"]:

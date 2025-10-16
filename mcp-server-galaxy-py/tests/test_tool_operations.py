@@ -6,59 +6,49 @@ from unittest.mock import patch
 
 import pytest
 
-from .test_helpers import galaxy_state, run_tool_fn, search_tools_fn
+from .test_helpers import galaxy_state, get_tool_citations_fn, run_tool_fn
 
 
 class TestToolOperations:
     """Test tool operations"""
 
-    def test_search_tools_fn(self, mock_galaxy_instance):
-        """Test tool search functionality"""
-        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
-            # Search should return dict with 'tools' key
-            result = search_tools_fn("")
-            assert "tools" in result
-            assert len(result["tools"]) == 2
-            assert result["tools"][0]["id"] == "tool1"
-
-            # Search with query
-            mock_galaxy_instance.tools.get_tools.return_value = [
-                {"id": "tool1", "name": "Test Tool 1", "description": "Aligns sequences"}
-            ]
-
-            result = search_tools_fn("align")
-            assert "tools" in result
-            assert len(result["tools"]) == 1
-            assert "align" in result["tools"][0]["description"].lower()
-
-    def test_search_tools_with_results(self, mock_galaxy_instance):
-        """Test search tools returns filtered results"""
-        all_tools = [
-            {"id": "tool1", "name": "BWA Aligner", "description": "Aligns sequences"},
-            {"id": "tool2", "name": "Samtools", "description": "Process BAM files"},
-            {"id": "tool3", "name": "HISAT2", "description": "Fast aligner"},
-        ]
+    def test_get_tool_citations_scoped_id(self, mock_galaxy_instance):
+        """Tool citations should accept scoped IDs returned by search."""
+        mock_galaxy_instance.tools.show_tool.return_value = {
+            "name": "FastQC",
+            "version": "0.72",
+            "citations": [{"title": "FastQC citation"}],
+        }
+        mock_galaxy_instance.tools.show_tool.side_effect = None
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
-            # Mock filtering behavior
-            def mock_get_tools(name=None):
-                if name and name.lower() == "align":
-                    return [
-                        t
-                        for t in all_tools
-                        if "align" in t["name"].lower() or "align" in t["description"].lower()
-                    ]
-                return all_tools
+            result = get_tool_citations_fn("tools:toolshed.g2/fastqc")
 
-            mock_galaxy_instance.tools.get_tools.side_effect = mock_get_tools
+        assert result["tool_name"] == "FastQC"
+        assert result["tool_version"] == "0.72"
+        assert result["citations"] == [{"title": "FastQC citation"}]
+        mock_galaxy_instance.tools.show_tool.assert_called_once_with("toolshed.g2/fastqc")
 
-            # Search for aligners
-            result = search_tools_fn("align")
-            assert "tools" in result
-            aligners = result["tools"]
-            assert len(aligners) == 2
-            assert any("BWA" in t["name"] for t in aligners)
-            assert any("HISAT2" in t["name"] for t in aligners)
+    def test_get_tool_citations_plain_id(self, mock_galaxy_instance):
+        """Plain tool identifiers remain supported for backward compatibility."""
+        mock_galaxy_instance.tools.show_tool.return_value = {
+            "name": "FastQC",
+            "version": "0.72",
+            "citations": [],
+        }
+        mock_galaxy_instance.tools.show_tool.side_effect = None
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_tool_citations_fn("toolshed.g2/fastqc")
+
+        assert result["tool_name"] == "FastQC"
+        mock_galaxy_instance.tools.show_tool.assert_called_once_with("toolshed.g2/fastqc")
+
+    def test_get_tool_citations_invalid_scope(self, mock_galaxy_instance):
+        """Invalid scoped IDs should raise a helpful error."""
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError, match="Tool resource identifiers"):
+                get_tool_citations_fn("histories:abc123")
 
     def test_run_tool_fn(self, mock_galaxy_instance):
         """Test running a tool"""
@@ -95,7 +85,7 @@ class TestToolOperations:
         """Test tool operations fail when not connected"""
         with patch.dict(galaxy_state, {"connected": False}):
             with pytest.raises(Exception):
-                search_tools_fn("query")
+                get_tool_citations_fn("tools:abc")
 
             with pytest.raises(Exception):
                 run_tool_fn("history_1", "tool1", {})

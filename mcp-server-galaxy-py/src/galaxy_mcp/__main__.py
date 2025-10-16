@@ -1,12 +1,11 @@
 """Command-line entry point for Galaxy MCP server."""
 
-from . import server
+from .server import run_http_server
 
 
-def run():
-    """Run the MCP server."""
-    # Use FastMCP's simplified run method
-    server.mcp.run()
+def run() -> None:
+    """Run the MCP server using HTTP-based transport."""
+    run_http_server()
 
 
 if __name__ == "__main__":

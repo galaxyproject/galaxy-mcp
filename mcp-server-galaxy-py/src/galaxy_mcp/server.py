@@ -3,15 +3,28 @@ import concurrent.futures
 import logging
 import os
 import threading
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any
+import types
 
 import requests
 from bioblend.galaxy import GalaxyInstance
 from dotenv import find_dotenv, load_dotenv
 from fastmcp import FastMCP
+from mcp.server.auth.middleware.auth_context import get_access_token
+
+from galaxy_mcp.auth import (
+    GalaxyOAuthProvider,
+    configure_auth_provider,
+    get_active_session,
+)
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 # Set up logging
-logging.basicConfig(level=logging.INFO)
+logging_level = os.environ.get("GALAXY_MCP_LOG_LEVEL", "INFO").upper()
+logging.basicConfig(level=getattr(logging, logging_level, logging.INFO))
 logger = logging.getLogger(__name__)
 
 
@@ -46,185 +59,1074 @@ if dotenv_path:
     load_dotenv(dotenv_path)
     print(f"Loaded environment variables from {dotenv_path}")
 
-# Create an MCP server
-mcp: FastMCP = FastMCP("Galaxy")
-
-# Galaxy client state
+# Galaxy configuration (target Galaxy instance)
+raw_galaxy_url = os.environ.get("GALAXY_URL")
+normalized_galaxy_url = raw_galaxy_url if not raw_galaxy_url or raw_galaxy_url.endswith("/") else f"{raw_galaxy_url}/"
 galaxy_state: dict[str, Any] = {
-    "url": os.environ.get("GALAXY_URL"),
-    "api_key": os.environ.get("GALAXY_API_KEY"),
+    "url": normalized_galaxy_url,
+    "api_key": None,
     "gi": None,
     "connected": False,
 }
 
-
-# Initialize Galaxy client if environment variables are set
-if galaxy_state["url"] and galaxy_state["api_key"]:
+# Configure OAuth provider if Galaxy URL and public URL are specified
+public_base_url = os.environ.get("GALAXY_MCP_PUBLIC_URL")
+session_secret = os.environ.get("GALAXY_MCP_SESSION_SECRET")
+client_registry_path_env = os.environ.get("GALAXY_MCP_CLIENT_REGISTRY")
+default_registry_path = Path.home() / ".galaxy-mcp" / "clients.json"
+client_registry_path = (
+    Path(client_registry_path_env).expanduser()
+    if client_registry_path_env
+    else default_registry_path
+)
+auth_provider: GalaxyOAuthProvider | None = None
+if public_base_url and normalized_galaxy_url:
     try:
-        galaxy_url = (
-            galaxy_state["url"] if galaxy_state["url"].endswith("/") else f"{galaxy_state['url']}/"
+        auth_provider = GalaxyOAuthProvider(
+            base_url=public_base_url,
+            galaxy_url=normalized_galaxy_url,
+            session_secret=session_secret,
+            client_registry_path=client_registry_path,
         )
-        galaxy_state["url"] = galaxy_url
-        galaxy_state["gi"] = GalaxyInstance(url=galaxy_url, key=galaxy_state["api_key"])
-        galaxy_state["connected"] = True
-        logger.info(f"Galaxy client initialized from environment variables (URL: {galaxy_url})")
-    except Exception as e:
-        logger.warning(f"Failed to initialize Galaxy client from environment variables: {e}")
-        logger.warning("You'll need to use connect() to establish a connection.")
+        configure_auth_provider(auth_provider)
+        logger.info("OAuth login enabled for Galaxy at %s", normalized_galaxy_url)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.error("Failed to initialize OAuth provider: %s", exc, exc_info=True)
+elif public_base_url and not normalized_galaxy_url:
+    logger.warning(
+        "GALAXY_MCP_PUBLIC_URL is set but GALAXY_URL is missing. OAuth login is disabled until GALAXY_URL is configured."
+    )
+elif not public_base_url:
+    logger.info("GALAXY_MCP_PUBLIC_URL not set. OAuth login is disabled; falling back to API key authentication.")
+
+# Create an MCP server (with auth if available)
+mcp: FastMCP = FastMCP("Galaxy", auth=auth_provider)
 
 
-def ensure_connected():
-    """Helper function to ensure Galaxy connection is established"""
-    if not galaxy_state["connected"] or not galaxy_state["gi"]:
+class _PreflightMiddleware(BaseHTTPMiddleware):
+    """Allow browser CORS preflight requests to bypass FastMCP auth handling."""
+
+    async def dispatch(self, request, call_next):
+        origin = request.headers.get("origin", "*")
+        allow_methods = request.headers.get(
+            "access-control-request-method", "POST,GET,OPTIONS"
+        )
+        allow_headers = request.headers.get(
+            "access-control-request-headers", "authorization,content-type"
+        )
+
+        cors_headers = {
+            "access-control-allow-origin": origin,
+            "access-control-allow-methods": allow_methods,
+            "access-control-allow-headers": allow_headers,
+            "access-control-max-age": "600",
+        }
+
+        if request.method.upper() == "OPTIONS":
+            return Response(status_code=204, headers=cors_headers)
+
+        response = await call_next(request)
+        for header, value in cors_headers.items():
+            response.headers.setdefault(header, value)
+        return response
+
+
+_original_http_app = FastMCP.http_app
+
+
+def _http_app_with_preflight(self, *args, **kwargs):
+    app = _original_http_app(self, *args, **kwargs)
+    app.add_middleware(_PreflightMiddleware)
+    return app
+
+
+mcp.http_app = types.MethodType(_http_app_with_preflight, mcp)
+
+
+SEARCHABLE_SOURCES: tuple[str, ...] = (
+    "histories",
+    "tools",
+    "workflows",
+    "datasets",
+    "dataset_collections",
+    "libraries",
+    "library_datasets",
+    "jobs",
+    "invocations",
+)
+
+SOURCE_ALIASES: dict[str, str] = {
+    "history": "histories",
+    "histories": "histories",
+    "tool": "tools",
+    "tools": "tools",
+    "workflow": "workflows",
+    "workflows": "workflows",
+    "dataset": "datasets",
+    "datasets": "datasets",
+    "dataset_collection": "dataset_collections",
+    "dataset_collections": "dataset_collections",
+    "library": "libraries",
+    "libraries": "libraries",
+    "library_dataset": "library_datasets",
+    "library_datasets": "library_datasets",
+    "job": "jobs",
+    "jobs": "jobs",
+    "invocation": "invocations",
+    "invocations": "invocations",
+}
+
+SEARCH_INPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "term": {
+            "type": "string",
+            "description": "Search term matched against resource names, identifiers, and descriptions.",
+            "minLength": 1,
+        },
+        "sources": {
+            "type": "array",
+            "description": "Optional subset of resource types to search (e.g., 'tools', 'histories', 'datasets'). Providing this argument improves relevance and performance.",
+            "items": {"type": "string", "enum": list(SEARCHABLE_SOURCES)},
+            "uniqueItems": True,
+        },
+        "per_source_limit": {
+            "type": "integer",
+            "description": "Maximum number of hits to return per resource type.",
+            "minimum": 1,
+            "default": 5,
+        },
+        "include_deleted": {
+            "type": "boolean",
+            "description": "Include deleted resources when supported by the Galaxy API.",
+            "default": False,
+        },
+        "include_published": {
+            "type": "boolean",
+            "description": "Include published/shared resources where applicable (e.g. workflows, libraries).",
+            "default": False,
+        },
+    },
+    "required": ["term"],
+}
+
+FETCH_INPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "resource_id": {
+            "type": "string",
+            "description": "Identifier minted by the search tool in the form '<source>:<encoded_id>'.",
+        }
+    },
+    "required": ["resource_id"],
+}
+
+
+def _normalize_term(term: str) -> str:
+    return term.strip().lower()
+
+
+def _score_match(name: str | None, identifier: str | None, term_lower: str) -> float:
+    if not term_lower:
+        return 0.5
+    if name:
+        name_l = name.lower()
+        if name_l == term_lower:
+            return 1.0
+        if term_lower in name_l:
+            return min(0.95, 0.6 + len(term_lower) / max(len(name_l), 1))
+    if identifier:
+        id_l = identifier.lower()
+        if id_l == term_lower:
+            return 0.9
+        if term_lower in id_l:
+            return 0.75
+    return 0.5
+
+
+def _format_search_result(
+    source: str,
+    identifier: str | tuple[str, ...],
+    name: str | None,
+    summary: str,
+    term_lower: str,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if isinstance(identifier, tuple):
+        encoded_id = ":".join(identifier)
+    else:
+        encoded_id = identifier
+    display_name = name or encoded_id
+    result = {
+        "id": f"{source}:{encoded_id}",
+        "source": source,
+        "name": display_name,
+        "summary": summary,
+        "score": round(_score_match(display_name, encoded_id, term_lower), 3),
+    }
+    if extra:
+        result["metadata"] = extra
+    return result
+
+
+def _split_tool_identifier(tool_id: str) -> tuple[str, str | None]:
+    if not tool_id or "/" not in tool_id:
+        return tool_id, None
+    base_id, version = tool_id.rsplit("/", 1)
+    if not version:
+        return base_id, None
+    return base_id, version
+
+
+def _resolve_tool_version_name(version_entry: Any) -> str | None:
+    if version_entry is None:
+        return None
+    if isinstance(version_entry, str):
+        return version_entry
+    if isinstance(version_entry, dict):
+        if version_entry.get("version"):
+            return version_entry["version"]
+        if version_entry.get("name"):
+            return version_entry["name"]
+        version_id = version_entry.get("id")
+        if isinstance(version_id, str):
+            _, candidate = _split_tool_identifier(version_id)
+            return candidate
+    return None
+
+
+def _safe_call(action: str, func: Callable[[], Any]) -> Any | None:
+    try:
+        return func()
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.warning("%s failed during search aggregation: %s", action, exc)
+        return None
+
+
+def _get_request_connection_state() -> dict[str, Any]:
+    """
+    Resolve the effective Galaxy connection for the current request.
+
+    Returns a dictionary containing the Galaxy URL, API key, GalaxyInstance client,
+    connection source, and (optionally) the active OAuth session object.
+    """
+    credentials, api_key = get_active_session(get_access_token)
+    url = credentials.galaxy_url if credentials else normalized_galaxy_url
+    if credentials and api_key:
+        gi = GalaxyInstance(url=credentials.galaxy_url, key=api_key)
+        return {
+            "url": credentials.galaxy_url,
+            "api_key": api_key,
+            "gi": gi,
+            "connected": True,
+            "source": "oauth",
+            "session": credentials,
+        }
+
+    # Test override (used by pytest to simulate connections without OAuth)
+    if (
+        os.environ.get("PYTEST_CURRENT_TEST")
+        and galaxy_state.get("connected")
+        and galaxy_state.get("gi")
+    ):
+        return {
+            "url": galaxy_state.get("url") or normalized_galaxy_url,
+            "api_key": galaxy_state.get("api_key"),
+            "gi": galaxy_state.get("gi"),
+            "connected": True,
+            "source": "test",
+            "session": None,
+        }
+
+    return {
+        "url": url,
+        "api_key": None,
+        "gi": None,
+        "connected": False,
+        "source": None,
+        "session": None,
+    }
+
+
+def ensure_connected() -> dict[str, Any]:
+    """Resolve the active Galaxy connection, raising if none is available."""
+    state = _get_request_connection_state()
+    if not state["connected"] or not state["gi"]:
         raise ValueError(
-            "Not connected to Galaxy. "
-            "Please run connect() first with your Galaxy URL and API key. "
-            "Example: connect(url='https://your-galaxy.org', api_key='your-key')"
+            "Not connected to Galaxy. Please authenticate through your MCP client "
+            "to establish a Galaxy session."
+        )
+    return state
+
+
+def _search_histories(
+    gi: GalaxyInstance,
+    state: dict[str, Any],
+    term_lower: str,
+    per_source_limit: int,
+    include_deleted: bool,
+    include_published: bool,  # noqa: ARG001 - retained for consistent signature
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    limit = max(per_source_limit * 3, 20)
+
+    def _collect(deleted_flag: bool | None) -> list[dict[str, Any]]:
+        return gi.histories.get_histories(limit=limit, deleted=deleted_flag)
+
+    candidates: list[dict[str, Any]] = []
+    non_deleted = _safe_call("histories.get_histories", lambda: _collect(False))
+    if non_deleted:
+        candidates.extend(non_deleted)
+    if include_deleted:
+        deleted_items = _safe_call("histories.get_histories (deleted)", lambda: _collect(True))
+        if deleted_items:
+            candidates.extend(deleted_items)
+
+    for history in candidates:
+        hist_id = history.get("id")
+        if not hist_id or hist_id in seen:
+            continue
+        seen.add(hist_id)
+        name = history.get("name") or hist_id
+        if term_lower not in name.lower() and term_lower not in hist_id.lower():
+            continue
+        details = _safe_call(
+            "histories.show_history", lambda: gi.histories.show_history(hist_id)
+        ) or {}
+        summary = f"History state: {details.get('state', history.get('state', 'unknown'))}"
+        extra = {
+            "update_time": details.get("update_time"),
+            "size": details.get("size"),
+            "tags": details.get("tags", []),
+            "deleted": details.get("deleted", history.get("deleted")),
+        }
+        results.append(_format_search_result("histories", hist_id, name, summary, term_lower, extra))
+        if len(results) >= per_source_limit:
+            break
+    return results
+
+
+def _search_tools(
+    gi: GalaxyInstance,
+    state: dict[str, Any],  # noqa: ARG001 - consistent signature
+    term_lower: str,
+    per_source_limit: int,
+    include_deleted: bool,  # noqa: ARG001 - tools do not expose deleted flag
+    include_published: bool,  # noqa: ARG001 - tools do not differentiate published state
+) -> list[dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = {}
+    seen_tool_versions: set[str] = set()
+    candidates: list[dict[str, Any]] = []
+
+    filtered = _safe_call("tools.get_tools (filtered)", lambda: gi.tools.get_tools(name=term_lower))
+    if filtered:
+        candidates.extend(filtered)
+    if len(candidates) < per_source_limit:
+        all_tools = _safe_call("tools.get_tools", gi.tools.get_tools) or []
+        candidates.extend(all_tools)
+
+    for tool in candidates:
+        tool_id = tool.get("id")
+        if not tool_id or tool_id in seen_tool_versions:
+            continue
+        seen_tool_versions.add(tool_id)
+
+        base_id, version_name = _split_tool_identifier(tool_id)
+        name = tool.get("name") or base_id
+        description = tool.get("description") or ""
+        labels = tool.get("labels", [])
+        searchable_text = " ".join(
+            filter(
+                None,
+                [
+                    name,
+                    base_id,
+                    tool_id,
+                    version_name,
+                    description,
+                    " ".join(labels) if isinstance(labels, list) else "",
+                ],
+            )
+        ).lower()
+        if term_lower not in searchable_text:
+            continue
+
+        group = grouped.setdefault(
+            base_id,
+            {
+                "name": name,
+                "description": description,
+                "tool_type": tool.get("tool_type"),
+                "labels": set(),
+                "versions": [],
+                "score": 0.0,
+            },
         )
 
+        if description and not group["description"]:
+            group["description"] = description
+        if tool.get("tool_type") and not group["tool_type"]:
+            group["tool_type"] = tool.get("tool_type")
+        if isinstance(labels, list):
+            group["labels"].update(labels)
 
-@mcp.tool()
-def connect(url: str | None = None, api_key: str | None = None) -> dict[str, Any]:
-    """
-    Connect to Galaxy server
+        version_label = tool.get("version") or version_name
+        group["versions"].append(
+            {
+                "id": tool_id,
+                "version": version_label,
+                "description": description,
+                "resource_id": f"tools:{tool_id}",
+            }
+        )
 
-    Args:
-        url: Galaxy server URL (optional, uses GALAXY_URL env var if not provided)
-        api_key: Galaxy API key (optional, uses GALAXY_API_KEY env var if not provided)
+        version_score = _score_match(name, tool_id, term_lower)
+        if version_label:
+            version_score = max(version_score, _score_match(version_label, tool_id, term_lower))
+        group["score"] = max(group["score"], version_score)
 
-    Returns:
-        Connection status and user information
-    """
-    try:
-        # Use provided parameters or fall back to environment variables
-        use_url = url or os.environ.get("GALAXY_URL")
-        use_api_key = api_key or os.environ.get("GALAXY_API_KEY")
+    results: list[dict[str, Any]] = []
+    for base_id, info in sorted(
+        grouped.items(),
+        key=lambda item: (-item[1]["score"], item[1]["name"]),
+    ):
+        versions = info["versions"]
+        versions.sort(
+            key=lambda entry: (
+                entry["version"] or "",
+                entry["id"],
+            ),
+            reverse=True,
+        )
+        version_names = [entry["version"] for entry in versions if entry.get("version")]
+        description = info["description"] or "Galaxy tool"
+        if version_names:
+            versions_preview = ", ".join(version_names[:3])
+            if len(version_names) > 3:
+                versions_preview += ", …"
+            description = f"{description} (versions: {versions_preview})"
+        metadata = {
+            "tool_id": base_id,
+            "tool_type": info["tool_type"],
+            "labels": sorted(info["labels"]),
+            "versions": versions,
+        }
+        result = _format_search_result("tools", base_id, info["name"], description, term_lower, metadata)
+        result["score"] = round(info["score"], 3)
+        results.append(result)
+        if len(results) >= per_source_limit:
+            break
+    return results
 
-        # Check if we have the necessary credentials
-        if not use_url or not use_api_key:
-            # Try to reload from .env file in case it was added after startup
-            dotenv_path = find_dotenv(usecwd=True)
-            if dotenv_path:
-                load_dotenv(dotenv_path, override=True)
-                # Check again after loading .env
-                use_url = url or os.environ.get("GALAXY_URL")
-                use_api_key = api_key or os.environ.get("GALAXY_API_KEY")
 
-            # If still missing credentials, report error
-            if not use_url or not use_api_key:
-                missing = []
-                if not use_url:
-                    missing.append("URL")
-                if not use_api_key:
-                    missing.append("API key")
-                missing_str = " and ".join(missing)
-                raise ValueError(
-                    f"Missing Galaxy {missing_str}. Please provide as arguments, "
-                    f"set environment variables, or create a .env file with "
-                    f"GALAXY_URL and GALAXY_API_KEY."
+def _search_workflows(
+    gi: GalaxyInstance,
+    state: dict[str, Any],  # noqa: ARG001
+    term_lower: str,
+    per_source_limit: int,
+    include_deleted: bool,  # noqa: ARG001
+    include_published: bool,
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def _collect(published: bool) -> list[dict[str, Any]]:
+        return gi.workflows.get_workflows(published=published)
+
+    candidates = _safe_call("workflows.get_workflows", lambda: _collect(include_published)) or []
+    if include_published:
+        owned = _safe_call("workflows.get_workflows (private)", lambda: _collect(False)) or []
+        candidates.extend(owned)
+
+    for workflow in candidates:
+        wf_id = workflow.get("id")
+        if not wf_id or wf_id in seen:
+            continue
+        seen.add(wf_id)
+        name = workflow.get("name") or wf_id
+        searchable = " ".join(
+            [
+                name,
+                wf_id,
+                workflow.get("annotation", "") or "",
+                workflow.get("description", "") or "",
+            ]
+        ).lower()
+        if term_lower not in searchable:
+            continue
+        summary = workflow.get("annotation") or "Galaxy workflow"
+        extra = {
+            "published": workflow.get("published", False),
+            "latest_workflow_id": workflow.get("latest_workflow_id"),
+        }
+        results.append(_format_search_result("workflows", wf_id, name, summary, term_lower, extra))
+        if len(results) >= per_source_limit:
+            break
+    return results
+
+
+def _search_datasets(
+    gi: GalaxyInstance,
+    state: dict[str, Any],  # noqa: ARG001
+    term_lower: str,
+    per_source_limit: int,
+    include_deleted: bool,
+    include_published: bool,  # noqa: ARG001
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    dataset_limit = max(per_source_limit * 5, 50)
+    deleted_flag: bool | None = None if include_deleted else False
+    candidates = (
+        _safe_call(
+            "datasets.get_datasets",
+            lambda: gi.datasets.get_datasets(limit=dataset_limit, deleted=deleted_flag),
+        )
+        or []
+    )
+
+    for ds in candidates:
+        ds_id = ds.get("id")
+        if not ds_id or ds_id in seen:
+            continue
+        seen.add(ds_id)
+        name = ds.get("name") or ds_id
+        searchable = " ".join([name, ds_id, ds.get("extension", ""), ds.get("state", "")]).lower()
+        if term_lower not in searchable:
+            continue
+        summary = f"Dataset state: {ds.get('state', 'unknown')} ({ds.get('extension', 'unknown')} format)"
+        extra = {
+            "history_id": ds.get("history_id"),
+            "deleted": ds.get("deleted"),
+            "visible": ds.get("visible"),
+            "tags": ds.get("tags", []),
+        }
+        results.append(_format_search_result("datasets", ds_id, name, summary, term_lower, extra))
+        if len(results) >= per_source_limit:
+            break
+    return results
+
+
+def _search_dataset_collections(
+    gi: GalaxyInstance,
+    state: dict[str, Any],
+    term_lower: str,
+    per_source_limit: int,
+    include_deleted: bool,
+    include_published: bool,  # noqa: ARG001
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    histories = _safe_call(
+        "histories.get_histories for collections",
+        lambda: gi.histories.get_histories(limit=max(per_source_limit * 4, 20), deleted=False),
+    ) or []
+    if include_deleted:
+        histories.extend(
+            _safe_call(
+                "histories.get_histories deleted for collections",
+                lambda: gi.histories.get_histories(limit=10, deleted=True),
+            )
+            or []
+        )
+
+    for history in histories:
+        hist_id = history.get("id")
+        if not hist_id:
+            continue
+        collections = _safe_call(
+            f"histories.show_history (collections) {hist_id}",
+            lambda: gi.histories.show_history(
+                hist_id,
+                contents=True,
+                types=["dataset_collection"],
+                deleted=include_deleted if include_deleted else None,
+            ),
+        )
+        if not collections:
+            continue
+        for collection in collections:
+            coll_id = collection.get("id")
+            if not coll_id or coll_id in seen:
+                continue
+            seen.add(coll_id)
+            name = collection.get("name") or coll_id
+            searchable = " ".join([name, coll_id, collection.get("collection_type", "")]).lower()
+            if term_lower not in searchable:
+                continue
+            summary = (
+                f"{collection.get('collection_type', 'collection').title()} in history "
+                f"{history.get('name') or hist_id}"
+            )
+            extra = {
+                "history_id": hist_id,
+                "collection_type": collection.get("collection_type"),
+                "element_count": collection.get("element_count"),
+                "deleted": collection.get("deleted"),
+            }
+            results.append(
+                _format_search_result("dataset_collections", coll_id, name, summary, term_lower, extra)
+            )
+            if len(results) >= per_source_limit:
+                return results
+    return results
+
+
+def _search_libraries(
+    gi: GalaxyInstance,
+    state: dict[str, Any],  # noqa: ARG001
+    term_lower: str,
+    per_source_limit: int,
+    include_deleted: bool,
+    include_published: bool,  # noqa: ARG001
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    libraries = _safe_call(
+        "libraries.get_libraries",
+        lambda: gi.libraries.get_libraries(deleted=include_deleted if include_deleted else False),
+    ) or []
+
+    for library in libraries:
+        library_id = library.get("id")
+        if not library_id or library_id in seen:
+            continue
+        seen.add(library_id)
+        name = library.get("name") or library_id
+        searchable = " ".join(
+            [name, library_id, library.get("description", ""), library.get("synopsis", "")]
+        ).lower()
+        if term_lower not in searchable:
+            continue
+        summary = library.get("description") or "Galaxy data library"
+        extra = {
+            "synopsis": library.get("synopsis"),
+            "deleted": library.get("deleted"),
+        }
+        results.append(_format_search_result("libraries", library_id, name, summary, term_lower, extra))
+        if len(results) >= per_source_limit:
+            break
+    return results
+
+
+def _search_library_datasets(
+    gi: GalaxyInstance,
+    state: dict[str, Any],  # noqa: ARG001
+    term_lower: str,
+    per_source_limit: int,
+    include_deleted: bool,
+    include_published: bool,  # noqa: ARG001
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    libraries = _safe_call(
+        "libraries.get_libraries for datasets",
+        lambda: gi.libraries.get_libraries(deleted=include_deleted if include_deleted else False),
+    ) or []
+
+    for library in libraries:
+        library_id = library.get("id")
+        if not library_id:
+            continue
+        contents = _safe_call(
+            f"libraries.show_library {library_id}",
+            lambda: gi.libraries.show_library(library_id, contents=True),
+        )
+        if not contents:
+            continue
+        for entry in contents:
+            if entry.get("type") not in {"file", "dataset"}:
+                continue
+            dataset_id = entry.get("id")
+            if not dataset_id:
+                continue
+            name = entry.get("name") or dataset_id
+            searchable = " ".join([name, dataset_id, entry.get("type", "")]).lower()
+            if term_lower not in searchable:
+                continue
+            summary = f"Library dataset in {library.get('name') or library_id}"
+            extra = {
+                "library_id": library_id,
+                "deleted": entry.get("deleted"),
+                "type": entry.get("type"),
+            }
+            results.append(
+                _format_search_result(
+                    "library_datasets",
+                    (library_id, dataset_id),
+                    name,
+                    summary,
+                    term_lower,
+                    extra,
                 )
+            )
+            if len(results) >= per_source_limit:
+                return results
+    return results
 
-        galaxy_url = use_url if use_url.endswith("/") else f"{use_url}/"
 
-        # Create a new Galaxy instance to test connection
-        gi = GalaxyInstance(url=galaxy_url, key=use_api_key)
+def _search_jobs(
+    gi: GalaxyInstance,
+    state: dict[str, Any],
+    term_lower: str,
+    per_source_limit: int,
+    include_deleted: bool,  # noqa: ARG001
+    include_published: bool,  # noqa: ARG001
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    jobs = (
+        _safe_call(
+            "jobs.get_jobs",
+            lambda: gi.jobs.get_jobs(limit=max(per_source_limit * 5, 50)),
+        )
+        or []
+    )
 
-        # Test the connection by fetching user info
-        user_info = gi.users.get_current_user()
+    for job in jobs:
+        job_id = job.get("id")
+        if not job_id:
+            continue
+        searchable = " ".join(
+            [
+                job_id,
+                job.get("tool_id", ""),
+                job.get("state", ""),
+                job.get("history_id", "") or "",
+            ]
+        ).lower()
+        if term_lower not in searchable:
+            continue
+        summary = f"Job state: {job.get('state', 'unknown')} (tool {job.get('tool_id', 'unknown')})"
+        extra = {
+            "tool_id": job.get("tool_id"),
+            "state": job.get("state"),
+            "history_id": job.get("history_id"),
+            "exit_code": job.get("exit_code"),
+        }
+        results.append(_format_search_result("jobs", job_id, job_id, summary, term_lower, extra))
+        if len(results) >= per_source_limit:
+            break
+    return results
 
-        # Update galaxy state
-        galaxy_state["url"] = galaxy_url
-        galaxy_state["api_key"] = use_api_key
-        galaxy_state["gi"] = gi
-        galaxy_state["connected"] = True
 
-        return {"connected": True, "user": user_info}
-    except Exception as e:
-        # Reset state on failure
-        galaxy_state["url"] = None
-        galaxy_state["api_key"] = None
-        galaxy_state["gi"] = None
-        galaxy_state["connected"] = False
+def _search_invocations(
+    gi: GalaxyInstance,
+    state: dict[str, Any],
+    term_lower: str,
+    per_source_limit: int,
+    include_deleted: bool,  # noqa: ARG001
+    include_published: bool,  # noqa: ARG001
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    invocations = (
+        _safe_call(
+            "invocations.get_invocations",
+            lambda: gi.invocations.get_invocations(limit=max(per_source_limit * 4, 40), view="element"),
+        )
+        or []
+    )
 
-        error_msg = f"Failed to connect to Galaxy at {galaxy_url}: {str(e)}"
-        if "401" in str(e) or "authentication" in str(e).lower():
-            error_msg += " Check that your API key is valid and has the necessary permissions."
-        elif "404" in str(e) or "not found" in str(e).lower():
-            error_msg += " Check that the Galaxy URL is correct and accessible."
-        elif "connection" in str(e).lower() or "timeout" in str(e).lower():
-            error_msg += " Check your network connection and that the Galaxy server is running."
+    for invocation in invocations:
+        inv_id = invocation.get("id")
+        if not inv_id:
+            continue
+        name = invocation.get("workflow_name") or invocation.get("workflow_id") or inv_id
+        searchable = " ".join(
+            [
+                inv_id,
+                name,
+                invocation.get("state", ""),
+                invocation.get("history_id", "") or "",
+                invocation.get("workflow_id", "") or "",
+            ]
+        ).lower()
+        if term_lower not in searchable:
+            continue
+        summary = f"Invocation state: {invocation.get('state', 'unknown')}"
+        extra = {
+            "history_id": invocation.get("history_id"),
+            "workflow_id": invocation.get("workflow_id"),
+            "update_time": invocation.get("update_time"),
+        }
+        results.append(_format_search_result("invocations", inv_id, name, summary, term_lower, extra))
+        if len(results) >= per_source_limit:
+            break
+    return results
+
+
+SEARCH_HANDLERS: dict[str, Callable[[GalaxyInstance, dict[str, Any], str, int, bool, bool], list[dict[str, Any]]]] = {
+    "histories": _search_histories,
+    "tools": _search_tools,
+    "workflows": _search_workflows,
+    "datasets": _search_datasets,
+    "dataset_collections": _search_dataset_collections,
+    "libraries": _search_libraries,
+    "library_datasets": _search_library_datasets,
+    "jobs": _search_jobs,
+    "invocations": _search_invocations,
+}
+
+
+def _fetch_history(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str, Any]:
+    return gi.histories.show_history(identifier[0])
+
+
+def _fetch_tool(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str, Any]:
+    if not identifier:
+        raise ValueError("Tool resource identifier missing.")
+
+    raw_id = identifier[0]
+    base_id, embedded_version = _split_tool_identifier(raw_id)
+    version_spec = embedded_version
+
+    # Support explicit version provided as an additional identifier component.
+    if len(identifier) > 1:
+        version_spec = identifier[1]
+
+    def _show_tool(version: str | None) -> dict[str, Any]:
+        kwargs = {"io_details": True}
+        if version:
+            kwargs["tool_version"] = version
+        return gi.tools.show_tool(base_id, **kwargs)
+
+    if version_spec:
+        details = _show_tool(version_spec)
+        resolved_version = details.get("version") or version_spec
+        return {
+            "tool_id": base_id,
+            "versions": [
+                {
+                    "version": resolved_version,
+                    "id": details.get("id"),
+                    "details": details,
+                }
+            ],
+        }
+
+    latest_details = _show_tool(None)
+    version_entries = latest_details.get("versions") or []
+    aggregated: list[dict[str, Any]] = []
+    seen_versions: set[str] = set()
+
+    def _add_version(details: dict[str, Any]) -> None:
+        resolved_version = details.get("version")
+        aggregated.append(
+            {
+                "version": resolved_version,
+                "id": details.get("id"),
+                "resource_id": f"tools:{details.get('id')}" if details.get("id") else None,
+                "details": details,
+            }
+        )
+        if resolved_version:
+            seen_versions.add(resolved_version)
+
+    _add_version(latest_details)
+
+    for version_entry in version_entries:
+        version_name = _resolve_tool_version_name(version_entry)
+        if not version_name or version_name in seen_versions:
+            continue
+        details = _show_tool(version_name)
+        if version_name in seen_versions:
+            continue
+        _add_version(details)
+
+    return {
+        "tool_id": base_id,
+        "versions": aggregated,
+    }
+
+
+def _fetch_workflow(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str, Any]:
+    return gi.workflows.show_workflow(identifier[0])
+
+
+def _fetch_dataset(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str, Any]:
+    return gi.datasets.show_dataset(identifier[0])
+
+
+def _fetch_dataset_collection(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str, Any]:
+    return gi.dataset_collections.show_dataset_collection(identifier[0])
+
+
+def _fetch_library(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str, Any]:
+    return gi.libraries.show_library(identifier[0], contents=True)
+
+
+def _fetch_library_dataset(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str, Any]:
+    if len(identifier) != 2:
+        raise ValueError(
+            "Library datasets require identifiers in the form 'library_datasets:<library_id>:<dataset_id>'."
+        )
+    library_id, dataset_id = identifier
+    return gi.libraries.show_dataset(library_id, dataset_id)
+
+
+def _fetch_job(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str, Any]:
+    return gi.jobs.show_job(identifier[0], full_details=True)
+
+
+def _fetch_invocation(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str, Any]:
+    return gi.invocations.show_invocation(identifier[0])
+
+
+FETCH_HANDLERS: dict[str, Callable[[GalaxyInstance, list[str]], dict[str, Any]]] = {
+    "histories": _fetch_history,
+    "tools": _fetch_tool,
+    "workflows": _fetch_workflow,
+    "datasets": _fetch_dataset,
+    "dataset_collections": _fetch_dataset_collection,
+    "libraries": _fetch_library,
+    "library_datasets": _fetch_library_dataset,
+    "jobs": _fetch_job,
+    "invocations": _fetch_invocation,
+}
+
+
+@mcp.tool(
+    name="search",
+    description="Search across Galaxy histories, tools, workflows, datasets, libraries, jobs, and invocations. Specify the `sources` argument (e.g., 'tools', 'histories') when possible to narrow the scope.",
+    enabled=True,
+    annotations={
+        "readOnlyHint": "true",
+        "title": "Search Galaxy Resources",
+        "aiInputSchema": SEARCH_INPUT_SCHEMA,
+    },
+)
+def search(
+    term: str,
+    sources: list[str] | None = None,
+    per_source_limit: int = 5,
+    include_deleted: bool = False,
+    include_published: bool = False,
+) -> dict[str, Any]:
+    """
+    Search Galaxy for resources. Provide a subset of `sources` (e.g., 'tools', 'histories') when
+    possible to reduce load and improve result relevance.
+    """
+    if per_source_limit < 1:
+        raise ValueError("per_source_limit must be at least 1.")
+
+    normalized_term = term.strip()
+    if not normalized_term:
+        raise ValueError("Search term must not be empty.")
+    term_lower = _normalize_term(normalized_term)
+
+    input_sources = sources or list(SEARCHABLE_SOURCES)
+    requested_sources: set[str] = set()
+    unsupported: list[str] = []
+    for source in input_sources:
+        canonical = SOURCE_ALIASES.get(source, source)
+        if canonical not in SEARCH_HANDLERS:
+            unsupported.append(source)
         else:
-            error_msg += " Verify the URL format (should end with /) and API key."
-
-        raise ValueError(error_msg) from e
-
-
-@mcp.tool()
-def search_tools(query: str) -> dict[str, Any]:
-    """
-    Search for tools in Galaxy
-
-    Args:
-        query: Search query (tool name to filter on)
-
-    Returns:
-        List of tools matching the query
-    """
-    ensure_connected()
-
-    try:
-        # The get_tools method is used with name filter parameter
-        tools = galaxy_state["gi"].tools.get_tools(name=query)
-        return {"tools": tools}
-    except Exception as e:
+            requested_sources.add(canonical)
+    if unsupported:
         raise ValueError(
-            f"Failed to search tools with query '{query}': {str(e)}. "
-            "Check that the Galaxy instance is accessible and the tool name is correct."
-        ) from e
+            f"Unsupported search sources requested: {', '.join(sorted(unsupported))}. "
+            f"Supported values are: {', '.join(SEARCHABLE_SOURCES)}."
+        )
+    if not requested_sources:
+        requested_sources = set(SEARCHABLE_SOURCES)
+
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+
+    aggregated_results: list[dict[str, Any]] = []
+    errors: list[str] = []
+
+    for source in SEARCHABLE_SOURCES:
+        if source not in requested_sources:
+            continue
+        handler = SEARCH_HANDLERS[source]
+        try:
+            handler_results = handler(
+                gi,
+                state,
+                term_lower,
+                per_source_limit,
+                include_deleted,
+                include_published,
+            )
+            aggregated_results.extend(handler_results)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.error("Search handler for %s failed: %s", source, exc, exc_info=True)
+            errors.append(f"{source}: {exc}")
+
+    aggregated_results.sort(key=lambda item: (-item.get("score", 0), item.get("name", "")))
+
+    response: dict[str, Any] = {
+        "term": normalized_term,
+        "results": aggregated_results,
+        "total": len(aggregated_results),
+        "sources": [source for source in SEARCHABLE_SOURCES if source in requested_sources],
+        "per_source_limit": per_source_limit,
+    }
+    if errors:
+        response["errors"] = errors
+    return response
 
 
-@mcp.tool()
-def get_tool_details(tool_id: str, io_details: bool = False) -> dict[str, Any]:
-    """
-    Get detailed information about a specific tool
+@mcp.tool(
+    name="fetch",
+    description="Fetch metadata for a Galaxy resource identified by a search result identifier.",
+    enabled=True,
+    annotations={
+        "readOnlyHint": "true",
+        "title": "Fetch Galaxy Resource",
+        "aiInputSchema": FETCH_INPUT_SCHEMA,
+    },
+)
+def fetch(resource_id: str) -> dict[str, Any]:
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
-    Args:
-        tool_id: ID of the tool
-        io_details: Whether to include input/output details
-
-    Returns:
-        Tool details
-    """
-    ensure_connected()
-
-    try:
-        # Get detailed information about the tool
-        tool_info = galaxy_state["gi"].tools.show_tool(tool_id, io_details=io_details)
-        return tool_info
-    except Exception as e:
+    parts = resource_id.split(":")
+    if len(parts) < 2:
         raise ValueError(
-            f"Failed to get tool details for ID '{tool_id}': {str(e)}. "
-            "Verify the tool ID is correct and the tool is installed on this "
-            "Galaxy instance."
-        ) from e
+            "Resource identifier must be in the format '<source>:<encoded_id>'. "
+            f"Received '{resource_id}'."
+        )
+    source = SOURCE_ALIASES.get(parts[0], parts[0])
+    if source not in FETCH_HANDLERS:
+        raise ValueError(
+            f"Unsupported resource type '{parts[0]}'. Supported types: {', '.join(SEARCHABLE_SOURCES)}."
+        )
+    identifiers = parts[1:]
+    handler = FETCH_HANDLERS[source]
+    metadata = handler(gi, identifiers)
+    return {"resource_id": resource_id, "source": source, "metadata": metadata}
 
 
 @mcp.tool()
-def get_tool_citations(tool_id: str) -> dict[str, Any]:
+def get_tool_citations(resource_id: str) -> dict[str, Any]:
     """
-    Get citation information for a specific tool
+    Get citation information for a specific tool identified by a scoped search ID.
 
     Args:
-        tool_id: ID of the tool
+        resource_id: Scoped identifier returned by the `search` tool (e.g. ``tools:<tool_id>``).
 
     Returns:
         Tool citation information
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
+        tool_id = resource_id
+        if ":" in resource_id:
+            prefix, remainder = resource_id.split(":", 1)
+            canonical_prefix = SOURCE_ALIASES.get(prefix, prefix)
+            if canonical_prefix != "tools" or not remainder:
+                raise ValueError(
+                    "Tool resource identifiers must be in the form 'tools:<tool_id>'. "
+                    f"Received '{resource_id}'."
+                )
+            tool_id = remainder
+
         # Get the tool information which includes citations
-        tool_info = galaxy_state["gi"].tools.show_tool(tool_id)
+        tool_info = gi.tools.show_tool(tool_id)
 
         # Extract citation information
         citations = tool_info.get("citations", [])
@@ -253,11 +1155,12 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> dict[str,
     Returns:
         Dictionary containing tool execution information including job IDs and output dataset IDs
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         # Run the tool with provided inputs
-        result = galaxy_state["gi"].tools.run_tool(history_id, tool_id, inputs)
+        result = gi.tools.run_tool(history_id, tool_id, inputs)
         return result
     except Exception as e:
         error_msg = f"Failed to run tool '{tool_id}' in history '{history_id}': {str(e)}"
@@ -272,24 +1175,6 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> dict[str,
 
 
 @mcp.tool()
-def get_tool_panel() -> dict[str, Any]:
-    """
-    Get the tool panel structure (toolbox)
-
-    Returns:
-        Tool panel hierarchy
-    """
-    ensure_connected()
-
-    try:
-        # Get the tool panel structure
-        tool_panel = galaxy_state["gi"].tools.get_tool_panel()
-        return {"tool_panel": tool_panel}
-    except Exception as e:
-        raise ValueError(f"Failed to get tool panel: {str(e)}") from e
-
-
-@mcp.tool()
 def create_history(history_name: str) -> dict[str, Any]:
     """
     Create a new history in Galaxy
@@ -300,8 +1185,9 @@ def create_history(history_name: str) -> dict[str, Any]:
     Returns:
         Dictionary containing the created history details including the new history ID hash
     """
-    ensure_connected()
-    return galaxy_state["gi"].histories.create_history(history_name)
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+    return gi.histories.create_history(history_name)
 
 
 @mcp.tool()
@@ -318,14 +1204,15 @@ def filter_tools_by_dataset(dataset_type: list[str]) -> dict[str, Any]:
         dict: A dictionary containing the list of recommended tools and the total count.
     """
 
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     lock = threading.Lock()
 
     dataset_keywords = [dt.lower() for dt in dataset_type]
 
     try:
-        tool_panel = galaxy_state["gi"].tools.get_tool_panel()
+        tool_panel = gi.tools.get_tool_panel()
 
         def flatten_tools(panel):
             tools = []
@@ -364,7 +1251,7 @@ def filter_tools_by_dataset(dataset_type: list[str]) -> dict[str, Any]:
             if tool_id.endswith("_label"):
                 return None
             try:
-                tool_details = galaxy_state["gi"].tools.show_tool(tool_id, io_details=True)
+                tool_details = gi.tools.show_tool(tool_id, io_details=True)
                 tool_inputs = tool_details.get("inputs", [{}])
                 for input_spec in tool_inputs:
                     if not isinstance(input_spec, dict):
@@ -418,18 +1305,19 @@ def get_server_info() -> dict[str, Any]:
     Returns:
         Server information including version, URL, and other configuration details
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         # Get server configuration info
-        config_info = galaxy_state["gi"].config.get_config()
+        config_info = gi.config.get_config()
 
         # Get server version info
-        version_info = galaxy_state["gi"].config.get_version()
+        version_info = gi.config.get_version()
 
         # Build comprehensive server info response
         server_info = {
-            "url": galaxy_state["url"],
+            "url": state["url"],
             "version": version_info,
             "config": {
                 "brand": config_info.get("brand", "Galaxy"),
@@ -466,10 +1354,11 @@ def get_user() -> dict[str, Any]:
     Returns:
         Current user details
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
-        user_info = galaxy_state["gi"].users.get_current_user()
+        user_info = gi.users.get_current_user()
         return user_info
     except Exception as e:
         raise ValueError(f"Failed to get user: {str(e)}") from e
@@ -490,18 +1379,17 @@ def get_histories(
     Returns:
         Dictionary containing list of histories and pagination metadata
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         # Get histories with pagination and optional filtering
-        histories = galaxy_state["gi"].histories.get_histories(
-            limit=limit, offset=offset, name=name
-        )
+        histories = gi.histories.get_histories(limit=limit, offset=offset, name=name)
 
         # If pagination is used, get total count for metadata
         if limit is not None:
             # Get total count without pagination
-            all_histories = galaxy_state["gi"].histories.get_histories(name=name)
+            all_histories = gi.histories.get_histories(name=name)
             total_items = len(all_histories) if all_histories else 0
 
             # Calculate pagination metadata
@@ -553,10 +1441,11 @@ def list_history_ids() -> list[dict[str, str]]:
     Returns:
         List of dictionaries containing 'id' and 'name' fields
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
-        histories = galaxy_state["gi"].histories.get_histories()
+        histories = gi.histories.get_histories()
         if not histories:
             return []
         # Extract just the id and name for convenience
@@ -587,17 +1476,18 @@ def get_history_details(history_id: str) -> dict[str, Any]:
         To get actual datasets: Use get_history_contents(history_id, limit=N,
                                          order="create_time-dsc")
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         logger.info(f"Getting details for history ID: {history_id}")
 
         # Get history details
-        history_info = galaxy_state["gi"].histories.show_history(history_id, contents=False)
+        history_info = gi.histories.show_history(history_id, contents=False)
         logger.info(f"Successfully retrieved history info: {history_info.get('name', 'Unknown')}")
 
         # Get total count by calling without limit
-        all_contents = galaxy_state["gi"].histories.show_history(history_id, contents=True)
+        all_contents = gi.histories.show_history(history_id, contents=True)
         total_items = len(all_contents) if all_contents else 0
 
         return {
@@ -649,7 +1539,8 @@ def get_history_contents(
     Returns:
         Dictionary containing paginated dataset list, pagination metadata, and history reference
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         logger.info(
@@ -658,7 +1549,7 @@ def get_history_contents(
         )
 
         # Use datasets API for better ordering support
-        contents = galaxy_state["gi"].datasets.get_datasets(
+        contents = gi.datasets.get_datasets(
             limit=limit,
             offset=offset,
             history_id=history_id,
@@ -674,7 +1565,7 @@ def get_history_contents(
             contents = [item for item in contents if item.get("visible", True)]
 
         # Get total count for pagination metadata
-        all_contents = galaxy_state["gi"].datasets.get_datasets(
+        all_contents = gi.datasets.get_datasets(
             history_id=history_id,
             order=order,
         )
@@ -740,14 +1631,13 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str,
     Returns:
         Dictionary containing job metadata, tool information, dataset ID, and job ID
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         # Get dataset provenance to find the creating job
         try:
-            provenance = galaxy_state["gi"].histories.show_dataset_provenance(
-                history_id=history_id, dataset_id=dataset_id
-            )
+            provenance = gi.histories.show_dataset_provenance(history_id=history_id, dataset_id=dataset_id)
 
             # Extract job ID from provenance
             job_id = provenance.get("job_id")
@@ -760,7 +1650,7 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str,
         except Exception as provenance_error:
             # If provenance fails, try getting dataset details which might contain job info
             try:
-                dataset_details = galaxy_state["gi"].datasets.show_dataset(dataset_id)
+                dataset_details = gi.datasets.show_dataset(dataset_id)
                 job_id = dataset_details.get("creating_job")
                 if not job_id:
                     raise ValueError(
@@ -775,8 +1665,8 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str,
 
         # Get job details using the Galaxy API directly
         # (Bioblend doesn't have a direct method for this)
-        url = f"{galaxy_state['url']}api/jobs/{job_id}"
-        headers = {"x-api-key": galaxy_state["api_key"]}
+        url = f"{state['url']}api/jobs/{job_id}"
+        headers = {"x-api-key": state["api_key"]}
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         job_info = response.json()
@@ -809,11 +1699,12 @@ def get_dataset_details(
         Dictionary containing dataset metadata (name, size, state, extension) and optional
         content preview with line count and truncation information
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         # Get dataset details using bioblend
-        dataset_info = galaxy_state["gi"].datasets.show_dataset(dataset_id)
+        dataset_info = gi.datasets.show_dataset(dataset_id)
 
         result = {"dataset": dataset_info, "dataset_id": dataset_id}
 
@@ -821,7 +1712,7 @@ def get_dataset_details(
         if include_preview and dataset_info.get("state") == "ok":
             try:
                 # Get dataset content for preview
-                content = galaxy_state["gi"].datasets.download_dataset(
+                content = gi.datasets.download_dataset(
                     dataset_id, use_default_filename=False, require_ok_state=False
                 )
 
@@ -899,11 +1790,17 @@ def download_dataset(
     environments), omit the file_path parameter to download content to memory. Only
     specify file_path if you can actually write files to the local filesystem.
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         # Get dataset info first to check state and get metadata
-        dataset_info = galaxy_state["gi"].datasets.show_dataset(dataset_id)
+        dataset_info = gi.datasets.show_dataset(dataset_id)
+
+        filename = dataset_info.get("name", f"dataset_{dataset_id}")
+        extension = dataset_info.get("extension", "")
+        if extension and not filename.endswith(f".{extension}"):
+            filename = f"{filename}.{extension}"
 
         # Check dataset state if required
         if require_ok_state and dataset_info.get("state") != "ok":
@@ -915,7 +1812,7 @@ def download_dataset(
         # Download the dataset
         if file_path:
             # Download to specific path
-            result_path = galaxy_state["gi"].datasets.download_dataset(
+            result_path = gi.datasets.download_dataset(
                 dataset_id,
                 file_path=file_path,
                 use_default_filename=False,
@@ -930,20 +1827,14 @@ def download_dataset(
 
         else:
             # Download content to memory (don't save to filesystem)
-            result_path = galaxy_state["gi"].datasets.download_dataset(
+            result_path = gi.datasets.download_dataset(
                 dataset_id,
                 use_default_filename=False,  # Get content in memory
                 require_ok_state=require_ok_state,
             )
 
-            # Create suggested filename from dataset info
-            filename = dataset_info.get("name", f"dataset_{dataset_id}")
-            extension = dataset_info.get("extension", "")
-            if extension and not filename.endswith(f".{extension}"):
-                filename = f"{filename}.{extension}"
-
             download_path = None  # No file saved
-            file_size = len(result_path) if isinstance(result_path, bytes | str) else None
+            file_size = len(result_path) if isinstance(result_path, (bytes, str)) else None
 
         return {
             "dataset_id": dataset_id,
@@ -987,7 +1878,8 @@ def upload_file(path: str, history_id: str | None = None) -> dict[str, Any]:
     Returns:
         Dictionary containing upload status and information about the created dataset(s)
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         if not os.path.exists(path):
@@ -997,7 +1889,7 @@ def upload_file(path: str, history_id: str | None = None) -> dict[str, Any]:
                 "Check that the file exists and you have read permissions."
             )
 
-        result = galaxy_state["gi"].tools.upload_file(path, history_id=history_id)
+        result = gi.tools.upload_file(path, history_id=history_id)
         return result
     except Exception as e:
         raise ValueError(f"Failed to upload file: {str(e)}") from e
@@ -1031,16 +1923,17 @@ def get_invocations(
     Returns:
         Dictionary containing workflow invocation information, execution status, and step details
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         # If invocation_id is provided, get details of a specific invocation
         if invocation_id:
-            invocation = galaxy_state["gi"].invocations.show_invocation(invocation_id)
+            invocation = gi.invocations.show_invocation(invocation_id)
             return {"invocation": invocation}
 
         # Otherwise get a list of invocations with optional filters
-        invocations = galaxy_state["gi"].invocations.get_invocations(
+        invocations = gi.invocations.get_invocations(
             workflow_id=workflow_id,
             history_id=history_id,
             limit=limit,
@@ -1124,7 +2017,8 @@ def import_workflow_from_iwc(trs_id: str) -> dict[str, Any]:
     Returns:
         Imported workflow information
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         # Get the workflow manifest
@@ -1154,11 +2048,35 @@ def import_workflow_from_iwc(trs_id: str) -> dict[str, Any]:
             )
 
         # Import the workflow into Galaxy
-        imported_workflow = galaxy_state["gi"].workflows.import_workflow_dict(workflow_definition)
+        imported_workflow = gi.workflows.import_workflow_dict(workflow_definition)
         return {"imported_workflow": imported_workflow}
     except Exception as e:
         raise ValueError(f"Failed to import workflow from IWC: {str(e)}") from e
 
 
+def run_http_server(
+    *,
+    host: str | None = None,
+    port: int | None = None,
+    transport: str | None = None,
+    path: str | None = None,
+) -> None:
+    """Run the MCP server over HTTP-based transport."""
+    resolved_host = host or os.environ.get("GALAXY_MCP_HOST", "0.0.0.0")
+    resolved_port = int(port or os.environ.get("GALAXY_MCP_PORT", "8000"))
+    resolved_transport = (transport or os.environ.get("GALAXY_MCP_TRANSPORT") or "streamable-http").lower()
+    if resolved_transport not in {"streamable-http", "sse"}:
+        raise ValueError(
+            f"Unsupported transport '{resolved_transport}'. Choose 'streamable-http' or 'sse'."
+        )
+    resolved_path = path or os.environ.get("GALAXY_MCP_HTTP_PATH")
+    if resolved_path is None and resolved_transport == "streamable-http":
+        resolved_path = "/"
+    if resolved_path is not None and not resolved_path.startswith("/"):
+        resolved_path = f"/{resolved_path}"
+
+    mcp.run(transport=resolved_transport, host=resolved_host, port=resolved_port, path=resolved_path)
+
+
 if __name__ == "__main__":
-    mcp.run()
+    run_http_server()

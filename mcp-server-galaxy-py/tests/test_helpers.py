@@ -7,6 +7,7 @@ from galaxy_mcp.server import (
     download_dataset,
     ensure_connected,
     filter_tools_by_dataset,
+    fetch,
     galaxy_state,
     get_dataset_details,
     get_histories,
@@ -17,14 +18,12 @@ from galaxy_mcp.server import (
     get_job_details,
     get_server_info,
     get_tool_citations,
-    get_tool_details,
-    get_tool_panel,
     get_user,
     import_workflow_from_iwc,
     list_history_ids,
     run_tool,
+    search,
     search_iwc_workflows,
-    search_tools,
     upload_file,
 )
 
@@ -51,16 +50,15 @@ get_iwc_workflows_fn = get_function(get_iwc_workflows)
 get_job_details_fn = get_function(get_job_details)
 get_server_info_fn = get_function(get_server_info)
 get_tool_citations_fn = get_function(get_tool_citations)
-get_tool_details_fn = get_function(get_tool_details)
-get_tool_panel_fn = get_function(get_tool_panel)
 get_user_fn = get_function(get_user)
 get_invocations_fn = get_function(get_invocations)
 import_workflow_from_iwc_fn = get_function(import_workflow_from_iwc)
 list_history_ids_fn = get_function(list_history_ids)
 run_tool_fn = get_function(run_tool)
 search_iwc_workflows_fn = get_function(search_iwc_workflows)
-search_tools_fn = get_function(search_tools)
 upload_file_fn = get_function(upload_file)
+search_fn = get_function(search)
+fetch_fn = get_function(fetch)
 
 # Re-export non-wrapped items
 __all__ = [
@@ -76,16 +74,15 @@ __all__ = [
     "get_job_details_fn",
     "get_server_info_fn",
     "get_tool_citations_fn",
-    "get_tool_details_fn",
-    "get_tool_panel_fn",
     "get_user_fn",
     "get_invocations_fn",
     "import_workflow_from_iwc_fn",
     "list_history_ids_fn",
     "run_tool_fn",
     "search_iwc_workflows_fn",
-    "search_tools_fn",
     "upload_file_fn",
+    "search_fn",
+    "fetch_fn",
     "galaxy_state",
     "ensure_connected",
 ]
