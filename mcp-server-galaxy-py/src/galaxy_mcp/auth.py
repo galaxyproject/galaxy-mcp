@@ -9,9 +9,10 @@ import json
 import logging
 import secrets
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import urlparse
 
 import anyio
@@ -20,6 +21,8 @@ from bioblend.galaxy import GalaxyInstance
 from cryptography.fernet import Fernet, InvalidToken
 from fastmcp.server.auth.auth import (
     AccessToken as FastMCPAccessToken,
+)
+from fastmcp.server.auth.auth import (
     ClientRegistrationOptions,
     OAuthProvider,
     RevocationOptions,
@@ -33,9 +36,14 @@ from mcp.server.auth.provider import (
 )
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
+from starlette.responses import (
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+)
 from starlette.routing import Route
-
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +129,9 @@ class GalaxyOAuthProvider(OAuthProvider):
         self._transactions: dict[str, AuthorizationTransaction] = {}
         self._clients: dict[str, OAuthClientInformationFull] = {}
         self._fernet = Fernet(self._derive_key(session_secret))
-        self._client_registry_path = Path(client_registry_path).expanduser() if client_registry_path else None
+        self._client_registry_path = (
+            Path(client_registry_path).expanduser() if client_registry_path else None
+        )
 
         self._load_client_registry()
 
@@ -136,7 +146,9 @@ class GalaxyOAuthProvider(OAuthProvider):
         self._clients[client_info.client_id] = client_info
         await self._persist_client_registry()
 
-    async def authorize(self, client: OAuthClientInformationFull, params: AuthorizationParams) -> str:
+    async def authorize(
+        self, client: OAuthClientInformationFull, params: AuthorizationParams
+    ) -> str:
         txn_id = secrets.token_urlsafe(32)
         transaction = AuthorizationTransaction(
             client_id=client.client_id,
@@ -199,7 +211,9 @@ class GalaxyOAuthProvider(OAuthProvider):
             raise GalaxyAuthenticationError("Authorization code issued for a different client.")
 
         galaxy_payload = payload["galaxy"]
-        return self._issue_tokens(client_id=client.client_id, scopes=payload["scopes"], galaxy_payload=galaxy_payload)
+        return self._issue_tokens(
+            client_id=client.client_id, scopes=payload["scopes"], galaxy_payload=galaxy_payload
+        )
 
     async def load_refresh_token(
         self,
@@ -237,7 +251,9 @@ class GalaxyOAuthProvider(OAuthProvider):
             raise GalaxyAuthenticationError("Refresh token issued for a different client.")
 
         resolved_scopes = scopes or payload["scopes"]
-        return self._issue_tokens(client_id=client.client_id, scopes=resolved_scopes, galaxy_payload=payload["galaxy"])
+        return self._issue_tokens(
+            client_id=client.client_id, scopes=resolved_scopes, galaxy_payload=payload["galaxy"]
+        )
 
     async def load_access_token(self, token: str) -> AccessToken | None:
         try:
@@ -263,7 +279,9 @@ class GalaxyOAuthProvider(OAuthProvider):
 
     async def revoke_token(self, token: AccessToken | RefreshToken) -> None:
         # Stateless tokens cannot be selectively revoked without external storage.
-        logger.debug("Revocation requested for token, but stateless tokens cannot be revoked individually.")
+        logger.debug(
+            "Revocation requested for token, but stateless tokens cannot be revoked individually."
+        )
 
     # ------------------------------------------------------------------
     # Integration helpers
@@ -311,10 +329,14 @@ class GalaxyOAuthProvider(OAuthProvider):
         """Return OAuth protected resource metadata."""
         return JSONResponse(self.get_resource_metadata())
 
-    def get_routes(self, mcp_path: str | None = None, mcp_endpoint: Any | None = None) -> list[Route]:
+    def get_routes(
+        self, mcp_path: str | None = None, mcp_endpoint: Any | None = None
+    ) -> list[Route]:
         routes = super().get_routes(mcp_path, mcp_endpoint)
 
-        base_path = self._normalize_base_path(urlparse(str(self.base_url)).path if self.base_url else None)
+        base_path = self._normalize_base_path(
+            urlparse(str(self.base_url)).path if self.base_url else None
+        )
         existing_paths = {route.path for route in routes if isinstance(route, Route)}
 
         for path in self.get_login_paths(base_path):
@@ -415,7 +437,9 @@ class GalaxyOAuthProvider(OAuthProvider):
             raise InvalidToken("Token type mismatch")
         return payload
 
-    def _issue_tokens(self, *, client_id: str, scopes: list[str], galaxy_payload: dict[str, Any]) -> OAuthToken:
+    def _issue_tokens(
+        self, *, client_id: str, scopes: list[str], galaxy_payload: dict[str, Any]
+    ) -> OAuthToken:
         now = int(time.time())
         access_payload = {
             "typ": "access",
@@ -473,14 +497,18 @@ class GalaxyOAuthProvider(OAuthProvider):
             return self._render_login_form(transaction, error=str(exc))
         except Exception as exc:  # pragma: no cover - defensive
             logger.exception("Unexpected error during Galaxy login: %s", exc)
-            return self._render_login_form(transaction, error="Unexpected error during authentication.")
+            return self._render_login_form(
+                transaction, error="Unexpected error during authentication."
+            )
 
         return RedirectResponse(redirect_url, status_code=303)
 
     async def _authenticate_and_complete(self, txn_id: str, username: str, password: str) -> str:
         transaction = self._transactions.pop(txn_id, None)
         if not transaction:
-            raise GalaxyAuthenticationError("Authorization request expired. Please restart the flow.")
+            raise GalaxyAuthenticationError(
+                "Authorization request expired. Please restart the flow."
+            )
 
         api_key = await self._get_api_key(username, password)
         user_info = await self._get_user_info(api_key)
@@ -508,7 +536,9 @@ class GalaxyOAuthProvider(OAuthProvider):
         code_value = self._encrypt_payload(code_payload)
 
         logger.info("Galaxy authentication successful for user %s", galaxy_payload["username"])
-        return construct_redirect_uri(transaction.redirect_uri, code=code_value, state=transaction.state)
+        return construct_redirect_uri(
+            transaction.redirect_uri, code=code_value, state=transaction.state
+        )
 
     async def _get_api_key(self, username: str, password: str) -> str:
         url = f"{self._galaxy_url}api/authenticate/baseauth"
@@ -536,9 +566,12 @@ class GalaxyOAuthProvider(OAuthProvider):
         except Exception as exc:
             raise GalaxyAuthenticationError("Failed to validate API key with Galaxy.") from exc
 
-    def _render_login_form(self, transaction: AuthorizationTransaction, error: str | None = None) -> HTMLResponse:
+    def _render_login_form(
+        self, transaction: AuthorizationTransaction, error: str | None = None
+    ) -> HTMLResponse:
         message = (
-            "<p>Authenticate with your Galaxy credentials to allow this MCP server to access Galaxy on your behalf.</p>"
+            "<p>Authenticate with your Galaxy credentials to allow this MCP server to access "
+            "Galaxy on your behalf.</p>"
         )
         if error:
             message += f'<p style="color: red;">{error}</p>'
@@ -578,7 +611,9 @@ def get_auth_provider() -> GalaxyOAuthProvider | None:
     return _AUTH_PROVIDER
 
 
-def get_active_session(get_token: Callable[[], AccessToken | None]) -> tuple[GalaxyCredentials | None, str | None]:
+def get_active_session(
+    get_token: Callable[[], AccessToken | None],
+) -> tuple[GalaxyCredentials | None, str | None]:
     """Decode the access token from the request and extract Galaxy credentials."""
     provider = get_auth_provider()
     if not provider:

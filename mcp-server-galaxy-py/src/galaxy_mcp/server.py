@@ -3,24 +3,24 @@ import concurrent.futures
 import logging
 import os
 import threading
+import types
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
-import types
 
 import requests
 from bioblend.galaxy import GalaxyInstance
 from dotenv import find_dotenv, load_dotenv
 from fastmcp import FastMCP
 from mcp.server.auth.middleware.auth_context import get_access_token
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 from galaxy_mcp.auth import (
     GalaxyOAuthProvider,
     configure_auth_provider,
     get_active_session,
 )
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
 
 # Set up logging
 logging_level = os.environ.get("GALAXY_MCP_LOG_LEVEL", "INFO").upper()
@@ -61,7 +61,9 @@ if dotenv_path:
 
 # Galaxy configuration (target Galaxy instance)
 raw_galaxy_url = os.environ.get("GALAXY_URL")
-normalized_galaxy_url = raw_galaxy_url if not raw_galaxy_url or raw_galaxy_url.endswith("/") else f"{raw_galaxy_url}/"
+normalized_galaxy_url = (
+    raw_galaxy_url if not raw_galaxy_url or raw_galaxy_url.endswith("/") else f"{raw_galaxy_url}/"
+)
 galaxy_state: dict[str, Any] = {
     "url": normalized_galaxy_url,
     "api_key": None,
@@ -94,10 +96,14 @@ if public_base_url and normalized_galaxy_url:
         logger.error("Failed to initialize OAuth provider: %s", exc, exc_info=True)
 elif public_base_url and not normalized_galaxy_url:
     logger.warning(
-        "GALAXY_MCP_PUBLIC_URL is set but GALAXY_URL is missing. OAuth login is disabled until GALAXY_URL is configured."
+        "GALAXY_MCP_PUBLIC_URL is set but GALAXY_URL is missing. OAuth login is disabled until "
+        "GALAXY_URL is configured."
     )
 elif not public_base_url:
-    logger.info("GALAXY_MCP_PUBLIC_URL not set. OAuth login is disabled; falling back to API key authentication.")
+    logger.info(
+        "GALAXY_MCP_PUBLIC_URL not set. OAuth login is disabled; falling back to API key "
+        "authentication."
+    )
 
 # Create an MCP server (with auth if available)
 mcp: FastMCP = FastMCP("Galaxy", auth=auth_provider)
@@ -108,9 +114,7 @@ class _PreflightMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request, call_next):
         origin = request.headers.get("origin", "*")
-        allow_methods = request.headers.get(
-            "access-control-request-method", "POST,GET,OPTIONS"
-        )
+        allow_methods = request.headers.get("access-control-request-method", "POST,GET,OPTIONS")
         allow_headers = request.headers.get(
             "access-control-request-headers", "authorization,content-type"
         )
@@ -181,12 +185,17 @@ SEARCH_INPUT_SCHEMA = {
     "properties": {
         "term": {
             "type": "string",
-            "description": "Search term matched against resource names, identifiers, and descriptions.",
+            "description": (
+                "Search term matched against resource names, identifiers, and descriptions."
+            ),
             "minLength": 1,
         },
         "sources": {
             "type": "array",
-            "description": "Optional subset of resource types to search (e.g., 'tools', 'histories', 'datasets'). Providing this argument improves relevance and performance.",
+            "description": (
+                "Optional subset of resource types to search (e.g., 'tools', 'histories', "
+                "'datasets'). Providing this argument improves relevance and performance."
+            ),
             "items": {"type": "string", "enum": list(SEARCHABLE_SOURCES)},
             "uniqueItems": True,
         },
@@ -203,7 +212,9 @@ SEARCH_INPUT_SCHEMA = {
         },
         "include_published": {
             "type": "boolean",
-            "description": "Include published/shared resources where applicable (e.g. workflows, libraries).",
+            "description": (
+                "Include published/shared resources where applicable (e.g. workflows, libraries)."
+            ),
             "default": False,
         },
     },
@@ -215,7 +226,9 @@ FETCH_INPUT_SCHEMA = {
     "properties": {
         "resource_id": {
             "type": "string",
-            "description": "Identifier minted by the search tool in the form '<source>:<encoded_id>'.",
+            "description": (
+                "Identifier minted by the search tool in the form '<source>:<encoded_id>'."
+            ),
         }
     },
     "required": ["resource_id"],
@@ -252,10 +265,7 @@ def _format_search_result(
     term_lower: str,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    if isinstance(identifier, tuple):
-        encoded_id = ":".join(identifier)
-    else:
-        encoded_id = identifier
+    encoded_id = ":".join(identifier) if isinstance(identifier, tuple) else identifier
     display_name = name or encoded_id
     result = {
         "id": f"{source}:{encoded_id}",
@@ -391,9 +401,13 @@ def _search_histories(
         name = history.get("name") or hist_id
         if term_lower not in name.lower() and term_lower not in hist_id.lower():
             continue
-        details = _safe_call(
-            "histories.show_history", lambda: gi.histories.show_history(hist_id)
-        ) or {}
+        details = (
+            _safe_call(
+                "histories.show_history",
+                lambda hid=hist_id: gi.histories.show_history(hid),
+            )
+            or {}
+        )
         summary = f"History state: {details.get('state', history.get('state', 'unknown'))}"
         extra = {
             "update_time": details.get("update_time"),
@@ -401,7 +415,9 @@ def _search_histories(
             "tags": details.get("tags", []),
             "deleted": details.get("deleted", history.get("deleted")),
         }
-        results.append(_format_search_result("histories", hist_id, name, summary, term_lower, extra))
+        results.append(
+            _format_search_result("histories", hist_id, name, summary, term_lower, extra)
+        )
         if len(results) >= per_source_limit:
             break
     return results
@@ -512,7 +528,9 @@ def _search_tools(
             "labels": sorted(info["labels"]),
             "versions": versions,
         }
-        result = _format_search_result("tools", base_id, info["name"], description, term_lower, metadata)
+        result = _format_search_result(
+            "tools", base_id, info["name"], description, term_lower, metadata
+        )
         result["score"] = round(info["score"], 3)
         results.append(result)
         if len(results) >= per_source_limit:
@@ -595,7 +613,9 @@ def _search_datasets(
         searchable = " ".join([name, ds_id, ds.get("extension", ""), ds.get("state", "")]).lower()
         if term_lower not in searchable:
             continue
-        summary = f"Dataset state: {ds.get('state', 'unknown')} ({ds.get('extension', 'unknown')} format)"
+        summary = (
+            f"Dataset state: {ds.get('state', 'unknown')} ({ds.get('extension', 'unknown')} format)"
+        )
         extra = {
             "history_id": ds.get("history_id"),
             "deleted": ds.get("deleted"),
@@ -618,10 +638,13 @@ def _search_dataset_collections(
 ) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     seen: set[str] = set()
-    histories = _safe_call(
-        "histories.get_histories for collections",
-        lambda: gi.histories.get_histories(limit=max(per_source_limit * 4, 20), deleted=False),
-    ) or []
+    histories = (
+        _safe_call(
+            "histories.get_histories for collections",
+            lambda: gi.histories.get_histories(limit=max(per_source_limit * 4, 20), deleted=False),
+        )
+        or []
+    )
     if include_deleted:
         histories.extend(
             _safe_call(
@@ -637,8 +660,8 @@ def _search_dataset_collections(
             continue
         collections = _safe_call(
             f"histories.show_history (collections) {hist_id}",
-            lambda: gi.histories.show_history(
-                hist_id,
+            lambda hid=hist_id: gi.histories.show_history(
+                hid,
                 contents=True,
                 types=["dataset_collection"],
                 deleted=include_deleted if include_deleted else None,
@@ -666,7 +689,9 @@ def _search_dataset_collections(
                 "deleted": collection.get("deleted"),
             }
             results.append(
-                _format_search_result("dataset_collections", coll_id, name, summary, term_lower, extra)
+                _format_search_result(
+                    "dataset_collections", coll_id, name, summary, term_lower, extra
+                )
             )
             if len(results) >= per_source_limit:
                 return results
@@ -683,10 +708,15 @@ def _search_libraries(
 ) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     seen: set[str] = set()
-    libraries = _safe_call(
-        "libraries.get_libraries",
-        lambda: gi.libraries.get_libraries(deleted=include_deleted if include_deleted else False),
-    ) or []
+    libraries = (
+        _safe_call(
+            "libraries.get_libraries",
+            lambda: gi.libraries.get_libraries(
+                deleted=include_deleted if include_deleted else False
+            ),
+        )
+        or []
+    )
 
     for library in libraries:
         library_id = library.get("id")
@@ -704,7 +734,9 @@ def _search_libraries(
             "synopsis": library.get("synopsis"),
             "deleted": library.get("deleted"),
         }
-        results.append(_format_search_result("libraries", library_id, name, summary, term_lower, extra))
+        results.append(
+            _format_search_result("libraries", library_id, name, summary, term_lower, extra)
+        )
         if len(results) >= per_source_limit:
             break
     return results
@@ -719,10 +751,15 @@ def _search_library_datasets(
     include_published: bool,  # noqa: ARG001
 ) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
-    libraries = _safe_call(
-        "libraries.get_libraries for datasets",
-        lambda: gi.libraries.get_libraries(deleted=include_deleted if include_deleted else False),
-    ) or []
+    libraries = (
+        _safe_call(
+            "libraries.get_libraries for datasets",
+            lambda: gi.libraries.get_libraries(
+                deleted=include_deleted if include_deleted else False
+            ),
+        )
+        or []
+    )
 
     for library in libraries:
         library_id = library.get("id")
@@ -730,7 +767,7 @@ def _search_library_datasets(
             continue
         contents = _safe_call(
             f"libraries.show_library {library_id}",
-            lambda: gi.libraries.show_library(library_id, contents=True),
+            lambda lid=library_id: gi.libraries.show_library(lid, contents=True),
         )
         if not contents:
             continue
@@ -821,7 +858,9 @@ def _search_invocations(
     invocations = (
         _safe_call(
             "invocations.get_invocations",
-            lambda: gi.invocations.get_invocations(limit=max(per_source_limit * 4, 40), view="element"),
+            lambda: gi.invocations.get_invocations(
+                limit=max(per_source_limit * 4, 40), view="element"
+            ),
         )
         or []
     )
@@ -848,13 +887,17 @@ def _search_invocations(
             "workflow_id": invocation.get("workflow_id"),
             "update_time": invocation.get("update_time"),
         }
-        results.append(_format_search_result("invocations", inv_id, name, summary, term_lower, extra))
+        results.append(
+            _format_search_result("invocations", inv_id, name, summary, term_lower, extra)
+        )
         if len(results) >= per_source_limit:
             break
     return results
 
 
-SEARCH_HANDLERS: dict[str, Callable[[GalaxyInstance, dict[str, Any], str, int, bool, bool], list[dict[str, Any]]]] = {
+SEARCH_HANDLERS: dict[
+    str, Callable[[GalaxyInstance, dict[str, Any], str, int, bool, bool], list[dict[str, Any]]]
+] = {
     "histories": _search_histories,
     "tools": _search_tools,
     "workflows": _search_workflows,
@@ -957,7 +1000,8 @@ def _fetch_library(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[s
 def _fetch_library_dataset(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str, Any]:
     if len(identifier) != 2:
         raise ValueError(
-            "Library datasets require identifiers in the form 'library_datasets:<library_id>:<dataset_id>'."
+            "Library datasets require identifiers in the form "
+            "'library_datasets:<library_id>:<dataset_id>'."
         )
     library_id, dataset_id = identifier
     return gi.libraries.show_dataset(library_id, dataset_id)
@@ -986,7 +1030,11 @@ FETCH_HANDLERS: dict[str, Callable[[GalaxyInstance, list[str]], dict[str, Any]]]
 
 @mcp.tool(
     name="search",
-    description="Search across Galaxy histories, tools, workflows, datasets, libraries, jobs, and invocations. Specify the `sources` argument (e.g., 'tools', 'histories') when possible to narrow the scope.",
+    description=(
+        "Search across Galaxy histories, tools, workflows, datasets, libraries, jobs, and "
+        "invocations. Specify the `sources` argument (e.g., 'tools', 'histories') when possible to "
+        "narrow the scope."
+    ),
     enabled=True,
     annotations={
         "readOnlyHint": "true",
@@ -1091,7 +1139,8 @@ def fetch(resource_id: str) -> dict[str, Any]:
     source = SOURCE_ALIASES.get(parts[0], parts[0])
     if source not in FETCH_HANDLERS:
         raise ValueError(
-            f"Unsupported resource type '{parts[0]}'. Supported types: {', '.join(SEARCHABLE_SOURCES)}."
+            f"Unsupported resource type '{parts[0]}'. Supported types: "
+            f"{', '.join(SEARCHABLE_SOURCES)}."
         )
     identifiers = parts[1:]
     handler = FETCH_HANDLERS[source]
@@ -1637,7 +1686,9 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str,
     try:
         # Get dataset provenance to find the creating job
         try:
-            provenance = gi.histories.show_dataset_provenance(history_id=history_id, dataset_id=dataset_id)
+            provenance = gi.histories.show_dataset_provenance(
+                history_id=history_id, dataset_id=dataset_id
+            )
 
             # Extract job ID from provenance
             job_id = provenance.get("job_id")
@@ -1834,7 +1885,7 @@ def download_dataset(
             )
 
             download_path = None  # No file saved
-            file_size = len(result_path) if isinstance(result_path, (bytes, str)) else None
+            file_size = len(result_path) if isinstance(result_path, bytes | str) else None
 
         return {
             "dataset_id": dataset_id,
@@ -2064,7 +2115,9 @@ def run_http_server(
     """Run the MCP server over HTTP-based transport."""
     resolved_host = host or os.environ.get("GALAXY_MCP_HOST", "0.0.0.0")
     resolved_port = int(port or os.environ.get("GALAXY_MCP_PORT", "8000"))
-    resolved_transport = (transport or os.environ.get("GALAXY_MCP_TRANSPORT") or "streamable-http").lower()
+    resolved_transport = (
+        transport or os.environ.get("GALAXY_MCP_TRANSPORT") or "streamable-http"
+    ).lower()
     if resolved_transport not in {"streamable-http", "sse"}:
         raise ValueError(
             f"Unsupported transport '{resolved_transport}'. Choose 'streamable-http' or 'sse'."
@@ -2075,7 +2128,9 @@ def run_http_server(
     if resolved_path is not None and not resolved_path.startswith("/"):
         resolved_path = f"/{resolved_path}"
 
-    mcp.run(transport=resolved_transport, host=resolved_host, port=resolved_port, path=resolved_path)
+    mcp.run(
+        transport=resolved_transport, host=resolved_host, port=resolved_port, path=resolved_path
+    )
 
 
 if __name__ == "__main__":

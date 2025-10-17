@@ -158,7 +158,11 @@ def mock_galaxy_instance():
             "history_id": "test_history_1",
         }
     ]
-    mock_invocations.show_invocation.return_value = {"id": "inv1", "state": "ok", "workflow_id": "workflow1"}
+    mock_invocations.show_invocation.return_value = {
+        "id": "inv1",
+        "state": "ok",
+        "workflow_id": "workflow1",
+    }
     mock_gi.invocations = mock_invocations
 
     # Mock datasets

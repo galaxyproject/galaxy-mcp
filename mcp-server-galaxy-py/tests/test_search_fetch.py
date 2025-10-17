@@ -50,7 +50,9 @@ class TestSearchAndFetch:
             assert versions, "Grouped tool result should include version metadata."
             for version in versions:
                 assert version.get("id"), "Version entries must include a Galaxy tool identifier."
-                assert version.get("resource_id"), "Version entries must expose a resource identifier."
+                assert version.get(
+                    "resource_id"
+                ), "Version entries must expose a resource identifier."
 
         for item in response["results"]:
             assert ":" in item["id"]

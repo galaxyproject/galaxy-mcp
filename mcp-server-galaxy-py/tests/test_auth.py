@@ -6,13 +6,11 @@ import json
 from urllib.parse import urlparse
 
 import pytest
-from starlette.routing import Route
-from starlette.testclient import TestClient
-
 from fastmcp.server.server import FastMCP
-
 from galaxy_mcp.auth import GalaxyOAuthProvider
 from mcp.shared.auth import OAuthClientInformationFull
+from starlette.routing import Route
+from starlette.testclient import TestClient
 
 
 def _make_provider() -> GalaxyOAuthProvider:
@@ -79,7 +77,7 @@ def test_resource_metadata_route_returns_payload() -> None:
         assert response.json() == metadata
 
 
-@pytest.mark.anyio
+@pytest.mark.anyio()
 async def test_register_client_persists_to_registry(tmp_path) -> None:
     registry_path = tmp_path / "clients.json"
     provider = GalaxyOAuthProvider(
