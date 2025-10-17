@@ -337,14 +337,23 @@ class GalaxyOAuthProvider(OAuthProvider):
         base_path = self._normalize_base_path(
             urlparse(str(self.base_url)).path if self.base_url else None
         )
+        login_paths = self.get_login_paths(base_path)
+        metadata_paths = self.get_resource_metadata_paths(base_path)
+
+        routes = [
+            route
+            for route in routes
+            if not (isinstance(route, Route) and route.path in login_paths | metadata_paths)
+        ]
+
         existing_paths = {route.path for route in routes if isinstance(route, Route)}
 
-        for path in self.get_login_paths(base_path):
+        for path in login_paths:
             if path not in existing_paths:
                 routes.append(Route(path, endpoint=self.handle_login, methods=["GET", "POST"]))
                 existing_paths.add(path)
 
-        for path in self.get_resource_metadata_paths(base_path):
+        for path in metadata_paths:
             if path not in existing_paths:
                 routes.append(Route(path, endpoint=self.handle_resource_metadata, methods=["GET"]))
                 existing_paths.add(path)
@@ -396,7 +405,7 @@ class GalaxyOAuthProvider(OAuthProvider):
             tmp_path.replace(path)
 
         try:
-            await anyio.to_thread.run_sync(_write, cancellable=True)
+            await anyio.to_thread.run_sync(_write, abandon_on_cancel=True)
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning("Failed to persist client registry to %s: %s", path, exc)
 

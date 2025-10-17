@@ -19,7 +19,7 @@ def mock_galaxy_instance():
     mock_histories = Mock()
     histories_data = [
         {"id": "test_history_1", "name": "Test History 1", "deleted": False},
-        {"id": "test_history_2", "name": "RNA History", "deleted": False},
+        {"id": "test_history_2", "name": "Test History 2", "deleted": False},
     ]
 
     def mock_get_histories(limit=None, deleted=False, **kwargs):

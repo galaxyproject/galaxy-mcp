@@ -33,7 +33,7 @@ class TestHistoryOperations:
 
     def test_get_histories_empty(self, mock_galaxy_instance):
         """Test get_histories with no histories"""
-        mock_galaxy_instance.histories.get_histories.return_value = []
+        mock_galaxy_instance.histories.get_histories.side_effect = lambda *args, **kwargs: []
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = get_histories_fn()

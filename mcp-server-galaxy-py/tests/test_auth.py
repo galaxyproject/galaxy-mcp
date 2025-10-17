@@ -77,7 +77,7 @@ def test_resource_metadata_route_returns_payload() -> None:
         assert response.json() == metadata
 
 
-@pytest.mark.anyio()
+@pytest.mark.asyncio()
 async def test_register_client_persists_to_registry(tmp_path) -> None:
     registry_path = tmp_path / "clients.json"
     provider = GalaxyOAuthProvider(
