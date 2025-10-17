@@ -1148,7 +1148,11 @@ def fetch(resource_id: str) -> dict[str, Any]:
     return {"resource_id": resource_id, "source": source, "metadata": metadata}
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        "readOnlyHint": "true",
+    },
+)
 def get_tool_citations(resource_id: str) -> dict[str, Any]:
     """
     Get citation information for a specific tool identified by a scoped search ID.
@@ -1189,7 +1193,11 @@ def get_tool_citations(resource_id: str) -> dict[str, Any]:
         raise ValueError(f"Failed to get tool citations: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        "readOnlyHint": "false",
+    },
+)
 def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> dict[str, Any]:
     """
     Run a tool in Galaxy
@@ -1223,7 +1231,11 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> dict[str,
         raise ValueError(error_msg) from e
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        "readOnlyHint": "false",
+    },
+)
 def create_history(history_name: str) -> dict[str, Any]:
     """
     Create a new history in Galaxy
@@ -1239,7 +1251,11 @@ def create_history(history_name: str) -> dict[str, Any]:
     return gi.histories.create_history(history_name)
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        "readOnlyHint": "true",
+    },
+)
 def filter_tools_by_dataset(dataset_type: list[str]) -> dict[str, Any]:
     """
     Filter Galaxy tools that are potentially suitable for a given dataset type.
@@ -1346,7 +1362,11 @@ def filter_tools_by_dataset(dataset_type: list[str]) -> dict[str, Any]:
         raise ValueError(f"Failed to filter tools based on dataset: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        "readOnlyHint": "true",
+    },
+)
 def get_server_info() -> dict[str, Any]:
     """
     Get Galaxy server information including version, URL, and configuration details
@@ -1395,7 +1415,11 @@ def get_server_info() -> dict[str, Any]:
         raise ValueError(f"Failed to get server information: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        "readOnlyHint": "true",
+    },
+)
 def get_user() -> dict[str, Any]:
     """
     Get current user information
@@ -1413,7 +1437,11 @@ def get_user() -> dict[str, Any]:
         raise ValueError(f"Failed to get user: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        "readOnlyHint": "true",
+    },
+)
 def get_histories(
     limit: int | None = None, offset: int = 0, name: str | None = None
 ) -> dict[str, Any]:
@@ -1482,7 +1510,11 @@ def get_histories(
         )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        "readOnlyHint": "true",
+    },
+)
 def list_history_ids() -> list[dict[str, str]]:
     """
     Get a simplified list of history IDs and names for easy reference
@@ -1504,7 +1536,11 @@ def list_history_ids() -> list[dict[str, str]]:
         raise ValueError(f"Failed to list history IDs: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        "readOnlyHint": "true",
+    },
+)
 def get_history_details(history_id: str) -> dict[str, Any]:
     """
     Get history metadata and summary count ONLY - does not return actual datasets
@@ -1556,7 +1592,11 @@ def get_history_details(history_id: str) -> dict[str, Any]:
         raise ValueError(f"Failed to get history details for ID '{history_id}': {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        "readOnlyHint": "true",
+    },
+)
 def get_history_contents(
     history_id: str,
     limit: int = 100,
@@ -1666,7 +1706,11 @@ def get_history_contents(
         raise ValueError(f"Failed to get history contents for ID '{history_id}': {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        "readOnlyHint": "true",
+    },
+)
 def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str, Any]:
     """
     Get detailed information about the job that created a specific dataset
@@ -1732,7 +1776,11 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str,
         raise ValueError(f"Failed to get job details for dataset '{dataset_id}': {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        "readOnlyHint": "true",
+    },
+)
 def get_dataset_details(
     dataset_id: str, include_preview: bool = True, preview_lines: int = 10
 ) -> dict[str, Any]:
@@ -1808,7 +1856,11 @@ def get_dataset_details(
         raise ValueError(f"Failed to get dataset details for '{dataset_id}': {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        "readOnlyHint": "true",
+    },
+)
 def download_dataset(
     dataset_id: str,
     file_path: str | None = None,
@@ -1916,7 +1968,11 @@ def download_dataset(
         raise ValueError(f"Failed to download dataset '{dataset_id}': {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        "readOnlyHint": "false",
+    },
+)
 def upload_file(path: str, history_id: str | None = None) -> dict[str, Any]:
     """
     Upload a local file to Galaxy
@@ -1946,7 +2002,11 @@ def upload_file(path: str, history_id: str | None = None) -> dict[str, Any]:
         raise ValueError(f"Failed to upload file: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        "readOnlyHint": "true",
+    },
+)
 def get_invocations(
     invocation_id: str | None = None,
     workflow_id: str | None = None,
@@ -1996,7 +2056,11 @@ def get_invocations(
         raise ValueError(f"Failed to get workflow invocations: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        "readOnlyHint": "true",
+    },
+)
 def get_iwc_workflows() -> dict[str, Any]:
     """
     Fetch all workflows from the IWC (Interactive Workflow Composer)
@@ -2020,7 +2084,11 @@ def get_iwc_workflows() -> dict[str, Any]:
         raise ValueError(f"Failed to fetch IWC workflows: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        "readOnlyHint": "true",
+    },
+)
 def search_iwc_workflows(query: str) -> dict[str, Any]:
     """
     Search for workflows in the IWC manifest
@@ -2057,7 +2125,11 @@ def search_iwc_workflows(query: str) -> dict[str, Any]:
         raise ValueError(f"Failed to search IWC workflows: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations={
+        "readOnlyHint": "false",
+    },
+)
 def import_workflow_from_iwc(trs_id: str) -> dict[str, Any]:
     """
     Import a workflow from IWC to the user's Galaxy instance
