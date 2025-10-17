@@ -57,18 +57,7 @@ def test_login_routes_registered_on_fastmcp() -> None:
         assert response.status_code == 400
 
 
-def test_resource_metadata_includes_expected_fields() -> None:
-    provider = _make_provider()
-
-    metadata = provider.get_resource_metadata()
-
-    assert metadata["resource"] == "https://galaxy.example.com/"
-    assert metadata["authorization_servers"] == ["https://public.example.com/.well-known/mcp"]
-    assert metadata["scopes_supported"] == ["galaxy:full"]
-    assert metadata["token_types_supported"] == ["Bearer"]
-
-
-def test_resource_metadata_route_returns_payload() -> None:
+def test_resource_metadata_endpoint_returns_expected_payload() -> None:
     provider = _make_provider()
     server = FastMCP("Test", auth=provider)
 
@@ -82,6 +71,11 @@ def test_resource_metadata_route_returns_payload() -> None:
         response = client.get(path)
         assert response.status_code == 200
         assert response.json() == metadata
+
+    assert metadata["resource"] == "https://galaxy.example.com/"
+    assert metadata["authorization_servers"] == ["https://public.example.com/.well-known/mcp"]
+    assert metadata["scopes_supported"] == ["galaxy:full"]
+    assert metadata["token_types_supported"] == ["Bearer"]
 
 
 @pytest.mark.asyncio()
