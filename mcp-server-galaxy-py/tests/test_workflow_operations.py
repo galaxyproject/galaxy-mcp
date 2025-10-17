@@ -9,17 +9,16 @@ import pytest
 from .test_helpers import (
     galaxy_state,
     get_invocations_fn,
-    get_iwc_workflows_fn,
     import_workflow_from_iwc_fn,
-    search_iwc_workflows_fn,
+    iwc_workflows_fn,
 )
 
 
 class TestWorkflowOperations:
     """Test workflow operations"""
 
-    def test_get_iwc_workflows_fn(self):
-        """Test getting IWC workflows"""
+    def test_iwc_workflows_fetch(self):
+        """Test retrieving IWC workflows"""
         mock_response = Mock()
         mock_response.json.return_value = [
             {
@@ -32,15 +31,14 @@ class TestWorkflowOperations:
         mock_response.raise_for_status.return_value = None
 
         with patch("requests.get", return_value=mock_response):
-            result = get_iwc_workflows_fn()
+            result = iwc_workflows_fn()
 
-            assert "workflows" in result
+            assert result["matched"] == 2
             assert len(result["workflows"]) == 2
             assert result["workflows"][0]["trs_id"] == "workflow1"
 
-    def test_search_iwc_workflows_fn(self):
+    def test_iwc_workflows_search(self):
         """Test searching IWC workflows"""
-        # Mock the get_iwc_workflows function since search calls it
         mock_workflows = {
             "workflows": [
                 {
@@ -60,12 +58,13 @@ class TestWorkflowOperations:
             ]
         }
 
-        with patch("galaxy_mcp.server.get_iwc_workflows.fn", return_value=mock_workflows):
-            result = search_iwc_workflows_fn("rna")
+        with patch(
+            "galaxy_mcp.server._fetch_iwc_workflows", return_value=mock_workflows["workflows"]
+        ):
+            result = iwc_workflows_fn(term="rna")
 
-            assert "workflows" in result
-            assert "count" in result
-            assert result["count"] == 1
+            assert result["matched"] == 1
+            assert result["total"] == len(mock_workflows["workflows"])
             assert "RNA-seq" in result["workflows"][0]["definition"]["name"]
 
     def test_import_workflow_from_iwc_fn(self, mock_galaxy_instance):

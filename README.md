@@ -33,11 +33,13 @@ uvx --from galaxy-mcp mcp dev galaxy_mcp.server
 uvx --from galaxy-mcp mcp run galaxy_mcp.server
 ```
 
-You'll need to set up your Galaxy credentials via environment variables:
+You'll need to set up the target Galaxy instance via environment variables:
 
 ```bash
 export GALAXY_URL=<galaxy_url>
-export GALAXY_API_KEY=<galaxy_api_key>
+export GALAXY_MCP_PUBLIC_URL=<public_url_exposed_to_clients>
+# Optional: persist encrypted session cache across restarts
+export GALAXY_MCP_SESSION_SECRET=<random_secret>
 ```
 
 ### Alternative Installation

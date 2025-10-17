@@ -39,14 +39,20 @@ uv sync --all-extras
 
 ## Configuration
 
-The server requires Galaxy credentials to connect to an instance. You can provide these via environment variables:
+The server needs to know which Galaxy instance to target. Configure it via environment variables:
 
 ```bash
 export GALAXY_URL=<galaxy_url>
-export GALAXY_API_KEY=<galaxy_api_key>
+export GALAXY_MCP_PUBLIC_URL=https://your-public-hostname
+# Optional but recommended: persist session encryption across restarts
+export GALAXY_MCP_SESSION_SECRET="random-long-secret"
 ```
 
 Alternatively, create a `.env` file in the project root with these variables.
+
+### OAuth Sign-In (ChatGPT and other MCP clients)
+
+When `GALAXY_URL` and `GALAXY_MCP_PUBLIC_URL` are set, the server exposes OAuth endpoints that prompt users to authenticate with their Galaxy username/password. Successful logins generate short-lived access tokens bound to the Galaxy instance and cached API keys that expire after three days of inactivity. The cached keys never leave the server—tool executions automatically use the active OAuth session.
 
 ## Usage
 
@@ -92,19 +98,16 @@ See [USAGE_EXAMPLES.md](USAGE_EXAMPLES.md) for detailed usage patterns and commo
 
 The Python implementation provides the following MCP tools:
 
-- `connect`: Establish connection to a Galaxy instance
-- `search_tools`: Find Galaxy tools by name
-- `get_tool_details`: Retrieve detailed tool information
+- `search`: Discover Galaxy resources (tools, histories, workflows, datasets, etc.)
+- `fetch`: Retrieve metadata (including tool citations) for a resource returned by `search`
 - `run_tool`: Execute a Galaxy tool with parameters
-- `get_tool_panel`: Retrieve the Galaxy tool panel structure
+- `filter_tools_by_dataset`: Recommend tools based on dataset characteristics
 - `get_user`: Get current user information
-- `get_histories`: List available Galaxy histories
-- `list_history_ids`: Get simplified list of history IDs and names
+- `get_histories`: List available Galaxy histories (use `ids_only=True` for a simplified list)
 - `get_history_details`: Get detailed information about a specific history
 - `upload_file`: Upload local files to Galaxy
 - `get_invocations`: View workflow executions
-- `get_iwc_workflows`: Access Interactive Workflow Composer workflows
-- `search_iwc_workflows`: Search IWC workflows by keywords
+- `iwc_workflows`: Access or search Interactive Workflow Composer workflows
 - `import_workflow_from_iwc`: Import an IWC workflow to Galaxy
 
 ## Testing
@@ -134,7 +137,6 @@ uv run pytest -v
 
 Tests are organized by functionality:
 
-- `test_connection.py` - Galaxy connection and authentication
 - `test_history_operations.py` - History-related operations
 - `test_dataset_operations.py` - Dataset upload/download
 - `test_tool_operations.py` - Tool search and execution
@@ -164,6 +166,10 @@ uv run pre-commit install
 ```
 
 Pre-commit hooks will automatically format your code and run linting checks when you commit. All contributors should install these hooks to maintain consistent code quality.
+
+### Authentication Provider Notes
+
+`GalaxyOAuthProvider` extends FastMCPs default OAuth provider so we can surface Galaxy-specific login and metadata endpoints. FastMCP automatically wires in generic routes when you pass `auth=...`, so our implementation overrides `get_routes()` to replace those defaults with Galaxy-aware handlers (and to add base-path-prefixed variants). The tests under `tests/test_auth.py` assert that the replacement logic works and that the custom OAuth flow remains spec compliant.
 
 ### Development Commands
 

@@ -4,38 +4,16 @@ This document provides common usage patterns and examples for the Galaxy MCP ser
 
 ## Quick Start
 
-### 1. Connect to Galaxy
+### 1. Verify Connectivity
 
-First, you need to establish a connection to your Galaxy instance:
-
-```python
-# Option 1: Use environment variables (recommended)
-# Set GALAXY_URL and GALAXY_API_KEY in your environment or .env file
-connect()
-
-# Option 2: Provide credentials directly
-connect(url="https://your-galaxy-instance.org", api_key="your-api-key")
-```
-
-#### Get server information
-
-Once connected, you can retrieve comprehensive information about the Galaxy server:
+Authenticate through your MCP client’s OAuth flow (e.g., ChatGPT will prompt you). With an active
+session you can confirm access by requesting server metadata:
 
 ```python
 server_info = get_server_info()
-# Returns: {
-#   "url": "https://your-galaxy-instance.org/",
-#   "version": {"version_major": "23.1", "version_minor": "1", ...},
-#   "config": {
-#     "brand": "Galaxy",
-#     "allow_user_creation": true,
-#     "enable_quotas": false,
-#     "ftp_upload_site": "ftp.galaxy.org",
-#     "support_url": "https://help.galaxyproject.org/",
-#     ...
-#   }
-# }
 ```
+
+The response includes the Galaxy URL, version information, and selected configuration fields.
 
 ### 2. Working with Histories
 
@@ -49,7 +27,7 @@ histories = get_histories()
 #### Get just IDs and names (simplified)
 
 ```python
-history_list = list_history_ids()
+history_list = get_histories(ids_only=True)["histories"]
 # Returns: [{"id": "abc123", "name": "My Analysis"}, ...]
 ```
 
@@ -67,15 +45,32 @@ details = get_history_details(history_id)
 #### Search for tools
 
 ```python
-tools = search_tools("fastqc")
-# Returns: {"tools": [...]}
+tool_search = search(term="fastqc", sources=["tools"])
+tool_hits = [item for item in tool_search["results"] if item["source"] == "tools"]
+first_tool = tool_hits[0]
+tool_versions = first_tool["metadata"]["versions"]
+# Each version entry holds the Galaxy tool ID and a resource_id for fetch calls.
 ```
 
-#### Get tool details
+#### Get tool metadata
 
 ```python
-tool_details = get_tool_details("toolshed.g2.bx.psu.edu/repos/devteam/fastqc/fastqc/0.72")
-# Returns: Detailed tool information including parameters
+# Fetch aggregated metadata (all versions)
+tool_metadata = fetch(first_tool["id"])
+all_versions = tool_metadata["metadata"]["versions"]
+
+# Fetch metadata for a specific version
+latest_version = tool_versions[0]
+latest_version_metadata = fetch(latest_version["resource_id"])
+# Per-version details are returned under metadata["versions"][0]["details"]
+```
+
+#### Access tool citations
+
+```python
+tool_metadata = fetch(first_tool["id"])
+citations = tool_metadata["metadata"].get("citations", [])
+# Citations are aggregated across tool versions when available.
 ```
 
 #### Run a tool
@@ -89,6 +84,11 @@ inputs = {
     "input_file": {"src": "hda", "id": "dataset_id"},
     "param1": "value1"
 }
+
+# Find the Galaxy tool ID for the desired version
+tool_search = search(term="fastqc", sources=["tools"])
+tool_versions = tool_search["results"][0]["metadata"]["versions"]
+tool_id = tool_versions[0]["id"]  # e.g. 'toolshed.../fastqc/fastqc/0.72'
 
 # Run the tool
 result = run_tool(history_id, tool_id, inputs)
@@ -112,10 +112,10 @@ upload_result = upload_file("/path/to/your/file.txt", history_id="abc123")
 
 ```python
 # Get all workflows from Interactive Workflow Composer
-iwc_workflows = get_iwc_workflows()
+iwc_catalogue = iwc_workflows()
 
 # Search for specific workflows
-matching_workflows = search_iwc_workflows("RNA-seq")
+matching_workflows = iwc_workflows(term="RNA-seq")
 ```
 
 #### Import a workflow
@@ -130,26 +130,24 @@ imported = import_workflow_from_iwc("github.com/galaxyproject/iwc/tree/main/work
 ### Pattern 1: Complete Analysis Pipeline
 
 ```python
-# 1. Connect to Galaxy
-connect()
-
-# 2. Create a new history for the analysis
+# 1. Create a new history for the analysis
 new_history = create_history("RNA-seq Analysis")
 history_id = new_history["id"]
 
-# 3. Upload data files
+# 2. Upload data files
 upload_file("/data/sample1_R1.fastq", history_id)
 upload_file("/data/sample1_R2.fastq", history_id)
 
-# 4. Search and run quality control
-qc_tools = search_tools("fastqc")
-tool_id = qc_tools["tools"][0]["id"]
+# 3. Search and run quality control
+search_response = search(term="fastqc", sources=["tools"])
+qc_hit = next(item for item in search_response["results"] if item["source"] == "tools")
+tool_id = qc_hit["metadata"]["versions"][0]["id"]
 
-# 5. Get history contents to find dataset IDs
+# 4. Get history contents to find dataset IDs
 history_details = get_history_details(history_id)
 datasets = history_details["contents"]
 
-# 6. Run FastQC on uploaded files
+# 5. Run FastQC on uploaded files
 for dataset in datasets:
     if dataset["extension"] == "fastq":
         inputs = {"input_file": {"src": "hda", "id": dataset["id"]}}
@@ -159,8 +157,7 @@ for dataset in datasets:
 ### Pattern 2: Working with Existing Data
 
 ```python
-# 1. Connect and list histories
-connect()
+# 1. List histories
 histories = list_history_ids()
 
 # 2. Find a specific history
@@ -189,22 +186,16 @@ if target_history:
     - Problem: Passing the entire history object instead of just the ID
     - Solution: Use `history["id"]` not `history`
 
-2. **"Not connected to Galaxy" error**
-
-    - Problem: Trying to use tools before connecting
-    - Solution: Always call `connect()` first
-
 3. **"Tool not found" error**
     - Problem: Using incorrect tool ID format
-    - Solution: Use the full tool ID from `search_tools()` or `get_tool_panel()`
+    - Solution: Use `search(term=..., sources=["tools"])` and take the Galaxy tool ID from `result["metadata"]["versions"][0]["id"]`
 
 ## Best Practices
 
-1. **Always connect first**: Before using any other tools, establish a connection
-2. **Use IDs correctly**: When functions ask for an ID, pass just the ID string, not the entire object
-3. **Check return types**: Some functions return lists, others return dictionaries
-4. **Handle errors gracefully**: Wrap operations in try-except blocks
-5. **Use environment variables**: Store credentials in .env file for security
+1. **Use IDs correctly**: When functions ask for an ID, pass just the ID string, not the entire object
+2. **Check return types**: Some functions return lists, others return dictionaries
+3. **Handle errors gracefully**: Wrap operations in try/except blocks
+4. **Use environment variables**: Store credentials in a `.env` file when you cannot rely on OAuth
 
 ## Advanced Usage
 
@@ -213,8 +204,10 @@ if target_history:
 Different tools require different input formats. Here's how to determine the correct format:
 
 ```python
-# 1. Get tool details to see required parameters
-tool_info = get_tool_details(tool_id, io_details=True)
+# 1. Find the tool via search and fetch metadata for the desired version
+tool_hit = search(term="bwa", sources=["tools"])["results"][0]
+selected_version = tool_hit["metadata"]["versions"][0]
+tool_info = fetch(selected_version["resource_id"])["metadata"]["versions"][0]["details"]
 
 # 2. Examine the inputs section
 for input_param in tool_info["inputs"]:

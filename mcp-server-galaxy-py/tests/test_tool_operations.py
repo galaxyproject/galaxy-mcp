@@ -12,53 +12,57 @@ from .test_helpers import galaxy_state, run_tool_fn, search_tools_fn
 class TestToolOperations:
     """Test tool operations"""
 
-    def test_search_tools_fn(self, mock_galaxy_instance):
-        """Test tool search functionality"""
-        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
-            # Search should return dict with 'tools' key
-            result = search_tools_fn("")
-            assert "tools" in result
-            assert len(result["tools"]) == 2
-            assert result["tools"][0]["id"] == "tool1"
-
-            # Search with query
-            mock_galaxy_instance.tools.get_tools.return_value = [
-                {"id": "tool1", "name": "Test Tool 1", "description": "Aligns sequences"}
-            ]
-
-            result = search_tools_fn("align")
-            assert "tools" in result
-            assert len(result["tools"]) == 1
-            assert "align" in result["tools"][0]["description"].lower()
-
-    def test_search_tools_with_results(self, mock_galaxy_instance):
-        """Test search tools returns filtered results"""
-        all_tools = [
-            {"id": "tool1", "name": "BWA Aligner", "description": "Aligns sequences"},
-            {"id": "tool2", "name": "Samtools", "description": "Process BAM files"},
-            {"id": "tool3", "name": "HISAT2", "description": "Fast aligner"},
+    def test_search_tools_includes_citations(self, mock_galaxy_instance):
+        """Tool search should include aggregated citations."""
+        mock_galaxy_instance.tools.get_tools.return_value = [
+            {
+                "id": "toolshed.g2/fastqc/0.72",
+                "name": "FastQC",
+                "description": "QC tool",
+                "version": "0.72",
+                "tool_type": "default",
+                "labels": ["qc"],
+            }
         ]
 
-        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
-            # Mock filtering behavior
-            def mock_get_tools(name=None):
-                if name and name.lower() == "align":
-                    return [
-                        t
-                        for t in all_tools
-                        if "align" in t["name"].lower() or "align" in t["description"].lower()
-                    ]
-                return all_tools
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}), patch(
+            "galaxy_mcp.server._collect_tool_details",
+            return_value={
+                "tool_id": "toolshed.g2/fastqc",
+                "citations": [
+                    {"title": "FastQC citation"},
+                    {"title": "Older citation"},
+                ],
+                "versions": [
+                    {
+                        "id": "toolshed.g2/fastqc/0.72",
+                        "version": "0.72",
+                        "resource_id": "tools:toolshed.g2/fastqc/0.72",
+                        "details": {"id": "toolshed.g2/fastqc/0.72", "version": "0.72"},
+                    },
+                    {
+                        "id": "toolshed.g2/fastqc/0.71",
+                        "version": "0.71",
+                        "resource_id": "tools:toolshed.g2/fastqc/0.71",
+                        "details": {"id": "toolshed.g2/fastqc/0.71", "version": "0.71"},
+                    },
+                ],
+            },
+        ):
+            response = search_tools_fn(term="FastQC")
 
-            mock_galaxy_instance.tools.get_tools.side_effect = mock_get_tools
+        assert response["source"] == "tools"
+        assert response["total"] == len(response["matches"])
+        assert response["matches"], "Expected at least one match"
 
-            # Search for aligners
-            result = search_tools_fn("align")
-            assert "tools" in result
-            aligners = result["tools"]
-            assert len(aligners) == 2
-            assert any("BWA" in t["name"] for t in aligners)
-            assert any("HISAT2" in t["name"] for t in aligners)
+        first = response["matches"][0]
+        details = first["details"]
+        assert details["tool_id"] == "toolshed.g2/fastqc"
+        assert details["citations"] == [
+            {"title": "FastQC citation"},
+            {"title": "Older citation"},
+        ]
+        assert len(details["versions"]) == 2
 
     def test_run_tool_fn(self, mock_galaxy_instance):
         """Test running a tool"""
@@ -95,7 +99,7 @@ class TestToolOperations:
         """Test tool operations fail when not connected"""
         with patch.dict(galaxy_state, {"connected": False}):
             with pytest.raises(Exception):
-                search_tools_fn("query")
+                search_tools_fn(term="abc")
 
             with pytest.raises(Exception):
                 run_tool_fn("history_1", "tool1", {})

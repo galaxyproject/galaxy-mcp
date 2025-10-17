@@ -10,7 +10,6 @@ from .test_helpers import (
     galaxy_state,
     get_histories_fn,
     get_history_details_fn,
-    list_history_ids_fn,
 )
 
 
@@ -33,7 +32,7 @@ class TestHistoryOperations:
 
     def test_get_histories_empty(self, mock_galaxy_instance):
         """Test get_histories with no histories"""
-        mock_galaxy_instance.histories.get_histories.return_value = []
+        mock_galaxy_instance.histories.get_histories.side_effect = lambda *args, **kwargs: []
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = get_histories_fn()
@@ -41,15 +40,16 @@ class TestHistoryOperations:
             assert result["histories"] == []
             assert result["pagination"]["total_items"] == 0
 
-    def test_list_history_ids_fn(self, mock_galaxy_instance):
-        """Test list_history_ids returns simplified list"""
+    def test_get_histories_ids_only(self, mock_galaxy_instance):
+        """Test get_histories ids_only mode returns simplified list"""
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
-            history_ids = list_history_ids_fn()
+            result = get_histories_fn(ids_only=True)
 
-            assert isinstance(history_ids, list)
-            assert len(history_ids) == 2
-            assert history_ids[0] == {"id": "test_history_1", "name": "Test History 1"}
-            assert history_ids[1] == {"id": "test_history_2", "name": "Test History 2"}
+            assert isinstance(result["histories"], list)
+            assert len(result["histories"]) == 2
+            assert result["histories"][0] == {"id": "test_history_1", "name": "Test History 1"}
+            assert result["histories"][1] == {"id": "test_history_2", "name": "Test History 2"}
+            assert result["ids_only"] is True
 
     def test_get_history_details_fn(self, mock_galaxy_instance):
         """Test get_history_details with valid ID"""
@@ -98,7 +98,7 @@ class TestHistoryOperations:
                 get_histories_fn()
 
             with pytest.raises(Exception):
-                list_history_ids_fn()
+                get_histories_fn(ids_only=True)
 
             with pytest.raises(Exception):
                 get_history_details_fn("any_id")

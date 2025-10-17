@@ -42,10 +42,9 @@ RUN groupadd -r app && useradd -r -g app app
 WORKDIR /app
 
 # Define default environment variables
-ENV GALAXY_INSTANCE="https://usegalaxy.org" \
-    GALAXY_API_KEY=""
+ENV GALAXY_URL="https://usegalaxy.org" \
+    GALAXY_MCP_PUBLIC_URL="http://localhost:8000"
 
-COPY --from=uv /root/.local /root/.local
 COPY --from=uv --chown=app:app /app/.venv /app/.venv
 
 # Place executables in the environment at the front of the path
@@ -70,5 +69,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
 # Use tini as init to handle signals properly
 ENTRYPOINT ["/usr/bin/tini", "--"]
 
-# Update command to use environment variables instead of DB path
-CMD ["mcp-server-galaxy", "--galaxy-url", "${GALAXY_INSTANCE}", "--api-key", "${GALAXY_API_KEY}"]
+# Default command – environment variables configure the target Galaxy instance
+CMD ["galaxy-mcp"]

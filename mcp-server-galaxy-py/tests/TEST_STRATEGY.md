@@ -26,7 +26,6 @@ The best approach for writing integration tests for the Galaxy MCP server is to 
 ```
 tests/
 ├── conftest.py              # Shared fixtures and configuration
-├── test_connection.py       # Galaxy connection and authentication
 ├── test_history_operations.py   # History-related operations
 ├── test_dataset_operations.py   # Dataset upload/download
 ├── test_tool_operations.py      # Tool search and execution

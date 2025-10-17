@@ -9,8 +9,8 @@ import pytest
 from .test_helpers import (
     create_history_fn,
     galaxy_state,
+    get_histories_fn,
     import_workflow_from_iwc_fn,
-    list_history_ids_fn,
     run_tool_fn,
     upload_file_fn,
 )
@@ -98,7 +98,7 @@ class TestIntegration:
                 {"id": "history_1", "name": "RNA-seq Data"}
             ]
 
-            histories = list_history_ids_fn()
+            histories = get_histories_fn(ids_only=True)["histories"]
             histories[0]["id"]
 
             # 3. Workflow execution not directly available in current MCP implementation
