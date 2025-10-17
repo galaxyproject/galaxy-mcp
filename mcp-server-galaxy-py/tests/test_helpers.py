@@ -16,7 +16,6 @@ from galaxy_mcp.server import (
     get_iwc_workflows,
     get_job_details,
     get_server_info,
-    get_tool_citations,
     get_user,
     import_workflow_from_iwc,
     list_history_ids,
@@ -47,7 +46,6 @@ get_history_details_fn = get_function(get_history_details)
 get_iwc_workflows_fn = get_function(get_iwc_workflows)
 get_job_details_fn = get_function(get_job_details)
 get_server_info_fn = get_function(get_server_info)
-get_tool_citations_fn = get_function(get_tool_citations)
 get_user_fn = get_function(get_user)
 get_invocations_fn = get_function(get_invocations)
 import_workflow_from_iwc_fn = get_function(import_workflow_from_iwc)
@@ -70,7 +68,6 @@ __all__ = [
     "get_iwc_workflows_fn",
     "get_job_details_fn",
     "get_server_info_fn",
-    "get_tool_citations_fn",
     "get_user_fn",
     "get_invocations_fn",
     "import_workflow_from_iwc_fn",

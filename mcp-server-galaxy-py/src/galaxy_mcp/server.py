@@ -1,5 +1,6 @@
 # Galaxy MCP Server
 import concurrent.futures
+import json
 import logging
 import os
 import threading
@@ -932,24 +933,26 @@ def _fetch_tool(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str,
             kwargs["tool_version"] = version
         return gi.tools.show_tool(base_id, **kwargs)
 
-    if version_spec:
-        details = _show_tool(version_spec)
-        resolved_version = details.get("version") or version_spec
-        return {
-            "tool_id": base_id,
-            "versions": [
-                {
-                    "version": resolved_version,
-                    "id": details.get("id"),
-                    "details": details,
-                }
-            ],
-        }
+    requested_version = version_spec
 
     latest_details = _show_tool(None)
     version_entries = latest_details.get("versions") or []
     aggregated: list[dict[str, Any]] = []
+    collected_citations: list[Any] = []
     seen_versions: set[str] = set()
+    seen_citation_hashes: set[str] = set()
+
+    def _collect_citations(details: dict[str, Any]) -> None:
+        citations = details.get("citations") or []
+        for citation in citations:
+            try:
+                signature = json.dumps(citation, sort_keys=True)
+            except TypeError:
+                signature = repr(citation)
+            if signature in seen_citation_hashes:
+                continue
+            seen_citation_hashes.add(signature)
+            collected_citations.append(citation)
 
     def _add_version(details: dict[str, Any]) -> None:
         resolved_version = details.get("version")
@@ -963,6 +966,7 @@ def _fetch_tool(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str,
         )
         if resolved_version:
             seen_versions.add(resolved_version)
+        _collect_citations(details)
 
     _add_version(latest_details)
 
@@ -975,9 +979,22 @@ def _fetch_tool(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str,
             continue
         _add_version(details)
 
+    if requested_version and requested_version not in seen_versions:
+        requested_details = _show_tool(requested_version)
+        _add_version(requested_details)
+
+    if requested_version:
+        aggregated.sort(
+            key=lambda entry: (
+                entry.get("version") != requested_version,
+                entry.get("version") or "",
+            )
+        )
+
     return {
         "tool_id": base_id,
         "versions": aggregated,
+        "citations": collected_citations,
     }
 
 
@@ -1146,51 +1163,6 @@ def fetch(resource_id: str) -> dict[str, Any]:
     handler = FETCH_HANDLERS[source]
     metadata = handler(gi, identifiers)
     return {"resource_id": resource_id, "source": source, "metadata": metadata}
-
-
-@mcp.tool(
-    annotations={
-        "readOnlyHint": "true",
-    },
-)
-def get_tool_citations(resource_id: str) -> dict[str, Any]:
-    """
-    Get citation information for a specific tool identified by a scoped search ID.
-
-    Args:
-        resource_id: Scoped identifier returned by the `search` tool (e.g. ``tools:<tool_id>``).
-
-    Returns:
-        Tool citation information
-    """
-    state = ensure_connected()
-    gi: GalaxyInstance = state["gi"]
-
-    try:
-        tool_id = resource_id
-        if ":" in resource_id:
-            prefix, remainder = resource_id.split(":", 1)
-            canonical_prefix = SOURCE_ALIASES.get(prefix, prefix)
-            if canonical_prefix != "tools" or not remainder:
-                raise ValueError(
-                    "Tool resource identifiers must be in the form 'tools:<tool_id>'. "
-                    f"Received '{resource_id}'."
-                )
-            tool_id = remainder
-
-        # Get the tool information which includes citations
-        tool_info = gi.tools.show_tool(tool_id)
-
-        # Extract citation information
-        citations = tool_info.get("citations", [])
-
-        return {
-            "tool_name": tool_info.get("name", tool_id),
-            "tool_version": tool_info.get("version", "unknown"),
-            "citations": citations,
-        }
-    except Exception as e:
-        raise ValueError(f"Failed to get tool citations: {str(e)}") from e
 
 
 @mcp.tool(

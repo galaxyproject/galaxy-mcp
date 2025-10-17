@@ -65,11 +65,12 @@ latest_version_metadata = fetch(latest_version["resource_id"])
 # Per-version details are returned under metadata["versions"][0]["details"]
 ```
 
-#### Get tool citations
+#### Access tool citations
 
 ```python
-tool_citations = get_tool_citations(first_tool["id"])
-# Returns: {"tool_name": "FastQC", "tool_version": "0.72", "citations": [...]}
+tool_metadata = fetch(first_tool["id"])
+citations = tool_metadata["metadata"].get("citations", [])
+# Citations are aggregated across tool versions when available.
 ```
 
 #### Run a tool
