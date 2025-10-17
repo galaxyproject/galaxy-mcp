@@ -148,92 +148,105 @@ def _http_app_with_preflight(self, *args, **kwargs):
 mcp.http_app = types.MethodType(_http_app_with_preflight, mcp)
 
 
-SEARCHABLE_SOURCES: tuple[str, ...] = (
-    "histories",
-    "tools",
-    "workflows",
-    "datasets",
-    "dataset_collections",
-    "libraries",
-    "library_datasets",
-    "jobs",
-    "invocations",
-)
-
-SOURCE_ALIASES: dict[str, str] = {
-    "history": "histories",
-    "histories": "histories",
-    "tool": "tools",
-    "tools": "tools",
-    "workflow": "workflows",
-    "workflows": "workflows",
-    "dataset": "datasets",
-    "datasets": "datasets",
-    "dataset_collection": "dataset_collections",
-    "dataset_collections": "dataset_collections",
-    "library": "libraries",
-    "libraries": "libraries",
-    "library_dataset": "library_datasets",
-    "library_datasets": "library_datasets",
-    "job": "jobs",
-    "jobs": "jobs",
-    "invocation": "invocations",
-    "invocations": "invocations",
-}
-
-SEARCH_INPUT_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "term": {
-            "type": "string",
-            "description": (
-                "Search term matched against resource names, identifiers, and descriptions."
-            ),
-            "minLength": 1,
+def _build_search_input_schema(
+    *,
+    include_deleted: bool = False,
+    include_published: bool = False,
+) -> dict[str, Any]:
+    """Create a strong JSON schema for search tool inputs."""
+    schema: dict[str, Any] = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "term": {
+                "type": "string",
+                "description": (
+                    "Search term matched against resource names, identifiers, and descriptions."
+                ),
+                "minLength": 1,
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Maximum number of results to return.",
+                "minimum": 1,
+                "default": 5,
+            },
         },
-        "sources": {
-            "type": "array",
-            "description": (
-                "Optional subset of resource types to search (e.g., 'tools', 'histories', "
-                "'datasets'). Providing this argument improves relevance and performance."
-            ),
-            "items": {"type": "string", "enum": list(SEARCHABLE_SOURCES)},
-            "uniqueItems": True,
-        },
-        "per_source_limit": {
-            "type": "integer",
-            "description": "Maximum number of hits to return per resource type.",
-            "minimum": 1,
-            "default": 5,
-        },
-        "include_deleted": {
+        "required": ["term"],
+    }
+    if include_deleted:
+        schema["properties"]["include_deleted"] = {
             "type": "boolean",
             "description": "Include deleted resources when supported by the Galaxy API.",
             "default": False,
-        },
-        "include_published": {
+        }
+    if include_published:
+        schema["properties"]["include_published"] = {
             "type": "boolean",
             "description": (
-                "Include published/shared resources where applicable (e.g. workflows, libraries)."
+                "Include published or shared resources when supported by the Galaxy API."
             ),
             "default": False,
-        },
-    },
-    "required": ["term"],
-}
-
-FETCH_INPUT_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "resource_id": {
-            "type": "string",
-            "description": (
-                "Identifier minted by the search tool in the form '<source>:<encoded_id>'."
-            ),
         }
-    },
-    "required": ["resource_id"],
-}
+    return schema
+
+
+def _search_result_item_schema(source: str) -> dict[str, Any]:
+    """Create a JSON schema describing a search result entry."""
+    return {
+        "type": "object",
+        "additionalProperties": True,
+        "properties": {
+            "resource_id": {
+                "type": "string",
+                "description": "Identifier that can be used to reference the resource.",
+            },
+            "source": {"type": "string", "enum": [source]},
+            "name": {"type": "string", "description": "Display name of the resource."},
+            "summary": {"type": "string", "description": "Short human-readable summary."},
+            "score": {
+                "type": "number",
+                "description": "Relative match score in the range [0, 1].",
+            },
+            "metadata": {
+                "type": "object",
+                "description": "Key highlights extracted from the resource.",
+            },
+            "details": {
+                "type": "object",
+                "description": "Full metadata payload returned by Galaxy for this resource.",
+            },
+        },
+        "required": ["resource_id", "source", "name", "summary", "score", "details"],
+    }
+
+
+def _build_search_response_schema(source: str) -> dict[str, Any]:
+    """Construct a JSON schema for search tool responses."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "source": {"type": "string", "enum": [source]},
+            "term": {"type": "string", "description": "Sanitized search term."},
+            "limit": {
+                "type": "integer",
+                "description": "Configured maximum number of results.",
+                "minimum": 1,
+            },
+            "total": {
+                "type": "integer",
+                "description": "Number of results returned.",
+                "minimum": 0,
+            },
+            "matches": {
+                "type": "array",
+                "description": f"List of matching {source.replace('_', ' ')}.",
+                "items": _search_result_item_schema(source),
+            },
+        },
+        "required": ["source", "term", "limit", "total", "matches"],
+    }
 
 
 def _normalize_term(term: str) -> str:
@@ -265,18 +278,21 @@ def _format_search_result(
     summary: str,
     term_lower: str,
     extra: dict[str, Any] | None = None,
+    details: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     encoded_id = ":".join(identifier) if isinstance(identifier, tuple) else identifier
     display_name = name or encoded_id
-    result = {
-        "id": f"{source}:{encoded_id}",
+    metadata = extra or {}
+    result: dict[str, Any] = {
+        "resource_id": f"{source}:{encoded_id}",
         "source": source,
         "name": display_name,
         "summary": summary,
         "score": round(_score_match(display_name, encoded_id, term_lower), 3),
     }
-    if extra:
-        result["metadata"] = extra
+    if metadata:
+        result["metadata"] = metadata
+    result["details"] = details or {}
     return result
 
 
@@ -370,562 +386,272 @@ def ensure_connected() -> dict[str, Any]:
     return state
 
 
-def _search_histories(
-    gi: GalaxyInstance,
-    state: dict[str, Any],
-    term_lower: str,
-    per_source_limit: int,
-    include_deleted: bool,
-    include_published: bool,  # noqa: ARG001 - retained for consistent signature
-) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    limit = max(per_source_limit * 3, 20)
+# Shared JSON schema fragments used by MCP tool annotations.
+EMPTY_OBJECT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {},
+    "required": [],
+}
 
-    def _collect(deleted_flag: bool | None) -> list[dict[str, Any]]:
-        return gi.histories.get_histories(limit=limit, deleted=deleted_flag)
+GENERIC_OBJECT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": True,
+}
 
-    candidates: list[dict[str, Any]] = []
-    non_deleted = _safe_call("histories.get_histories", lambda: _collect(False))
-    if non_deleted:
-        candidates.extend(non_deleted)
-    if include_deleted:
-        deleted_items = _safe_call("histories.get_histories (deleted)", lambda: _collect(True))
-        if deleted_items:
-            candidates.extend(deleted_items)
+STRING_SCHEMA = {"type": "string"}
+INTEGER_SCHEMA = {"type": "integer"}
+BOOLEAN_SCHEMA = {"type": "boolean"}
 
-    for history in candidates:
-        hist_id = history.get("id")
-        if not hist_id or hist_id in seen:
-            continue
-        seen.add(hist_id)
-        name = history.get("name") or hist_id
-        if term_lower not in name.lower() and term_lower not in hist_id.lower():
-            continue
-        details = (
-            _safe_call(
-                "histories.show_history",
-                lambda hid=hist_id: gi.histories.show_history(hid),
-            )
-            or {}
-        )
-        summary = f"History state: {details.get('state', history.get('state', 'unknown'))}"
-        extra = {
-            "update_time": details.get("update_time"),
-            "size": details.get("size"),
-            "tags": details.get("tags", []),
-            "deleted": details.get("deleted", history.get("deleted")),
-        }
-        results.append(
-            _format_search_result("histories", hist_id, name, summary, term_lower, extra)
-        )
-        if len(results) >= per_source_limit:
-            break
-    return results
-
-
-def _search_tools(
-    gi: GalaxyInstance,
-    state: dict[str, Any],  # noqa: ARG001 - consistent signature
-    term_lower: str,
-    per_source_limit: int,
-    include_deleted: bool,  # noqa: ARG001 - tools do not expose deleted flag
-    include_published: bool,  # noqa: ARG001 - tools do not differentiate published state
-) -> list[dict[str, Any]]:
-    grouped: dict[str, dict[str, Any]] = {}
-    seen_tool_versions: set[str] = set()
-    candidates: list[dict[str, Any]] = []
-
-    filtered = _safe_call("tools.get_tools (filtered)", lambda: gi.tools.get_tools(name=term_lower))
-    if filtered:
-        candidates.extend(filtered)
-    if len(candidates) < per_source_limit:
-        all_tools = _safe_call("tools.get_tools", gi.tools.get_tools) or []
-        candidates.extend(all_tools)
-
-    for tool in candidates:
-        tool_id = tool.get("id")
-        if not tool_id or tool_id in seen_tool_versions:
-            continue
-        seen_tool_versions.add(tool_id)
-
-        base_id, version_name = _split_tool_identifier(tool_id)
-        name = tool.get("name") or base_id
-        description = tool.get("description") or ""
-        labels = tool.get("labels", [])
-        searchable_text = " ".join(
-            filter(
-                None,
-                [
-                    name,
-                    base_id,
-                    tool_id,
-                    version_name,
-                    description,
-                    " ".join(labels) if isinstance(labels, list) else "",
-                ],
-            )
-        ).lower()
-        if term_lower not in searchable_text:
-            continue
-
-        group = grouped.setdefault(
-            base_id,
-            {
-                "name": name,
-                "description": description,
-                "tool_type": tool.get("tool_type"),
-                "labels": set(),
-                "versions": [],
-                "score": 0.0,
-            },
-        )
-
-        if description and not group["description"]:
-            group["description"] = description
-        if tool.get("tool_type") and not group["tool_type"]:
-            group["tool_type"] = tool.get("tool_type")
-        if isinstance(labels, list):
-            group["labels"].update(labels)
-
-        version_label = tool.get("version") or version_name
-        group["versions"].append(
-            {
-                "id": tool_id,
-                "version": version_label,
-                "description": description,
-                "resource_id": f"tools:{tool_id}",
-            }
-        )
-
-        version_score = _score_match(name, tool_id, term_lower)
-        if version_label:
-            version_score = max(version_score, _score_match(version_label, tool_id, term_lower))
-        group["score"] = max(group["score"], version_score)
-
-    results: list[dict[str, Any]] = []
-    for base_id, info in sorted(
-        grouped.items(),
-        key=lambda item: (-item[1]["score"], item[1]["name"]),
-    ):
-        versions = info["versions"]
-        versions.sort(
-            key=lambda entry: (
-                entry["version"] or "",
-                entry["id"],
-            ),
-            reverse=True,
-        )
-        version_names = [entry["version"] for entry in versions if entry.get("version")]
-        description = info["description"] or "Galaxy tool"
-        if version_names:
-            versions_preview = ", ".join(version_names[:3])
-            if len(version_names) > 3:
-                versions_preview += ", …"
-            description = f"{description} (versions: {versions_preview})"
-        metadata = {
-            "tool_id": base_id,
-            "tool_type": info["tool_type"],
-            "labels": sorted(info["labels"]),
-            "versions": versions,
-        }
-        result = _format_search_result(
-            "tools", base_id, info["name"], description, term_lower, metadata
-        )
-        result["score"] = round(info["score"], 3)
-        results.append(result)
-        if len(results) >= per_source_limit:
-            break
-    return results
-
-
-def _search_workflows(
-    gi: GalaxyInstance,
-    state: dict[str, Any],  # noqa: ARG001
-    term_lower: str,
-    per_source_limit: int,
-    include_deleted: bool,  # noqa: ARG001
-    include_published: bool,
-) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
-    seen: set[str] = set()
-
-    def _collect(published: bool) -> list[dict[str, Any]]:
-        return gi.workflows.get_workflows(published=published)
-
-    candidates = _safe_call("workflows.get_workflows", lambda: _collect(include_published)) or []
-    if include_published:
-        owned = _safe_call("workflows.get_workflows (private)", lambda: _collect(False)) or []
-        candidates.extend(owned)
-
-    for workflow in candidates:
-        wf_id = workflow.get("id")
-        if not wf_id or wf_id in seen:
-            continue
-        seen.add(wf_id)
-        name = workflow.get("name") or wf_id
-        searchable = " ".join(
-            [
-                name,
-                wf_id,
-                workflow.get("annotation", "") or "",
-                workflow.get("description", "") or "",
-            ]
-        ).lower()
-        if term_lower not in searchable:
-            continue
-        summary = workflow.get("annotation") or "Galaxy workflow"
-        extra = {
-            "published": workflow.get("published", False),
-            "latest_workflow_id": workflow.get("latest_workflow_id"),
-        }
-        results.append(_format_search_result("workflows", wf_id, name, summary, term_lower, extra))
-        if len(results) >= per_source_limit:
-            break
-    return results
-
-
-def _search_datasets(
-    gi: GalaxyInstance,
-    state: dict[str, Any],  # noqa: ARG001
-    term_lower: str,
-    per_source_limit: int,
-    include_deleted: bool,
-    include_published: bool,  # noqa: ARG001
-) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    dataset_limit = max(per_source_limit * 5, 50)
-    deleted_flag: bool | None = None if include_deleted else False
-    candidates = (
-        _safe_call(
-            "datasets.get_datasets",
-            lambda: gi.datasets.get_datasets(limit=dataset_limit, deleted=deleted_flag),
-        )
-        or []
-    )
-
-    for ds in candidates:
-        ds_id = ds.get("id")
-        if not ds_id or ds_id in seen:
-            continue
-        seen.add(ds_id)
-        name = ds.get("name") or ds_id
-        searchable = " ".join([name, ds_id, ds.get("extension", ""), ds.get("state", "")]).lower()
-        if term_lower not in searchable:
-            continue
-        summary = (
-            f"Dataset state: {ds.get('state', 'unknown')} ({ds.get('extension', 'unknown')} format)"
-        )
-        extra = {
-            "history_id": ds.get("history_id"),
-            "deleted": ds.get("deleted"),
-            "visible": ds.get("visible"),
-            "tags": ds.get("tags", []),
-        }
-        results.append(_format_search_result("datasets", ds_id, name, summary, term_lower, extra))
-        if len(results) >= per_source_limit:
-            break
-    return results
-
-
-def _search_dataset_collections(
-    gi: GalaxyInstance,
-    state: dict[str, Any],
-    term_lower: str,
-    per_source_limit: int,
-    include_deleted: bool,
-    include_published: bool,  # noqa: ARG001
-) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    histories = (
-        _safe_call(
-            "histories.get_histories for collections",
-            lambda: gi.histories.get_histories(limit=max(per_source_limit * 4, 20), deleted=False),
-        )
-        or []
-    )
-    if include_deleted:
-        histories.extend(
-            _safe_call(
-                "histories.get_histories deleted for collections",
-                lambda: gi.histories.get_histories(limit=10, deleted=True),
-            )
-            or []
-        )
-
-    for history in histories:
-        hist_id = history.get("id")
-        if not hist_id:
-            continue
-        collections = _safe_call(
-            f"histories.show_history (collections) {hist_id}",
-            lambda hid=hist_id: gi.histories.show_history(
-                hid,
-                contents=True,
-                types=["dataset_collection"],
-                deleted=include_deleted if include_deleted else None,
-            ),
-        )
-        if not collections:
-            continue
-        for collection in collections:
-            coll_id = collection.get("id")
-            if not coll_id or coll_id in seen:
-                continue
-            seen.add(coll_id)
-            name = collection.get("name") or coll_id
-            searchable = " ".join([name, coll_id, collection.get("collection_type", "")]).lower()
-            if term_lower not in searchable:
-                continue
-            summary = (
-                f"{collection.get('collection_type', 'collection').title()} in history "
-                f"{history.get('name') or hist_id}"
-            )
-            extra = {
-                "history_id": hist_id,
-                "collection_type": collection.get("collection_type"),
-                "element_count": collection.get("element_count"),
-                "deleted": collection.get("deleted"),
-            }
-            results.append(
-                _format_search_result(
-                    "dataset_collections", coll_id, name, summary, term_lower, extra
-                )
-            )
-            if len(results) >= per_source_limit:
-                return results
-    return results
-
-
-def _search_libraries(
-    gi: GalaxyInstance,
-    state: dict[str, Any],  # noqa: ARG001
-    term_lower: str,
-    per_source_limit: int,
-    include_deleted: bool,
-    include_published: bool,  # noqa: ARG001
-) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    libraries = (
-        _safe_call(
-            "libraries.get_libraries",
-            lambda: gi.libraries.get_libraries(
-                deleted=include_deleted if include_deleted else False
-            ),
-        )
-        or []
-    )
-
-    for library in libraries:
-        library_id = library.get("id")
-        if not library_id or library_id in seen:
-            continue
-        seen.add(library_id)
-        name = library.get("name") or library_id
-        searchable = " ".join(
-            [name, library_id, library.get("description", ""), library.get("synopsis", "")]
-        ).lower()
-        if term_lower not in searchable:
-            continue
-        summary = library.get("description") or "Galaxy data library"
-        extra = {
-            "synopsis": library.get("synopsis"),
-            "deleted": library.get("deleted"),
-        }
-        results.append(
-            _format_search_result("libraries", library_id, name, summary, term_lower, extra)
-        )
-        if len(results) >= per_source_limit:
-            break
-    return results
-
-
-def _search_library_datasets(
-    gi: GalaxyInstance,
-    state: dict[str, Any],  # noqa: ARG001
-    term_lower: str,
-    per_source_limit: int,
-    include_deleted: bool,
-    include_published: bool,  # noqa: ARG001
-) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
-    libraries = (
-        _safe_call(
-            "libraries.get_libraries for datasets",
-            lambda: gi.libraries.get_libraries(
-                deleted=include_deleted if include_deleted else False
-            ),
-        )
-        or []
-    )
-
-    for library in libraries:
-        library_id = library.get("id")
-        if not library_id:
-            continue
-        contents = _safe_call(
-            f"libraries.show_library {library_id}",
-            lambda lid=library_id: gi.libraries.show_library(lid, contents=True),
-        )
-        if not contents:
-            continue
-        for entry in contents:
-            if entry.get("type") not in {"file", "dataset"}:
-                continue
-            dataset_id = entry.get("id")
-            if not dataset_id:
-                continue
-            name = entry.get("name") or dataset_id
-            searchable = " ".join([name, dataset_id, entry.get("type", "")]).lower()
-            if term_lower not in searchable:
-                continue
-            summary = f"Library dataset in {library.get('name') or library_id}"
-            extra = {
-                "library_id": library_id,
-                "deleted": entry.get("deleted"),
-                "type": entry.get("type"),
-            }
-            results.append(
-                _format_search_result(
-                    "library_datasets",
-                    (library_id, dataset_id),
-                    name,
-                    summary,
-                    term_lower,
-                    extra,
-                )
-            )
-            if len(results) >= per_source_limit:
-                return results
-    return results
-
-
-def _search_jobs(
-    gi: GalaxyInstance,
-    state: dict[str, Any],
-    term_lower: str,
-    per_source_limit: int,
-    include_deleted: bool,  # noqa: ARG001
-    include_published: bool,  # noqa: ARG001
-) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
-    jobs = (
-        _safe_call(
-            "jobs.get_jobs",
-            lambda: gi.jobs.get_jobs(limit=max(per_source_limit * 5, 50)),
-        )
-        or []
-    )
-
-    for job in jobs:
-        job_id = job.get("id")
-        if not job_id:
-            continue
-        searchable = " ".join(
-            [
-                job_id,
-                job.get("tool_id", ""),
-                job.get("state", ""),
-                job.get("history_id", "") or "",
-            ]
-        ).lower()
-        if term_lower not in searchable:
-            continue
-        summary = f"Job state: {job.get('state', 'unknown')} (tool {job.get('tool_id', 'unknown')})"
-        extra = {
-            "tool_id": job.get("tool_id"),
-            "state": job.get("state"),
-            "history_id": job.get("history_id"),
-            "exit_code": job.get("exit_code"),
-        }
-        results.append(_format_search_result("jobs", job_id, job_id, summary, term_lower, extra))
-        if len(results) >= per_source_limit:
-            break
-    return results
-
-
-def _search_invocations(
-    gi: GalaxyInstance,
-    state: dict[str, Any],
-    term_lower: str,
-    per_source_limit: int,
-    include_deleted: bool,  # noqa: ARG001
-    include_published: bool,  # noqa: ARG001
-) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
-    invocations = (
-        _safe_call(
-            "invocations.get_invocations",
-            lambda: gi.invocations.get_invocations(
-                limit=max(per_source_limit * 4, 40), view="element"
-            ),
-        )
-        or []
-    )
-
-    for invocation in invocations:
-        inv_id = invocation.get("id")
-        if not inv_id:
-            continue
-        name = invocation.get("workflow_name") or invocation.get("workflow_id") or inv_id
-        searchable = " ".join(
-            [
-                inv_id,
-                name,
-                invocation.get("state", ""),
-                invocation.get("history_id", "") or "",
-                invocation.get("workflow_id", "") or "",
-            ]
-        ).lower()
-        if term_lower not in searchable:
-            continue
-        summary = f"Invocation state: {invocation.get('state', 'unknown')}"
-        extra = {
-            "history_id": invocation.get("history_id"),
-            "workflow_id": invocation.get("workflow_id"),
-            "update_time": invocation.get("update_time"),
-        }
-        results.append(
-            _format_search_result("invocations", inv_id, name, summary, term_lower, extra)
-        )
-        if len(results) >= per_source_limit:
-            break
-    return results
-
-
-SEARCH_HANDLERS: dict[
-    str, Callable[[GalaxyInstance, dict[str, Any], str, int, bool, bool], list[dict[str, Any]]]
-] = {
-    "histories": _search_histories,
-    "tools": _search_tools,
-    "workflows": _search_workflows,
-    "datasets": _search_datasets,
-    "dataset_collections": _search_dataset_collections,
-    "libraries": _search_libraries,
-    "library_datasets": _search_library_datasets,
-    "jobs": _search_jobs,
-    "invocations": _search_invocations,
+GENERIC_OBJECT_ARRAY_SCHEMA: dict[str, Any] = {
+    "type": "array",
+    "items": GENERIC_OBJECT_SCHEMA,
 }
 
 
-def _fetch_history(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str, Any]:
-    return gi.histories.show_history(identifier[0])
+RUN_TOOL_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "history_id": {
+            "type": "string",
+            "description": "Target Galaxy history identifier (encoded).",
+        },
+        "tool_id": {
+            "type": "string",
+            "description": "Galaxy tool identifier to execute.",
+        },
+        "inputs": {
+            "type": "object",
+            "description": "Tool input payload matching Galaxy's tool schema.",
+        },
+    },
+    "required": ["history_id", "tool_id", "inputs"],
+}
+
+CREATE_HISTORY_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "history_name": {
+            "type": "string",
+            "description": "Name for the new history.",
+        }
+    },
+    "required": ["history_name"],
+}
+
+FILTER_TOOLS_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "dataset_type": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1,
+            "description": "Keywords describing the dataset (e.g. ['csv', 'tabular']).",
+        }
+    },
+    "required": ["dataset_type"],
+}
+
+GET_HISTORIES_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "limit": {
+            "type": ["integer", "null"],
+            "minimum": 1,
+            "description": "Maximum number of histories to return (None for all).",
+        },
+        "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Offset for pagination.",
+        },
+        "name": {
+            "type": ["string", "null"],
+            "description": "Optional name filter (case-sensitive substring).",
+        },
+        "ids_only": {
+            "type": "boolean",
+            "description": "Return simplified id/name pairs when true.",
+            "default": False,
+        },
+    },
+    "required": [],
+}
+
+GET_HISTORY_DETAILS_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "history_id": {
+            "type": "string",
+            "description": "Galaxy history identifier to inspect.",
+        }
+    },
+    "required": ["history_id"],
+}
+
+GET_HISTORY_CONTENTS_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "history_id": {"type": "string", "description": "History id to list contents for."},
+        "limit": {"type": "integer", "minimum": 1, "default": 100},
+        "offset": {"type": "integer", "minimum": 0, "default": 0},
+        "deleted": {"type": "boolean", "default": False},
+        "visible": {"type": "boolean", "default": True},
+        "details": {"type": "boolean", "default": False},
+        "order": {"type": "string", "default": "hid-asc"},
+    },
+    "required": ["history_id"],
+}
+
+GET_JOB_DETAILS_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "dataset_id": {
+            "type": "string",
+            "description": "Dataset identifier whose producing job should be inspected.",
+        },
+        "history_id": {
+            "type": ["string", "null"],
+            "description": "Optional history id for disambiguation.",
+        },
+    },
+    "required": ["dataset_id"],
+}
+
+GET_DATASET_DETAILS_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "dataset_id": {"type": "string"},
+        "include_preview": {"type": "boolean", "default": True},
+        "preview_lines": {"type": "integer", "minimum": 1, "default": 10},
+    },
+    "required": ["dataset_id"],
+}
+
+DOWNLOAD_DATASET_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "dataset_id": {"type": "string"},
+        "file_path": {"type": ["string", "null"], "description": "Filesystem path to save to."},
+        "use_default_filename": {"type": "boolean", "default": True},
+        "require_ok_state": {"type": "boolean", "default": True},
+    },
+    "required": ["dataset_id"],
+}
+
+UPLOAD_FILE_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "path": {"type": "string", "description": "Local path to upload."},
+        "history_id": {
+            "type": ["string", "null"],
+            "description": "Target history id (defaults to current).",
+        },
+    },
+    "required": ["path"],
+}
+
+GET_INVOCATIONS_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "invocation_id": {"type": ["string", "null"]},
+        "workflow_id": {"type": ["string", "null"]},
+        "history_id": {"type": ["string", "null"]},
+        "limit": {"type": ["integer", "null"], "minimum": 1},
+        "view": {"type": "string", "enum": ["collection", "element"], "default": "collection"},
+        "step_details": {"type": "boolean", "default": False},
+    },
+    "required": [],
+}
+
+IWC_WORKFLOWS_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "term": {
+            "type": ["string", "null"],
+            "description": "Optional search term applied to workflow names, annotations, and tags.",
+        }
+    },
+    "required": [],
+}
+
+IMPORT_IWC_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "trs_id": {
+            "type": "string",
+            "description": "TRS identifier for the workflow to import.",
+        }
+    },
+    "required": ["trs_id"],
+}
+
+HISTORIES_RESPONSE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "histories": GENERIC_OBJECT_ARRAY_SCHEMA,
+        "pagination": GENERIC_OBJECT_SCHEMA,
+        "ids_only": {"type": "boolean"},
+    },
+    "required": ["histories", "pagination"],
+}
+
+HISTORY_DETAILS_RESPONSE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "history": GENERIC_OBJECT_SCHEMA,
+        "contents_summary": GENERIC_OBJECT_SCHEMA,
+    },
+    "required": ["history", "contents_summary"],
+}
+
+HISTORY_CONTENTS_RESPONSE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "history_id": {"type": "string"},
+        "contents": GENERIC_OBJECT_ARRAY_SCHEMA,
+        "pagination": GENERIC_OBJECT_SCHEMA,
+    },
+    "required": ["history_id", "contents", "pagination"],
+}
+
+IWC_WORKFLOWS_RESPONSE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "term": {"type": ["string", "null"]},
+        "total": {"type": "integer", "minimum": 0},
+        "matched": {"type": "integer", "minimum": 0},
+        "workflows": GENERIC_OBJECT_ARRAY_SCHEMA,
+    },
+    "required": ["total", "matched", "workflows"],
+}
 
 
-def _fetch_tool(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str, Any]:
-    if not identifier:
-        raise ValueError("Tool resource identifier missing.")
-
-    raw_id = identifier[0]
-    base_id, embedded_version = _split_tool_identifier(raw_id)
-    version_spec = embedded_version
-
-    # Support explicit version provided as an additional identifier component.
-    if len(identifier) > 1:
-        version_spec = identifier[1]
+def _collect_tool_details(
+    gi: GalaxyInstance,
+    tool_identifier: str,
+    version_override: str | None = None,
+) -> dict[str, Any]:
+    """Retrieve detailed tool metadata including all known versions and citations."""
+    base_id, embedded_version = _split_tool_identifier(tool_identifier)
+    version_spec = version_override or embedded_version
 
     def _show_tool(version: str | None) -> dict[str, Any]:
         kwargs = {"io_details": True}
@@ -998,176 +724,187 @@ def _fetch_tool(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str,
     }
 
 
-def _fetch_workflow(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str, Any]:
-    return gi.workflows.show_workflow(identifier[0])
-
-
-def _fetch_dataset(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str, Any]:
-    return gi.datasets.show_dataset(identifier[0])
-
-
-def _fetch_dataset_collection(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str, Any]:
-    return gi.dataset_collections.show_dataset_collection(identifier[0])
-
-
-def _fetch_library(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str, Any]:
-    return gi.libraries.show_library(identifier[0], contents=True)
-
-
-def _fetch_library_dataset(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str, Any]:
-    if len(identifier) != 2:
-        raise ValueError(
-            "Library datasets require identifiers in the form "
-            "'library_datasets:<library_id>:<dataset_id>'."
-        )
-    library_id, dataset_id = identifier
-    return gi.libraries.show_dataset(library_id, dataset_id)
-
-
-def _fetch_job(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str, Any]:
-    return gi.jobs.show_job(identifier[0], full_details=True)
-
-
-def _fetch_invocation(gi: GalaxyInstance, identifier: list[str], *_: Any) -> dict[str, Any]:
-    return gi.invocations.show_invocation(identifier[0])
-
-
-FETCH_HANDLERS: dict[str, Callable[[GalaxyInstance, list[str]], dict[str, Any]]] = {
-    "histories": _fetch_history,
-    "tools": _fetch_tool,
-    "workflows": _fetch_workflow,
-    "datasets": _fetch_dataset,
-    "dataset_collections": _fetch_dataset_collection,
-    "libraries": _fetch_library,
-    "library_datasets": _fetch_library_dataset,
-    "jobs": _fetch_job,
-    "invocations": _fetch_invocation,
-}
-
-
 @mcp.tool(
-    name="search",
-    description=(
-        "Search across Galaxy histories, tools, workflows, datasets, libraries, jobs, and "
-        "invocations. Specify the `sources` argument (e.g., 'tools', 'histories') when possible to "
-        "narrow the scope."
-    ),
+    name="search_tools",
+    description="Search Galaxy tools and return detailed metadata for matching tools.",
     enabled=True,
     annotations={
         "readOnlyHint": "true",
-        "title": "Search Galaxy Resources",
-        "aiInputSchema": SEARCH_INPUT_SCHEMA,
+        "title": "Search Tools",
+        "aiInputSchema": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "term": {
+                    "type": "string",
+                    "description": (
+                        "Substring matched against tool names, identifiers, "
+                        "descriptions, and labels."
+                    ),
+                    "minLength": 1,
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of tool groups to return.",
+                    "minimum": 1,
+                    "default": 5,
+                },
+            },
+            "required": ["term"],
+        },
+        "aiResponseSchema": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "source": {"type": "string", "enum": ["tools"]},
+                "term": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1},
+                "total": {"type": "integer", "minimum": 0},
+                "matches": {
+                    "type": "array",
+                    "items": _search_result_item_schema("tools"),
+                },
+            },
+            "required": ["source", "term", "limit", "total", "matches"],
+        },
     },
 )
-def search(
-    term: str,
-    sources: list[str] | None = None,
-    per_source_limit: int = 5,
-    include_deleted: bool = False,
-    include_published: bool = False,
-) -> dict[str, Any]:
-    """
-    Search Galaxy for resources. Provide a subset of `sources` (e.g., 'tools', 'histories') when
-    possible to reduce load and improve result relevance.
-    """
-    if per_source_limit < 1:
-        raise ValueError("per_source_limit must be at least 1.")
-
+def search_tools(term: str, limit: int = 5) -> dict[str, Any]:
+    if limit < 1:
+        raise ValueError("limit must be at least 1.")
     normalized_term = term.strip()
     if not normalized_term:
         raise ValueError("Search term must not be empty.")
     term_lower = _normalize_term(normalized_term)
-
-    input_sources = sources or list(SEARCHABLE_SOURCES)
-    requested_sources: set[str] = set()
-    unsupported: list[str] = []
-    for source in input_sources:
-        canonical = SOURCE_ALIASES.get(source, source)
-        if canonical not in SEARCH_HANDLERS:
-            unsupported.append(source)
-        else:
-            requested_sources.add(canonical)
-    if unsupported:
-        raise ValueError(
-            f"Unsupported search sources requested: {', '.join(sorted(unsupported))}. "
-            f"Supported values are: {', '.join(SEARCHABLE_SOURCES)}."
-        )
-    if not requested_sources:
-        requested_sources = set(SEARCHABLE_SOURCES)
-
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
+    grouped: dict[str, dict[str, Any]] = {}
+    seen_tool_versions: set[str] = set()
+    candidates: list[dict[str, Any]] = []
 
-    aggregated_results: list[dict[str, Any]] = []
-    errors: list[str] = []
+    filtered = _safe_call("tools.get_tools (filtered)", lambda: gi.tools.get_tools(name=term_lower))
+    if filtered:
+        candidates.extend(filtered)
+    if len(candidates) < limit:
+        all_tools = _safe_call("tools.get_tools", gi.tools.get_tools) or []
+        candidates.extend(all_tools)
 
-    for source in SEARCHABLE_SOURCES:
-        if source not in requested_sources:
+    for tool in candidates:
+        tool_id = tool.get("id")
+        if not tool_id or tool_id in seen_tool_versions:
             continue
-        handler = SEARCH_HANDLERS[source]
-        try:
-            handler_results = handler(
-                gi,
-                state,
-                term_lower,
-                per_source_limit,
-                include_deleted,
-                include_published,
+        seen_tool_versions.add(tool_id)
+
+        base_id, version_name = _split_tool_identifier(tool_id)
+        name = tool.get("name") or base_id
+        description = tool.get("description") or ""
+        labels = tool.get("labels", [])
+        searchable_text = " ".join(
+            filter(
+                None,
+                [
+                    name,
+                    base_id,
+                    tool_id,
+                    version_name,
+                    description,
+                    " ".join(labels) if isinstance(labels, list) else "",
+                ],
             )
-            aggregated_results.extend(handler_results)
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.error("Search handler for %s failed: %s", source, exc, exc_info=True)
-            errors.append(f"{source}: {exc}")
+        ).lower()
+        if term_lower not in searchable_text:
+            continue
 
-    aggregated_results.sort(key=lambda item: (-item.get("score", 0), item.get("name", "")))
+        group = grouped.setdefault(
+            base_id,
+            {
+                "name": name,
+                "description": description,
+                "tool_type": tool.get("tool_type"),
+                "labels": set(),
+                "versions": [],
+                "score": 0.0,
+            },
+        )
 
-    response: dict[str, Any] = {
+        if description and not group["description"]:
+            group["description"] = description
+        if tool.get("tool_type") and not group["tool_type"]:
+            group["tool_type"] = tool.get("tool_type")
+        if isinstance(labels, list):
+            group["labels"].update(labels)
+
+        version_label = tool.get("version") or version_name
+        group["versions"].append(
+            {
+                "id": tool_id,
+                "version": version_label,
+                "description": description,
+                "resource_id": f"tools:{tool_id}",
+            }
+        )
+
+        version_score = _score_match(name, tool_id, term_lower)
+        if version_label:
+            version_score = max(version_score, _score_match(version_label, tool_id, term_lower))
+        group["score"] = max(group["score"], version_score)
+
+    matches: list[dict[str, Any]] = []
+    for base_id, info in sorted(
+        grouped.items(),
+        key=lambda item: (-item[1]["score"], item[1]["name"]),
+    ):
+        versions = info["versions"]
+        versions.sort(
+            key=lambda entry: (
+                entry["version"] or "",
+                entry["id"],
+            ),
+            reverse=True,
+        )
+        version_names = [entry["version"] for entry in versions if entry.get("version")]
+        description = info["description"] or "Galaxy tool"
+        if version_names:
+            versions_preview = ", ".join(version_names[:3])
+            if len(version_names) > 3:
+                versions_preview += ", …"
+            description = f"{description} (versions: {versions_preview})"
+        metadata = {
+            "tool_id": base_id,
+            "tool_type": info["tool_type"],
+            "labels": sorted(info["labels"]),
+            "versions": versions,
+        }
+        details_payload = _safe_call(
+            "tools.collect_details", lambda base=base_id: _collect_tool_details(gi, base)
+        ) or {"tool_id": base_id, "versions": versions}
+        result = _format_search_result(
+            "tools",
+            base_id,
+            info["name"],
+            description,
+            term_lower,
+            metadata,
+            details_payload,
+        )
+        result["score"] = round(info["score"], 3)
+        matches.append(result)
+        if len(matches) >= limit:
+            break
+    return {
+        "source": "tools",
         "term": normalized_term,
-        "results": aggregated_results,
-        "total": len(aggregated_results),
-        "sources": [source for source in SEARCHABLE_SOURCES if source in requested_sources],
-        "per_source_limit": per_source_limit,
+        "limit": limit,
+        "total": len(matches),
+        "matches": matches,
     }
-    if errors:
-        response["errors"] = errors
-    return response
-
-
-@mcp.tool(
-    name="fetch",
-    description="Fetch metadata for a Galaxy resource identified by a search result identifier.",
-    enabled=True,
-    annotations={
-        "readOnlyHint": "true",
-        "title": "Fetch Galaxy Resource",
-        "aiInputSchema": FETCH_INPUT_SCHEMA,
-    },
-)
-def fetch(resource_id: str) -> dict[str, Any]:
-    state = ensure_connected()
-    gi: GalaxyInstance = state["gi"]
-
-    parts = resource_id.split(":")
-    if len(parts) < 2:
-        raise ValueError(
-            "Resource identifier must be in the format '<source>:<encoded_id>'. "
-            f"Received '{resource_id}'."
-        )
-    source = SOURCE_ALIASES.get(parts[0], parts[0])
-    if source not in FETCH_HANDLERS:
-        raise ValueError(
-            f"Unsupported resource type '{parts[0]}'. Supported types: "
-            f"{', '.join(SEARCHABLE_SOURCES)}."
-        )
-    identifiers = parts[1:]
-    handler = FETCH_HANDLERS[source]
-    metadata = handler(gi, identifiers)
-    return {"resource_id": resource_id, "source": source, "metadata": metadata}
 
 
 @mcp.tool(
     annotations={
         "readOnlyHint": "false",
+        "aiInputSchema": RUN_TOOL_INPUT_SCHEMA,
+        "aiResponseSchema": GENERIC_OBJECT_SCHEMA,
     },
 )
 def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> dict[str, Any]:
@@ -1206,6 +943,8 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> dict[str,
 @mcp.tool(
     annotations={
         "readOnlyHint": "false",
+        "aiInputSchema": CREATE_HISTORY_INPUT_SCHEMA,
+        "aiResponseSchema": GENERIC_OBJECT_SCHEMA,
     },
 )
 def create_history(history_name: str) -> dict[str, Any]:
@@ -1226,6 +965,8 @@ def create_history(history_name: str) -> dict[str, Any]:
 @mcp.tool(
     annotations={
         "readOnlyHint": "true",
+        "aiInputSchema": FILTER_TOOLS_INPUT_SCHEMA,
+        "aiResponseSchema": GENERIC_OBJECT_SCHEMA,
     },
 )
 def filter_tools_by_dataset(dataset_type: list[str]) -> dict[str, Any]:
@@ -1337,6 +1078,8 @@ def filter_tools_by_dataset(dataset_type: list[str]) -> dict[str, Any]:
 @mcp.tool(
     annotations={
         "readOnlyHint": "true",
+        "aiInputSchema": EMPTY_OBJECT_SCHEMA,
+        "aiResponseSchema": GENERIC_OBJECT_SCHEMA,
     },
 )
 def get_server_info() -> dict[str, Any]:
@@ -1390,6 +1133,8 @@ def get_server_info() -> dict[str, Any]:
 @mcp.tool(
     annotations={
         "readOnlyHint": "true",
+        "aiInputSchema": EMPTY_OBJECT_SCHEMA,
+        "aiResponseSchema": GENERIC_OBJECT_SCHEMA,
     },
 )
 def get_user() -> dict[str, Any]:
@@ -1412,10 +1157,15 @@ def get_user() -> dict[str, Any]:
 @mcp.tool(
     annotations={
         "readOnlyHint": "true",
+        "aiInputSchema": GET_HISTORIES_INPUT_SCHEMA,
+        "aiResponseSchema": HISTORIES_RESPONSE_SCHEMA,
     },
 )
 def get_histories(
-    limit: int | None = None, offset: int = 0, name: str | None = None
+    limit: int | None = None,
+    offset: int = 0,
+    name: str | None = None,
+    ids_only: bool = False,
 ) -> dict[str, Any]:
     """
     Get paginated list of user histories
@@ -1473,7 +1223,19 @@ def get_histories(
                 "paginated": False,
             }
 
-        return {"histories": histories, "pagination": pagination}
+        if ids_only:
+            simplified = [
+                {"id": history.get("id"), "name": history.get("name", "Unnamed")}
+                for history in histories
+                if history.get("id")
+            ]
+            return {
+                "histories": simplified,
+                "pagination": pagination,
+                "ids_only": True,
+            }
+
+        return {"histories": histories, "pagination": pagination, "ids_only": False}
     except Exception as e:
         raise ValueError(
             f"Failed to get histories: {str(e)}. "
@@ -1485,32 +1247,8 @@ def get_histories(
 @mcp.tool(
     annotations={
         "readOnlyHint": "true",
-    },
-)
-def list_history_ids() -> list[dict[str, str]]:
-    """
-    Get a simplified list of history IDs and names for easy reference
-
-    Returns:
-        List of dictionaries containing 'id' and 'name' fields
-    """
-    state = ensure_connected()
-    gi: GalaxyInstance = state["gi"]
-
-    try:
-        histories = gi.histories.get_histories()
-        if not histories:
-            return []
-        # Extract just the id and name for convenience
-        simplified = [{"id": h["id"], "name": h.get("name", "Unnamed")} for h in histories]
-        return simplified
-    except Exception as e:
-        raise ValueError(f"Failed to list history IDs: {str(e)}") from e
-
-
-@mcp.tool(
-    annotations={
-        "readOnlyHint": "true",
+        "aiInputSchema": GET_HISTORY_DETAILS_INPUT_SCHEMA,
+        "aiResponseSchema": HISTORY_DETAILS_RESPONSE_SCHEMA,
     },
 )
 def get_history_details(history_id: str) -> dict[str, Any]:
@@ -1567,6 +1305,8 @@ def get_history_details(history_id: str) -> dict[str, Any]:
 @mcp.tool(
     annotations={
         "readOnlyHint": "true",
+        "aiInputSchema": GET_HISTORY_CONTENTS_INPUT_SCHEMA,
+        "aiResponseSchema": HISTORY_CONTENTS_RESPONSE_SCHEMA,
     },
 )
 def get_history_contents(
@@ -1681,6 +1421,8 @@ def get_history_contents(
 @mcp.tool(
     annotations={
         "readOnlyHint": "true",
+        "aiInputSchema": GET_JOB_DETAILS_INPUT_SCHEMA,
+        "aiResponseSchema": GENERIC_OBJECT_SCHEMA,
     },
 )
 def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str, Any]:
@@ -1751,6 +1493,8 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str,
 @mcp.tool(
     annotations={
         "readOnlyHint": "true",
+        "aiInputSchema": GET_DATASET_DETAILS_INPUT_SCHEMA,
+        "aiResponseSchema": GENERIC_OBJECT_SCHEMA,
     },
 )
 def get_dataset_details(
@@ -1831,6 +1575,8 @@ def get_dataset_details(
 @mcp.tool(
     annotations={
         "readOnlyHint": "true",
+        "aiInputSchema": DOWNLOAD_DATASET_INPUT_SCHEMA,
+        "aiResponseSchema": GENERIC_OBJECT_SCHEMA,
     },
 )
 def download_dataset(
@@ -1943,6 +1689,8 @@ def download_dataset(
 @mcp.tool(
     annotations={
         "readOnlyHint": "false",
+        "aiInputSchema": UPLOAD_FILE_INPUT_SCHEMA,
+        "aiResponseSchema": GENERIC_OBJECT_SCHEMA,
     },
 )
 def upload_file(path: str, history_id: str | None = None) -> dict[str, Any]:
@@ -1977,6 +1725,8 @@ def upload_file(path: str, history_id: str | None = None) -> dict[str, Any]:
 @mcp.tool(
     annotations={
         "readOnlyHint": "true",
+        "aiInputSchema": GET_INVOCATIONS_INPUT_SCHEMA,
+        "aiResponseSchema": GENERIC_OBJECT_SCHEMA,
     },
 )
 def get_invocations(
@@ -1988,34 +1738,24 @@ def get_invocations(
     step_details: bool = False,
 ) -> dict[str, Any]:
     """
-    View workflow invocations in Galaxy
+    View workflow invocations in Galaxy.
 
     Args:
-        invocation_id: Specific workflow invocation ID to view - a hexadecimal hash string
-                      (e.g., 'a1b2c3d4e5f6789a', typically 16 characters, optional)
-        workflow_id: Filter invocations by workflow ID - a hexadecimal hash string
-                    (e.g., 'b2c3d4e5f6789abc', typically 16 characters, optional)
-        history_id: Filter invocations by history ID - a hexadecimal hash string
-                   (e.g., '1cd8e2f6b131e5aa', typically 16 characters, optional)
-        limit: Maximum number of invocations to return (optional, default: no limit)
-        view: Level of detail to return - 'element' for detailed or 'collection' for summary
-             (default: 'collection')
-        step_details: Include details on individual workflow steps
-                     (only applies when view is 'element', default: False)
-
-    Returns:
-        Dictionary containing workflow invocation information, execution status, and step details
+        invocation_id: Specific workflow invocation ID to view.
+        workflow_id: Filter invocations by workflow ID.
+        history_id: Filter invocations by history ID.
+        limit: Maximum number of invocations to return.
+        view: Detail level ('element' or 'collection').
+        step_details: Include step details when view is 'element'.
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
     try:
-        # If invocation_id is provided, get details of a specific invocation
         if invocation_id:
             invocation = gi.invocations.show_invocation(invocation_id)
             return {"invocation": invocation}
 
-        # Otherwise get a list of invocations with optional filters
         invocations = gi.invocations.get_invocations(
             workflow_id=workflow_id,
             history_id=history_id,
@@ -2028,100 +1768,80 @@ def get_invocations(
         raise ValueError(f"Failed to get workflow invocations: {str(e)}") from e
 
 
-@mcp.tool(
-    annotations={
-        "readOnlyHint": "true",
-    },
-)
-def get_iwc_workflows() -> dict[str, Any]:
-    """
-    Fetch all workflows from the IWC (Interactive Workflow Composer)
+def _fetch_iwc_workflows() -> list[dict[str, Any]]:
+    """Retrieve the flattened list of workflows from the IWC manifest."""
+    response = requests.get("https://iwc.galaxyproject.org/workflow_manifest.json")
+    response.raise_for_status()
+    manifest = response.json()
 
-    Returns:
-        Complete workflow manifest from IWC
-    """
-    try:
-        response = requests.get("https://iwc.galaxyproject.org/workflow_manifest.json")
-        response.raise_for_status()
-        manifest = response.json()
-
-        # Collect workflows from all manifest entries
-        all_workflows = []
-        for entry in manifest:
-            if "workflows" in entry:
-                all_workflows.extend(entry["workflows"])
-
-        return {"workflows": all_workflows}
-    except Exception as e:
-        raise ValueError(f"Failed to fetch IWC workflows: {str(e)}") from e
+    workflows: list[dict[str, Any]] = []
+    for entry in manifest:
+        if isinstance(entry, dict) and "workflows" in entry:
+            workflows.extend(entry["workflows"] or [])
+    return workflows
 
 
 @mcp.tool(
+    name="iwc_workflows",
+    description="Fetch workflows from the IWC catalogue, optionally filtered by a search term.",
+    enabled=True,
     annotations={
         "readOnlyHint": "true",
+        "title": "IWC Workflows",
+        "aiInputSchema": IWC_WORKFLOWS_INPUT_SCHEMA,
+        "aiResponseSchema": IWC_WORKFLOWS_RESPONSE_SCHEMA,
     },
 )
-def search_iwc_workflows(query: str) -> dict[str, Any]:
-    """
-    Search for workflows in the IWC manifest
-
-    Args:
-        query: Search query (matches against name, description, and tags)
-
-    Returns:
-        List of matching workflows
-    """
+def iwc_workflows(term: str | None = None) -> dict[str, Any]:
+    """Return IWC workflows, optionally filtered by a search term."""
     try:
-        # Get the full manifest
-        manifest = get_iwc_workflows.fn()["workflows"]
+        workflows = _fetch_iwc_workflows()
+    except Exception as exc:  # pragma: no cover - network failures
+        raise ValueError(f"Failed to fetch IWC workflows: {exc}") from exc
 
-        # Filter workflows based on the search query
-        results = []
-        query = query.lower()
+    if term:
+        query = term.lower().strip()
+        matched = []
+        for workflow in workflows:
+            definition = workflow.get("definition") or {}
+            name = str(definition.get("name", "")).lower()
+            annotation = str(definition.get("annotation", "")).lower()
+            tags = [str(tag).lower() for tag in definition.get("tags", []) if tag]
+            if query in name or query in annotation or any(query in tag for tag in tags):
+                matched.append(workflow)
+    else:
+        matched = workflows
 
-        for workflow in manifest:
-            # Check if query matches name, description or tags
-            name = workflow.get("definition", {}).get("name", "").lower()
-            description = workflow.get("definition", {}).get("annotation", "").lower()
-            tags = [tag.lower() for tag in workflow.get("definition", {}).get("tags", [])]
-
-            if (
-                query in name
-                or query in description
-                or (tags and any(query in tag for tag in tags))
-            ):
-                results.append(workflow)
-
-        return {"workflows": results, "count": len(results)}
-    except Exception as e:
-        raise ValueError(f"Failed to search IWC workflows: {str(e)}") from e
+    return {
+        "term": term,
+        "total": len(workflows),
+        "matched": len(matched),
+        "workflows": matched,
+    }
 
 
 @mcp.tool(
     annotations={
         "readOnlyHint": "false",
+        "aiInputSchema": IMPORT_IWC_INPUT_SCHEMA,
+        "aiResponseSchema": GENERIC_OBJECT_SCHEMA,
     },
 )
 def import_workflow_from_iwc(trs_id: str) -> dict[str, Any]:
     """
-    Import a workflow from IWC to the user's Galaxy instance
+    Import a workflow from IWC to the user's Galaxy instance.
 
     Args:
-        trs_id: TRS ID of the workflow in the IWC manifest
-
-    Returns:
-        Imported workflow information
+        trs_id: TRS ID of the workflow in the IWC manifest.
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
     try:
-        # Get the workflow manifest
-        manifest = get_iwc_workflows.fn()["workflows"]
+        workflows = _fetch_iwc_workflows()
 
-        # Find the specified workflow
         workflow = None
-        for wf in manifest:
+        for wf in workflows:
             if wf.get("trsID") == trs_id:
                 workflow = wf
                 break
@@ -2129,20 +1849,16 @@ def import_workflow_from_iwc(trs_id: str) -> dict[str, Any]:
         if not workflow:
             raise ValueError(
                 f"Workflow with trsID '{trs_id}' not found in IWC manifest. "
-                "Check the trsID format and that it exists in the IWC. "
-                "You can search workflows using search_iwc_workflows() first."
+                "Use iwc_workflows(term=...) to discover available workflows."
             )
 
-        # Extract the workflow definition
         workflow_definition = workflow.get("definition")
         if not workflow_definition:
             raise ValueError(
                 f"No definition found for workflow with trsID '{trs_id}'. "
-                "The workflow exists but has no valid definition. "
                 "This may be a problem with the IWC manifest."
             )
 
-        # Import the workflow into Galaxy
         imported_workflow = gi.workflows.import_workflow_dict(workflow_definition)
         return {"imported_workflow": imported_workflow}
     except Exception as e:
@@ -2179,3 +1895,700 @@ def run_http_server(
 
 if __name__ == "__main__":
     run_http_server()
+
+
+@mcp.tool(
+    name="search_histories",
+    description="Search Galaxy histories by name or identifier.",
+    enabled=True,
+    annotations={
+        "readOnlyHint": "true",
+        "title": "Search Histories",
+        "aiInputSchema": _build_search_input_schema(include_deleted=True),
+        "aiResponseSchema": _build_search_response_schema("histories"),
+    },
+)
+def search_histories(term: str, limit: int = 5, include_deleted: bool = False) -> dict[str, Any]:
+    if limit < 1:
+        raise ValueError("limit must be at least 1.")
+    normalized_term = term.strip()
+    if not normalized_term:
+        raise ValueError("Search term must not be empty.")
+    term_lower = _normalize_term(normalized_term)
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+    matches: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    list_limit = max(limit * 3, 20)
+
+    def _collect(deleted_flag: bool | None) -> list[dict[str, Any]]:
+        return gi.histories.get_histories(limit=list_limit, deleted=deleted_flag)
+
+    candidates: list[dict[str, Any]] = []
+    non_deleted = _safe_call("histories.get_histories", lambda: _collect(False))
+    if non_deleted:
+        candidates.extend(non_deleted)
+    if include_deleted:
+        deleted_items = _safe_call("histories.get_histories (deleted)", lambda: _collect(True))
+        if deleted_items:
+            candidates.extend(deleted_items)
+
+    for history in candidates:
+        hist_id = history.get("id")
+        if not hist_id or hist_id in seen:
+            continue
+        seen.add(hist_id)
+        name = history.get("name") or hist_id
+        if term_lower not in name.lower() and term_lower not in hist_id.lower():
+            continue
+        details = (
+            _safe_call(
+                "histories.show_history",
+                lambda hid=hist_id: gi.histories.show_history(hid),
+            )
+            or {}
+        )
+        summary = f"History state: {details.get('state', history.get('state', 'unknown'))}"
+        extra = {
+            "update_time": details.get("update_time"),
+            "size": details.get("size"),
+            "tags": details.get("tags", []),
+            "deleted": details.get("deleted", history.get("deleted")),
+        }
+        combined_details: dict[str, Any] = {}
+        if isinstance(history, dict):
+            combined_details.update(history)
+        if isinstance(details, dict):
+            combined_details.update(details)
+        matches.append(
+            _format_search_result(
+                "histories",
+                hist_id,
+                name,
+                summary,
+                term_lower,
+                extra,
+                combined_details,
+            )
+        )
+        if len(matches) >= limit:
+            break
+    return {
+        "source": "histories",
+        "term": normalized_term,
+        "limit": limit,
+        "total": len(matches),
+        "matches": matches,
+    }
+
+
+@mcp.tool(
+    name="search_workflows",
+    description="Search Galaxy workflows including optionally published workflows.",
+    enabled=True,
+    annotations={
+        "readOnlyHint": "true",
+        "title": "Search Workflows",
+        "aiInputSchema": _build_search_input_schema(include_published=True),
+        "aiResponseSchema": _build_search_response_schema("workflows"),
+    },
+)
+def search_workflows(
+    term: str,
+    limit: int = 5,
+    include_published: bool = False,
+) -> dict[str, Any]:
+    if limit < 1:
+        raise ValueError("limit must be at least 1.")
+    normalized_term = term.strip()
+    if not normalized_term:
+        raise ValueError("Search term must not be empty.")
+    term_lower = _normalize_term(normalized_term)
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+    matches: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def _collect(published: bool) -> list[dict[str, Any]]:
+        return gi.workflows.get_workflows(published=published)
+
+    candidates = _safe_call("workflows.get_workflows", lambda: _collect(include_published)) or []
+    if include_published:
+        owned = _safe_call("workflows.get_workflows (private)", lambda: _collect(False)) or []
+        candidates.extend(owned)
+
+    for workflow in candidates:
+        wf_id = workflow.get("id")
+        if not wf_id or wf_id in seen:
+            continue
+        seen.add(wf_id)
+        name = workflow.get("name") or wf_id
+        searchable = " ".join(
+            [
+                name,
+                wf_id,
+                workflow.get("annotation", "") or "",
+                workflow.get("description", "") or "",
+            ]
+        ).lower()
+        if term_lower not in searchable:
+            continue
+        summary = workflow.get("annotation") or "Galaxy workflow"
+        extra = {
+            "published": workflow.get("published", False),
+            "latest_workflow_id": workflow.get("latest_workflow_id"),
+        }
+        details = (
+            _safe_call("workflows.show_workflow", lambda wid=wf_id: gi.workflows.show_workflow(wid))
+            or {}
+        )
+        combined_details: dict[str, Any] = {}
+        if isinstance(workflow, dict):
+            combined_details.update(workflow)
+        if isinstance(details, dict):
+            combined_details.update(details)
+        matches.append(
+            _format_search_result(
+                "workflows",
+                wf_id,
+                name,
+                summary,
+                term_lower,
+                extra,
+                combined_details,
+            )
+        )
+        if len(matches) >= limit:
+            break
+    return {
+        "source": "workflows",
+        "term": normalized_term,
+        "limit": limit,
+        "total": len(matches),
+        "matches": matches,
+    }
+
+
+@mcp.tool(
+    name="search_datasets",
+    description="Search Galaxy datasets within histories.",
+    enabled=True,
+    annotations={
+        "readOnlyHint": "true",
+        "title": "Search Datasets",
+        "aiInputSchema": _build_search_input_schema(include_deleted=True),
+        "aiResponseSchema": _build_search_response_schema("datasets"),
+    },
+)
+def search_datasets(term: str, limit: int = 5, include_deleted: bool = False) -> dict[str, Any]:
+    if limit < 1:
+        raise ValueError("limit must be at least 1.")
+    normalized_term = term.strip()
+    if not normalized_term:
+        raise ValueError("Search term must not be empty.")
+    term_lower = _normalize_term(normalized_term)
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+    matches: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    dataset_limit = max(limit * 5, 50)
+    deleted_flag: bool | None = None if include_deleted else False
+    candidates = (
+        _safe_call(
+            "datasets.get_datasets",
+            lambda: gi.datasets.get_datasets(limit=dataset_limit, deleted=deleted_flag),
+        )
+        or []
+    )
+
+    for ds in candidates:
+        ds_id = ds.get("id")
+        if not ds_id or ds_id in seen:
+            continue
+        seen.add(ds_id)
+        name = ds.get("name") or ds_id
+        searchable = " ".join([name, ds_id, ds.get("extension", ""), ds.get("state", "")]).lower()
+        if term_lower not in searchable:
+            continue
+        summary = (
+            f"Dataset state: {ds.get('state', 'unknown')} ({ds.get('extension', 'unknown')} format)"
+        )
+        extra = {
+            "history_id": ds.get("history_id"),
+            "deleted": ds.get("deleted"),
+            "visible": ds.get("visible"),
+            "tags": ds.get("tags", []),
+        }
+        details = (
+            _safe_call("datasets.show_dataset", lambda did=ds_id: gi.datasets.show_dataset(did))
+            or {}
+        )
+        combined_details: dict[str, Any] = {}
+        if isinstance(ds, dict):
+            combined_details.update(ds)
+        if isinstance(details, dict):
+            combined_details.update(details)
+        matches.append(
+            _format_search_result(
+                "datasets",
+                ds_id,
+                name,
+                summary,
+                term_lower,
+                extra,
+                combined_details,
+            )
+        )
+        if len(matches) >= limit:
+            break
+    return {
+        "source": "datasets",
+        "term": normalized_term,
+        "limit": limit,
+        "total": len(matches),
+        "matches": matches,
+    }
+
+
+@mcp.tool(
+    name="search_dataset_collections",
+    description="Search Galaxy dataset collections across available histories.",
+    enabled=True,
+    annotations={
+        "readOnlyHint": "true",
+        "title": "Search Dataset Collections",
+        "aiInputSchema": _build_search_input_schema(include_deleted=True),
+        "aiResponseSchema": _build_search_response_schema("dataset_collections"),
+    },
+)
+def search_dataset_collections(
+    term: str,
+    limit: int = 5,
+    include_deleted: bool = False,
+) -> dict[str, Any]:
+    if limit < 1:
+        raise ValueError("limit must be at least 1.")
+    normalized_term = term.strip()
+    if not normalized_term:
+        raise ValueError("Search term must not be empty.")
+    term_lower = _normalize_term(normalized_term)
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+    matches: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    histories = (
+        _safe_call(
+            "histories.get_histories for collections",
+            lambda: gi.histories.get_histories(limit=max(limit * 4, 20), deleted=False),
+        )
+        or []
+    )
+    if include_deleted:
+        histories.extend(
+            _safe_call(
+                "histories.get_histories deleted for collections",
+                lambda: gi.histories.get_histories(limit=10, deleted=True),
+            )
+            or []
+        )
+
+    for history in histories:
+        hist_id = history.get("id")
+        if not hist_id:
+            continue
+        collections = _safe_call(
+            f"histories.show_history (collections) {hist_id}",
+            lambda hid=hist_id: gi.histories.show_history(
+                hid,
+                contents=True,
+                types=["dataset_collection"],
+                deleted=include_deleted if include_deleted else None,
+            ),
+        )
+        if not collections:
+            continue
+        for collection in collections:
+            coll_id = collection.get("id")
+            if not coll_id or coll_id in seen:
+                continue
+            seen.add(coll_id)
+            name = collection.get("name") or coll_id
+            searchable = " ".join([name, coll_id, collection.get("collection_type", "")]).lower()
+            if term_lower not in searchable:
+                continue
+            summary = (
+                f"{collection.get('collection_type', 'collection').title()} in history "
+                f"{history.get('name') or hist_id}"
+            )
+            extra = {
+                "history_id": hist_id,
+                "collection_type": collection.get("collection_type"),
+                "element_count": collection.get("element_count"),
+                "deleted": collection.get("deleted"),
+            }
+            details = _safe_call(
+                "dataset_collections.show_dataset_collection",
+                lambda cid=coll_id: gi.dataset_collections.show_dataset_collection(cid),
+            )
+            if details is None:
+                details = collection
+            matches.append(
+                _format_search_result(
+                    "dataset_collections",
+                    coll_id,
+                    name,
+                    summary,
+                    term_lower,
+                    extra,
+                    details,
+                )
+            )
+            if len(matches) >= limit:
+                matches = matches[:limit]
+                return {
+                    "source": "dataset_collections",
+                    "term": normalized_term,
+                    "limit": limit,
+                    "total": len(matches),
+                    "matches": matches,
+                }
+    return {
+        "source": "dataset_collections",
+        "term": normalized_term,
+        "limit": limit,
+        "total": len(matches),
+        "matches": matches,
+    }
+
+
+@mcp.tool(
+    name="search_libraries",
+    description="Search Galaxy data libraries.",
+    enabled=True,
+    annotations={
+        "readOnlyHint": "true",
+        "title": "Search Libraries",
+        "aiInputSchema": _build_search_input_schema(include_deleted=True),
+        "aiResponseSchema": _build_search_response_schema("libraries"),
+    },
+)
+def search_libraries(term: str, limit: int = 5, include_deleted: bool = False) -> dict[str, Any]:
+    if limit < 1:
+        raise ValueError("limit must be at least 1.")
+    normalized_term = term.strip()
+    if not normalized_term:
+        raise ValueError("Search term must not be empty.")
+    term_lower = _normalize_term(normalized_term)
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+    matches: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    libraries = (
+        _safe_call(
+            "libraries.get_libraries",
+            lambda: gi.libraries.get_libraries(
+                deleted=include_deleted if include_deleted else False
+            ),
+        )
+        or []
+    )
+
+    for library in libraries:
+        library_id = library.get("id")
+        if not library_id or library_id in seen:
+            continue
+        seen.add(library_id)
+        name = library.get("name") or library_id
+        searchable = " ".join(
+            [name, library_id, library.get("description", ""), library.get("synopsis", "")]
+        ).lower()
+        if term_lower not in searchable:
+            continue
+        summary = library.get("description") or "Galaxy data library"
+        extra = {
+            "synopsis": library.get("synopsis"),
+            "deleted": library.get("deleted"),
+        }
+        details = (
+            _safe_call(
+                "libraries.show_library_full",
+                lambda lid=library_id: gi.libraries.show_library(lid, contents=True),
+            )
+            or {}
+        )
+        combined_details: dict[str, Any] = {}
+        if isinstance(library, dict):
+            combined_details.update(library)
+        if isinstance(details, dict):
+            combined_details.update(details)
+        matches.append(
+            _format_search_result(
+                "libraries",
+                library_id,
+                name,
+                summary,
+                term_lower,
+                extra,
+                combined_details,
+            )
+        )
+        if len(matches) >= limit:
+            break
+    return {
+        "source": "libraries",
+        "term": normalized_term,
+        "limit": limit,
+        "total": len(matches),
+        "matches": matches,
+    }
+
+
+@mcp.tool(
+    name="search_library_datasets",
+    description="Search datasets stored within Galaxy data libraries.",
+    enabled=True,
+    annotations={
+        "readOnlyHint": "true",
+        "title": "Search Library Datasets",
+        "aiInputSchema": _build_search_input_schema(include_deleted=True),
+        "aiResponseSchema": _build_search_response_schema("library_datasets"),
+    },
+)
+def search_library_datasets(
+    term: str,
+    limit: int = 5,
+    include_deleted: bool = False,
+) -> dict[str, Any]:
+    if limit < 1:
+        raise ValueError("limit must be at least 1.")
+    normalized_term = term.strip()
+    if not normalized_term:
+        raise ValueError("Search term must not be empty.")
+    term_lower = _normalize_term(normalized_term)
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+    matches: list[dict[str, Any]] = []
+    libraries = (
+        _safe_call(
+            "libraries.get_libraries for datasets",
+            lambda: gi.libraries.get_libraries(
+                deleted=include_deleted if include_deleted else False
+            ),
+        )
+        or []
+    )
+
+    for library in libraries:
+        library_id = library.get("id")
+        if not library_id:
+            continue
+        contents = _safe_call(
+            f"libraries.show_library {library_id}",
+            lambda lid=library_id: gi.libraries.show_library(lid, contents=True),
+        )
+        if not contents:
+            continue
+        for entry in contents:
+            if entry.get("type") not in {"file", "dataset"}:
+                continue
+            dataset_id = entry.get("id")
+            if not dataset_id:
+                continue
+            name = entry.get("name") or dataset_id
+            searchable = " ".join([name, dataset_id, entry.get("type", "")]).lower()
+            if term_lower not in searchable:
+                continue
+            summary = f"Library dataset in {library.get('name') or library_id}"
+            extra = {
+                "library_id": library_id,
+                "deleted": entry.get("deleted"),
+                "type": entry.get("type"),
+            }
+            details = _safe_call(
+                "libraries.show_dataset",
+                lambda lid=library_id, did=dataset_id: gi.libraries.show_dataset(lid, did),
+            )
+            if details is None:
+                details = entry
+            matches.append(
+                _format_search_result(
+                    "library_datasets",
+                    (library_id, dataset_id),
+                    name,
+                    summary,
+                    term_lower,
+                    extra,
+                    details,
+                )
+            )
+            if len(matches) >= limit:
+                return {
+                    "source": "library_datasets",
+                    "term": normalized_term,
+                    "limit": limit,
+                    "total": len(matches),
+                    "matches": matches[:limit],
+                }
+    return {
+        "source": "library_datasets",
+        "term": normalized_term,
+        "limit": limit,
+        "total": len(matches),
+        "matches": matches,
+    }
+
+
+@mcp.tool(
+    name="search_jobs",
+    description="Search recent Galaxy jobs by identifier, tool, or state.",
+    enabled=True,
+    annotations={
+        "readOnlyHint": "true",
+        "title": "Search Jobs",
+        "aiInputSchema": _build_search_input_schema(),
+        "aiResponseSchema": _build_search_response_schema("jobs"),
+    },
+)
+def search_jobs(term: str, limit: int = 5) -> dict[str, Any]:
+    if limit < 1:
+        raise ValueError("limit must be at least 1.")
+    normalized_term = term.strip()
+    if not normalized_term:
+        raise ValueError("Search term must not be empty.")
+    term_lower = _normalize_term(normalized_term)
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+    matches: list[dict[str, Any]] = []
+    jobs = (
+        _safe_call(
+            "jobs.get_jobs",
+            lambda: gi.jobs.get_jobs(limit=max(limit * 5, 50)),
+        )
+        or []
+    )
+
+    for job in jobs:
+        job_id = job.get("id")
+        if not job_id:
+            continue
+        searchable = " ".join(
+            [
+                job_id,
+                job.get("tool_id", ""),
+                job.get("state", ""),
+                job.get("history_id", "") or "",
+            ]
+        ).lower()
+        if term_lower not in searchable:
+            continue
+        summary = f"Job state: {job.get('state', 'unknown')} (tool {job.get('tool_id', 'unknown')})"
+        extra = {
+            "tool_id": job.get("tool_id"),
+            "state": job.get("state"),
+            "history_id": job.get("history_id"),
+            "exit_code": job.get("exit_code"),
+        }
+        details = _safe_call(
+            "jobs.show_job", lambda jid=job_id: gi.jobs.show_job(jid, full_details=True)
+        )
+        if details is None:
+            details = job
+        matches.append(
+            _format_search_result(
+                "jobs",
+                job_id,
+                job_id,
+                summary,
+                term_lower,
+                extra,
+                details,
+            )
+        )
+        if len(matches) >= limit:
+            break
+    return {
+        "source": "jobs",
+        "term": normalized_term,
+        "limit": limit,
+        "total": len(matches),
+        "matches": matches,
+    }
+
+
+@mcp.tool(
+    name="search_invocations",
+    description="Search Galaxy workflow invocations.",
+    enabled=True,
+    annotations={
+        "readOnlyHint": "true",
+        "title": "Search Invocations",
+        "aiInputSchema": _build_search_input_schema(),
+        "aiResponseSchema": _build_search_response_schema("invocations"),
+    },
+)
+def search_invocations(term: str, limit: int = 5) -> dict[str, Any]:
+    if limit < 1:
+        raise ValueError("limit must be at least 1.")
+    normalized_term = term.strip()
+    if not normalized_term:
+        raise ValueError("Search term must not be empty.")
+    term_lower = _normalize_term(normalized_term)
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+    matches: list[dict[str, Any]] = []
+    invocations = (
+        _safe_call(
+            "invocations.get_invocations",
+            lambda: gi.invocations.get_invocations(limit=max(limit * 4, 40), view="element"),
+        )
+        or []
+    )
+
+    for invocation in invocations:
+        inv_id = invocation.get("id")
+        if not inv_id:
+            continue
+        name = invocation.get("workflow_name") or invocation.get("workflow_id") or inv_id
+        searchable = " ".join(
+            [
+                inv_id,
+                name,
+                invocation.get("state", ""),
+                invocation.get("history_id", "") or "",
+                invocation.get("workflow_id", "") or "",
+            ]
+        ).lower()
+        if term_lower not in searchable:
+            continue
+        summary = f"Invocation state: {invocation.get('state', 'unknown')}"
+        extra = {
+            "history_id": invocation.get("history_id"),
+            "workflow_id": invocation.get("workflow_id"),
+            "update_time": invocation.get("update_time"),
+        }
+        details = _safe_call(
+            "invocations.show_invocation",
+            lambda iid=inv_id: gi.invocations.show_invocation(iid),
+        )
+        if details is None:
+            details = invocation
+        matches.append(
+            _format_search_result(
+                "invocations",
+                inv_id,
+                name,
+                summary,
+                term_lower,
+                extra,
+                details,
+            )
+        )
+        if len(matches) >= limit:
+            break
+    return {
+        "source": "invocations",
+        "term": normalized_term,
+        "limit": limit,
+        "total": len(matches),
+        "matches": matches,
+    }

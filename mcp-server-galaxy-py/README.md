@@ -103,13 +103,11 @@ The Python implementation provides the following MCP tools:
 - `run_tool`: Execute a Galaxy tool with parameters
 - `filter_tools_by_dataset`: Recommend tools based on dataset characteristics
 - `get_user`: Get current user information
-- `get_histories`: List available Galaxy histories
-- `list_history_ids`: Get simplified list of history IDs and names
+- `get_histories`: List available Galaxy histories (use `ids_only=True` for a simplified list)
 - `get_history_details`: Get detailed information about a specific history
 - `upload_file`: Upload local files to Galaxy
 - `get_invocations`: View workflow executions
-- `get_iwc_workflows`: Access Interactive Workflow Composer workflows
-- `search_iwc_workflows`: Search IWC workflows by keywords
+- `iwc_workflows`: Access or search Interactive Workflow Composer workflows
 - `import_workflow_from_iwc`: Import an IWC workflow to Galaxy
 
 ## Testing

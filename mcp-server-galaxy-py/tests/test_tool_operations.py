@@ -6,45 +6,63 @@ from unittest.mock import patch
 
 import pytest
 
-from .test_helpers import fetch_fn, galaxy_state, run_tool_fn
+from .test_helpers import galaxy_state, run_tool_fn, search_tools_fn
 
 
 class TestToolOperations:
     """Test tool operations"""
 
-    def test_fetch_tool_includes_citations(self, mock_galaxy_instance):
-        """Fetching a tool should include aggregated citations."""
-        mock_galaxy_instance.tools.show_tool.side_effect = [
+    def test_search_tools_includes_citations(self, mock_galaxy_instance):
+        """Tool search should include aggregated citations."""
+        mock_galaxy_instance.tools.get_tools.return_value = [
             {
                 "id": "toolshed.g2/fastqc/0.72",
                 "name": "FastQC",
+                "description": "QC tool",
                 "version": "0.72",
-                "citations": [{"title": "FastQC citation"}],
-                "versions": [{"id": "toolshed.g2/fastqc/0.71"}],
-            },
-            {
-                "id": "toolshed.g2/fastqc/0.71",
-                "name": "FastQC",
-                "version": "0.71",
-                "citations": [{"title": "Older citation"}],
-                "versions": [],
-            },
+                "tool_type": "default",
+                "labels": ["qc"],
+            }
         ]
 
-        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
-            result = fetch_fn("tools:toolshed.g2/fastqc/0.72")
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}), patch(
+            "galaxy_mcp.server._collect_tool_details",
+            return_value={
+                "tool_id": "toolshed.g2/fastqc",
+                "citations": [
+                    {"title": "FastQC citation"},
+                    {"title": "Older citation"},
+                ],
+                "versions": [
+                    {
+                        "id": "toolshed.g2/fastqc/0.72",
+                        "version": "0.72",
+                        "resource_id": "tools:toolshed.g2/fastqc/0.72",
+                        "details": {"id": "toolshed.g2/fastqc/0.72", "version": "0.72"},
+                    },
+                    {
+                        "id": "toolshed.g2/fastqc/0.71",
+                        "version": "0.71",
+                        "resource_id": "tools:toolshed.g2/fastqc/0.71",
+                        "details": {"id": "toolshed.g2/fastqc/0.71", "version": "0.71"},
+                    },
+                ],
+            },
+        ):
+            response = search_tools_fn(term="FastQC")
 
-        metadata = result["metadata"]
-        assert metadata["tool_id"] == "toolshed.g2/fastqc"
-        assert metadata["citations"] == [
+        assert response["source"] == "tools"
+        assert response["total"] == len(response["matches"])
+        assert response["matches"], "Expected at least one match"
+
+        first = response["matches"][0]
+        details = first["details"]
+        assert details["tool_id"] == "toolshed.g2/fastqc"
+        assert details["citations"] == [
             {"title": "FastQC citation"},
             {"title": "Older citation"},
         ]
-        assert len(metadata["versions"]) == 2
-        mock_galaxy_instance.tools.show_tool.assert_any_call("toolshed.g2/fastqc", io_details=True)
-        mock_galaxy_instance.tools.show_tool.assert_any_call(
-            "toolshed.g2/fastqc", io_details=True, tool_version="0.71"
-        )
+        assert len(details["versions"]) == 2
 
     def test_run_tool_fn(self, mock_galaxy_instance):
         """Test running a tool"""
@@ -81,7 +99,7 @@ class TestToolOperations:
         """Test tool operations fail when not connected"""
         with patch.dict(galaxy_state, {"connected": False}):
             with pytest.raises(Exception):
-                fetch_fn("tools:abc")
+                search_tools_fn(term="abc")
 
             with pytest.raises(Exception):
                 run_tool_fn("history_1", "tool1", {})

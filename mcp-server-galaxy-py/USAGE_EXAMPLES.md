@@ -27,7 +27,7 @@ histories = get_histories()
 #### Get just IDs and names (simplified)
 
 ```python
-history_list = list_history_ids()
+history_list = get_histories(ids_only=True)["histories"]
 # Returns: [{"id": "abc123", "name": "My Analysis"}, ...]
 ```
 
@@ -112,10 +112,10 @@ upload_result = upload_file("/path/to/your/file.txt", history_id="abc123")
 
 ```python
 # Get all workflows from Interactive Workflow Composer
-iwc_workflows = get_iwc_workflows()
+iwc_catalogue = iwc_workflows()
 
 # Search for specific workflows
-matching_workflows = search_iwc_workflows("RNA-seq")
+matching_workflows = iwc_workflows(term="RNA-seq")
 ```
 
 #### Import a workflow
