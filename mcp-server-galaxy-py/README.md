@@ -98,7 +98,6 @@ See [USAGE_EXAMPLES.md](USAGE_EXAMPLES.md) for detailed usage patterns and commo
 
 The Python implementation provides the following MCP tools:
 
-- `connect`: Establish connection to a Galaxy instance
 - `search`: Discover Galaxy resources (tools, histories, workflows, datasets, etc.)
 - `fetch`: Retrieve metadata for a resource returned by `search`
 - `get_tool_citations`: Fetch citation details for a tool using its search-scoped identifier

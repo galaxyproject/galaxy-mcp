@@ -2,7 +2,6 @@
 
 # Import all the wrapped functions from server
 from galaxy_mcp.server import (
-    connect,
     create_history,
     download_dataset,
     ensure_connected,
@@ -38,7 +37,6 @@ def get_function(tool_or_function):
 
 
 # Create function aliases for testing
-connect_fn = get_function(connect)
 create_history_fn = get_function(create_history)
 download_dataset_fn = get_function(download_dataset)
 filter_tools_by_dataset_fn = get_function(filter_tools_by_dataset)
@@ -62,7 +60,6 @@ fetch_fn = get_function(fetch)
 
 # Re-export non-wrapped items
 __all__ = [
-    "connect_fn",
     "create_history_fn",
     "download_dataset_fn",
     "filter_tools_by_dataset_fn",
