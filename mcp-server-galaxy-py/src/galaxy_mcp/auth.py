@@ -45,6 +45,17 @@ from starlette.responses import (
 )
 from starlette.routing import Route
 
+try:  # pragma: no cover - fallback import for Python < 3.12
+    from typing import override
+except ImportError:  # pragma: no cover - Python < 3.12 without typing.override
+    try:
+        from typing_extensions import override  # type: ignore
+    except ImportError:  # pragma: no cover - hard fallback if typing_extensions missing
+
+        def override(func):  # type: ignore
+            return func
+
+
 logger = logging.getLogger(__name__)
 
 AUTH_CODE_TTL_SECONDS = 5 * 60
@@ -139,13 +150,16 @@ class GalaxyOAuthProvider(OAuthProvider):
     # OAuth provider interface
     # ------------------------------------------------------------------
 
+    @override
     async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:
         return self._clients.get(client_id)
 
+    @override
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
         self._clients[client_info.client_id] = client_info
         await self._persist_client_registry()
 
+    @override
     async def authorize(
         self, client: OAuthClientInformationFull, params: AuthorizationParams
     ) -> str:
@@ -171,6 +185,7 @@ class GalaxyOAuthProvider(OAuthProvider):
         logger.debug("Created authorization transaction %s for client %s", txn_id, client.client_id)
         return login_url
 
+    @override
     async def load_authorization_code(
         self,
         client: OAuthClientInformationFull,
@@ -198,6 +213,7 @@ class GalaxyOAuthProvider(OAuthProvider):
             resource=None,
         )
 
+    @override
     async def exchange_authorization_code(
         self,
         client: OAuthClientInformationFull,
@@ -215,6 +231,7 @@ class GalaxyOAuthProvider(OAuthProvider):
             client_id=client.client_id, scopes=payload["scopes"], galaxy_payload=galaxy_payload
         )
 
+    @override
     async def load_refresh_token(
         self,
         client: OAuthClientInformationFull,
@@ -237,6 +254,7 @@ class GalaxyOAuthProvider(OAuthProvider):
             expires_at=payload["exp"],
         )
 
+    @override
     async def exchange_refresh_token(
         self,
         client: OAuthClientInformationFull,
@@ -255,6 +273,7 @@ class GalaxyOAuthProvider(OAuthProvider):
             client_id=client.client_id, scopes=resolved_scopes, galaxy_payload=payload["galaxy"]
         )
 
+    @override
     async def load_access_token(self, token: str) -> AccessToken | None:
         try:
             payload = self._decrypt_payload(token, expected_type="access")
@@ -277,6 +296,7 @@ class GalaxyOAuthProvider(OAuthProvider):
             },
         )
 
+    @override
     async def revoke_token(self, token: AccessToken | RefreshToken) -> None:
         # Stateless tokens cannot be selectively revoked without external storage.
         logger.debug(
@@ -312,10 +332,12 @@ class GalaxyOAuthProvider(OAuthProvider):
             metadata_paths.add(f"{normalized}{RESOURCE_METADATA_PATH}")
         return metadata_paths
 
+    @override
     async def handle_login(self, request: Request) -> Response:
         """Public wrapper for the login handler so it can be registered on FastMCP routes."""
         return await self._login_handler(request)
 
+    @override
     def get_resource_metadata(self) -> dict[str, Any]:
         """Return OAuth protected resource metadata."""
         return {
@@ -325,10 +347,12 @@ class GalaxyOAuthProvider(OAuthProvider):
             "token_types_supported": ["Bearer"],
         }
 
+    @override
     async def handle_resource_metadata(self, request: Request) -> Response:
         """Return OAuth protected resource metadata."""
         return JSONResponse(self.get_resource_metadata())
 
+    @override
     def get_routes(
         self, mcp_path: str | None = None, mcp_endpoint: Any | None = None
     ) -> list[Route]:
