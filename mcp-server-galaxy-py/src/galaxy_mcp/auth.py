@@ -332,6 +332,15 @@ class GalaxyOAuthProvider(OAuthProvider):
     def get_routes(
         self, mcp_path: str | None = None, mcp_endpoint: Any | None = None
     ) -> list[Route]:
+        """
+        Return the Starlette routes that expose the OAuth surface.
+
+        FastMCP's base OAuth implementation eagerly registers generic login/resource-metadata
+        endpoints. Galaxy-specific login handling needs to replace those with custom handlers
+        (including base-path-prefixed variants), so we strip the parent definitions first and
+        then install our own. This defensive dedupe also shields us from future FastMCP routing
+        changes that might otherwise create duplicate routes and confusing behaviour.
+        """
         routes = super().get_routes(mcp_path, mcp_endpoint)
 
         base_path = self._normalize_base_path(

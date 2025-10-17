@@ -170,6 +170,10 @@ uv run pre-commit install
 
 Pre-commit hooks will automatically format your code and run linting checks when you commit. All contributors should install these hooks to maintain consistent code quality.
 
+### Authentication Provider Notes
+
+`GalaxyOAuthProvider` extends FastMCPs default OAuth provider so we can surface Galaxy-specific login and metadata endpoints. FastMCP automatically wires in generic routes when you pass `auth=...`, so our implementation overrides `get_routes()` to replace those defaults with Galaxy-aware handlers (and to add base-path-prefixed variants). The tests under `tests/test_auth.py` assert that the replacement logic works and that the custom OAuth flow remains spec compliant.
+
 ### Development Commands
 
 We use a Makefile for consistent development commands:
