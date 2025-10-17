@@ -169,7 +169,6 @@ Hooks include:
 
 Tests are organized by functionality:
 
-- `test_connection.py` - Galaxy connection and authentication
 - `test_history_operations.py` - History-related operations
 - `test_dataset_operations.py` - Dataset upload/download
 - `test_tool_operations.py` - Tool search and execution

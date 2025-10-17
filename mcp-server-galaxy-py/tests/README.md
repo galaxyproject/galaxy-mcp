@@ -5,7 +5,6 @@ This directory contains integration tests for the Galaxy MCP server.
 ## Test Structure
 
 - `conftest.py` - Pytest configuration and shared fixtures
-- `test_connection.py` - Tests for Galaxy connection and authentication
 - `test_history_operations.py` - Tests for history-related operations
 - `test_dataset_operations.py` - Tests for dataset operations
 - `test_tool_operations.py` - Tests for tool search and execution

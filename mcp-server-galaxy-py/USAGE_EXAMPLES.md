@@ -4,33 +4,16 @@ This document provides common usage patterns and examples for the Galaxy MCP ser
 
 ## Quick Start
 
-### 1. Connect to Galaxy
+### 1. Verify Connectivity
 
-First, make sure you have authenticated via the MCP client's OAuth flow (e.g., ChatGPT will prompt you). With an active session you can confirm connectivity:
-
-```python
-connect()
-```
-
-#### Get server information
-
-Once connected, you can retrieve comprehensive information about the Galaxy server:
+Authenticate through your MCP client’s OAuth flow (e.g., ChatGPT will prompt you). With an active
+session you can confirm access by requesting server metadata:
 
 ```python
 server_info = get_server_info()
-# Returns: {
-#   "url": "https://your-galaxy-instance.org/",
-#   "version": {"version_major": "23.1", "version_minor": "1", ...},
-#   "config": {
-#     "brand": "Galaxy",
-#     "allow_user_creation": true,
-#     "enable_quotas": false,
-#     "ftp_upload_site": "ftp.galaxy.org",
-#     "support_url": "https://help.galaxyproject.org/",
-#     ...
-#   }
-# }
 ```
+
+The response includes the Galaxy URL, version information, and selected configuration fields.
 
 ### 2. Working with Histories
 
@@ -146,27 +129,24 @@ imported = import_workflow_from_iwc("github.com/galaxyproject/iwc/tree/main/work
 ### Pattern 1: Complete Analysis Pipeline
 
 ```python
-# 1. Connect to Galaxy
-connect()
-
-# 2. Create a new history for the analysis
+# 1. Create a new history for the analysis
 new_history = create_history("RNA-seq Analysis")
 history_id = new_history["id"]
 
-# 3. Upload data files
+# 2. Upload data files
 upload_file("/data/sample1_R1.fastq", history_id)
 upload_file("/data/sample1_R2.fastq", history_id)
 
-# 4. Search and run quality control
+# 3. Search and run quality control
 search_response = search(term="fastqc", sources=["tools"])
-qc_hit = next(item for item in search_response["results"] if item["source"] == "tool")
-tool_id = qc_hit["id"].split(":", 1)[1]
+qc_hit = next(item for item in search_response["results"] if item["source"] == "tools")
+tool_id = qc_hit["metadata"]["versions"][0]["id"]
 
-# 5. Get history contents to find dataset IDs
+# 4. Get history contents to find dataset IDs
 history_details = get_history_details(history_id)
 datasets = history_details["contents"]
 
-# 6. Run FastQC on uploaded files
+# 5. Run FastQC on uploaded files
 for dataset in datasets:
     if dataset["extension"] == "fastq":
         inputs = {"input_file": {"src": "hda", "id": dataset["id"]}}
@@ -176,8 +156,7 @@ for dataset in datasets:
 ### Pattern 2: Working with Existing Data
 
 ```python
-# 1. Connect and list histories
-connect()
+# 1. List histories
 histories = list_history_ids()
 
 # 2. Find a specific history
@@ -206,22 +185,16 @@ if target_history:
     - Problem: Passing the entire history object instead of just the ID
     - Solution: Use `history["id"]` not `history`
 
-2. **"Not connected to Galaxy" error**
-
-    - Problem: Trying to use tools before connecting
-    - Solution: Always call `connect()` first
-
 3. **"Tool not found" error**
     - Problem: Using incorrect tool ID format
     - Solution: Use `search(term=..., sources=["tools"])` and take the Galaxy tool ID from `result["metadata"]["versions"][0]["id"]`
 
 ## Best Practices
 
-1. **Always connect first**: Before using any other tools, establish a connection
-2. **Use IDs correctly**: When functions ask for an ID, pass just the ID string, not the entire object
-3. **Check return types**: Some functions return lists, others return dictionaries
-4. **Handle errors gracefully**: Wrap operations in try-except blocks
-5. **Use environment variables**: Store credentials in .env file for security
+1. **Use IDs correctly**: When functions ask for an ID, pass just the ID string, not the entire object
+2. **Check return types**: Some functions return lists, others return dictionaries
+3. **Handle errors gracefully**: Wrap operations in try/except blocks
+4. **Use environment variables**: Store credentials in a `.env` file when you cannot rely on OAuth
 
 ## Advanced Usage
 
