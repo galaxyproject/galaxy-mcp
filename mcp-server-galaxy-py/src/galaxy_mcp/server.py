@@ -4,12 +4,24 @@ import logging
 import os
 import threading
 from functools import lru_cache
+import types
+from pathlib import Path
 from typing import Any
 
 import requests
 from bioblend.galaxy import GalaxyInstance
 from dotenv import find_dotenv, load_dotenv
 from fastmcp import FastMCP
+from mcp.server.auth.middleware.auth_context import get_access_token
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
+
+from galaxy_mcp.auth import (
+    GalaxyOAuthProvider,
+    configure_auth_provider,
+    get_active_session,
+)
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -47,41 +59,195 @@ if dotenv_path:
     load_dotenv(dotenv_path)
     print(f"Loaded environment variables from {dotenv_path}")
 
-# Create an MCP server
-mcp: FastMCP = FastMCP("Galaxy")
-
-# Galaxy client state
+# Configure Galaxy target and client state
+raw_galaxy_url = os.environ.get("GALAXY_URL")
+normalized_galaxy_url = (
+    raw_galaxy_url if not raw_galaxy_url or raw_galaxy_url.endswith("/") else f"{raw_galaxy_url}/"
+)
 galaxy_state: dict[str, Any] = {
-    "url": os.environ.get("GALAXY_URL"),
+    "url": normalized_galaxy_url,
     "api_key": os.environ.get("GALAXY_API_KEY"),
     "gi": None,
     "connected": False,
 }
 
+# Configure OAuth provider if requested
+public_base_url = os.environ.get("GALAXY_MCP_PUBLIC_URL")
+session_secret = os.environ.get("GALAXY_MCP_SESSION_SECRET")
+client_registry_path_env = os.environ.get("GALAXY_MCP_CLIENT_REGISTRY")
+default_registry_path = Path.home() / ".galaxy-mcp" / "clients.json"
+client_registry_path = (
+    Path(client_registry_path_env).expanduser()
+    if client_registry_path_env
+    else default_registry_path
+)
+auth_provider: GalaxyOAuthProvider | None = None
+if public_base_url and normalized_galaxy_url:
+    try:
+        auth_provider = GalaxyOAuthProvider(
+            base_url=public_base_url,
+            galaxy_url=normalized_galaxy_url,
+            session_secret=session_secret,
+            client_registry_path=client_registry_path,
+        )
+        configure_auth_provider(auth_provider)
+        logger.info("OAuth login enabled for Galaxy at %s", normalized_galaxy_url)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.error("Failed to initialize OAuth provider: %s", exc, exc_info=True)
+elif public_base_url and not normalized_galaxy_url:
+    logger.warning(
+        "GALAXY_MCP_PUBLIC_URL is set but GALAXY_URL is missing. "
+        "OAuth login remains disabled until GALAXY_URL is configured."
+    )
+else:
+    logger.info(
+        "OAuth login disabled. Configure GALAXY_MCP_PUBLIC_URL to enable browser-based login."
+    )
+
+# Create an MCP server (inject auth provider when available)
+if auth_provider:
+    mcp: FastMCP = FastMCP("Galaxy", auth=auth_provider)
+else:
+    mcp = FastMCP("Galaxy")
+
+# Allow browser preflight CORS requests to bypass FastMCP auth
+
+
+class _PreflightMiddleware(BaseHTTPMiddleware):
+    """Ensure CORS preflight requests succeed for browser-based clients."""
+
+    async def dispatch(self, request, call_next):
+        origin = request.headers.get("origin", "*")
+        allow_methods = request.headers.get("access-control-request-method", "POST,GET,OPTIONS")
+        allow_headers = request.headers.get(
+            "access-control-request-headers", "authorization,content-type"
+        )
+
+        cors_headers = {
+            "access-control-allow-origin": origin,
+            "access-control-allow-methods": allow_methods,
+            "access-control-allow-headers": allow_headers,
+            "access-control-max-age": "600",
+        }
+
+        if request.method.upper() == "OPTIONS":
+            return Response(status_code=204, headers=cors_headers)
+
+        response = await call_next(request)
+        for header, value in cors_headers.items():
+            response.headers.setdefault(header, value)
+        return response
+
+
+_original_http_app = FastMCP.http_app
+
+
+class _OAuthPublicRoutes:
+    """Expose OAuth login and metadata routes without auth headers."""
+
+    def __init__(self, app, provider: GalaxyOAuthProvider, base_path: str | None):
+        self._app = app
+        self._provider = provider
+        self._login_paths = provider.get_login_paths(base_path)
+        self._metadata_paths = provider.get_resource_metadata_paths(base_path)
+        self.state = getattr(app, "state", None)
+        self.router = getattr(app, "router", None)
+
+    def __getattr__(self, item):
+        return getattr(self._app, item)
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self._app(scope, receive, send)
+            return
+
+        path = scope.get("path", "")
+        method = scope.get("method", "").upper()
+        if path in self._metadata_paths:
+            if method not in {"GET", "HEAD"}:
+                await self._app(scope, receive, send)
+                return
+            request = Request(scope, receive=receive)
+            response = await self._provider.handle_resource_metadata(request)
+            await response(scope, receive, send)
+            return
+
+        if path in self._login_paths and method in {"GET", "POST"}:
+            request = Request(scope, receive=receive)
+            response = await self._provider.handle_login(request)
+            await response(scope, receive, send)
+            return
+
+        await self._app(scope, receive, send)
+
+
+def _http_app_with_preflight(self, *args, **kwargs):
+    app = _original_http_app(self, *args, **kwargs)
+    app.add_middleware(_PreflightMiddleware)
+    if auth_provider:
+        base_path = kwargs.get("path")
+        app = _OAuthPublicRoutes(app, auth_provider, base_path)
+    return app
+
+
+mcp.http_app = types.MethodType(_http_app_with_preflight, mcp)
+
 
 # Initialize Galaxy client if environment variables are set
 if galaxy_state["url"] and galaxy_state["api_key"]:
     try:
-        galaxy_url = (
-            galaxy_state["url"] if galaxy_state["url"].endswith("/") else f"{galaxy_state['url']}/"
-        )
-        galaxy_state["url"] = galaxy_url
-        galaxy_state["gi"] = GalaxyInstance(url=galaxy_url, key=galaxy_state["api_key"])
+        galaxy_state["gi"] = GalaxyInstance(url=galaxy_state["url"], key=galaxy_state["api_key"])
         galaxy_state["connected"] = True
-        logger.info(f"Galaxy client initialized from environment variables (URL: {galaxy_url})")
+        logger.info(
+            "Galaxy client initialized from environment variables (URL: %s)",
+            galaxy_state["url"],
+        )
     except Exception as e:
         logger.warning(f"Failed to initialize Galaxy client from environment variables: {e}")
         logger.warning("You'll need to use connect() to establish a connection.")
 
 
-def ensure_connected():
-    """Helper function to ensure Galaxy connection is established"""
-    if not galaxy_state["connected"] or not galaxy_state["gi"]:
+def _get_request_connection_state() -> dict[str, Any]:
+    """
+    Determine the effective Galaxy connection, preferring OAuth credentials when available.
+    """
+    if auth_provider:
+        credentials, api_key = get_active_session(get_access_token)
+        if credentials and api_key:
+            try:
+                gi = GalaxyInstance(url=credentials.galaxy_url, key=api_key)
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.error("Failed to create Galaxy client for OAuth session: %s", exc)
+            else:
+                return {
+                    "url": credentials.galaxy_url,
+                    "api_key": api_key,
+                    "gi": gi,
+                    "connected": True,
+                    "source": "oauth",
+                    "session": credentials,
+                }
+
+    return {
+        "url": galaxy_state.get("url") or normalized_galaxy_url,
+        "api_key": galaxy_state.get("api_key"),
+        "gi": galaxy_state.get("gi"),
+        "connected": galaxy_state.get("connected", False) and bool(galaxy_state.get("gi")),
+        "source": "api_key" if galaxy_state.get("connected") else None,
+        "session": None,
+    }
+
+
+def ensure_connected() -> dict[str, Any]:
+    """Helper function to ensure Galaxy connection is established."""
+    state = _get_request_connection_state()
+    if not state["connected"] or not state["gi"]:
         raise ValueError(
-            "Not connected to Galaxy. "
-            "Please run connect() first with your Galaxy URL and API key. "
-            "Example: connect(url='https://your-galaxy.org', api_key='your-key')"
+            "Not connected to Galaxy. Authenticate via OAuth or run connect() with your "
+            "Galaxy URL and API key. Example: connect(url='https://your-galaxy.org', "
+            "api_key='your-key')"
         )
+    return state
 
 
 @mcp.tool()
@@ -97,6 +263,18 @@ def connect(url: str | None = None, api_key: str | None = None) -> dict[str, Any
         Connection status and user information
     """
     try:
+        # Reuse current OAuth session when available
+        state = _get_request_connection_state()
+        if state["connected"] and state.get("source") == "oauth" and state["gi"]:
+            gi: GalaxyInstance = state["gi"]
+            user_info = gi.users.get_current_user()
+            return {
+                "connected": True,
+                "user": user_info,
+                "url": state["url"],
+                "auth": "oauth",
+            }
+
         # Use provided parameters or fall back to environment variables
         use_url = url or os.environ.get("GALAXY_URL")
         use_api_key = api_key or os.environ.get("GALAXY_API_KEY")
@@ -147,6 +325,7 @@ def connect(url: str | None = None, api_key: str | None = None) -> dict[str, Any
         galaxy_state["gi"] = None
         galaxy_state["connected"] = False
 
+        galaxy_url = locals().get("galaxy_url") or use_url or normalized_galaxy_url or "unknown"
         error_msg = f"Failed to connect to Galaxy at {galaxy_url}: {str(e)}"
         if "401" in str(e) or "authentication" in str(e).lower():
             error_msg += " Check that your API key is valid and has the necessary permissions."
@@ -171,11 +350,12 @@ def search_tools_by_name(query: str) -> dict[str, Any]:
     Returns:
         List of tools matching the query
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         # The get_tools method is used with name filter parameter
-        tools = galaxy_state["gi"].tools.get_tools(name=query)
+        tools = gi.tools.get_tools(name=query)
         return {"tools": tools}
     except Exception as e:
         raise ValueError(format_error("Search tools", e, {"query": query})) from e
@@ -193,11 +373,12 @@ def get_tool_details(tool_id: str, io_details: bool = False) -> dict[str, Any]:
     Returns:
         Tool details
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         # Get detailed information about the tool
-        tool_info = galaxy_state["gi"].tools.show_tool(tool_id, io_details=io_details)
+        tool_info = gi.tools.show_tool(tool_id, io_details=io_details)
         return tool_info
     except Exception as e:
         raise ValueError(
@@ -247,11 +428,12 @@ def get_tool_citations(tool_id: str) -> dict[str, Any]:
     Returns:
         Tool citation information
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         # Get the tool information which includes citations
-        tool_info = galaxy_state["gi"].tools.show_tool(tool_id)
+        tool_info = gi.tools.show_tool(tool_id)
 
         # Extract citation information
         citations = tool_info.get("citations", [])
@@ -280,11 +462,12 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> dict[str,
     Returns:
         Dictionary containing tool execution information including job IDs and output dataset IDs
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         # Run the tool with provided inputs
-        result = galaxy_state["gi"].tools.run_tool(history_id, tool_id, inputs)
+        result = gi.tools.run_tool(history_id, tool_id, inputs)
         return result
     except Exception as e:
         raise ValueError(
@@ -302,11 +485,12 @@ def get_tool_panel() -> dict[str, Any]:
     Returns:
         Tool panel hierarchy
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         # Get the tool panel structure
-        tool_panel = galaxy_state["gi"].tools.get_tool_panel()
+        tool_panel = gi.tools.get_tool_panel()
         return {"tool_panel": tool_panel}
     except Exception as e:
         raise ValueError(format_error("Get tool panel", e)) from e
@@ -323,8 +507,9 @@ def create_history(history_name: str) -> dict[str, Any]:
     Returns:
         Dictionary containing the created history details including the new history ID hash
     """
-    ensure_connected()
-    return galaxy_state["gi"].histories.create_history(history_name)
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+    return gi.histories.create_history(history_name)
 
 
 @mcp.tool()
@@ -344,14 +529,15 @@ def search_tools_by_keywords(keywords: list[str]) -> dict[str, Any]:
         }
     """
 
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     lock = threading.Lock()
 
     keywords_lower = [k.lower() for k in keywords]
 
     try:
-        tool_panel = galaxy_state["gi"].tools.get_tool_panel()
+        tool_panel = gi.tools.get_tool_panel()
 
         def flatten_tools(panel):
             tools = []
@@ -390,7 +576,7 @@ def search_tools_by_keywords(keywords: list[str]) -> dict[str, Any]:
             if tool_id.endswith("_label"):
                 return None
             try:
-                tool_details = galaxy_state["gi"].tools.show_tool(tool_id, io_details=True)
+                tool_details = gi.tools.show_tool(tool_id, io_details=True)
                 tool_inputs = tool_details.get("inputs", [{}])
                 for input_spec in tool_inputs:
                     if not isinstance(input_spec, dict):
@@ -444,18 +630,20 @@ def get_server_info() -> dict[str, Any]:
     Returns:
         Server information including version, URL, and other configuration details
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+    url = state["url"] or normalized_galaxy_url
 
     try:
         # Get server configuration info
-        config_info = galaxy_state["gi"].config.get_config()
+        config_info = gi.config.get_config()
 
         # Get server version info
-        version_info = galaxy_state["gi"].config.get_version()
+        version_info = gi.config.get_version()
 
         # Build comprehensive server info response
         server_info = {
-            "url": galaxy_state["url"],
+            "url": url,
             "version": version_info,
             "config": {
                 "brand": config_info.get("brand", "Galaxy"),
@@ -492,10 +680,11 @@ def get_user() -> dict[str, Any]:
     Returns:
         Current user details
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
-        user_info = galaxy_state["gi"].users.get_current_user()
+        user_info = gi.users.get_current_user()
         return user_info
     except Exception as e:
         raise ValueError(f"Failed to get user: {str(e)}") from e
@@ -516,18 +705,17 @@ def get_histories(
     Returns:
         Dictionary containing list of histories and pagination metadata
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         # Get histories with pagination and optional filtering
-        histories = galaxy_state["gi"].histories.get_histories(
-            limit=limit, offset=offset, name=name
-        )
+        histories = gi.histories.get_histories(limit=limit, offset=offset, name=name)
 
         # If pagination is used, get total count for metadata
         if limit is not None:
             # Get total count without pagination
-            all_histories = galaxy_state["gi"].histories.get_histories(name=name)
+            all_histories = gi.histories.get_histories(name=name)
             total_items = len(all_histories) if all_histories else 0
 
             # Calculate pagination metadata
@@ -579,10 +767,11 @@ def list_history_ids() -> list[dict[str, str]]:
     Returns:
         List of dictionaries containing 'id' and 'name' fields
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
-        histories = galaxy_state["gi"].histories.get_histories()
+        histories = gi.histories.get_histories()
         if not histories:
             return []
         # Extract just the id and name for convenience
@@ -613,17 +802,18 @@ def get_history_details(history_id: str) -> dict[str, Any]:
         To get actual datasets: Use get_history_contents(history_id, limit=N,
                                          order="create_time-dsc")
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         logger.info(f"Getting details for history ID: {history_id}")
 
         # Get history details
-        history_info = galaxy_state["gi"].histories.show_history(history_id, contents=False)
+        history_info = gi.histories.show_history(history_id, contents=False)
         logger.info(f"Successfully retrieved history info: {history_info.get('name', 'Unknown')}")
 
         # Get total count by calling without limit
-        all_contents = galaxy_state["gi"].histories.show_history(history_id, contents=True)
+        all_contents = gi.histories.show_history(history_id, contents=True)
         total_items = len(all_contents) if all_contents else 0
 
         return {
@@ -675,7 +865,8 @@ def get_history_contents(
     Returns:
         Dictionary containing paginated dataset list, pagination metadata, and history reference
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         logger.info(
@@ -684,7 +875,7 @@ def get_history_contents(
         )
 
         # Use datasets API for better ordering support
-        contents = galaxy_state["gi"].datasets.get_datasets(
+        contents = gi.datasets.get_datasets(
             limit=limit,
             offset=offset,
             history_id=history_id,
@@ -700,7 +891,7 @@ def get_history_contents(
             contents = [item for item in contents if item.get("visible", True)]
 
         # Get total count for pagination metadata
-        all_contents = galaxy_state["gi"].datasets.get_datasets(
+        all_contents = gi.datasets.get_datasets(
             history_id=history_id,
             order=order,
         )
@@ -766,12 +957,17 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str,
     Returns:
         Dictionary containing job metadata, tool information, dataset ID, and job ID
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+    base_url = state["url"] or normalized_galaxy_url or ""
+    api_key = state["api_key"]
+    if not base_url or not api_key:
+        raise ValueError("Galaxy connection is missing URL or API key information.")
 
     try:
         # Get dataset provenance to find the creating job
         try:
-            provenance = galaxy_state["gi"].histories.show_dataset_provenance(
+            provenance = gi.histories.show_dataset_provenance(
                 history_id=history_id, dataset_id=dataset_id
             )
 
@@ -786,7 +982,7 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str,
         except Exception as provenance_error:
             # If provenance fails, try getting dataset details which might contain job info
             try:
-                dataset_details = galaxy_state["gi"].datasets.show_dataset(dataset_id)
+                dataset_details = gi.datasets.show_dataset(dataset_id)
                 job_id = dataset_details.get("creating_job")
                 if not job_id:
                     raise ValueError(
@@ -801,9 +997,9 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str,
 
         # Get job details using the Galaxy API directly
         # (Bioblend doesn't have a direct method for this)
-        url = f"{galaxy_state['url']}api/jobs/{job_id}"
-        headers = {"x-api-key": galaxy_state["api_key"]}
-        response = requests.get(url, headers=headers)
+        url = f"{base_url}api/jobs/{job_id}"
+        headers = {"x-api-key": api_key}
+        response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         job_info = response.json()
 
@@ -835,11 +1031,12 @@ def get_dataset_details(
         Dictionary containing dataset metadata (name, size, state, extension) and optional
         content preview with line count and truncation information
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         # Get dataset details using bioblend
-        dataset_info = galaxy_state["gi"].datasets.show_dataset(dataset_id)
+        dataset_info = gi.datasets.show_dataset(dataset_id)
 
         result = {"dataset": dataset_info, "dataset_id": dataset_id}
 
@@ -847,7 +1044,7 @@ def get_dataset_details(
         if include_preview and dataset_info.get("state") == "ok":
             try:
                 # Get dataset content for preview
-                content = galaxy_state["gi"].datasets.download_dataset(
+                content = gi.datasets.download_dataset(
                     dataset_id, use_default_filename=False, require_ok_state=False
                 )
 
@@ -925,11 +1122,12 @@ def download_dataset(
     environments), omit the file_path parameter to download content to memory. Only
     specify file_path if you can actually write files to the local filesystem.
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         # Get dataset info first to check state and get metadata
-        dataset_info = galaxy_state["gi"].datasets.show_dataset(dataset_id)
+        dataset_info = gi.datasets.show_dataset(dataset_id)
 
         # Check dataset state if required
         if require_ok_state and dataset_info.get("state") != "ok":
@@ -941,7 +1139,7 @@ def download_dataset(
         # Download the dataset
         if file_path:
             # Download to specific path
-            result_path = galaxy_state["gi"].datasets.download_dataset(
+            result_path = gi.datasets.download_dataset(
                 dataset_id,
                 file_path=file_path,
                 use_default_filename=False,
@@ -956,7 +1154,7 @@ def download_dataset(
 
         else:
             # Download content to memory (don't save to filesystem)
-            result_path = galaxy_state["gi"].datasets.download_dataset(
+            result_path = gi.datasets.download_dataset(
                 dataset_id,
                 use_default_filename=False,  # Get content in memory
                 require_ok_state=require_ok_state,
@@ -1013,7 +1211,8 @@ def upload_file(path: str, history_id: str | None = None) -> dict[str, Any]:
     Returns:
         Dictionary containing upload status and information about the created dataset(s)
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         if not os.path.exists(path):
@@ -1023,7 +1222,7 @@ def upload_file(path: str, history_id: str | None = None) -> dict[str, Any]:
                 "Check that the file exists and you have read permissions."
             )
 
-        result = galaxy_state["gi"].tools.upload_file(path, history_id=history_id)
+        result = gi.tools.upload_file(path, history_id=history_id)
         return result
     except Exception as e:
         raise ValueError(f"Failed to upload file: {str(e)}") from e
@@ -1109,16 +1308,17 @@ def get_invocations(
     Returns:
         Dictionary containing workflow invocation information, execution status, and step details
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         # If invocation_id is provided, get details of a specific invocation
         if invocation_id:
-            invocation = galaxy_state["gi"].invocations.show_invocation(invocation_id)
+            invocation = gi.invocations.show_invocation(invocation_id)
             return {"invocation": invocation}
 
         # Otherwise get a list of invocations with optional filters
-        invocations = galaxy_state["gi"].invocations.get_invocations(
+        invocations = gi.invocations.get_invocations(
             workflow_id=workflow_id,
             history_id=history_id,
             limit=limit,
@@ -1220,7 +1420,8 @@ def import_workflow_from_iwc(trs_id: str) -> dict[str, Any]:
     Returns:
         Imported workflow information
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
         # Get the workflow manifest
@@ -1250,7 +1451,7 @@ def import_workflow_from_iwc(trs_id: str) -> dict[str, Any]:
             )
 
         # Import the workflow into Galaxy
-        imported_workflow = galaxy_state["gi"].workflows.import_workflow_dict(workflow_definition)
+        imported_workflow = gi.workflows.import_workflow_dict(workflow_definition)
         return {"imported_workflow": imported_workflow}
     except Exception as e:
         raise ValueError(f"Failed to import workflow from IWC: {str(e)}") from e
@@ -1394,6 +1595,48 @@ def cancel_workflow_invocation(invocation_id: str) -> dict[str, Any]:
             format_error("Cancel workflow invocation", e, {"invocation_id": invocation_id})
         ) from e
 
+def run_http_server(
+    *,
+    host: str | None = None,
+    port: int | None = None,
+    transport: str | None = None,
+    path: str | None = None,
+) -> None:
+    """Run the MCP server over HTTP-based transport."""
+    resolved_host = host or os.environ.get("GALAXY_MCP_HOST", "0.0.0.0")
+    resolved_port = int(port or os.environ.get("GALAXY_MCP_PORT", "8000"))
+    resolved_transport = (
+        transport or os.environ.get("GALAXY_MCP_TRANSPORT") or "streamable-http"
+    ).lower()
+    if resolved_transport not in {"streamable-http", "sse"}:
+        raise ValueError(
+            f"Unsupported transport '{resolved_transport}'. Choose 'streamable-http' or 'sse'."
+        )
+
+    resolved_path = path or os.environ.get("GALAXY_MCP_HTTP_PATH")
+    if resolved_path is None and resolved_transport == "streamable-http":
+        resolved_path = "/"
+    if resolved_path is not None and not resolved_path.startswith("/"):
+        resolved_path = f"/{resolved_path}"
+
+    logger.info(
+        "Starting Galaxy MCP server over %s at %s:%s%s",
+        resolved_transport,
+        resolved_host,
+        resolved_port,
+        resolved_path or "",
+    )
+    mcp.run(
+        transport=resolved_transport,
+        host=resolved_host,
+        port=resolved_port,
+        path=resolved_path,
+    )
+
 
 if __name__ == "__main__":
-    mcp.run()
+    selected_transport = os.environ.get("GALAXY_MCP_TRANSPORT", "stdio").lower()
+    if selected_transport in {"streamable-http", "sse"}:
+        run_http_server(transport=selected_transport)
+    else:
+        mcp.run()

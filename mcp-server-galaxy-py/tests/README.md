@@ -11,6 +11,7 @@ This directory contains integration tests for the Galaxy MCP server.
 - `test_tool_operations.py` - Tests for tool search and execution
 - `test_workflow_operations.py` - Tests for workflow operations
 - `test_integration.py` - End-to-end integration tests
+- `test_oauth.py` - Tests for OAuth session handling and public endpoints
 
 ## Running Tests
 

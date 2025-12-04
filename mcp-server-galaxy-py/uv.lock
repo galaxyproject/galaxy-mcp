@@ -657,7 +657,9 @@ name = "galaxy-mcp"
 version = "1.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "anyio" },
     { name = "bioblend" },
+    { name = "cryptography" },
     { name = "fastmcp" },
     { name = "python-dotenv" },
     { name = "requests" },
@@ -683,8 +685,10 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anyio", specifier = ">=4.0.0" },
     { name = "bioblend", specifier = ">=1.7.0" },
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.2.1" },
+    { name = "cryptography", specifier = ">=41.0.0" },
     { name = "fastmcp", specifier = ">=2.3.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8.0" },

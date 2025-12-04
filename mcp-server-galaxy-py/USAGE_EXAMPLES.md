@@ -16,6 +16,27 @@ This document provides common usage patterns and examples for the Galaxy MCP ser
 Let me get some basic information about your server to make sure everything is working properly."
 *Uses `get_server_info()` to retrieve server details*
 
+For stdio deployments you can authenticate with a long-lived API key:
+
+```python
+# Set GALAXY_URL and GALAXY_API_KEY in your environment or .env file
+connect()
+
+# Or provide credentials directly
+connect(url="https://your-galaxy-instance.org", api_key="your-api-key")
+```
+
+For HTTP deployments that use OAuth the active session is resolved automatically. Calling
+`connect()` without arguments simply confirms the session and returns user details:
+
+```python
+session_info = connect()
+assert session_info["auth"] == "oauth"
+print(session_info["user"]["username"])
+```
+
+#### Get server information
+
 "Perfect! Your Galaxy server is running version 23.1 and has the following features available:
 - User registration: Enabled
 - File upload via FTP: Available at ftp.galaxy.org

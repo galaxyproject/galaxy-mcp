@@ -7,6 +7,7 @@ This is the Python implementation of the Galaxy MCP server, providing a Model Co
 ## Features
 
 - Complete Galaxy API integration through BioBlend
+- Optional OAuth login flow for HTTP deployments
 - Interactive Workflow Composer (IWC) integration
 - FastMCP2 server with remote deployment support
 - Type-annotated Python codebase
@@ -41,54 +42,65 @@ uv sync --all-extras
 
 ## Configuration
 
-The server requires Galaxy credentials to connect to an instance. You can provide these via environment variables:
+At minimum the server needs to know which Galaxy instance to target:
 
 ```bash
-export GALAXY_URL=<galaxy_url>
-export GALAXY_API_KEY=<galaxy_api_key>
+export GALAXY_URL="https://usegalaxy.org.au/"
 ```
 
-Alternatively, create a `.env` file in the project root with these variables.
+How you authenticate depends on your transport:
+
+- **Stdio / long-lived sessions** – provide an API key:
+
+  ```bash
+  export GALAXY_API_KEY="your-api-key"
+  ```
+
+- **HTTP / OAuth** – configure the public URL that users reach and a signing secret for session
+  tokens. The server mints short-lived Galaxy API keys on behalf of each user.
+
+  ```bash
+  export GALAXY_MCP_PUBLIC_URL="https://mcp.example.com"
+  export GALAXY_MCP_SESSION_SECRET="$(openssl rand -hex 32)"
+  ```
+
+  Optionally set `GALAXY_MCP_CLIENT_REGISTRY` to control where OAuth client registrations are stored.
+
+You can also steer the transport with `GALAXY_MCP_TRANSPORT` (`stdio`, `streamable-http`, or `sse`).
+All variables can be placed in a `.env` file for convenience.
 
 ## Usage
 
-### Quick Start with uvx
-
-The fastest way to run the Galaxy MCP server is using `uvx`:
+### Quick Start with `uvx`
 
 ```bash
-# Run the server directly without installation
+# Local stdio transport (no network listener)
 uvx galaxy-mcp
 
-# Run with FastMCP2 dev tools
-uvx --from galaxy-mcp fastmcp dev src/galaxy_mcp/server.py
-
-# Run as remote server
-uvx --from galaxy-mcp fastmcp run src/galaxy_mcp/server.py --transport sse --port 8000
+# Remote/browser clients with HTTP + OAuth
+export GALAXY_URL="https://usegalaxy.org.au/"
+export GALAXY_MCP_PUBLIC_URL="https://mcp.example.com"
+export GALAXY_MCP_SESSION_SECRET="$(openssl rand -hex 32)"
+uvx galaxy-mcp --transport streamable-http --host 0.0.0.0 --port 8000
 ```
 
-### As a standalone MCP server
+### Installed CLI
 
 ```bash
-# Install and run the MCP server
 pip install galaxy-mcp
-galaxy-mcp
-
-# The server will wait for MCP protocol messages on stdin
+galaxy-mcp --transport streamable-http --host 0.0.0.0 --port 8000
 ```
 
-### With MCP clients
+If `--transport` is omitted the server defaults to stdio and reads/writes MCP messages via stdin/stdout.
+
+### Working from a checkout
 
 ```bash
-# Use with FastMCP2 CLI tools
-fastmcp dev src/galaxy_mcp/server.py
-fastmcp run src/galaxy_mcp/server.py
-
-# Use with other MCP-compatible clients
-your-mcp-client galaxy-mcp
+uv sync
+uv run galaxy-mcp --transport streamable-http --host 0.0.0.0 --port 8000
 ```
 
-See [USAGE_EXAMPLES.md](USAGE_EXAMPLES.md) for detailed usage patterns and common examples.
+See [USAGE_EXAMPLES.md](USAGE_EXAMPLES.md) for detailed tool usage patterns.
 
 ## Available MCP Tools
 

@@ -41,9 +41,12 @@ RUN groupadd -r app && useradd -r -g app app
 
 WORKDIR /app
 
-# Define default environment variables
-ENV GALAXY_INSTANCE="https://usegalaxy.org" \
-    GALAXY_API_KEY=""
+# Define default environment variables (stdio transport by default)
+ENV GALAXY_URL="https://usegalaxy.org" \
+    GALAXY_API_KEY="" \
+    GALAXY_MCP_TRANSPORT="stdio" \
+    GALAXY_MCP_HOST="0.0.0.0" \
+    GALAXY_MCP_PORT="8000"
 
 COPY --from=uv /root/.local /root/.local
 COPY --from=uv --chown=app:app /app/.venv /app/.venv
@@ -63,12 +66,12 @@ USER app
 # Expose service port
 EXPOSE 8000
 
-# Add healthcheck
+# Add healthcheck that verifies the HTTP listener is accepting connections
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD mcp-server-galaxy --health-check || exit 1
+  CMD python -c "import os, socket, sys; addr=('127.0.0.1', int(os.environ.get('GALAXY_MCP_PORT', '8000'))); sock=socket.socket(); sock.settimeout(2); sock.connect(addr); sock.close()"
 
 # Use tini as init to handle signals properly
 ENTRYPOINT ["/usr/bin/tini", "--"]
 
-# Update command to use environment variables instead of DB path
-CMD ["mcp-server-galaxy", "--galaxy-url", "${GALAXY_INSTANCE}", "--api-key", "${GALAXY_API_KEY}"]
+# Start the MCP server (transport/host/port taken from environment variables)
+CMD ["galaxy-mcp"]

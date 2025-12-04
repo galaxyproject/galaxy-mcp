@@ -5,8 +5,9 @@ Test Galaxy connection and authentication
 from unittest.mock import patch
 
 import pytest
+from galaxy_mcp.auth import GalaxyCredentials
 
-from .test_helpers import ensure_connected, galaxy_state, get_server_info_fn
+from .test_helpers import connect_fn, ensure_connected, galaxy_state, get_server_info_fn
 
 
 @pytest.mark.usefixtures("_test_env")
@@ -58,6 +59,39 @@ class TestConnection:
             with patch.dict(galaxy_state, {"connected": False}):
                 # Without credentials, should not connect
                 assert not galaxy_state.get("connected", False)
+
+    def test_connect_returns_oauth_session(self, mock_galaxy_instance):
+        """Ensure connect() reports OAuth session details when available."""
+        credentials = GalaxyCredentials(
+            galaxy_url="https://oauth.galaxy/",
+            api_key="oauth-api-key",
+            username="oauth-user",
+            user_email="oauth@example.com",
+            expires_at=1_700_000_000,
+            scopes=["galaxy:full"],
+            client_id="client-123",
+        )
+
+        with patch("galaxy_mcp.server.auth_provider", object()):
+            with patch(
+                "galaxy_mcp.server.get_active_session",
+                return_value=(credentials, credentials.api_key),
+            ):
+                with patch(
+                    "galaxy_mcp.server.GalaxyInstance", return_value=mock_galaxy_instance
+                ) as mock_constructor:
+                    result = connect_fn()
+
+        assert result["connected"] is True
+        assert result["auth"] == "oauth"
+        assert result["url"] == credentials.galaxy_url
+        assert (
+            result["user"]["username"]
+            == mock_galaxy_instance.users.get_current_user.return_value["username"]
+        )
+        mock_constructor.assert_called_once_with(
+            url=credentials.galaxy_url, key=credentials.api_key
+        )
 
     def test_get_server_info_success(self, mock_galaxy_instance):
         """Test successful server info retrieval"""

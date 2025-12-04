@@ -11,6 +11,7 @@ Note: There is also a work-in-progress TypeScript implementation available in a 
 ## Key Features
 
 - **Galaxy Connection**: Connect to any Galaxy instance with a URL and API key
+- **OAuth Login (optional)**: Offer browser-based sign-in that exchanges credentials for temporary Galaxy API keys
 - **Server Information**: Retrieve comprehensive server details including version, configuration, and capabilities
 - **Tools Management**: Search, view details, and execute Galaxy tools
 - **Workflow Integration**: Access and import workflows from the Interactive Workflow Composer (IWC)
@@ -20,25 +21,29 @@ Note: There is also a work-in-progress TypeScript implementation available in a 
 
 ## Quick Start
 
-The fastest way to get started is using `uvx`:
+The `galaxy-mcp` CLI ships with both stdio (local) and HTTP transports. Choose the setup that
+matches your client:
 
 ```bash
-# Run the server directly without installation
+# Stdio transport (default) – great for local development tools
 uvx galaxy-mcp
 
-# Run with MCP developer tools for interactive exploration
-uvx --from galaxy-mcp mcp dev galaxy_mcp.server
-
-# Run as a deployed MCP server
-uvx --from galaxy-mcp mcp run galaxy_mcp.server
+# HTTP transport with OAuth (for remote/browser clients)
+export GALAXY_URL="https://usegalaxy.org.au/"          # Target Galaxy instance
+export GALAXY_MCP_PUBLIC_URL="https://mcp.example.com" # Public base URL for OAuth redirects
+export GALAXY_MCP_SESSION_SECRET="$(openssl rand -hex 32)"
+uvx galaxy-mcp --transport streamable-http --host 0.0.0.0 --port 8000
 ```
 
-You'll need to set up your Galaxy credentials via environment variables:
+When running over stdio you can provide long-lived credentials via environment variables:
 
 ```bash
-export GALAXY_URL=<galaxy_url>
-export GALAXY_API_KEY=<galaxy_api_key>
+export GALAXY_URL="https://usegalaxy.org/"
+export GALAXY_API_KEY="your-api-key"
 ```
+
+For OAuth flows the server exchanges user credentials for short-lived Galaxy API keys on demand, so
+you typically leave `GALAXY_API_KEY` unset.
 
 ### Alternative Installation
 
@@ -46,10 +51,35 @@ export GALAXY_API_KEY=<galaxy_api_key>
 # Install from PyPI
 pip install galaxy-mcp
 
-# Or from source
+# Run (stdio by default)
+galaxy-mcp
+
+# Or from source using uv
 cd mcp-server-galaxy-py
-pip install -r requirements.txt
-mcp run main.py
+uv sync
+uv run galaxy-mcp --transport streamable-http --host 0.0.0.0 --port 8000
+```
+
+## Container Usage
+
+The published image defaults to stdio transport (no HTTP listener):
+
+```bash
+docker run --rm -it \
+  -e GALAXY_URL="https://usegalaxy.org/" \
+  -e GALAXY_API_KEY="your-api-key" \
+  galaxyproject/galaxy-mcp
+```
+
+For OAuth + HTTP:
+
+```bash
+docker run --rm -it -p 8000:8000 \
+  -e GALAXY_URL="https://usegalaxy.org.au/" \
+  -e GALAXY_MCP_TRANSPORT="streamable-http" \
+  -e GALAXY_MCP_PUBLIC_URL="https://mcp.example.com" \
+  -e GALAXY_MCP_SESSION_SECRET="$(openssl rand -hex 32)" \
+  galaxyproject/galaxy-mcp
 ```
 
 ## Connect to Claude Desktop

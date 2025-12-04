@@ -26,7 +26,9 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
+    "anyio>=4.0.0",
     "bioblend>=1.7.0",
+    "cryptography>=41.0.0",
     "fastmcp>=2.3.0",
     "requests>=2.32.3",
     "python-dotenv>=1.0.0",

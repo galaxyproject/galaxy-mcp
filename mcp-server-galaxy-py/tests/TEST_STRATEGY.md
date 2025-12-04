@@ -31,6 +31,7 @@ tests/
 ├── test_dataset_operations.py   # Dataset upload/download
 ├── test_tool_operations.py      # Tool search and execution
 ├── test_workflow_operations.py  # Workflow import and invocation
+├── test_oauth.py                # OAuth flow and HTTP public routes
 └── test_integration.py         # End-to-end scenarios
 ```
 
