@@ -84,7 +84,31 @@ def ensure_connected():
         )
 
 
-@mcp.tool()
+@mcp.tool(
+    name="connect",
+    description="Connect to a Galaxy server using a URL and API key. Uses environment variables or a .env file when values are not provided.",
+    tags={"api", "connection", "auth"},
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "connected": {
+                "type": "boolean",
+                "description": "Whether the connection to Galaxy was successful."
+            },
+            "user": {
+                "type": "object",
+                "description": "User information returned by Galaxy if the connection is successful."
+            }
+        },
+        "required": ["connected", "user"]
+    }
+)
 def connect(url: str | None = None, api_key: str | None = None) -> dict[str, Any]:
     """
     Connect to Galaxy server
@@ -160,7 +184,26 @@ def connect(url: str | None = None, api_key: str | None = None) -> dict[str, Any
         raise ValueError(error_msg) from e
 
 
-@mcp.tool()
+@mcp.tool(
+    name="search_tools",
+    description="Search Galaxy for tools matching a given name.",
+    tags={"tools", "search", "lookup"},
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True
+    },
+    output_schema= {
+        "type": "object",
+        "properties": {
+            "tools": {
+                "type": "array",
+                "description": "List of tools matching the query."
+            }
+        }
+    }
+)
 def search_tools(query: str) -> dict[str, Any]:
     """
     Search for tools in Galaxy
@@ -175,13 +218,46 @@ def search_tools(query: str) -> dict[str, Any]:
 
     try:
         # The get_tools method is used with name filter parameter
-        tools = galaxy_state["gi"].tools.get_tools(name=query)
+        tools = galaxy_state["gi"].tools._get(params={"q":"name:rnaseq OR name:assembly"})
         return {"tools": tools}
     except Exception as e:
         raise ValueError(format_error("Search tools", e, {"query": query})) from e
 
 
-@mcp.tool()
+@mcp.tool(
+    name="get_tool_details",
+    description="Retrieve detailed information about a specific Galaxy tool.",
+    tags={"galaxy", "tools", "metadata", "details"},
+    output_schema={
+        "type": "object",
+        "properties": {
+            "model_class": {"type": "string", "description": "Galaxy model class, typically 'Tool'."},
+            "id": {"type": "string", "description": "Unique Galaxy tool identifier."},
+            "name": {"type": "string", "description": "Human-readable name of the tool."},
+            "version": {"type": "string", "description": "Tool version string."},
+            "description": {"type": "string", "description": "Tool description."},
+            "labels": {"type": "array", "items": {"type": "string"}, "description": "List of labels attached to the tool."},
+            "icon": {"type": ["string", "null"], "description": "Icon URL or null."},
+            "edam_operations": {"type": "array", "items": {"type": "string"}, "description": "EDAM operation terms."},
+            "edam_topics": {"type": "array", "items": {"type": "string"}, "description": "EDAM topic terms."},
+            "hidden": {"type": "string", "description": "Hidden flag, if any."},
+            "is_workflow_compatible": {"type": "boolean", "description": "Whether the tool is workflow compatible."},
+            "xrefs": {"type": "array", "items": {"type": "object"}, "description": "External references associated with the tool."},
+            "tool_shed_repository": {"type": "object", "description": "Information about the tool shed repository."},
+            "inputs": {"type": "array", "items": {"type": "object"}, "description": "List of tool input parameters with metadata."},
+            "outputs": {"type": "array", "items": {"type": "object"}, "description": "List of tool output definitions with metadata."},
+            "panel_section_id": {"type": "string", "description": "Tool panel section ID."},
+            "panel_section_name": {"type": "string", "description": "Tool panel section name."},
+            "form_style": {"type": "string", "description": "Form style used for tool parameters."}
+        },
+        "required": ["model_class", "id", "name"]
+    },
+    annotations={
+        "readOnlyHint": True,
+        "idempotentHint": True,
+        "openWorldHint": True
+    }
+)
 def get_tool_details(tool_id: str, io_details: bool = False) -> dict[str, Any]:
     """
     Get detailed information about a specific tool
@@ -205,7 +281,36 @@ def get_tool_details(tool_id: str, io_details: bool = False) -> dict[str, Any]:
         ) from e
 
 
-@mcp.tool()
+@mcp.tool(
+    name="get_tool_citations",
+    description="Retrieve citation metadata for a specific Galaxy tool, including description, DOI links, and authors.",
+    tags={"tools", "citations", "metadata"},
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "tool_name": {
+                "type": "string",
+                "description": "The human-readable name of the tool."
+            },
+            "tool_version": {
+                "type": "string",
+                "description": "Version of the tool."
+            },
+            "citations": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": "List of citation objects returned by Galaxy."
+            }
+        },
+        "required": ["tool_name", "tool_version", "citations"]
+    },
+)
 def get_tool_citations(tool_id: str) -> dict[str, Any]:
     """
     Get citation information for a specific tool
@@ -234,7 +339,42 @@ def get_tool_citations(tool_id: str) -> dict[str, Any]:
         raise ValueError(format_error("Get tool citations", e, {"tool_id": tool_id})) from e
 
 
-@mcp.tool()
+@mcp.tool(
+    name="run_tool",
+    description="Execute a Galaxy tool within a specific history using the provided inputs.",
+    tags={"tools", "execution", "jobs"},
+    output_schema={
+        "type": "object",
+        "properties": {
+            "jobs": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": "Galaxy job objects created by the tool execution."
+            },
+            "outputs": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": "Output dataset objects produced by the tool."
+            },
+            "implicit_collections": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": "Implicit collection outputs (if any)."
+            },
+            "output_collections": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": "Explicit collection outputs (if any)."
+            }
+        }
+    },
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": False,
+        "openWorldHint": True
+    }
+)
 def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> dict[str, Any]:
     """
     Run a tool in Galaxy
@@ -263,7 +403,29 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> dict[str,
         ) from e
 
 
-@mcp.tool()
+@mcp.tool(
+    name="get_tool_panel",
+    description="Retrieve the hierarchical Galaxy tool panel (toolbox) structure.",
+    tags={"tools", "panel", "toolbox"},
+    output_schema={
+        "type": "object",
+        "properties": {
+            "tool_panel": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": (
+                    "List containing tools (if not in sections) or tool sections with nested tool descriptions."
+                )
+            }
+        },
+        "required": ["tool_panel"]
+    },
+    annotations={
+        "readOnlyHint": True,
+        "idempotentHint": True,
+        "openWorldHint": True
+    }
+)
 def get_tool_panel() -> dict[str, Any]:
     """
     Get the tool panel structure (toolbox)
@@ -281,7 +443,42 @@ def get_tool_panel() -> dict[str, Any]:
         raise ValueError(format_error("Get tool panel", e)) from e
 
 
-@mcp.tool()
+@mcp.tool(
+    name="create_history",
+    description="Create a new history in Galaxy with the specified name.",
+    tags={"history", "creation"},
+    output_schema={
+        "type": "object",
+        "properties": {
+            "model_class": {"type": "string", "description": "Galaxy model class of the object, typically 'History'."},
+            "id": {"type": "string", "description": "Unique Galaxy history ID (hash)."},
+            "name": {"type": "string", "description": "Human-readable name of the history."},
+            "deleted": {"type": "boolean", "description": "Whether the history is deleted."},
+            "purged": {"type": "boolean", "description": "Whether the history is purged."},
+            "archived": {"type": "boolean", "description": "Whether the history is archived."},
+            "url": {"type": "string", "description": "API URL of the history."},
+            "published": {"type": "boolean", "description": "Whether the history is published."},
+            "count": {"type": "number", "description": "Number of datasets in the history."},
+            "annotation": {"type": ["string", "null"], "description": "Annotation text for the history."},
+            "tags": {"type": "array", "items": {"type": "string"}, "description": "List of tags associated with the history."},
+            "update_time": {"type": "string", "description": "Timestamp of the last update."},
+            "contents_url": {"type": "string", "description": "API URL for the contents of the history."},
+            "size": {"type": "number", "description": "Size of the history."},
+            "user_id": {"type": "string", "description": "User ID of the history owner."},
+            "create_time": {"type": "string", "description": "Creation timestamp of the history."},
+            "state": {"type": "string", "description": "Current state of the history."},
+            "state_ids": {"type": "object", "description": "Mapping of dataset state to list of dataset IDs."},
+            "state_details": {"type": "object", "description": "Mapping of dataset state to counts of datasets."}
+        },
+        "required": ["id", "name", "model_class"]
+    },
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": False,
+        "openWorldHint": True
+    }
+)
 def create_history(history_name: str) -> dict[str, Any]:
     """
     Create a new history in Galaxy
@@ -296,7 +493,37 @@ def create_history(history_name: str) -> dict[str, Any]:
     return galaxy_state["gi"].histories.create_history(history_name)
 
 
-@mcp.tool()
+@mcp.tool(
+    name="filter_tools_by_dataset",
+    description="Filter Galaxy tools that are potentially suitable for a given dataset type.",
+    tags={"tools", "dataset", "filter"},
+    output_schema={
+        "type": "object",
+        "properties": {
+            "recommended_tools": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string", "description": "Galaxy tool ID."},
+                        "name": {"type": "string", "description": "Tool name."},
+                        "description": {"type": "string", "description": "Tool description."},
+                        "versions": {"type": "array", "items": {"type": "string"}, "description": "List of available tool versions."}
+                    },
+                    "required": ["id", "name"]
+                },
+                "description": "List of recommended tools matching the dataset type."
+            },
+            "count": {"type": "number", "description": "Total number of recommended tools."}
+        },
+        "required": ["recommended_tools", "count"]
+    },
+    annotations={
+        "readOnlyHint": True,
+        "idempotentHint": True,
+        "openWorldHint": True
+    }
+)
 def filter_tools_by_dataset(dataset_type: list[str]) -> dict[str, Any]:
     """
     Filter Galaxy tools that are potentially suitable for a given dataset type.
@@ -402,7 +629,25 @@ def filter_tools_by_dataset(dataset_type: list[str]) -> dict[str, Any]:
         raise ValueError(f"Failed to filter tools based on dataset: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    name="get_server_info",
+    description="Retrieve Galaxy server information including version, URL, and configuration details.",
+    tags={"server", "info", "metadata"},
+    output_schema={
+        "type": "object",
+        "properties": {
+            "url": {"type": "string", "description": "Base URL of the Galaxy server."},
+            "version": {"type": "object", "description": "Galaxy server version information."},
+            "config": {"type": "object", "description": "Server configuration details such as branding, URLs, and feature flags."}
+        },
+        "required": ["url", "version", "config"]
+    },
+    annotations={
+        "readOnlyHint": True,
+        "idempotentHint": True,
+        "openWorldHint": True
+    }
+)
 def get_server_info() -> dict[str, Any]:
     """
     Get Galaxy server information including version, URL, and configuration details
@@ -450,7 +695,35 @@ def get_server_info() -> dict[str, Any]:
         raise ValueError(f"Failed to get server information: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    name="get_user",
+    description="Retrieve current Galaxy user information including disk usage, quota, and preferences.",
+    tags={"user", "metadata", "account"},
+    output_schema={
+        "type": "object",
+        "properties": {
+            "total_disk_usage": {"type": "number", "description": "Total disk usage in bytes."},
+            "nice_total_disk_usage": {"type": "string", "description": "Human-readable disk usage."},
+            "quota_percent": {"type": "number", "description": "Percentage of quota used."},
+            "id": {"type": "string", "description": "User ID."},
+            "username": {"type": "string", "description": "Username of the current user."},
+            "email": {"type": "string", "description": "Email of the current user."},
+            "deleted": {"type": "boolean", "description": "Whether the user account is deleted."},
+            "is_admin": {"type": "boolean", "description": "Whether the user is an admin."},
+            "purged": {"type": "boolean", "description": "Whether the user account has been purged."},
+            "preferences": {"type": "object", "description": "User preferences dictionary."},
+            "preferred_object_store_id": {"type": ["string", "null"], "description": "ID of preferred object store or null."},
+            "quota": {"type": "string", "description": "Quota in human-readable format."},
+            "quota_bytes": {"type": "number", "description": "Quota in bytes."}
+        },
+        "required": ["id", "username", "email"]
+    },
+    annotations={
+        "readOnlyHint": True,
+        "idempotentHint": True,
+        "openWorldHint": True
+    }
+)
 def get_user() -> dict[str, Any]:
     """
     Get current user information
@@ -467,7 +740,32 @@ def get_user() -> dict[str, Any]:
         raise ValueError(f"Failed to get user: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    name="get_histories",
+    description="Retrieve a paginated list of Galaxy histories with optional filtering by name.",
+    tags={"history", "list", "pagination"},
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "histories": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": "List of Galaxy history objects."
+            },
+            "pagination": {
+                "type": "object",
+                "description": "Pagination."
+            }
+        },
+        "required": ["histories", "pagination"]
+    }
+)
 def get_histories(
     limit: int | None = None, offset: int = 0, name: str | None = None
 ) -> dict[str, Any]:
@@ -537,7 +835,28 @@ def get_histories(
         )
 
 
-@mcp.tool()
+@mcp.tool(
+    name="list_history_ids",
+    description="Get a simplified list of Galaxy history IDs and names for easy reference.",
+    tags={"histories", "id", "list"},
+    output_schema={
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string", "description": "History ID hash."},
+                "name": {"type": "string", "description": "History name."}
+            },
+            "required": ["id", "name"]
+        },
+        "description": "Array of objects containing history IDs and names."
+    },
+    annotations={
+        "readOnlyHint": True,
+        "idempotentHint": True,
+        "openWorldHint": True
+    }
+)
 def list_history_ids() -> list[dict[str, str]]:
     """
     Get a simplified list of history IDs and names for easy reference
@@ -558,7 +877,35 @@ def list_history_ids() -> list[dict[str, str]]:
         raise ValueError(f"Failed to list history IDs: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    name="get_history_details",
+    description="Retrieve basic metadata and summary count of a Galaxy history without returning datasets.",
+    tags={"history", "metadata", "summary"},
+    output_schema={
+        "type": "object",
+        "properties": {
+            "history": {
+                "type": "object",
+                "description": "Basic metadata of the history, including name, ID and state."
+            },
+            "contents_summary": {
+                "type": "object",
+                "properties": {
+                    "total_items": {"type": "number", "description": "Total number of datasets in the history."},
+                    "note": {"type": "string", "description": "Instruction to get actual datasets using get_history_contents."}
+                },
+                "required": ["total_items", "note"],
+                "description": "Summary of the history contents without loading datasets."
+            }
+        },
+        "required": ["history", "contents_summary"]
+    },
+    annotations={
+        "readOnlyHint": True,
+        "idempotentHint": True,
+        "openWorldHint": True
+    }
+)
 def get_history_details(history_id: str) -> dict[str, Any]:
     """
     Get history metadata and summary count ONLY - does not return actual datasets
@@ -609,7 +956,52 @@ def get_history_details(history_id: str) -> dict[str, Any]:
         raise ValueError(f"Failed to get history details for ID '{history_id}': {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    name="get_history_contents",
+    description=(
+        "Retrieve paginated datasets from a specific Galaxy history. "
+        "Supports filtering by visibility/deleted status and ordering by multiple fields."
+    ),
+    output_schema={
+        "type": "object",
+        "properties": {
+            "history_id": {
+                "type": "string",
+                "description": "Galaxy history ID (hexadecimal hash string)"
+            },
+            "contents": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": "List of dataset objects in the history"
+            },
+            "pagination": {
+                "type": "object",
+                "description": "Pagination metadata",
+                "properties": {
+                    "total_items": {"type": "integer", "description": "Total number of datasets matching filters"},
+                    "returned_items": {"type": "integer", "description": "Number of datasets returned in this page"},
+                    "limit": {"type": "integer", "description": "Maximum number of items requested per page"},
+                    "offset": {"type": "integer", "description": "Number of items skipped from the beginning"},
+                    "current_page": {"type": "integer", "description": "Current page number"},
+                    "total_pages": {"type": "integer", "description": "Total number of pages available"},
+                    "has_next": {"type": "boolean", "description": "Whether there is a next page"},
+                    "has_previous": {"type": "boolean", "description": "Whether there is a previous page"},
+                    "next_offset": {"type": ["integer", "null"], "description": "Offset to use for next page, null if last page"},
+                    "previous_offset": {"type": ["integer", "null"], "description": "Offset to use for previous page, null if first page"},
+                    "helper_text": {"type": "string", "description": "Textual guide for navigation"}
+                },
+                "required": ["total_items", "returned_items", "limit", "offset", "current_page", "total_pages", "has_next", "has_previous", "helper_text"]
+            }
+        },
+        "required": ["history_id", "contents", "pagination"]
+    },
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True
+    }
+)
 def get_history_contents(
     history_id: str,
     limit: int = 100,
@@ -718,7 +1110,34 @@ def get_history_contents(
         raise ValueError(f"Failed to get history contents for ID '{history_id}': {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    name="get_job_details",
+    description="Retrieve detailed information about the job that created a specific Galaxy dataset.",
+    tags={"galaxy", "jobs", "datasets", "provenance"},
+    output_schema={
+        "type": "object",
+        "properties": {
+            "job": {
+                "type": "object",
+                "description": "Metadata of the job that created the dataset, including tool information, state, and timestamps."
+            },
+            "dataset_id": {
+                "type": "string",
+                "description": "Galaxy dataset ID for which job details were retrieved."
+            },
+            "job_id": {
+                "type": "string",
+                "description": "Galaxy job ID of the job that created the dataset."
+            }
+        },
+        "required": ["job", "dataset_id", "job_id"]
+    },
+    annotations={
+        "readOnlyHint": True,
+        "idempotentHint": True,
+        "openWorldHint": True
+    }
+)
 def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str, Any]:
     """
     Get detailed information about the job that created a specific dataset
@@ -783,7 +1202,42 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str,
         raise ValueError(f"Failed to get job details for dataset '{dataset_id}': {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    name="get_dataset_details",
+    description="Retrieve detailed information about a Galaxy dataset, optionally including a preview of its content.",
+    tags={"datasets", "metadata", "preview"},
+    output_schema={
+        "type": "object",
+        "properties": {
+            "dataset": {
+                "type": "object",
+                "description": "Metadata of the dataset including name, size, state, id, and other attributes."
+            },
+            "dataset_id": {
+                "type": "string",
+                "description": "Galaxy dataset ID for which details were retrieved."
+            },
+            "preview": {
+                "type": "object",
+                "description": "Optional content preview of the dataset if include_preview=True and dataset state is 'ok'.",
+                "properties": {
+                    "lines": {"type": "string", "description": "Preview lines as a single string."},
+                    "total_lines": {"type": "integer", "description": "Total number of lines in the dataset."},
+                    "preview_lines": {"type": "integer", "description": "Number of lines returned in the preview."},
+                    "truncated": {"type": "boolean", "description": "Whether the dataset preview was truncated."},
+                    "error": {"type": "string", "description": "Error message if preview could not be retrieved."}
+                },
+                "required": ["lines", "total_lines", "preview_lines", "truncated"]
+            }
+        },
+        "required": ["dataset", "dataset_id"]
+    },
+    annotations={
+        "readOnlyHint": True,
+        "idempotentHint": True,
+        "openWorldHint": True
+    }
+)
 def get_dataset_details(
     dataset_id: str, include_preview: bool = True, preview_lines: int = 10
 ) -> dict[str, Any]:
@@ -858,7 +1312,62 @@ def get_dataset_details(
         raise ValueError(f"Failed to get dataset details for '{dataset_id}': {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    name="download_dataset",
+    description=(
+        "Download a Galaxy dataset to the local filesystem or to memory. "
+        "If `file_path` is provided, the content is saved there. "
+        "Otherwise, content is returned in memory with a suggested filename."
+    ),
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "dataset_id": {
+                "type": "string",
+                "description": "Galaxy dataset ID (hexadecimal hash string)"
+            },
+            "file_path": {
+                "type": ["string", "null"],
+                "description": "Local path where dataset was saved. Null if downloaded to memory."
+            },
+            "suggested_filename": {
+                "type": ["string", "null"],
+                "description": "Recommended filename if content downloaded to memory."
+            },
+            "content_available": {
+                "type": "boolean",
+                "description": "Indicates whether the dataset content was successfully downloaded."
+            },
+            "file_size": {
+                "type": ["integer", "null"],
+                "description": "Size of downloaded content in bytes. Null if unknown or not saved."
+            },
+            "note": {
+                "type": "string",
+                "description": "Explanation of whether content was saved to file or returned in memory."
+            },
+            "dataset_info": {
+                "type": "object",
+                "description": "Metadata of the dataset",
+                "properties": {
+                    "name": {"type": "string", "description": "Dataset name"},
+                    "extension": {"type": "string", "description": "Dataset file extension"},
+                    "state": {"type": "string", "description": "Processing state of the dataset"},
+                    "genome_build": {"type": ["string", "null"], "description": "Associated genome build, if any"},
+                    "file_size": {"type": ["integer", "null"], "description": "Reported size of the dataset in Galaxy"}
+                },
+                "required": ["name", "extension", "state", "genome_build", "file_size"]
+            }
+        },
+        "required": ["dataset_id", "content_available", "dataset_info", "note"]
+    }
+)
 def download_dataset(
     dataset_id: str,
     file_path: str | None = None,
@@ -966,7 +1475,47 @@ def download_dataset(
         raise ValueError(f"Failed to download dataset '{dataset_id}': {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(
+    name="upload_file",
+    description="Upload a local file to a Galaxy history. Returns details about created datasets and jobs.",
+    tags={"upload", "file", "dataset", "history"},
+    output_schema={
+        "type": "object",
+        "properties": {
+            "outputs": {
+                "type": "array",
+                "description": "List of datasets created from the uploaded file.",
+                "items": {"type": "object"}
+            },
+            "jobs": {
+                "type": "array",
+                "description": "Jobs triggered by the upload process.",
+                "items": {"type": "object"}
+            },
+            "output_collections": {
+                "type": "array",
+                "description": "List of output collections created, if any.",
+                "items": {"type": "object"}
+            },
+            "implicit_collections": {
+                "type": "array",
+                "description": "Implicit collections generated by the upload, if any.",
+                "items": {"type": "object"}
+            },
+            "produces_entry_points": {
+                "type": "boolean",
+                "description": "Indicates whether the upload produces entry points for workflows."
+            }
+        },
+        "required": ["outputs", "jobs", "output_collections", "implicit_collections", "produces_entry_points"]
+    },
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": False,
+        "openWorldHint": True
+    }
+)
 def upload_file(path: str, history_id: str | None = None) -> dict[str, Any]:
     """
     Upload a local file to Galaxy
