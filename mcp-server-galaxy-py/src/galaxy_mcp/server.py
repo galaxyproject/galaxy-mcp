@@ -94,6 +94,10 @@ def ensure_connected():
         "idempotentHint": True,
         "openWorldHint": True
     },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
+    },
     output_schema={
         "type": "object",
         "properties": {
@@ -194,6 +198,10 @@ def connect(url: str | None = None, api_key: str | None = None) -> dict[str, Any
         "idempotentHint": True,
         "openWorldHint": True
     },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
+    },
     output_schema= {
         "type": "object",
         "properties": {
@@ -228,6 +236,16 @@ def search_tools(query: str) -> dict[str, Any]:
     name="get_tool_details",
     description="Retrieve detailed information about a specific Galaxy tool.",
     tags={"galaxy", "tools", "metadata", "details"},
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True
+    },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
+    },
     output_schema={
         "type": "object",
         "properties": {
@@ -251,11 +269,6 @@ def search_tools(query: str) -> dict[str, Any]:
             "form_style": {"type": "string", "description": "Form style used for tool parameters."}
         },
         "required": ["model_class", "id", "name"]
-    },
-    annotations={
-        "readOnlyHint": True,
-        "idempotentHint": True,
-        "openWorldHint": True
     }
 )
 def get_tool_details(tool_id: str, io_details: bool = False) -> dict[str, Any]:
@@ -290,6 +303,10 @@ def get_tool_details(tool_id: str, io_details: bool = False) -> dict[str, Any]:
         "destructiveHint": False,
         "idempotentHint": True,
         "openWorldHint": True
+    },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
@@ -343,6 +360,16 @@ def get_tool_citations(tool_id: str) -> dict[str, Any]:
     name="run_tool",
     description="Execute a Galaxy tool within a specific history using the provided inputs.",
     tags={"tools", "execution", "jobs"},
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": False,
+        "openWorldHint": True
+    },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
+    },
     output_schema={
         "type": "object",
         "properties": {
@@ -367,12 +394,6 @@ def get_tool_citations(tool_id: str) -> dict[str, Any]:
                 "description": "Explicit collection outputs (if any)."
             }
         }
-    },
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": True
     }
 )
 def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> dict[str, Any]:
@@ -407,6 +428,16 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> dict[str,
     name="get_tool_panel",
     description="Retrieve the hierarchical Galaxy tool panel (toolbox) structure.",
     tags={"tools", "panel", "toolbox"},
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True
+    },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
+    },
     output_schema={
         "type": "object",
         "properties": {
@@ -419,11 +450,6 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> dict[str,
             }
         },
         "required": ["tool_panel"]
-    },
-    annotations={
-        "readOnlyHint": True,
-        "idempotentHint": True,
-        "openWorldHint": True
     }
 )
 def get_tool_panel() -> dict[str, Any]:
@@ -447,6 +473,16 @@ def get_tool_panel() -> dict[str, Any]:
     name="create_history",
     description="Create a new history in Galaxy with the specified name.",
     tags={"history", "creation"},
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": False,
+        "openWorldHint": True
+    },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
+    },
     output_schema={
         "type": "object",
         "properties": {
@@ -471,12 +507,6 @@ def get_tool_panel() -> dict[str, Any]:
             "state_details": {"type": "object", "description": "Mapping of dataset state to counts of datasets."}
         },
         "required": ["id", "name", "model_class"]
-    },
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": True
     }
 )
 def create_history(history_name: str) -> dict[str, Any]:
@@ -497,6 +527,16 @@ def create_history(history_name: str) -> dict[str, Any]:
     name="filter_tools_by_dataset",
     description="Filter Galaxy tools that are potentially suitable for a given dataset type.",
     tags={"tools", "dataset", "filter"},
+    annotations={
+        "readOnlyHint": True,
+        "idempotentHint": True,
+        "destructiveHint": True,
+        "openWorldHint": True
+    },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
+    },
     output_schema={
         "type": "object",
         "properties": {
@@ -517,11 +557,6 @@ def create_history(history_name: str) -> dict[str, Any]:
             "count": {"type": "number", "description": "Total number of recommended tools."}
         },
         "required": ["recommended_tools", "count"]
-    },
-    annotations={
-        "readOnlyHint": True,
-        "idempotentHint": True,
-        "openWorldHint": True
     }
 )
 def filter_tools_by_dataset(dataset_type: list[str]) -> dict[str, Any]:
@@ -633,6 +668,16 @@ def filter_tools_by_dataset(dataset_type: list[str]) -> dict[str, Any]:
     name="get_server_info",
     description="Retrieve Galaxy server information including version, URL, and configuration details.",
     tags={"server", "info", "metadata"},
+    annotations={
+        "readOnlyHint": True,
+        "idempotentHint": True,
+        "destructiveHint": True,
+        "openWorldHint": True
+    },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
+    },
     output_schema={
         "type": "object",
         "properties": {
@@ -641,11 +686,6 @@ def filter_tools_by_dataset(dataset_type: list[str]) -> dict[str, Any]:
             "config": {"type": "object", "description": "Server configuration details such as branding, URLs, and feature flags."}
         },
         "required": ["url", "version", "config"]
-    },
-    annotations={
-        "readOnlyHint": True,
-        "idempotentHint": True,
-        "openWorldHint": True
     }
 )
 def get_server_info() -> dict[str, Any]:
@@ -699,6 +739,16 @@ def get_server_info() -> dict[str, Any]:
     name="get_user",
     description="Retrieve current Galaxy user information including disk usage, quota, and preferences.",
     tags={"user", "metadata", "account"},
+    annotations={
+        "readOnlyHint": True,
+        "idempotentHint": True,
+        "destructiveHint": True,
+        "openWorldHint": True
+    },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
+    },
     output_schema={
         "type": "object",
         "properties": {
@@ -717,11 +767,6 @@ def get_server_info() -> dict[str, Any]:
             "quota_bytes": {"type": "number", "description": "Quota in bytes."}
         },
         "required": ["id", "username", "email"]
-    },
-    annotations={
-        "readOnlyHint": True,
-        "idempotentHint": True,
-        "openWorldHint": True
     }
 )
 def get_user() -> dict[str, Any]:
@@ -749,6 +794,10 @@ def get_user() -> dict[str, Any]:
         "destructiveHint": False,
         "idempotentHint": True,
         "openWorldHint": True
+    },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
@@ -839,6 +888,16 @@ def get_histories(
     name="list_history_ids",
     description="Get a simplified list of Galaxy history IDs and names for easy reference.",
     tags={"histories", "id", "list"},
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True
+    },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
+    },
     output_schema={
         "type": "array",
         "items": {
@@ -850,11 +909,6 @@ def get_histories(
             "required": ["id", "name"]
         },
         "description": "Array of objects containing history IDs and names."
-    },
-    annotations={
-        "readOnlyHint": True,
-        "idempotentHint": True,
-        "openWorldHint": True
     }
 )
 def list_history_ids() -> list[dict[str, str]]:
@@ -881,6 +935,16 @@ def list_history_ids() -> list[dict[str, str]]:
     name="get_history_details",
     description="Retrieve basic metadata and summary count of a Galaxy history without returning datasets.",
     tags={"history", "metadata", "summary"},
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True
+    },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
+    },
     output_schema={
         "type": "object",
         "properties": {
@@ -899,11 +963,6 @@ def list_history_ids() -> list[dict[str, str]]:
             }
         },
         "required": ["history", "contents_summary"]
-    },
-    annotations={
-        "readOnlyHint": True,
-        "idempotentHint": True,
-        "openWorldHint": True
     }
 )
 def get_history_details(history_id: str) -> dict[str, Any]:
@@ -962,6 +1021,17 @@ def get_history_details(history_id: str) -> dict[str, Any]:
         "Retrieve paginated datasets from a specific Galaxy history. "
         "Supports filtering by visibility/deleted status and ordering by multiple fields."
     ),
+    tags={"history", "datasets", "content"},
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True
+    },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
+    },
     output_schema={
         "type": "object",
         "properties": {
@@ -994,12 +1064,6 @@ def get_history_details(history_id: str) -> dict[str, Any]:
             }
         },
         "required": ["history_id", "contents", "pagination"]
-    },
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True
     }
 )
 def get_history_contents(
@@ -1114,6 +1178,16 @@ def get_history_contents(
     name="get_job_details",
     description="Retrieve detailed information about the job that created a specific Galaxy dataset.",
     tags={"galaxy", "jobs", "datasets", "provenance"},
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True
+    },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
+    },
     output_schema={
         "type": "object",
         "properties": {
@@ -1131,11 +1205,6 @@ def get_history_contents(
             }
         },
         "required": ["job", "dataset_id", "job_id"]
-    },
-    annotations={
-        "readOnlyHint": True,
-        "idempotentHint": True,
-        "openWorldHint": True
     }
 )
 def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str, Any]:
@@ -1206,6 +1275,16 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str,
     name="get_dataset_details",
     description="Retrieve detailed information about a Galaxy dataset, optionally including a preview of its content.",
     tags={"datasets", "metadata", "preview"},
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True
+    },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
+    },
     output_schema={
         "type": "object",
         "properties": {
@@ -1231,11 +1310,6 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str,
             }
         },
         "required": ["dataset", "dataset_id"]
-    },
-    annotations={
-        "readOnlyHint": True,
-        "idempotentHint": True,
-        "openWorldHint": True
     }
 )
 def get_dataset_details(
@@ -1319,11 +1393,16 @@ def get_dataset_details(
         "If `file_path` is provided, the content is saved there. "
         "Otherwise, content is returned in memory with a suggested filename."
     ),
+    tags={"dataset", "download", "file path"},
     annotations={
         "readOnlyHint": True,
         "destructiveHint": False,
         "idempotentHint": True,
         "openWorldHint": True
+    },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
@@ -1479,6 +1558,16 @@ def download_dataset(
     name="upload_file",
     description="Upload a local file to a Galaxy history. Returns details about created datasets and jobs.",
     tags={"upload", "file", "dataset", "history"},
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": False,
+        "openWorldHint": True
+    },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
+    },
     output_schema={
         "type": "object",
         "properties": {
@@ -1508,12 +1597,6 @@ def download_dataset(
             }
         },
         "required": ["outputs", "jobs", "output_collections", "implicit_collections", "produces_entry_points"]
-    },
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": True
     }
 )
 def upload_file(path: str, history_id: str | None = None) -> dict[str, Any]:
@@ -1557,6 +1640,10 @@ def upload_file(path: str, history_id: str | None = None) -> dict[str, Any]:
         "destructiveHint": False,
         "idempotentHint": False,
         "openWorldHint": True
+    },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
@@ -1668,6 +1755,10 @@ def upload_file_from_url(
         "idempotentHint": True,
         "openWorldHint": True
     },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
+    },
     output_schema={
         "type": "object",
         "properties": {
@@ -1762,6 +1853,10 @@ def get_manifest_json() -> list[dict[str, Any]]:
         "idempotentHint": True,
         "openWorldHint": True
     },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
+    },
     output_schema={
         "type": "object",
         "properties": {
@@ -1810,6 +1905,10 @@ def get_iwc_workflows() -> dict[str, Any]:
         "destructiveHint": False,
         "idempotentHint": True,
         "openWorldHint": True
+    },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
@@ -1912,6 +2011,10 @@ def search_iwc_workflows(query: str) -> dict[str, Any]:
         "idempotentHint": False,
         "openWorldHint": True
     },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
+    },
     output_schema={
         "type": "object",
         "properties": {
@@ -1985,6 +2088,10 @@ def import_workflow_from_iwc(trs_id: str) -> dict[str, Any]:
         "idempotentHint": True,
         "openWorldHint": True
     },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
+    },
     output_schema={
         "type": "object",
         "properties": {
@@ -2047,6 +2154,10 @@ def list_workflows(
         "idempotentHint": True,
         "openWorldHint": True
     },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
+    },
     output_schema={
         "type": "object",
         "properties": {
@@ -2097,6 +2208,10 @@ def get_workflow_details(workflow_id: str, version: int | None = None) -> dict[s
         "destructiveHint": False,
         "idempotentHint": False,
         "openWorldHint": True
+    },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
@@ -2180,6 +2295,10 @@ def invoke_workflow(
         "destructiveHint": False,
         "idempotentHint": False,
         "openWorldHint": True
+    },
+    meta={
+        "cacheable": True,
+        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
