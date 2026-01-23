@@ -36,9 +36,10 @@ class TestWorkflowOperations:
         with patch("galaxy_mcp.server.get_manifest_json", return_value=mock_manifest):
             result = get_iwc_workflows_fn()
 
-            assert "workflows" in result
-            assert len(result["workflows"]) == 2
-            assert result["workflows"][0]["trs_id"] == "workflow1"
+            assert result.success is True
+            assert result.count == 2
+            assert len(result.data) == 2
+            assert result.data[0]["trs_id"] == "workflow1"
 
     def test_search_iwc_workflows_fn(self):
         """Test searching IWC workflows"""
@@ -69,12 +70,11 @@ class TestWorkflowOperations:
         with patch("galaxy_mcp.server.get_manifest_json", return_value=mock_manifest):
             result = search_iwc_workflows_fn("rna")
 
-            assert "workflows" in result
-            assert "count" in result
-            assert result["count"] == 1
+            assert result.success is True
+            assert result.count == 1
             # New API returns simplified structure with name at top level
-            assert "RNA-seq" in result["workflows"][0]["name"]
-            assert result["workflows"][0]["trsID"] == "workflow-rna-seq"
+            assert "RNA-seq" in result.data[0]["name"]
+            assert result.data[0]["trsID"] == "workflow-rna-seq"
 
     def test_import_workflow_from_iwc_fn(self, mock_galaxy_instance):
         """Test importing workflow from IWC"""
@@ -96,8 +96,9 @@ class TestWorkflowOperations:
 
                 result = import_workflow_from_iwc_fn("test-workflow")
 
-                assert result["imported_workflow"]["id"] == "imported_workflow_1"
-                assert result["imported_workflow"]["name"] == "Test Workflow"
+                assert result.success is True
+                assert result.data["id"] == "imported_workflow_1"
+                assert result.data["name"] == "Test Workflow"
 
     def test_get_invocations_fn(self, mock_galaxy_instance):
         """Test getting workflow invocations"""
@@ -109,10 +110,10 @@ class TestWorkflowOperations:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = get_invocations_fn()
 
-            assert isinstance(result, dict)
-            assert "invocations" in result
-            assert len(result["invocations"]) == 2
-            assert result["invocations"][0]["id"] == "invocation_1"
+            assert result.success is True
+            assert result.count == 2
+            assert len(result.data) == 2
+            assert result.data[0]["id"] == "invocation_1"
 
     def test_workflow_operations_not_connected(self):
         """Test workflow operations fail when not connected"""
@@ -163,10 +164,11 @@ class TestWorkflowOperations:
             # Test getting all workflows
             result = list_workflows_fn()
 
-            assert "workflows" in result
-            assert len(result["workflows"]) == 2
-            assert result["workflows"][0]["id"] == "workflow1"
-            assert result["workflows"][1]["name"] == "RNA-seq Analysis"
+            assert result.success is True
+            assert result.count == 2
+            assert len(result.data) == 2
+            assert result.data[0]["id"] == "workflow1"
+            assert result.data[1]["name"] == "RNA-seq Analysis"
 
             # Verify function was called with correct parameters
             mock_galaxy_instance.workflows.get_workflows.assert_called_with(
@@ -189,8 +191,9 @@ class TestWorkflowOperations:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = list_workflows_fn(name="RNA-seq", published=True)
 
-            assert "workflows" in result
-            assert len(result["workflows"]) == 1
+            assert result.success is True
+            assert result.count == 1
+            assert len(result.data) == 1
 
             # Verify function was called with filters
             mock_galaxy_instance.workflows.get_workflows.assert_called_with(
@@ -215,11 +218,11 @@ class TestWorkflowOperations:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = get_workflow_details_fn("workflow1")
 
-            assert "workflow" in result
-            assert result["workflow"]["id"] == "workflow1"
-            assert result["workflow"]["name"] == "Test Workflow"
-            assert "steps" in result["workflow"]
-            assert "inputs" in result["workflow"]
+            assert result.success is True
+            assert result.data["id"] == "workflow1"
+            assert result.data["name"] == "Test Workflow"
+            assert "steps" in result.data
+            assert "inputs" in result.data
 
             # Verify function was called correctly
             mock_galaxy_instance.workflows.show_workflow.assert_called_with(
@@ -235,8 +238,8 @@ class TestWorkflowOperations:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = get_workflow_details_fn("workflow1", version=2)
 
-            assert "workflow" in result
-            assert result["workflow"]["version"] == 2
+            assert result.success is True
+            assert result.data["version"] == 2
 
             # Verify version parameter was passed
             mock_galaxy_instance.workflows.show_workflow.assert_called_with(
@@ -263,9 +266,9 @@ class TestWorkflowOperations:
                 workflow_id="workflow1", inputs=inputs, params=params, history_id="history1"
             )
 
-            assert "invocation" in result
-            assert result["invocation"]["id"] == "invocation123"
-            assert result["invocation"]["state"] == "scheduled"
+            assert result.success is True
+            assert result.data["id"] == "invocation123"
+            assert result.data["state"] == "scheduled"
 
             # Verify function was called with correct parameters
             mock_galaxy_instance.workflows.invoke_workflow.assert_called_with(
@@ -294,8 +297,8 @@ class TestWorkflowOperations:
                 workflow_id="workflow1", history_name="RNA-seq Analysis Results", inputs_by="name"
             )
 
-            assert "invocation" in result
-            assert result["invocation"]["history_id"] == "new_history123"
+            assert result.success is True
+            assert result.data["history_id"] == "new_history123"
 
             # Verify function was called with history_name
             mock_galaxy_instance.workflows.invoke_workflow.assert_called_with(
@@ -321,10 +324,9 @@ class TestWorkflowOperations:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = cancel_workflow_invocation_fn("invocation123")
 
-            assert "cancelled" in result
-            assert result["cancelled"] is True
-            assert "invocation" in result
-            assert result["invocation"]["state"] == "cancelled"
+            assert result.success is True
+            assert result.data["cancelled"] is True
+            assert result.data["invocation"]["state"] == "cancelled"
 
             # Verify function was called correctly
             mock_galaxy_instance.workflows.cancel_invocation.assert_called_with("invocation123")

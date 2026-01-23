@@ -29,8 +29,9 @@ class TestDatasetOperations:
             with patch("os.path.exists", return_value=True):
                 result = upload_file_fn("/path/to/test.txt", "test_history_1")
 
-                assert result["outputs"][0]["id"] == "new_dataset_1"
-                assert result["outputs"][0]["name"] == "test.txt"
+                assert result.success is True
+                assert result.data["outputs"][0]["id"] == "new_dataset_1"
+                assert result.data["outputs"][0]["name"] == "test.txt"
                 mock_galaxy_instance.tools.upload_file.assert_called_once()
 
     def test_upload_file_not_found(self, mock_galaxy_instance):
@@ -62,11 +63,12 @@ class TestDatasetOperations:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = get_dataset_details_fn(dataset_id, include_preview=True, preview_lines=3)
 
-            assert result["dataset_id"] == dataset_id
-            assert result["dataset"]["name"] == "test_data.txt"
-            assert result["preview"]["lines"] == "line1\nline2\nline3"
-            assert result["preview"]["total_lines"] == 6  # 5 lines + empty line at end
-            assert result["preview"]["truncated"] is True
+            assert result.success is True
+            assert result.data["dataset_id"] == dataset_id
+            assert result.data["dataset"]["name"] == "test_data.txt"
+            assert result.data["preview"]["lines"] == "line1\nline2\nline3"
+            assert result.data["preview"]["total_lines"] == 6  # 5 lines + empty line at end
+            assert result.data["preview"]["truncated"] is True
 
             mock_galaxy_instance.datasets.show_dataset.assert_called_once_with(dataset_id)
 
@@ -86,9 +88,10 @@ class TestDatasetOperations:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = get_dataset_details_fn(dataset_id, include_preview=False)
 
-            assert result["dataset_id"] == dataset_id
-            assert result["dataset"]["name"] == "test_data.txt"
-            assert "preview" not in result
+            assert result.success is True
+            assert result.data["dataset_id"] == dataset_id
+            assert result.data["dataset"]["name"] == "test_data.txt"
+            assert "preview" not in result.data
 
             # Should not call download_dataset for preview
             mock_galaxy_instance.datasets.download_dataset.assert_not_called()
@@ -113,9 +116,10 @@ class TestDatasetOperations:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = get_dataset_details_fn(dataset_id, include_preview=True)
 
-            assert result["dataset_id"] == dataset_id
-            assert "[Binary content" in result["preview"]["lines"]
-            assert "hex:" in result["preview"]["lines"]
+            assert result.success is True
+            assert result.data["dataset_id"] == dataset_id
+            assert "[Binary content" in result.data["preview"]["lines"]
+            assert "hex:" in result.data["preview"]["lines"]
 
     def test_download_dataset_with_file_path(self, mock_galaxy_instance):
         """Test dataset download to specific file path"""
@@ -138,10 +142,11 @@ class TestDatasetOperations:
                 with patch("os.path.getsize", return_value=1024):
                     result = download_dataset_fn(dataset_id, file_path=file_path)
 
-                    assert result["dataset_id"] == dataset_id
-                    assert result["file_path"] == file_path
-                    assert result["file_size"] == 1024
-                    assert result["dataset_info"]["name"] == "test_data.txt"
+                    assert result.success is True
+                    assert result.data["dataset_id"] == dataset_id
+                    assert result.data["file_path"] == file_path
+                    assert result.data["file_size"] == 1024
+                    assert result.data["dataset_info"]["name"] == "test_data.txt"
 
                     mock_galaxy_instance.datasets.download_dataset.assert_called_once_with(
                         dataset_id,
@@ -170,13 +175,14 @@ class TestDatasetOperations:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = download_dataset_fn(dataset_id)
 
-            assert result["dataset_id"] == dataset_id
-            assert result["file_path"] is None  # No file saved
-            assert result["suggested_filename"] == "test_data.txt"
-            assert result["content_available"] is True
-            assert result["file_size"] == len(mock_content)
-            assert result["dataset_info"]["name"] == "test_data"
-            assert "memory" in result["note"]
+            assert result.success is True
+            assert result.data["dataset_id"] == dataset_id
+            assert result.data["file_path"] is None  # No file saved
+            assert result.data["suggested_filename"] == "test_data.txt"
+            assert result.data["content_available"] is True
+            assert result.data["file_size"] == len(mock_content)
+            assert result.data["dataset_info"]["name"] == "test_data"
+            assert "memory" in result.data["note"]
 
             # Verify bioblend was called with use_default_filename=False
             mock_galaxy_instance.datasets.download_dataset.assert_called_once_with(
@@ -214,8 +220,9 @@ class TestDatasetOperations:
                 url, history_id=history_id, file_type="fasta", dbkey="hg38"
             )
 
-            assert result["outputs"][0]["id"] == "new_dataset_1"
-            assert result["outputs"][0]["name"] == "data.fasta"
+            assert result.success is True
+            assert result.data["outputs"][0]["id"] == "new_dataset_1"
+            assert result.data["outputs"][0]["name"] == "data.fasta"
             mock_galaxy_instance.tools.put_url.assert_called_once_with(
                 url, history_id=history_id, file_type="fasta", dbkey="hg38"
             )
@@ -231,7 +238,8 @@ class TestDatasetOperations:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = upload_file_from_url_fn(url, file_name="custom_name.txt", file_type="tabular")
 
-            assert result["outputs"][0]["name"] == "custom_name.txt"
+            assert result.success is True
+            assert result.data["outputs"][0]["name"] == "custom_name.txt"
             mock_galaxy_instance.tools.put_url.assert_called_once_with(
                 url, history_id=None, file_type="tabular", dbkey="?", file_name="custom_name.txt"
             )
@@ -316,19 +324,20 @@ class TestDatasetOperations:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = get_collection_details_fn(collection_id)
 
-            assert result["collection_id"] == collection_id
-            assert result["history_content_type"] == "dataset_collection"
-            assert result["collection"]["name"] == "My Sample Collection"
-            assert result["collection"]["collection_type"] == "list"
-            assert result["collection"]["element_count"] == 3
-            assert result["elements_truncated"] is False
-            assert len(result["elements"]) == 3
+            assert result.success is True
+            assert result.data["collection_id"] == collection_id
+            assert result.data["history_content_type"] == "dataset_collection"
+            assert result.data["collection"]["name"] == "My Sample Collection"
+            assert result.data["collection"]["collection_type"] == "list"
+            assert result.data["collection"]["element_count"] == 3
+            assert result.data["elements_truncated"] is False
+            assert len(result.data["elements"]) == 3
 
             # Check first element structure
-            assert result["elements"][0]["element_identifier"] == "sample1"
-            assert result["elements"][0]["object_id"] == "dataset1"
-            assert result["elements"][0]["name"] == "sample1.fastq"
-            assert result["elements"][0]["state"] == "ok"
+            assert result.data["elements"][0]["element_identifier"] == "sample1"
+            assert result.data["elements"][0]["object_id"] == "dataset1"
+            assert result.data["elements"][0]["name"] == "sample1.fastq"
+            assert result.data["elements"][0]["state"] == "ok"
 
             mock_galaxy_instance.dataset_collections.show_dataset_collection.assert_called_once_with(
                 collection_id, instance_type="history"
@@ -373,11 +382,12 @@ class TestDatasetOperations:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = get_collection_details_fn(collection_id, max_elements=50)
 
-            assert result["collection"]["element_count"] == 150
-            assert result["elements_truncated"] is True
-            assert len(result["elements"]) == 50
-            assert result["elements"][0]["element_identifier"] == "sample0"
-            assert result["elements"][49]["element_identifier"] == "sample49"
+            assert result.success is True
+            assert result.data["collection"]["element_count"] == 150
+            assert result.data["elements_truncated"] is True
+            assert len(result.data["elements"]) == 50
+            assert result.data["elements"][0]["element_identifier"] == "sample0"
+            assert result.data["elements"][49]["element_identifier"] == "sample49"
 
     def test_get_dataset_details_with_collection_id(self, mock_galaxy_instance):
         """Test that get_dataset_details raises helpful error when given a collection ID"""

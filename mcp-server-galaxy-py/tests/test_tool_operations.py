@@ -28,21 +28,24 @@ class TestToolOperations:
 
             # Search with empty query should return all tools
             result = search_tools_fn("")
-            assert "tools" in result
-            assert len(result["tools"]) == 2
-            assert result["tools"][0]["id"] == "tool1"
+            assert result.success is True
+            assert result.count == 2
+            assert len(result.data) == 2
+            assert result.data[0]["id"] == "tool1"
 
             # Search with query should filter by name substring
             result = search_tools_fn("tool 1")
-            assert "tools" in result
-            assert len(result["tools"]) == 1
-            assert result["tools"][0]["id"] == "tool1"
+            assert result.success is True
+            assert result.count == 1
+            assert len(result.data) == 1
+            assert result.data[0]["id"] == "tool1"
 
             # Search should also filter by ID substring
             result = search_tools_fn("tool2")
-            assert "tools" in result
-            assert len(result["tools"]) == 1
-            assert result["tools"][0]["id"] == "tool2"
+            assert result.success is True
+            assert result.count == 1
+            assert len(result.data) == 1
+            assert result.data[0]["id"] == "tool2"
 
     def test_search_tools_with_results(self, mock_galaxy_instance):
         """Test search tools returns filtered results"""
@@ -58,17 +61,17 @@ class TestToolOperations:
 
             # Search for aligners by name substring
             result = search_tools_fn("align")
-            assert "tools" in result
-            aligners = result["tools"]
+            assert result.success is True
+            aligners = result.data
             assert len(aligners) == 2
             assert any("BWA" in t["name"] for t in aligners)
             assert any("HISAT2" in t["name"] for t in aligners)
 
             # Search by ID substring
             result = search_tools_fn("tool1")
-            assert "tools" in result
-            assert len(result["tools"]) == 1
-            assert result["tools"][0]["id"] == "tool1"
+            assert result.success is True
+            assert len(result.data) == 1
+            assert result.data[0]["id"] == "tool1"
 
     def test_run_tool_fn(self, mock_galaxy_instance):
         """Test running a tool"""
@@ -82,10 +85,11 @@ class TestToolOperations:
 
             result = run_tool_fn("test_history_1", "tool1", inputs)
 
-            assert "jobs" in result
-            assert result["jobs"][0]["id"] == "job_1"
-            assert "outputs" in result
-            assert result["outputs"][0]["name"] == "aligned.bam"
+            assert result.success is True
+            assert "jobs" in result.data
+            assert result.data["jobs"][0]["id"] == "job_1"
+            assert "outputs" in result.data
+            assert result.data["outputs"][0]["name"] == "aligned.bam"
 
             mock_galaxy_instance.tools.run_tool.assert_called_once_with(
                 "test_history_1",
@@ -128,9 +132,10 @@ class TestToolOperations:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = get_tool_run_examples_fn("tool1", "1.0")
 
-        assert result["count"] == 1
-        assert result["requested_version"] == "1.0"
-        assert result["test_cases"][0]["name"] == "Test-1"
+        assert result.success is True
+        assert result.count == 1
+        assert result.data["requested_version"] == "1.0"
+        assert result.data["test_cases"][0]["name"] == "Test-1"
         mock_galaxy_instance.tools.get_tool_tests.assert_called_once_with(
             "tool1", tool_version="1.0"
         )
@@ -142,9 +147,10 @@ class TestToolOperations:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = get_tool_run_examples_fn("tool1")
 
-        assert result["count"] == 0
-        assert result["requested_version"] is None
-        assert result["tool_id"] == "tool1"
+        assert result.success is True
+        assert result.count == 0
+        assert result.data["requested_version"] is None
+        assert result.data["tool_id"] == "tool1"
         mock_galaxy_instance.tools.get_tool_tests.assert_called_once_with(
             "tool1", tool_version=None
         )

@@ -22,14 +22,13 @@ class TestHistoryOperations:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = get_histories_fn()
 
-            assert isinstance(result, dict)
-            assert "histories" in result
-            assert "pagination" in result
-            assert len(result["histories"]) == 2
-            assert result["histories"][0]["id"] == "test_history_1"
-            assert result["histories"][0]["name"] == "Test History 1"
-            assert result["pagination"]["total_items"] == 2
-            assert result["pagination"]["paginated"] is False
+            assert result.success is True
+            assert result.count == 2
+            assert len(result.data) == 2
+            assert result.data[0]["id"] == "test_history_1"
+            assert result.data[0]["name"] == "Test History 1"
+            # No pagination when limit is not specified
+            assert result.pagination is None
 
     def test_get_histories_empty(self, mock_galaxy_instance):
         """Test get_histories with no histories"""
@@ -38,18 +37,20 @@ class TestHistoryOperations:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = get_histories_fn()
 
-            assert result["histories"] == []
-            assert result["pagination"]["total_items"] == 0
+            assert result.success is True
+            assert result.data == []
+            assert result.count == 0
 
     def test_list_history_ids_fn(self, mock_galaxy_instance):
         """Test list_history_ids returns simplified list"""
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
-            history_ids = list_history_ids_fn()
+            result = list_history_ids_fn()
 
-            assert isinstance(history_ids, list)
-            assert len(history_ids) == 2
-            assert history_ids[0] == {"id": "test_history_1", "name": "Test History 1"}
-            assert history_ids[1] == {"id": "test_history_2", "name": "Test History 2"}
+            assert result.success is True
+            assert result.count == 2
+            assert len(result.data) == 2
+            assert result.data[0] == {"id": "test_history_1", "name": "Test History 1"}
+            assert result.data[1] == {"id": "test_history_2", "name": "Test History 2"}
 
     def test_get_history_details_fn(self, mock_galaxy_instance):
         """Test get_history_details with valid ID"""
@@ -61,12 +62,13 @@ class TestHistoryOperations:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = get_history_details_fn("test_history_1")
 
-            assert "history" in result
-            assert "contents_summary" in result
-            assert result["history"]["id"] == "test_history_1"
-            assert result["contents_summary"]["total_items"] == 2
-            assert "get_history_contents(" in result["contents_summary"]["note"]
-            assert "create_time-dsc" in result["contents_summary"]["note"]
+            assert result.success is True
+            assert "history" in result.data
+            assert "contents_summary" in result.data
+            assert result.data["history"]["id"] == "test_history_1"
+            assert result.data["contents_summary"]["total_items"] == 2
+            assert "get_history_contents(" in result.data["contents_summary"]["note"]
+            assert "create_time-dsc" in result.data["contents_summary"]["note"]
 
     def test_get_history_details_with_dict_string(self, mock_galaxy_instance):
         """Test get_history_details treats dict string as regular ID (should fail)"""
@@ -119,15 +121,15 @@ class TestHistoryOperations:
 
             result = get_history_contents_fn("test_history_1", limit=2, offset=0)
 
-            assert "contents" in result
-            assert "pagination" in result
-            assert result["history_id"] == "test_history_1"
-            assert len(result["contents"]) == 2
-            assert result["pagination"]["total_items"] == 5
-            assert result["pagination"]["current_page"] == 1
-            assert result["pagination"]["has_next"] is True
-            assert result["pagination"]["has_previous"] is False
-            assert result["pagination"]["next_offset"] == 2
+            assert result.success is True
+            assert "contents" in result.data
+            assert result.data["history_id"] == "test_history_1"
+            assert len(result.data["contents"]) == 2
+            assert result.pagination is not None
+            assert result.pagination.total_items == 5
+            assert result.pagination.has_next is True
+            assert result.pagination.has_previous is False
+            assert result.pagination.next_offset == 2
 
     def test_get_history_contents_no_pagination(self, mock_galaxy_instance):
         """Test get_history_contents without pagination (default)"""
@@ -142,10 +144,12 @@ class TestHistoryOperations:
 
             result = get_history_contents_fn("test_history_1")
 
-            assert len(result["contents"]) == 3
-            assert result["pagination"]["total_items"] == 3
-            assert result["pagination"]["has_next"] is False
-            assert result["pagination"]["has_previous"] is False
+            assert result.success is True
+            assert len(result.data["contents"]) == 3
+            assert result.pagination is not None
+            assert result.pagination.total_items == 3
+            assert result.pagination.has_next is False
+            assert result.pagination.has_previous is False
 
     def test_get_history_contents_most_recent_first(self, mock_galaxy_instance):
         """Test get_history_contents with ordering for most recent datasets"""
@@ -178,10 +182,11 @@ class TestHistoryOperations:
 
             result = get_history_contents_fn("test_history_1", limit=2, order="create_time-dsc")
 
-            assert len(result["contents"]) == 2
-            assert result["contents"][0]["id"] == "dataset5"  # Most recent first
-            assert result["contents"][1]["id"] == "dataset4"
-            assert result["pagination"]["total_items"] == 3
+            assert result.success is True
+            assert len(result.data["contents"]) == 2
+            assert result.data["contents"][0]["id"] == "dataset5"  # Most recent first
+            assert result.data["contents"][1]["id"] == "dataset4"
+            assert result.pagination.total_items == 3
 
             # Verify show_history was called
             mock_galaxy_instance.histories.show_history.assert_called_once_with(
@@ -224,21 +229,22 @@ class TestHistoryOperations:
 
             result = get_history_contents_fn("test_history_1")
 
-            assert len(result["contents"]) == 3
-            assert result["pagination"]["total_items"] == 3
+            assert result.success is True
+            assert len(result.data["contents"]) == 3
+            assert result.pagination.total_items == 3
 
             # Check that datasets are marked correctly
-            assert result["contents"][0]["history_content_type"] == "dataset"
-            assert result["contents"][0]["id"] == "dataset1"
+            assert result.data["contents"][0]["history_content_type"] == "dataset"
+            assert result.data["contents"][0]["id"] == "dataset1"
 
             # Check that collections are marked correctly
-            assert result["contents"][1]["history_content_type"] == "dataset_collection"
-            assert result["contents"][1]["id"] == "collection1"
-            assert result["contents"][1]["collection_type"] == "list"
+            assert result.data["contents"][1]["history_content_type"] == "dataset_collection"
+            assert result.data["contents"][1]["id"] == "collection1"
+            assert result.data["contents"][1]["collection_type"] == "list"
 
             # Check third item is also a dataset
-            assert result["contents"][2]["history_content_type"] == "dataset"
-            assert result["contents"][2]["id"] == "dataset2"
+            assert result.data["contents"][2]["history_content_type"] == "dataset"
+            assert result.data["contents"][2]["id"] == "dataset2"
 
             mock_galaxy_instance.histories.show_history.assert_called_once_with(
                 "test_history_1", contents=True

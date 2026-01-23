@@ -13,6 +13,7 @@ from bioblend.galaxy import GalaxyInstance
 from dotenv import find_dotenv, load_dotenv
 from fastmcp import FastMCP
 from mcp.server.auth.middleware.auth_context import get_access_token
+from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -22,6 +23,33 @@ from galaxy_mcp.auth import (
     configure_auth_provider,
     get_active_session,
 )
+
+
+class PaginationInfo(BaseModel):
+    """Pagination metadata for list operations."""
+
+    total_items: int = Field(description="Total number of items available")
+    returned_items: int = Field(description="Number of items in this response")
+    limit: int = Field(description="Maximum items requested")
+    offset: int = Field(description="Number of items skipped")
+    has_next: bool = Field(description="Whether more items are available")
+    has_previous: bool = Field(description="Whether previous items exist")
+    next_offset: int | None = Field(default=None, description="Offset for next page")
+    previous_offset: int | None = Field(default=None, description="Offset for previous page")
+    helper_text: str | None = Field(default=None, description="Human-readable pagination hint")
+
+
+class GalaxyResult(BaseModel):
+    """Standardized response from Galaxy MCP tools."""
+
+    data: Any = Field(description="Response data from Galaxy API")
+    success: bool = Field(default=True, description="Whether the operation succeeded")
+    message: str = Field(description="Human-readable status message")
+    count: int | None = Field(default=None, description="Number of items returned")
+    pagination: PaginationInfo | None = Field(
+        default=None, description="Pagination info for list operations"
+    )
+
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -251,7 +279,7 @@ def ensure_connected() -> dict[str, Any]:
 
 
 @mcp.tool()
-def connect(url: str | None = None, api_key: str | None = None) -> dict[str, Any]:
+def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
     """
     Connect to Galaxy server
 
@@ -260,7 +288,7 @@ def connect(url: str | None = None, api_key: str | None = None) -> dict[str, Any
         api_key: Galaxy API key (optional, uses GALAXY_API_KEY env var if not provided)
 
     Returns:
-        Connection status and user information
+        GalaxyResult with connection status and user information in data field
     """
     try:
         # Reuse current OAuth session when available
@@ -268,12 +296,16 @@ def connect(url: str | None = None, api_key: str | None = None) -> dict[str, Any
         if state["connected"] and state.get("source") == "oauth" and state["gi"]:
             gi: GalaxyInstance = state["gi"]
             user_info = gi.users.get_current_user()
-            return {
-                "connected": True,
-                "user": user_info,
-                "url": state["url"],
-                "auth": "oauth",
-            }
+            return GalaxyResult(
+                data={
+                    "connected": True,
+                    "user": user_info,
+                    "url": state["url"],
+                    "auth": "oauth",
+                },
+                success=True,
+                message=f"Connected to Galaxy at {state['url']} via OAuth",
+            )
 
         # Use provided parameters or fall back to environment variables
         use_url = url or os.environ.get("GALAXY_URL")
@@ -317,7 +349,11 @@ def connect(url: str | None = None, api_key: str | None = None) -> dict[str, Any
         galaxy_state["gi"] = gi
         galaxy_state["connected"] = True
 
-        return {"connected": True, "user": user_info}
+        return GalaxyResult(
+            data={"connected": True, "user": user_info},
+            success=True,
+            message=f"Connected to Galaxy at {galaxy_url}",
+        )
     except Exception as e:
         # Reset state on failure
         galaxy_state["url"] = None
@@ -340,7 +376,7 @@ def connect(url: str | None = None, api_key: str | None = None) -> dict[str, Any
 
 
 @mcp.tool()
-def search_tools_by_name(query: str) -> dict[str, Any]:
+def search_tools_by_name(query: str) -> GalaxyResult:
     """
     Search Galaxy tools whose name, ID, or description contains the given query (substring match).
 
@@ -348,7 +384,7 @@ def search_tools_by_name(query: str) -> dict[str, Any]:
         query: Search query (tool name, ID, or description to filter on)
 
     Returns:
-        List of tools matching the query
+        GalaxyResult with matching tools in data field
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
@@ -368,13 +404,18 @@ def search_tools_by_name(query: str) -> dict[str, Any]:
             or query_lower in tool.get("description", "").lower()
         ]
 
-        return {"tools": matching_tools}
+        return GalaxyResult(
+            data=matching_tools,
+            success=True,
+            message=f"Found {len(matching_tools)} tools matching '{query}'",
+            count=len(matching_tools),
+        )
     except Exception as e:
         raise ValueError(format_error("Search tools", e, {"query": query})) from e
 
 
 @mcp.tool()
-def get_tool_details(tool_id: str, io_details: bool = False) -> dict[str, Any]:
+def get_tool_details(tool_id: str, io_details: bool = False) -> GalaxyResult:
     """
     Get detailed information about a specific tool
 
@@ -383,7 +424,7 @@ def get_tool_details(tool_id: str, io_details: bool = False) -> dict[str, Any]:
         io_details: Whether to include input/output details
 
     Returns:
-        Tool details
+        GalaxyResult with tool details in data field
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
@@ -391,7 +432,11 @@ def get_tool_details(tool_id: str, io_details: bool = False) -> dict[str, Any]:
     try:
         # Get detailed information about the tool
         tool_info = gi.tools.show_tool(tool_id, io_details=io_details)
-        return tool_info
+        return GalaxyResult(
+            data=tool_info,
+            success=True,
+            message=f"Retrieved details for tool '{tool_id}'",
+        )
     except Exception as e:
         raise ValueError(
             format_error("Get tool details", e, {"tool_id": tool_id, "io_details": io_details})
@@ -399,7 +444,7 @@ def get_tool_details(tool_id: str, io_details: bool = False) -> dict[str, Any]:
 
 
 @mcp.tool()
-def get_tool_run_examples(tool_id: str, tool_version: str | None = None) -> dict[str, Any]:
+def get_tool_run_examples(tool_id: str, tool_version: str | None = None) -> GalaxyResult:
     """
     Return the exact XML test definitions (inputs, outputs, assertions, required files)
     for a Galaxy tool so an LLM can study real, working run configurations.
@@ -409,19 +454,22 @@ def get_tool_run_examples(tool_id: str, tool_version: str | None = None) -> dict
         tool_version: Optional version selector (use '*' for all versions)
 
     Returns:
-        Dictionary containing the list of test cases and summary metadata
+        GalaxyResult with test cases in data field
     """
     ensure_connected()
 
     try:
         test_cases = galaxy_state["gi"].tools.get_tool_tests(tool_id, tool_version=tool_version)
-        response: dict[str, Any] = {
-            "tool_id": tool_id,
-            "requested_version": tool_version,
-            "count": len(test_cases),
-            "test_cases": test_cases,
-        }
-        return response
+        return GalaxyResult(
+            data={
+                "tool_id": tool_id,
+                "requested_version": tool_version,
+                "test_cases": test_cases,
+            },
+            success=True,
+            message=f"Retrieved {len(test_cases)} test cases for tool '{tool_id}'",
+            count=len(test_cases),
+        )
     except Exception as e:
         context = {"tool_id": tool_id}
         if tool_version:
@@ -430,7 +478,7 @@ def get_tool_run_examples(tool_id: str, tool_version: str | None = None) -> dict
 
 
 @mcp.tool()
-def get_tool_citations(tool_id: str) -> dict[str, Any]:
+def get_tool_citations(tool_id: str) -> GalaxyResult:
     """
     Get citation information for a specific tool
 
@@ -438,7 +486,7 @@ def get_tool_citations(tool_id: str) -> dict[str, Any]:
         tool_id: ID of the tool
 
     Returns:
-        Tool citation information
+        GalaxyResult with tool citation information in data field
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
@@ -450,17 +498,22 @@ def get_tool_citations(tool_id: str) -> dict[str, Any]:
         # Extract citation information
         citations = tool_info.get("citations", [])
 
-        return {
-            "tool_name": tool_info.get("name", tool_id),
-            "tool_version": tool_info.get("version", "unknown"),
-            "citations": citations,
-        }
+        return GalaxyResult(
+            data={
+                "tool_name": tool_info.get("name", tool_id),
+                "tool_version": tool_info.get("version", "unknown"),
+                "citations": citations,
+            },
+            success=True,
+            message=f"Retrieved {len(citations)} citations for tool '{tool_id}'",
+            count=len(citations),
+        )
     except Exception as e:
         raise ValueError(format_error("Get tool citations", e, {"tool_id": tool_id})) from e
 
 
 @mcp.tool()
-def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> dict[str, Any]:
+def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyResult:
     """
     Run a tool in Galaxy
 
@@ -472,7 +525,7 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> dict[str,
         inputs: Dictionary of tool input parameters and dataset references matching tool schema
 
     Returns:
-        Dictionary containing tool execution information including job IDs and output dataset IDs
+        GalaxyResult with tool execution info including job IDs and output dataset IDs
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
@@ -480,7 +533,11 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> dict[str,
     try:
         # Run the tool with provided inputs
         result = gi.tools.run_tool(history_id, tool_id, inputs)
-        return result
+        return GalaxyResult(
+            data=result,
+            success=True,
+            message=f"Started tool '{tool_id}' in history '{history_id}'",
+        )
     except Exception as e:
         raise ValueError(
             format_error(
@@ -490,12 +547,12 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> dict[str,
 
 
 @mcp.tool()
-def get_tool_panel() -> dict[str, Any]:
+def get_tool_panel() -> GalaxyResult:
     """
     Get the tool panel structure (toolbox)
 
     Returns:
-        Tool panel hierarchy
+        GalaxyResult with tool panel hierarchy in data field
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
@@ -503,13 +560,17 @@ def get_tool_panel() -> dict[str, Any]:
     try:
         # Get the tool panel structure
         tool_panel = gi.tools.get_tool_panel()
-        return {"tool_panel": tool_panel}
+        return GalaxyResult(
+            data=tool_panel,
+            success=True,
+            message="Retrieved tool panel structure",
+        )
     except Exception as e:
         raise ValueError(format_error("Get tool panel", e)) from e
 
 
 @mcp.tool()
-def create_history(history_name: str) -> dict[str, Any]:
+def create_history(history_name: str) -> GalaxyResult:
     """
     Create a new history in Galaxy
 
@@ -517,15 +578,20 @@ def create_history(history_name: str) -> dict[str, Any]:
         history_name: Human-readable name for the new history (e.g., 'RNA-seq Analysis')
 
     Returns:
-        Dictionary containing the created history details including the new history ID hash
+        GalaxyResult with created history details including the new history ID hash in data field
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
-    return gi.histories.create_history(history_name)
+    history = gi.histories.create_history(history_name)
+    return GalaxyResult(
+        data=history,
+        success=True,
+        message=f"Created history '{history_name}'",
+    )
 
 
 @mcp.tool()
-def search_tools_by_keywords(keywords: list[str]) -> dict[str, Any]:
+def search_tools_by_keywords(keywords: list[str]) -> GalaxyResult:
     """
     Recommend Galaxy tools based on a list of keywords.
 
@@ -535,10 +601,7 @@ def search_tools_by_keywords(keywords: list[str]) -> dict[str, Any]:
             whose name, description, or accepted input formats contain any of these keywords.
 
     Returns:
-        dict: {
-            "recommended_tools": [ {id, name, description, versions}, ... ],
-            "count": <number_of_tools>
-        }
+        GalaxyResult with recommended tools in data field
     """
 
     state = ensure_connected()
@@ -629,18 +692,23 @@ def search_tools_by_keywords(keywords: list[str]) -> dict[str, Any]:
                     "versions": tool.get("versions", []),
                 }
             )
-        return {"recommended_tools": slim_tools, "count": len(slim_tools)}
+        return GalaxyResult(
+            data=slim_tools,
+            success=True,
+            message=f"Found {len(slim_tools)} tools matching keywords: {', '.join(keywords)}",
+            count=len(slim_tools),
+        )
     except Exception as e:
         raise ValueError(f"Failed to search tools by keywords: {str(e)}") from e
 
 
 @mcp.tool()
-def get_server_info() -> dict[str, Any]:
+def get_server_info() -> GalaxyResult:
     """
     Get Galaxy server information including version, URL, and configuration details
 
     Returns:
-        Server information including version, URL, and other configuration details
+        GalaxyResult with server information in data field
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
@@ -679,25 +747,33 @@ def get_server_info() -> dict[str, Any]:
             },
         }
 
-        return server_info
+        return GalaxyResult(
+            data=server_info,
+            success=True,
+            message=f"Retrieved server info for {url}",
+        )
     except Exception as e:
         raise ValueError(f"Failed to get server information: {str(e)}") from e
 
 
 @mcp.tool()
-def get_user() -> dict[str, Any]:
+def get_user() -> GalaxyResult:
     """
     Get current user information
 
     Returns:
-        Current user details
+        GalaxyResult with current user details in data field
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
     try:
         user_info = gi.users.get_current_user()
-        return user_info
+        return GalaxyResult(
+            data=user_info,
+            success=True,
+            message=f"Retrieved user info for '{user_info.get('username', 'unknown')}'",
+        )
     except Exception as e:
         raise ValueError(f"Failed to get user: {str(e)}") from e
 
@@ -705,7 +781,7 @@ def get_user() -> dict[str, Any]:
 @mcp.tool()
 def get_histories(
     limit: int | None = None, offset: int = 0, name: str | None = None
-) -> dict[str, Any]:
+) -> GalaxyResult:
     """
     Get paginated list of user histories
 
@@ -715,7 +791,7 @@ def get_histories(
         name: Filter histories by name pattern (optional, case-sensitive partial match)
 
     Returns:
-        Dictionary containing list of histories and pagination metadata
+        GalaxyResult with list of histories in data field and pagination metadata
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
@@ -736,33 +812,38 @@ def get_histories(
             current_page = (offset // limit) + 1 if limit > 0 else 1
             total_pages = ((total_items - 1) // limit) + 1 if limit > 0 and total_items > 0 else 1
 
-            pagination = {
-                "total_items": total_items,
-                "returned_items": len(histories),
-                "limit": limit,
-                "offset": offset,
-                "current_page": current_page,
-                "total_pages": total_pages,
-                "has_next": has_next,
-                "has_previous": has_previous,
-                "next_offset": offset + limit if has_next else None,
-                "previous_offset": max(0, offset - limit) if has_previous else None,
-                "helper_text": f"Page {current_page} of {total_pages}. "
+            pagination = PaginationInfo(
+                total_items=total_items,
+                returned_items=len(histories),
+                limit=limit,
+                offset=offset,
+                has_next=has_next,
+                has_previous=has_previous,
+                next_offset=offset + limit if has_next else None,
+                previous_offset=max(0, offset - limit) if has_previous else None,
+                helper_text=f"Page {current_page} of {total_pages}. "
                 + (
                     f"Use offset={offset + limit} for next page."
                     if has_next
                     else "This is the last page."
                 ),
-            }
-        else:
-            # No pagination requested, return simple count
-            pagination = {
-                "total_items": len(histories),
-                "returned_items": len(histories),
-                "paginated": False,
-            }
+            )
 
-        return {"histories": histories, "pagination": pagination}
+            return GalaxyResult(
+                data=histories,
+                success=True,
+                message=f"Retrieved {len(histories)} of {total_items} histories",
+                count=len(histories),
+                pagination=pagination,
+            )
+        else:
+            # No pagination requested
+            return GalaxyResult(
+                data=histories,
+                success=True,
+                message=f"Retrieved {len(histories)} histories",
+                count=len(histories),
+            )
     except Exception as e:
         raise ValueError(
             f"Failed to get histories: {str(e)}. "
@@ -772,12 +853,12 @@ def get_histories(
 
 
 @mcp.tool()
-def list_history_ids() -> list[dict[str, str]]:
+def list_history_ids() -> GalaxyResult:
     """
     Get a simplified list of history IDs and names for easy reference
 
     Returns:
-        List of dictionaries containing 'id' and 'name' fields
+        GalaxyResult with list of {id, name} dictionaries in data field
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
@@ -785,16 +866,26 @@ def list_history_ids() -> list[dict[str, str]]:
     try:
         histories = gi.histories.get_histories()
         if not histories:
-            return []
+            return GalaxyResult(
+                data=[],
+                success=True,
+                message="No histories found",
+                count=0,
+            )
         # Extract just the id and name for convenience
         simplified = [{"id": h["id"], "name": h.get("name", "Unnamed")} for h in histories]
-        return simplified
+        return GalaxyResult(
+            data=simplified,
+            success=True,
+            message=f"Found {len(simplified)} histories",
+            count=len(simplified),
+        )
     except Exception as e:
         raise ValueError(f"Failed to list history IDs: {str(e)}") from e
 
 
 @mcp.tool()
-def get_history_details(history_id: str) -> dict[str, Any]:
+def get_history_details(history_id: str) -> GalaxyResult:
     """
     Get history metadata and summary count ONLY - does not return actual datasets
 
@@ -807,9 +898,7 @@ def get_history_details(history_id: str) -> dict[str, Any]:
                    (e.g., '1cd8e2f6b131e5aa', typically 16 characters)
 
     Returns:
-        Dictionary containing:
-        - history: Basic history metadata (name, id, state, etc.)
-        - contents_summary: Just the count of datasets, not the datasets themselves
+        GalaxyResult with history metadata and contents summary in data field
 
         To get actual datasets: Use get_history_contents(history_id, limit=N,
                                          order="create_time-dsc")
@@ -828,14 +917,20 @@ def get_history_details(history_id: str) -> dict[str, Any]:
         all_contents = gi.histories.show_history(history_id, contents=True)
         total_items = len(all_contents) if all_contents else 0
 
-        return {
-            "history": history_info,
-            "contents_summary": {
-                "total_items": total_items,
-                "note": "This is just a count. To get actual datasets, use get_history_contents("
-                "history_id, limit=25, order='create_time-dsc') for newest datasets first.",
+        return GalaxyResult(
+            data={
+                "history": history_info,
+                "contents_summary": {
+                    "total_items": total_items,
+                    "note": "This is just a count. To get actual datasets, use "
+                    "get_history_contents(history_id, limit=25, order='create_time-dsc') "
+                    "for newest datasets first.",
+                },
             },
-        }
+            success=True,
+            message=f"Retrieved details for history '{history_info.get('name', history_id)}'",
+            count=total_items,
+        )
     except Exception as e:
         logger.error(f"Failed to get history details for ID '{history_id}': {str(e)}")
         if "404" in str(e) or "No route" in str(e):
@@ -853,7 +948,7 @@ def get_history_contents(
     deleted: bool = False,
     visible: bool = True,
     order: str = "hid-asc",
-) -> dict[str, Any]:
+) -> GalaxyResult:
     """
     Get paginated contents (datasets and collections) from a specific history with ordering support
 
@@ -873,9 +968,8 @@ def get_history_contents(
               - 'name-asc': Dataset name ascending (alphabetical)
 
     Returns:
-        Dictionary containing paginated dataset/collection list, pagination metadata,
-        and history reference. Each item includes a 'history_content_type' field:
-        'dataset' or 'dataset_collection'
+        GalaxyResult with paginated dataset/collection list in data field and pagination metadata.
+        Each item includes a 'history_content_type' field: 'dataset' or 'dataset_collection'
 
     Note:
         Performance: This function uses gi.histories.show_history(contents=True) to
@@ -950,28 +1044,30 @@ def get_history_contents(
             f"Retrieved {len(paginated_contents)} items (page {current_page} of {total_pages})"
         )
 
-        return {
-            "history_id": history_id,
-            "contents": paginated_contents,
-            "pagination": {
-                "total_items": total_items,
-                "returned_items": len(paginated_contents),
-                "limit": limit,
-                "offset": offset,
-                "current_page": current_page,
-                "total_pages": total_pages,
-                "has_next": has_next,
-                "has_previous": has_previous,
-                "next_offset": offset + limit if has_next else None,
-                "previous_offset": max(0, offset - limit) if has_previous else None,
-                "helper_text": f"Showing page {current_page} of {total_pages}. "
-                + (
-                    f"Use offset={offset + limit} for next page."
-                    if has_next
-                    else "This is the last page."
-                ),
-            },
-        }
+        pagination = PaginationInfo(
+            total_items=total_items,
+            returned_items=len(paginated_contents),
+            limit=limit,
+            offset=offset,
+            has_next=has_next,
+            has_previous=has_previous,
+            next_offset=offset + limit if has_next else None,
+            previous_offset=max(0, offset - limit) if has_previous else None,
+            helper_text=f"Showing page {current_page} of {total_pages}. "
+            + (
+                f"Use offset={offset + limit} for next page."
+                if has_next
+                else "This is the last page."
+            ),
+        )
+
+        return GalaxyResult(
+            data={"history_id": history_id, "contents": paginated_contents},
+            success=True,
+            message=f"Retrieved {len(paginated_contents)} items from history",
+            count=len(paginated_contents),
+            pagination=pagination,
+        )
     except Exception as e:
         logger.error(f"Failed to get history contents for ID '{history_id}': {str(e)}")
         if "404" in str(e) or "No route" in str(e):
@@ -982,7 +1078,7 @@ def get_history_contents(
 
 
 @mcp.tool()
-def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str, Any]:
+def get_job_details(dataset_id: str, history_id: str | None = None) -> GalaxyResult:
     """
     Get detailed information about the job that created a specific dataset
 
@@ -993,7 +1089,7 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str,
                    (e.g., '1cd8e2f6b131e5aa', typically 16 characters)
 
     Returns:
-        Dictionary containing job metadata, tool information, dataset ID, and job ID
+        GalaxyResult with job metadata, tool information, dataset ID, and job ID in data field
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
@@ -1047,7 +1143,11 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str,
         response.raise_for_status()
         job_info = response.json()
 
-        return {"job": job_info, "dataset_id": dataset_id, "job_id": job_id}
+        return GalaxyResult(
+            data={"job": job_info, "dataset_id": dataset_id, "job_id": job_id},
+            success=True,
+            message=f"Retrieved job details for dataset '{dataset_id}'",
+        )
     except Exception as e:
         if "404" in str(e):
             raise ValueError(
@@ -1060,7 +1160,7 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str,
 @mcp.tool()
 def get_dataset_details(
     dataset_id: str, include_preview: bool = True, preview_lines: int = 10
-) -> dict[str, Any]:
+) -> GalaxyResult:
     """
     Get detailed information about a specific dataset, optionally including a content preview
 
@@ -1072,8 +1172,8 @@ def get_dataset_details(
         preview_lines: Number of lines to include in the content preview (default: 10)
 
     Returns:
-        Dictionary containing dataset metadata (name, size, state, extension) and optional
-        content preview with line count and truncation information
+        GalaxyResult with dataset metadata (name, size, state, extension) and optional
+        content preview in data field
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
@@ -1082,7 +1182,7 @@ def get_dataset_details(
         # Get dataset details using bioblend
         dataset_info = gi.datasets.show_dataset(dataset_id)
 
-        result = {"dataset": dataset_info, "dataset_id": dataset_id}
+        result_data: dict[str, Any] = {"dataset": dataset_info, "dataset_id": dataset_id}
 
         # Add content preview if requested and dataset is in 'ok' state
         if include_preview and dataset_info.get("state") == "ok":
@@ -1108,7 +1208,7 @@ def get_dataset_details(
                 lines = content_str.split("\n")
                 preview = "\n".join(lines[:preview_lines])
 
-                result["preview"] = {
+                result_data["preview"] = {
                     "lines": preview,
                     "total_lines": len(lines),
                     "preview_lines": min(preview_lines, len(lines)),
@@ -1117,12 +1217,16 @@ def get_dataset_details(
 
             except Exception as preview_error:
                 logger.warning(f"Could not get preview for dataset {dataset_id}: {preview_error}")
-                result["preview"] = {
+                result_data["preview"] = {
                     "error": f"Preview unavailable: {str(preview_error)}",
                     "lines": None,
                 }
 
-        return result
+        return GalaxyResult(
+            data=result_data,
+            success=True,
+            message=f"Retrieved details for dataset '{dataset_info.get('name', dataset_id)}'",
+        )
 
     except Exception as e:
         # If show_dataset failed, check if this might be a collection ID
@@ -1156,7 +1260,7 @@ def get_dataset_details(
 
 
 @mcp.tool()
-def get_collection_details(collection_id: str, max_elements: int = 100) -> dict[str, Any]:
+def get_collection_details(collection_id: str, max_elements: int = 100) -> GalaxyResult:
     """
     Get detailed information about a dataset collection and its members
 
@@ -1170,12 +1274,8 @@ def get_collection_details(collection_id: str, max_elements: int = 100) -> dict[
                      Set lower for large collections to avoid overwhelming output
 
     Returns:
-        Dictionary containing:
-        - collection: Metadata about the collection (name, type, state, element count)
-        - elements: List of collection members with their dataset IDs and metadata
-        - elements_truncated: Whether the element list was truncated
-
-        Use get_dataset_details(dataset_id) to get full details for individual datasets
+        GalaxyResult with collection metadata and elements in data field.
+        Use get_dataset_details(dataset_id) to get full details for individual datasets.
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
@@ -1219,17 +1319,22 @@ def get_collection_details(collection_id: str, max_elements: int = 100) -> dict[
             }
             normalized_elements.append(normalized_element)
 
-        return {
-            "collection_id": collection_id,
-            "history_content_type": "dataset_collection",
-            "collection": collection_metadata,
-            "elements": normalized_elements,
-            "elements_truncated": elements_truncated,
-            "note": (
-                "Use get_dataset_details(object_id) to get full details "
-                "for individual datasets in this collection."
-            ),
-        }
+        return GalaxyResult(
+            data={
+                "collection_id": collection_id,
+                "history_content_type": "dataset_collection",
+                "collection": collection_metadata,
+                "elements": normalized_elements,
+                "elements_truncated": elements_truncated,
+                "note": (
+                    "Use get_dataset_details(object_id) to get full details "
+                    "for individual datasets in this collection."
+                ),
+            },
+            success=True,
+            message=f"Retrieved collection '{collection_metadata.get('name', collection_id)}'",
+            count=len(normalized_elements),
+        )
 
     except Exception as e:
         if "404" in str(e):
@@ -1246,7 +1351,7 @@ def download_dataset(
     file_path: str | None = None,
     use_default_filename: bool = True,
     require_ok_state: bool = True,
-) -> dict[str, Any]:
+) -> GalaxyResult:
     """
     Download a dataset from Galaxy to the local filesystem or memory
 
@@ -1262,7 +1367,7 @@ def download_dataset(
                          (default: True, set False to download datasets in other states)
 
     Returns:
-        Dictionary containing download information:
+        GalaxyResult with download information in data field:
         - file_path: Path where file was saved (None if downloaded to memory)
         - suggested_filename: Recommended filename based on dataset name
         - content_available: Whether content was successfully downloaded
@@ -1321,25 +1426,29 @@ def download_dataset(
             download_path = None  # No file saved
             file_size = len(result_path) if isinstance(result_path, bytes | str) else None
 
-        return {
-            "dataset_id": dataset_id,
-            "file_path": download_path,
-            "suggested_filename": filename if not file_path else None,
-            "content_available": result_path is not None,
-            "file_size": file_size,  # Keep consistent with existing API
-            "note": (
-                "Content downloaded to memory. Use file_path parameter to save to a location."
-                if not file_path
-                else "File saved to specified path."
-            ),
-            "dataset_info": {
-                "name": dataset_info.get("name"),
-                "extension": dataset_info.get("extension"),
-                "state": dataset_info.get("state"),
-                "genome_build": dataset_info.get("genome_build"),
-                "file_size": dataset_info.get("file_size"),
+        return GalaxyResult(
+            data={
+                "dataset_id": dataset_id,
+                "file_path": download_path,
+                "suggested_filename": filename if not file_path else None,
+                "content_available": result_path is not None,
+                "file_size": file_size,  # Keep consistent with existing API
+                "note": (
+                    "Content downloaded to memory. Use file_path parameter to save to a location."
+                    if not file_path
+                    else "File saved to specified path."
+                ),
+                "dataset_info": {
+                    "name": dataset_info.get("name"),
+                    "extension": dataset_info.get("extension"),
+                    "state": dataset_info.get("state"),
+                    "genome_build": dataset_info.get("genome_build"),
+                    "file_size": dataset_info.get("file_size"),
+                },
             },
-        }
+            success=True,
+            message=f"Downloaded dataset '{dataset_id}'",
+        )
 
     except Exception as e:
         if "404" in str(e):
@@ -1351,7 +1460,7 @@ def download_dataset(
 
 
 @mcp.tool()
-def upload_file(path: str, history_id: str | None = None) -> dict[str, Any]:
+def upload_file(path: str, history_id: str | None = None) -> GalaxyResult:
     """
     Upload a local file to Galaxy
 
@@ -1361,7 +1470,7 @@ def upload_file(path: str, history_id: str | None = None) -> dict[str, Any]:
                    (e.g., '1cd8e2f6b131e5aa', typically 16 characters)
 
     Returns:
-        Dictionary containing upload status and information about the created dataset(s)
+        GalaxyResult with upload status and information about the created dataset(s) in data field
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
@@ -1376,7 +1485,11 @@ def upload_file(path: str, history_id: str | None = None) -> dict[str, Any]:
 
         # BioBlend accepts None for history_id and uses the most recently used history
         result = gi.tools.upload_file(path, history_id=history_id)  # type: ignore[arg-type]
-        return result
+        return GalaxyResult(
+            data=result,
+            success=True,
+            message=f"Uploaded file '{path}'",
+        )
     except Exception as e:
         raise ValueError(f"Failed to upload file: {str(e)}") from e
 
@@ -1388,7 +1501,7 @@ def upload_file_from_url(
     file_type: str = "auto",
     dbkey: str = "?",
     file_name: str | None = None,
-) -> dict[str, Any]:
+) -> GalaxyResult:
     """
     Upload a file from a URL to Galaxy
 
@@ -1402,7 +1515,7 @@ def upload_file_from_url(
         file_name: Optional name for the uploaded file in Galaxy (inferred from URL if not provided)
 
     Returns:
-        Dictionary containing upload status and information about the created dataset(s)
+        GalaxyResult with upload status and information about the created dataset(s) in data field
     """
     ensure_connected()
 
@@ -1416,7 +1529,11 @@ def upload_file_from_url(
             kwargs["file_name"] = file_name
 
         result = galaxy_state["gi"].tools.put_url(url, history_id=history_id, **kwargs)
-        return result
+        return GalaxyResult(
+            data=result,
+            success=True,
+            message=f"Uploaded file from URL '{url}'",
+        )
     except Exception as e:
         raise ValueError(
             format_error(
@@ -1441,7 +1558,7 @@ def get_invocations(
     limit: int | None = None,
     view: str = "collection",
     step_details: bool = False,
-) -> dict[str, Any]:
+) -> GalaxyResult:
     """
     View workflow invocations in Galaxy
 
@@ -1459,7 +1576,7 @@ def get_invocations(
                      (only applies when view is 'element', default: False)
 
     Returns:
-        Dictionary containing workflow invocation information, execution status, and step details
+        GalaxyResult with workflow invocation information in data field
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
@@ -1468,7 +1585,11 @@ def get_invocations(
         # If invocation_id is provided, get details of a specific invocation
         if invocation_id:
             invocation = gi.invocations.show_invocation(invocation_id)
-            return {"invocation": invocation}
+            return GalaxyResult(
+                data=invocation,
+                success=True,
+                message=f"Retrieved invocation '{invocation_id}'",
+            )
 
         # Otherwise get a list of invocations with optional filters
         invocations = gi.invocations.get_invocations(
@@ -1478,7 +1599,12 @@ def get_invocations(
             view=view,
             step_details=step_details,
         )
-        return {"invocations": invocations}
+        return GalaxyResult(
+            data=invocations,
+            success=True,
+            message=f"Retrieved {len(invocations)} workflow invocations",
+            count=len(invocations),
+        )
     except Exception as e:
         raise ValueError(f"Failed to get workflow invocations: {str(e)}") from e
 
@@ -1492,12 +1618,12 @@ def get_manifest_json() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-def get_iwc_workflows() -> dict[str, Any]:
+def get_iwc_workflows() -> GalaxyResult:
     """
     Fetch all workflows from the IWC (Interactive Workflow Composer)
 
     Returns:
-        Complete workflow manifest from IWC
+        GalaxyResult with workflow manifest in data field
     """
     try:
         manifest = get_manifest_json()
@@ -1507,13 +1633,18 @@ def get_iwc_workflows() -> dict[str, Any]:
             if "workflows" in entry:
                 all_workflows.extend(entry["workflows"])
 
-        return {"workflows": all_workflows}
+        return GalaxyResult(
+            data=all_workflows,
+            success=True,
+            message=f"Retrieved {len(all_workflows)} workflows from IWC",
+            count=len(all_workflows),
+        )
     except Exception as e:
         raise ValueError(f"Failed to fetch IWC workflows: {str(e)}") from e
 
 
 @mcp.tool()
-def search_iwc_workflows(query: str) -> dict[str, Any]:
+def search_iwc_workflows(query: str) -> GalaxyResult:
     """
     Search for workflows in the IWC manifest
 
@@ -1521,11 +1652,12 @@ def search_iwc_workflows(query: str) -> dict[str, Any]:
         query: Search query (matches against name, description, and tags)
 
     Returns:
-        List of matching workflows
+        GalaxyResult with matching workflows in data field
     """
     try:
         # Get the full manifest
-        manifest = get_iwc_workflows.fn()["workflows"]
+        iwc_result = get_iwc_workflows.fn()
+        manifest = iwc_result.data
 
         # Filter workflows based on the search query
         results = []
@@ -1557,13 +1689,18 @@ def search_iwc_workflows(query: str) -> dict[str, Any]:
                     }
                 )
 
-        return {"workflows": results, "count": len(results)}
+        return GalaxyResult(
+            data=results,
+            success=True,
+            message=f"Found {len(results)} IWC workflows matching '{query}'",
+            count=len(results),
+        )
     except Exception as e:
         raise ValueError(f"Failed to search IWC workflows: {str(e)}") from e
 
 
 @mcp.tool()
-def import_workflow_from_iwc(trs_id: str) -> dict[str, Any]:
+def import_workflow_from_iwc(trs_id: str) -> GalaxyResult:
     """
     Import a workflow from IWC to the user's Galaxy instance
 
@@ -1571,14 +1708,15 @@ def import_workflow_from_iwc(trs_id: str) -> dict[str, Any]:
         trs_id: TRS ID of the workflow in the IWC manifest
 
     Returns:
-        Imported workflow information
+        GalaxyResult with imported workflow information in data field
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
     try:
         # Get the workflow manifest
-        manifest = get_iwc_workflows.fn()["workflows"]
+        iwc_result = get_iwc_workflows.fn()
+        manifest = iwc_result.data
 
         # Find the specified workflow
         workflow = None
@@ -1605,7 +1743,11 @@ def import_workflow_from_iwc(trs_id: str) -> dict[str, Any]:
 
         # Import the workflow into Galaxy
         imported_workflow = gi.workflows.import_workflow_dict(workflow_definition)
-        return {"imported_workflow": imported_workflow}
+        return GalaxyResult(
+            data=imported_workflow,
+            success=True,
+            message=f"Successfully imported workflow '{trs_id}'",
+        )
     except Exception as e:
         raise ValueError(f"Failed to import workflow from IWC: {str(e)}") from e
 
@@ -1613,7 +1755,7 @@ def import_workflow_from_iwc(trs_id: str) -> dict[str, Any]:
 @mcp.tool()
 def list_workflows(
     workflow_id: str | None = None, name: str | None = None, published: bool = False
-) -> dict[str, Any]:
+) -> GalaxyResult:
     """
     List workflows available in the Galaxy instance
 
@@ -1623,7 +1765,7 @@ def list_workflows(
         published: Include published workflows (default: False, shows only user workflows)
 
     Returns:
-        Dictionary containing list of workflows with their IDs, names, and metadata
+        GalaxyResult with list of workflows in data field
     """
     ensure_connected()
 
@@ -1631,7 +1773,12 @@ def list_workflows(
         workflows = galaxy_state["gi"].workflows.get_workflows(
             workflow_id=workflow_id, name=name, published=published
         )
-        return {"workflows": workflows}
+        return GalaxyResult(
+            data=workflows,
+            success=True,
+            message=f"Found {len(workflows)} workflows",
+            count=len(workflows),
+        )
     except Exception as e:
         raise ValueError(
             format_error(
@@ -1643,7 +1790,7 @@ def list_workflows(
 
 
 @mcp.tool()
-def get_workflow_details(workflow_id: str, version: int | None = None) -> dict[str, Any]:
+def get_workflow_details(workflow_id: str, version: int | None = None) -> GalaxyResult:
     """
     Get detailed information about a specific workflow
 
@@ -1652,7 +1799,7 @@ def get_workflow_details(workflow_id: str, version: int | None = None) -> dict[s
         version: Specific version of the workflow (optional, uses latest if not specified)
 
     Returns:
-        Dictionary containing detailed workflow information including steps, inputs, and parameters
+        GalaxyResult with workflow information including steps, inputs, and parameters in data field
     """
     ensure_connected()
 
@@ -1660,7 +1807,11 @@ def get_workflow_details(workflow_id: str, version: int | None = None) -> dict[s
         workflow = galaxy_state["gi"].workflows.show_workflow(
             workflow_id=workflow_id, version=version
         )
-        return {"workflow": workflow}
+        return GalaxyResult(
+            data=workflow,
+            success=True,
+            message=f"Retrieved details for workflow '{workflow.get('name', workflow_id)}'",
+        )
     except Exception as e:
         raise ValueError(
             format_error(
@@ -1678,7 +1829,7 @@ def invoke_workflow(
     history_name: str | None = None,
     inputs_by: str = "step_index",
     parameters_normalized: bool = False,
-) -> dict[str, Any]:
+) -> GalaxyResult:
     """
     Invoke (run) a workflow with specified inputs and parameters
 
@@ -1697,7 +1848,7 @@ def invoke_workflow(
         parameters_normalized: Whether parameters are already in normalized format
 
     Returns:
-        Dictionary containing workflow invocation information including invocation ID
+        GalaxyResult with workflow invocation information including invocation ID in data field
     """
     ensure_connected()
 
@@ -1711,7 +1862,11 @@ def invoke_workflow(
             inputs_by=inputs_by,
             parameters_normalized=parameters_normalized,
         )
-        return {"invocation": invocation}
+        return GalaxyResult(
+            data=invocation,
+            success=True,
+            message=f"Invoked workflow '{workflow_id}'",
+        )
     except Exception as e:
         raise ValueError(
             format_error(
@@ -1728,7 +1883,7 @@ def invoke_workflow(
 
 
 @mcp.tool()
-def cancel_workflow_invocation(invocation_id: str) -> dict[str, Any]:
+def cancel_workflow_invocation(invocation_id: str) -> GalaxyResult:
     """
     Cancel a running workflow invocation
 
@@ -1736,13 +1891,17 @@ def cancel_workflow_invocation(invocation_id: str) -> dict[str, Any]:
         invocation_id: ID of the workflow invocation to cancel - a hexadecimal hash string
 
     Returns:
-        Dictionary containing cancellation status and updated invocation information
+        GalaxyResult with cancellation status and updated invocation information in data field
     """
     ensure_connected()
 
     try:
         result = galaxy_state["gi"].workflows.cancel_invocation(invocation_id)
-        return {"cancelled": True, "invocation": result}
+        return GalaxyResult(
+            data={"cancelled": True, "invocation": result},
+            success=True,
+            message=f"Cancelled workflow invocation '{invocation_id}'",
+        )
     except Exception as e:
         raise ValueError(
             format_error("Cancel workflow invocation", e, {"invocation_id": invocation_id})
