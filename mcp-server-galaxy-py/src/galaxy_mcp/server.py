@@ -2048,6 +2048,137 @@ def search_iwc_workflows(query: str) -> GalaxyResult:
 
 
 @mcp.tool()
+def get_iwc_workflow_details(trs_id: str) -> GalaxyResult:
+    """
+    Get comprehensive details about a specific IWC workflow before importing.
+
+    Use this to examine a workflow's full documentation, inputs, and complexity
+    before deciding to import it into your Galaxy instance.
+
+    RECOMMENDED WORKFLOW:
+    1. Search workflows with search_iwc_workflows() or recommend_iwc_workflows()
+    2. Call this function with the trsID to get full details
+    3. Review the readme and inputs to ensure it fits your needs
+    4. Import with import_workflow_from_iwc(trs_id)
+
+    Args:
+        trs_id: The TRS (Tool Registry Service) ID from search results.
+                Format: "#workflow/github.com/iwc-workflows/<name>/<branch>"
+                Example: "#workflow/github.com/iwc-workflows/rnaseq-pe/main"
+
+    Returns:
+        GalaxyResult with comprehensive workflow information:
+        - trsID: Unique identifier
+        - name: Human-readable name
+        - description: Brief annotation
+        - readme: Full markdown documentation (the real docs!)
+        - tags: Category tags
+        - categories: High-level classifications
+        - authors: List of {name, orcid} for creators
+        - license: License identifier (e.g., "MIT")
+        - step_count: Total number of workflow steps
+        - tools_used: List of tool names used in the workflow
+        - inputs: List of workflow input definitions
+        - outputs: List of workflow output definitions
+        - updated: Last update timestamp (if available)
+
+    Example:
+        >>> get_iwc_workflow_details("#workflow/github.com/iwc-workflows/rnaseq-pe/main")
+        GalaxyResult(
+            data={
+                "trsID": "#workflow/github.com/iwc-workflows/rnaseq-pe/main",
+                "name": "RNA-Seq PE",
+                "readme": "# RNA-Seq Paired-End Workflow\\n\\nThis workflow...",
+                "step_count": 15,
+                "tools_used": ["fastqc", "hisat2", "featurecounts", "deseq2"],
+                "inputs": [
+                    {"name": "PE reads", "type": "data_collection_input"},
+                    {"name": "Reference genome", "type": "data_input"}
+                ],
+                ...
+            },
+            message="Retrieved details for workflow 'RNA-Seq PE'"
+        )
+
+    NEXT STEPS:
+    - Import workflow: import_workflow_from_iwc(trs_id)
+    - After import, run with: invoke_workflow(workflow_id, inputs)
+
+    ERROR HANDLING:
+    - "Workflow not found": Check trsID spelling, use search_iwc_workflows() first
+    """
+    try:
+        # Get the full manifest
+        iwc_result = get_iwc_workflows.fn()
+        manifest = iwc_result.data
+
+        # Find the specified workflow
+        workflow = None
+        for wf in manifest:
+            if wf.get("trsID") == trs_id:
+                workflow = wf
+                break
+
+        if not workflow:
+            raise ValueError(
+                f"Workflow with trsID '{trs_id}' not found in IWC manifest. "
+                "Check the trsID format and use search_iwc_workflows() to find valid IDs."
+            )
+
+        # Get enriched result with full readme
+        result = _enrich_workflow_result(workflow, include_full_readme=True)
+
+        # Add inputs and outputs from definition
+        definition = workflow.get("definition", {})
+        steps = definition.get("steps", {})
+
+        # Extract inputs (steps with type input or without tool_id)
+        inputs = []
+        outputs = []
+
+        for step_id, step_data in steps.items():
+            if not isinstance(step_data, dict):
+                continue
+
+            step_type = step_data.get("type", "")
+
+            # Input steps
+            if step_type in ("data_input", "data_collection_input", "parameter_input"):
+                inputs.append(
+                    {
+                        "name": step_data.get("label", f"Input {step_id}"),
+                        "type": step_type,
+                        "annotation": step_data.get("annotation", ""),
+                    }
+                )
+
+            # Collect outputs from workflow outputs
+            workflow_outputs = step_data.get("workflow_outputs", [])
+            for wo in workflow_outputs:
+                if isinstance(wo, dict):
+                    outputs.append(
+                        {
+                            "name": wo.get("label", wo.get("output_name", "")),
+                            "step": step_data.get("label", f"Step {step_id}"),
+                        }
+                    )
+
+        result["inputs"] = inputs
+        result["outputs"] = outputs
+
+        # Add updated timestamp if available
+        result["updated"] = workflow.get("updated", "")
+
+        return GalaxyResult(
+            data=result,
+            success=True,
+            message=f"Retrieved details for workflow '{result['name']}'",
+        )
+    except Exception as e:
+        raise ValueError(f"Failed to get IWC workflow details: {str(e)}") from e
+
+
+@mcp.tool()
 def import_workflow_from_iwc(trs_id: str) -> GalaxyResult:
     """
     Import a workflow from IWC to the user's Galaxy instance

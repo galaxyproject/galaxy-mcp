@@ -26,6 +26,7 @@ from galaxy_mcp.server import (
     get_histories,
     get_history_contents,
     get_history_details,
+    get_iwc_workflow_details,
     get_iwc_workflows,
     get_server_info,
     get_tool_details,
@@ -488,3 +489,46 @@ class TestRealIWCOperations:
         """Test importing with an invalid trsID."""
         with pytest.raises(ValueError, match="not found in IWC manifest"):
             import_workflow_from_iwc.fn("nonexistent/workflow/id")
+
+    def test_get_iwc_workflow_details(self):
+        """Test getting detailed information about a specific IWC workflow."""
+        # First, search to get a valid trsID
+        search_result = search_iwc_workflows.fn("quality")
+        assert search_result.success is True
+        assert search_result.count >= 1
+
+        trs_id = search_result.data[0]["trsID"]
+
+        # Get full details
+        result = get_iwc_workflow_details.fn(trs_id)
+
+        assert isinstance(result, GalaxyResult)
+        assert result.success is True
+
+        # Check comprehensive fields
+        data = result.data
+        assert data["trsID"] == trs_id
+        assert "name" in data
+        assert "description" in data
+        assert "readme" in data  # Full readme, not just summary
+        assert "readme_summary" in data
+        assert "step_count" in data
+        assert "authors" in data
+        assert "tools_used" in data
+        assert "inputs" in data
+        assert "outputs" in data
+        assert "license" in data
+        assert "categories" in data
+
+        # Full readme should be longer than summary (if readme exists)
+        if data["readme"]:
+            assert len(data["readme"]) >= len(data["readme_summary"])
+
+        # Inputs and outputs should be lists
+        assert isinstance(data["inputs"], list)
+        assert isinstance(data["outputs"], list)
+
+    def test_get_iwc_workflow_details_invalid_id(self):
+        """Test getting details with an invalid trsID."""
+        with pytest.raises(ValueError, match="not found in IWC manifest"):
+            get_iwc_workflow_details.fn("nonexistent/workflow/id")
