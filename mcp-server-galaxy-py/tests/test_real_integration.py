@@ -26,11 +26,15 @@ from galaxy_mcp.server import (
     get_histories,
     get_history_contents,
     get_history_details,
+    get_iwc_workflows,
     get_server_info,
     get_tool_details,
     get_tool_panel,
     get_user,
+    import_workflow_from_iwc,
+    list_workflows,
     run_tool,
+    search_iwc_workflows,
     search_tools_by_name,
     upload_file,
 )
@@ -365,3 +369,113 @@ class TestRealToolExecution:
 
         finally:
             os.unlink(tmp_path)
+
+
+class TestRealIWCOperations:
+    """Test real IWC (Intergalactic Workflow Commission) operations.
+
+    These tests fetch workflows from the IWC GitHub repository and can import
+    them into a connected Galaxy instance.
+    """
+
+    imported_workflows: list[str] = []
+
+    def setup_method(self):
+        """Connect to Galaxy before each test."""
+        connect.fn(GALAXY_URL, GALAXY_API_KEY)
+        self.imported_workflows = []
+
+    def teardown_method(self):
+        """Clean up imported workflows and reset state."""
+        if galaxy_state.get("gi"):
+            gi = galaxy_state["gi"]
+            for workflow_id in self.imported_workflows:
+                with contextlib.suppress(Exception):
+                    gi.workflows.delete_workflow(workflow_id)
+        galaxy_state["connected"] = False
+        galaxy_state["gi"] = None
+
+    def test_get_iwc_workflows(self):
+        """Test fetching all workflows from IWC."""
+        result = get_iwc_workflows.fn()
+
+        assert isinstance(result, GalaxyResult)
+        assert result.success is True
+        assert isinstance(result.data, list)
+        # IWC should have many workflows
+        assert result.count is not None
+        assert result.count > 10  # IWC has dozens of workflows
+
+        # Check structure of first workflow
+        if result.data:
+            workflow = result.data[0]
+            assert "trsID" in workflow
+            assert "definition" in workflow
+
+    def test_search_iwc_workflows_rna(self):
+        """Test searching IWC for RNA-related workflows."""
+        result = search_iwc_workflows.fn("rna")
+
+        assert isinstance(result, GalaxyResult)
+        assert result.success is True
+        assert isinstance(result.data, list)
+        # Should find some RNA workflows
+        assert result.count is not None
+        assert result.count >= 1
+
+        # Check result structure
+        if result.data:
+            workflow = result.data[0]
+            assert "trsID" in workflow
+            assert "name" in workflow
+
+    def test_search_iwc_workflows_assembly(self):
+        """Test searching IWC for assembly workflows."""
+        result = search_iwc_workflows.fn("assembly")
+
+        assert isinstance(result, GalaxyResult)
+        assert result.success is True
+        assert isinstance(result.data, list)
+        # Should find assembly workflows
+        assert result.count >= 1
+
+    def test_search_iwc_workflows_no_results(self):
+        """Test searching IWC with a query that returns no results."""
+        result = search_iwc_workflows.fn("xyznonexistent123")
+
+        assert isinstance(result, GalaxyResult)
+        assert result.success is True
+        assert result.count == 0
+        assert len(result.data) == 0
+
+    def test_import_workflow_from_iwc(self):
+        """Test importing a workflow from IWC into Galaxy."""
+        # First, search for a simple workflow to import
+        search_result = search_iwc_workflows.fn("quality")
+
+        assert search_result.success is True
+        assert search_result.count >= 1
+
+        # Get the trsID of the first matching workflow
+        trs_id = search_result.data[0]["trsID"]
+
+        # Import the workflow
+        import_result = import_workflow_from_iwc.fn(trs_id)
+
+        assert isinstance(import_result, GalaxyResult)
+        assert import_result.success is True
+        assert "id" in import_result.data
+        assert "name" in import_result.data
+
+        # Track for cleanup
+        self.imported_workflows.append(import_result.data["id"])
+
+        # Verify the workflow appears in user's workflow list
+        workflows_result = list_workflows.fn()
+        workflow_ids = [w["id"] for w in workflows_result.data]
+        assert import_result.data["id"] in workflow_ids
+
+    def test_import_workflow_invalid_trs_id(self):
+        """Test importing with an invalid trsID."""
+        with pytest.raises(ValueError, match="not found in IWC manifest"):
+            import_workflow_from_iwc.fn("nonexistent/workflow/id")
