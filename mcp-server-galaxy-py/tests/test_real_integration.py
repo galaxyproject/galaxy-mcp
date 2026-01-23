@@ -423,11 +423,20 @@ class TestRealIWCOperations:
         assert result.count is not None
         assert result.count >= 1
 
-        # Check result structure
+        # Check result structure includes enriched fields
         if result.data:
             workflow = result.data[0]
             assert "trsID" in workflow
             assert "name" in workflow
+            # New enriched fields
+            assert "readme_summary" in workflow
+            assert "step_count" in workflow
+            assert "authors" in workflow
+            assert "categories" in workflow
+            assert "tools_used" in workflow
+            assert isinstance(workflow["step_count"], int)
+            assert isinstance(workflow["authors"], list)
+            assert isinstance(workflow["tools_used"], list)
 
     def test_search_iwc_workflows_assembly(self):
         """Test searching IWC for assembly workflows."""

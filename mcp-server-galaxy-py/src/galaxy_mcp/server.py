@@ -1849,16 +1849,162 @@ def get_iwc_workflows() -> GalaxyResult:
         raise ValueError(f"Failed to fetch IWC workflows: {str(e)}") from e
 
 
+def _clean_readme_summary(readme: str, max_length: int = 300) -> str:
+    """Extract a clean summary from a readme, stripping markdown headers."""
+    if not readme:
+        return ""
+
+    lines = readme.split("\n")
+    clean_lines: list[str] = []
+
+    for line in lines:
+        # Skip markdown headers
+        if line.strip().startswith("#"):
+            continue
+        # Skip empty lines at the start
+        if not clean_lines and not line.strip():
+            continue
+        clean_lines.append(line)
+
+    text = " ".join(clean_lines)
+    # Normalize whitespace
+    text = " ".join(text.split())
+
+    if len(text) > max_length:
+        # Truncate at word boundary
+        text = text[: max_length - 3].rsplit(" ", 1)[0] + "..."
+
+    return text
+
+
+def _extract_tool_names_from_steps(steps: dict) -> list[str]:
+    """Extract unique tool names from workflow steps."""
+    tool_names = []
+    seen = set()
+
+    for step_data in steps.values():
+        if not isinstance(step_data, dict):
+            continue
+
+        # Get tool_id from step
+        tool_id = step_data.get("tool_id")
+        if tool_id:
+            # Extract the base tool name (handle toolshed format)
+            # e.g., "toolshed.g2.bx.psu.edu/repos/iuc/fastqc/fastqc/0.73" -> "fastqc"
+            parts = tool_id.split("/")
+            # Toolshed format - get the tool name (second to last part usually)
+            tool_name = parts[-2] if len(parts) > 1 else tool_id
+
+            if tool_name and tool_name not in seen:
+                tool_names.append(tool_name)
+                seen.add(tool_name)
+
+    return tool_names
+
+
+def _enrich_workflow_result(workflow: dict[str, Any], include_full_readme: bool = False) -> dict:
+    """Enrich a workflow entry with additional metadata."""
+    definition = workflow.get("definition", {})
+
+    # Basic fields
+    result = {
+        "trsID": workflow.get("trsID", ""),
+        "name": definition.get("name", ""),
+        "description": definition.get("annotation", ""),
+        "tags": definition.get("tags", []),
+    }
+
+    # Readme
+    readme = workflow.get("readme", "")
+    if include_full_readme:
+        result["readme"] = readme
+    result["readme_summary"] = _clean_readme_summary(readme)
+
+    # Step count
+    steps = definition.get("steps", {})
+    result["step_count"] = len(steps) if isinstance(steps, dict) else 0
+
+    # Authors
+    creators = definition.get("creator", [])
+    if isinstance(creators, list):
+        result["authors"] = [
+            {"name": c.get("name", ""), "orcid": c.get("identifier", "")}
+            for c in creators
+            if isinstance(c, dict)
+        ]
+    else:
+        result["authors"] = []
+
+    # Categories (from manifest entry, not definition)
+    result["categories"] = workflow.get("categories", [])
+
+    # License
+    result["license"] = definition.get("license", "")
+
+    # Tool names from steps
+    if isinstance(steps, dict):
+        result["tools_used"] = _extract_tool_names_from_steps(steps)
+    else:
+        result["tools_used"] = []
+
+    return result
+
+
 @mcp.tool()
 def search_iwc_workflows(query: str) -> GalaxyResult:
     """
-    Search for workflows in the IWC manifest
+    Search for workflows in the IWC (Intergalactic Workflow Commission) manifest.
+
+    IWC hosts curated, best-practice workflows for common bioinformatics analyses.
+    This function searches across workflow names, descriptions, tags, and readmes.
+
+    RECOMMENDED WORKFLOW:
+    1. Search for workflows matching your analysis need
+    2. Review the results - check step_count for complexity, readme_summary for details
+    3. Call get_iwc_workflow_details(trs_id) for full information
+    4. Import with import_workflow_from_iwc(trs_id)
+    5. Run with invoke_workflow()
 
     Args:
-        query: Search query (matches against name, description, and tags)
+        query: Search query (case-insensitive). Matches against:
+               - Workflow name (e.g., "RNA-seq")
+               - Description/annotation
+               - Tags (e.g., "assembly", "transcriptomics")
 
     Returns:
-        GalaxyResult with matching workflows in data field
+        GalaxyResult with matching workflows in data field. Each workflow includes:
+        - trsID: Unique identifier for importing
+        - name: Human-readable workflow name
+        - description: Brief annotation
+        - tags: Category tags
+        - readme_summary: First 300 chars of documentation
+        - step_count: Number of workflow steps (complexity indicator)
+        - authors: List of {name, orcid} for creators
+        - categories: High-level category classifications
+        - tools_used: List of tool names used in the workflow
+
+    Example:
+        >>> search_iwc_workflows("rna-seq")
+        GalaxyResult(
+            data=[{
+                "trsID": "#workflow/github.com/iwc-workflows/rnaseq-pe/main",
+                "name": "RNA-Seq PE",
+                "description": "Paired-end RNA-seq analysis",
+                "tags": ["transcriptomics", "RNAseq"],
+                "readme_summary": "This workflow performs standard RNA-seq...",
+                "step_count": 15,
+                "authors": [{"name": "IWC", "orcid": ""}],
+                "categories": ["Transcriptomics"],
+                "tools_used": ["fastqc", "hisat2", "featurecounts"]
+            }],
+            count=5,
+            message="Found 5 IWC workflows matching 'rna-seq'"
+        )
+
+    NEXT STEPS:
+    - Get full details: get_iwc_workflow_details(trs_id)
+    - Import to Galaxy: import_workflow_from_iwc(trs_id)
+    - For semantic search: recommend_iwc_workflows("I have RNA-seq data...")
     """
     try:
         # Get the full manifest
@@ -1867,7 +2013,7 @@ def search_iwc_workflows(query: str) -> GalaxyResult:
 
         # Filter workflows based on the search query
         results = []
-        query = query.lower()
+        query_lower = query.lower()
 
         for workflow in manifest:
             # Check if query matches name, description or tags (case-insensitive)
@@ -1875,25 +2021,21 @@ def search_iwc_workflows(query: str) -> GalaxyResult:
             name = definition.get("name", "")
             description = definition.get("annotation", "")
             tags = definition.get("tags", [])
+            readme = workflow.get("readme", "")
 
             # Lowercase for matching
             name_lower = name.lower()
             description_lower = description.lower()
             tags_lower = [tag.lower() for tag in tags]
+            readme_lower = readme.lower()
 
             if (
-                query in name_lower
-                or query in description_lower
-                or (tags_lower and any(query in tag for tag in tags_lower))
+                query_lower in name_lower
+                or query_lower in description_lower
+                or (tags_lower and any(query_lower in tag for tag in tags_lower))
+                or query_lower in readme_lower
             ):
-                results.append(
-                    {
-                        "trsID": workflow["trsID"],
-                        "name": name,
-                        "description": description,
-                        "tags": tags,
-                    }
-                )
+                results.append(_enrich_workflow_result(workflow))
 
         return GalaxyResult(
             data=results,
