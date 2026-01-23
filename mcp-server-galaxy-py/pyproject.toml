@@ -32,6 +32,7 @@ dependencies = [
     "fastmcp>=2.3.0",
     "requests>=2.32.3",
     "python-dotenv>=1.0.0",
+    "rank-bm25>=0.2.2",
 ]
 
 [project.urls]
@@ -75,3 +76,8 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+
+[tool.mypy]
+[[tool.mypy.overrides]]
+module = "rank_bm25"
+ignore_missing_imports = true

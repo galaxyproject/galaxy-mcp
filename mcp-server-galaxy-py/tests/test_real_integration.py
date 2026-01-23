@@ -34,6 +34,7 @@ from galaxy_mcp.server import (
     get_user,
     import_workflow_from_iwc,
     list_workflows,
+    recommend_iwc_workflows,
     run_tool,
     search_iwc_workflows,
     search_tools_by_name,
@@ -56,10 +57,10 @@ def galaxy_is_available() -> bool:
         return False
 
 
-# Skip all tests in this module if Galaxy is not available
+# Skip all tests in this module if Galaxy is not available or credentials missing
 pytestmark = pytest.mark.skipif(
     not galaxy_is_available(),
-    reason=f"Galaxy server not available at {GALAXY_URL}",
+    reason=f"Galaxy not available at {GALAXY_URL} or GALAXY_TEST_API_KEY not set",
 )
 
 
@@ -532,3 +533,57 @@ class TestRealIWCOperations:
         """Test getting details with an invalid trsID."""
         with pytest.raises(ValueError, match="not found in IWC manifest"):
             get_iwc_workflow_details.fn("nonexistent/workflow/id")
+
+    def test_recommend_iwc_workflows_rnaseq(self):
+        """Test recommending workflows for RNA-seq analysis."""
+        result = recommend_iwc_workflows.fn(
+            "I have paired-end RNA-seq data and want to do differential expression analysis"
+        )
+
+        assert isinstance(result, GalaxyResult)
+        assert result.success is True
+        assert isinstance(result.data, list)
+        assert result.count is not None
+
+        # Should find relevant workflows
+        if result.data:
+            workflow = result.data[0]
+            # Standard enriched fields
+            assert "trsID" in workflow
+            assert "name" in workflow
+            assert "readme_summary" in workflow
+            assert "step_count" in workflow
+            # Recommendation-specific fields (BM25 score is a float)
+            assert "match_score" in workflow
+            assert isinstance(workflow["match_score"], float | int)
+            assert workflow["match_score"] > 0
+
+    def test_recommend_iwc_workflows_assembly(self):
+        """Test recommending workflows for genome assembly."""
+        result = recommend_iwc_workflows.fn("assemble bacterial genome nanopore", limit=3)
+
+        assert isinstance(result, GalaxyResult)
+        assert result.success is True
+        assert result.count <= 3  # Respects limit
+
+        if result.data:
+            # Results should be sorted by match_score
+            scores = [w["match_score"] for w in result.data]
+            assert scores == sorted(scores, reverse=True)
+
+    def test_recommend_iwc_workflows_no_matches(self):
+        """Test recommending with a query that matches nothing."""
+        result = recommend_iwc_workflows.fn("xyznonexistent123 abcfake456")
+
+        assert isinstance(result, GalaxyResult)
+        assert result.success is True
+        assert result.count == 0
+        assert len(result.data) == 0
+
+    def test_recommend_iwc_workflows_with_limit(self):
+        """Test that limit parameter is respected."""
+        result = recommend_iwc_workflows.fn("sequencing", limit=2)
+
+        assert isinstance(result, GalaxyResult)
+        assert result.success is True
+        assert len(result.data) <= 2

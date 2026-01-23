@@ -2178,6 +2178,160 @@ def get_iwc_workflow_details(trs_id: str) -> GalaxyResult:
         raise ValueError(f"Failed to get IWC workflow details: {str(e)}") from e
 
 
+def _tokenize_for_search(text: str) -> list[str]:
+    """Tokenize text for BM25 search, filtering stop words."""
+    import re
+
+    stop_words = {
+        "the",
+        "and",
+        "for",
+        "with",
+        "from",
+        "have",
+        "want",
+        "data",
+        "this",
+        "that",
+        "are",
+        "was",
+        "will",
+    }
+    return [
+        word.lower()
+        for word in re.findall(r"\b[a-zA-Z]{2,}\b", text)
+        if word.lower() not in stop_words
+    ]
+
+
+@mcp.tool()
+def recommend_iwc_workflows(intent: str, limit: int = 5) -> GalaxyResult:
+    """
+    Semantic search for IWC workflows based on natural language description.
+
+    Use this when you have a general analysis goal and want to find the best
+    matching workflows. Uses BM25 ranking to search across names, descriptions,
+    readmes, tags, and tool names.
+
+    RECOMMENDED WORKFLOW:
+    1. Describe your analysis goal in natural language
+    2. Review ranked recommendations with match explanations
+    3. Get details for promising workflows: get_iwc_workflow_details(trs_id)
+    4. Import the best match: import_workflow_from_iwc(trs_id)
+
+    Args:
+        intent: Natural language description of your analysis goal.
+                Examples:
+                - "I have paired-end RNA-seq data and want differential expression"
+                - "Assemble a bacterial genome from nanopore reads"
+                - "Variant calling from whole exome sequencing data"
+                - "Quality control for Illumina sequencing data"
+        limit: Maximum number of recommendations to return (default: 5)
+
+    Returns:
+        GalaxyResult with ranked workflow recommendations. Each includes:
+        - All fields from search_iwc_workflows
+        - match_score: BM25 relevance score (higher is better)
+
+    Example:
+        >>> recommend_iwc_workflows("differential expression from RNA-seq", limit=3)
+        GalaxyResult(
+            data=[{
+                "trsID": "#workflow/github.com/iwc-workflows/rnaseq-pe/main",
+                "name": "RNA-Seq PE",
+                "description": "Paired-end RNA-seq differential expression",
+                "match_score": 12.5,
+                "readme_summary": "...",
+                "step_count": 15,
+                ...
+            }],
+            count=3,
+            message="Found 3 workflows matching your intent"
+        )
+
+    NEXT STEPS:
+    - Get full details: get_iwc_workflow_details(trs_id)
+    - Import top choice: import_workflow_from_iwc(trs_id)
+
+    TIP: Be specific in your intent. "RNA-seq" will match many workflows,
+    but "differential expression RNA-seq human samples" will rank better.
+    """
+    try:
+        from rank_bm25 import BM25Okapi
+
+        # Get the full manifest
+        iwc_result = get_iwc_workflows.fn()
+        manifest = iwc_result.data
+
+        if not manifest:
+            return GalaxyResult(
+                data=[],
+                success=True,
+                message="No workflows in IWC manifest",
+                count=0,
+            )
+
+        # Build corpus from workflow text
+        corpus: list[list[str]] = []
+        for workflow in manifest:
+            definition = workflow.get("definition", {})
+            steps = definition.get("steps", {})
+
+            # Combine all searchable text
+            text_parts = [
+                definition.get("name", ""),
+                definition.get("name", ""),  # Weight name higher by including twice
+                definition.get("annotation", ""),
+                " ".join(definition.get("tags", [])),
+                workflow.get("readme", ""),
+                " ".join(_extract_tool_names_from_steps(steps)),
+            ]
+            doc_text = " ".join(text_parts)
+            corpus.append(_tokenize_for_search(doc_text))
+
+        # Build BM25 index
+        bm25 = BM25Okapi(corpus)
+
+        # Tokenize query and get scores
+        query_tokens = _tokenize_for_search(intent)
+        if not query_tokens:
+            return GalaxyResult(
+                data=[],
+                success=True,
+                message="No searchable terms in query",
+                count=0,
+            )
+
+        scores = bm25.get_scores(query_tokens)
+
+        # Pair workflows with scores and filter zero scores
+        scored_workflows = [
+            (workflow, score)
+            for workflow, score in zip(manifest, scores, strict=False)
+            if score > 0
+        ]
+
+        # Sort by score descending and take top N
+        scored_workflows.sort(key=lambda x: x[1], reverse=True)
+        top_results = scored_workflows[:limit]
+
+        # Enrich results
+        results = []
+        for workflow, score in top_results:
+            enriched = _enrich_workflow_result(workflow)
+            enriched["match_score"] = round(score, 2)
+            results.append(enriched)
+
+        return GalaxyResult(
+            data=results,
+            success=True,
+            message=f"Found {len(results)} workflows matching your intent",
+            count=len(results),
+        )
+    except Exception as e:
+        raise ValueError(f"Failed to recommend IWC workflows: {str(e)}") from e
+
+
 @mcp.tool()
 def import_workflow_from_iwc(trs_id: str) -> GalaxyResult:
     """
