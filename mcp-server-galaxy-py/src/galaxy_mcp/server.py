@@ -380,11 +380,37 @@ def search_tools_by_name(query: str) -> GalaxyResult:
     """
     Search Galaxy tools whose name, ID, or description contains the given query (substring match).
 
+    RECOMMENDED WORKFLOW:
+    1. Use this function to find tools by name/keyword
+    2. Review the returned tool IDs and names
+    3. Call get_tool_details(tool_id) for full input parameters
+    4. Call run_tool() with the correct inputs
+
     Args:
-        query: Search query (tool name, ID, or description to filter on)
+        query: Search query - matches against tool name, ID, or description.
+               Examples: "fastq", "alignment", "filter", "bwa"
 
     Returns:
-        GalaxyResult with matching tools in data field
+        GalaxyResult with:
+        - data: List of matching tools with id, name, version, description
+        - count: Number of tools found
+        - message: Summary of results
+
+    Example:
+        >>> search_tools_by_name("fastq")
+        GalaxyResult(
+            data=[
+                {"id": "fastqc", "name": "FastQC", "version": "0.73+galaxy0", ...},
+                {"id": "fastq_filter", "name": "Filter FASTQ", ...}
+            ],
+            count=15,
+            message="Found 15 tools matching 'fastq'"
+        )
+
+    NEXT STEPS:
+    - To see full tool parameters: get_tool_details(tool_id)
+    - To see example inputs: get_tool_run_examples(tool_id)
+    - To run a tool: run_tool(history_id, tool_id, inputs)
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
@@ -417,14 +443,48 @@ def search_tools_by_name(query: str) -> GalaxyResult:
 @mcp.tool()
 def get_tool_details(tool_id: str, io_details: bool = False) -> GalaxyResult:
     """
-    Get detailed information about a specific tool
+    Get detailed information about a specific tool including its input parameters.
+
+    RECOMMENDED WORKFLOW:
+    1. First find tools using search_tools_by_name() or get_tool_panel()
+    2. Call this function with io_details=True to see all input parameters
+    3. Use the inputs schema to construct the inputs dict for run_tool()
 
     Args:
-        tool_id: ID of the tool
-        io_details: Whether to include input/output details
+        tool_id: Galaxy tool identifier. Common formats:
+                 - Simple: "fastqc", "bwa", "upload1"
+                 - Toolshed: "toolshed.g2.bx.psu.edu/repos/devteam/fastqc/fastqc/0.73"
+        io_details: Set True to include detailed input/output parameter schemas.
+                    Essential for understanding how to call run_tool().
 
     Returns:
-        GalaxyResult with tool details in data field
+        GalaxyResult with tool info including:
+        - id, name, version, description
+        - inputs: Parameter definitions (when io_details=True)
+        - outputs: Output file definitions
+
+    Example:
+        >>> get_tool_details("fastqc", io_details=True)
+        GalaxyResult(
+            data={
+                "id": "fastqc",
+                "name": "FastQC",
+                "version": "0.73+galaxy0",
+                "inputs": [
+                    {"name": "input_file", "type": "data", "format": ["fastq"]},
+                    {"name": "contaminants", "type": "data", "optional": True}
+                ],
+                ...
+            }
+        )
+
+    NEXT STEPS:
+    - To see example tool calls: get_tool_run_examples(tool_id)
+    - To run the tool: run_tool(history_id, tool_id, inputs)
+
+    ERROR HANDLING:
+    - Tool not found: Check tool_id spelling or use search_tools_by_name()
+    - Permission denied: Tool may be restricted to certain users
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
@@ -515,17 +575,64 @@ def get_tool_citations(tool_id: str) -> GalaxyResult:
 @mcp.tool()
 def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyResult:
     """
-    Run a tool in Galaxy
+    Run a Galaxy tool on datasets in a history.
+
+    RECOMMENDED WORKFLOW:
+    1. Create or select a history: create_history() or get_histories()
+    2. Upload data: upload_file() or upload_file_from_url()
+    3. Get tool parameters: get_tool_details(tool_id, io_details=True)
+    4. Call this function with properly formatted inputs
+    5. Monitor job: get_job_details() or check history contents
 
     Args:
-        history_id: Galaxy history ID where to run the tool - a hexadecimal hash string
-                   (e.g., '1cd8e2f6b131e5aa', typically 16 characters)
-        tool_id: Galaxy tool identifier - typically in format 'toolshed.g2.bx.psu.edu/repos/...'
-                (e.g., 'Cut1' for simple tools or full toolshed URLs for complex tools)
-        inputs: Dictionary of tool input parameters and dataset references matching tool schema
+        history_id: Galaxy history ID (16-char hex string like '1cd8e2f6b131e5aa').
+                    Get from create_history() or get_histories().
+        tool_id: Tool identifier. Common formats:
+                 - Simple built-in: "cat1", "Cut1", "upload1"
+                 - Toolshed: "toolshed.g2.bx.psu.edu/repos/iuc/fastqc/fastqc/0.73"
+        inputs: Tool input parameters. Dataset inputs use this format:
+                {"input_name": {"src": "hda", "id": "dataset_id"}}
 
     Returns:
-        GalaxyResult with tool execution info including job IDs and output dataset IDs
+        GalaxyResult with:
+        - data.jobs: List of job objects with state and IDs
+        - data.outputs: List of output datasets created
+        - data.output_collections: List of output collections (if any)
+
+    Example - Running FastQC:
+        >>> run_tool(
+        ...     history_id="abc123def456",
+        ...     tool_id="fastqc",
+        ...     inputs={"input_file": {"src": "hda", "id": "dataset123"}}
+        ... )
+        GalaxyResult(
+            data={
+                "jobs": [{"id": "job789", "state": "queued"}],
+                "outputs": [{"id": "output456", "name": "FastQC on data 1"}]
+            },
+            message="Started tool 'fastqc' in history 'abc123def456'"
+        )
+
+    Example - Tool with multiple inputs:
+        >>> run_tool(
+        ...     history_id="abc123",
+        ...     tool_id="bwa_mem",
+        ...     inputs={
+        ...         "fastq_input|fastq_input1": {"src": "hda", "id": "reads1"},
+        ...         "reference_source|ref_file": {"src": "hda", "id": "genome"},
+        ...         "analysis_type|analysis_type_selector": "simple"
+        ...     }
+        ... )
+
+    NEXT STEPS:
+    - Check job status: get_job_details(output_dataset_id)
+    - View outputs: get_history_contents(history_id)
+    - Download results: download_dataset(output_id)
+
+    ERROR HANDLING:
+    - "Tool not found": Verify tool_id with search_tools_by_name()
+    - "Invalid input": Check input format with get_tool_details(io_details=True)
+    - "Dataset not found": Verify dataset_id exists in the history
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
@@ -572,13 +679,41 @@ def get_tool_panel() -> GalaxyResult:
 @mcp.tool()
 def create_history(history_name: str) -> GalaxyResult:
     """
-    Create a new history in Galaxy
+    Create a new history to organize datasets and analyses.
+
+    A history is the primary workspace in Galaxy. Create a new history for each
+    distinct project or analysis to keep your work organized.
+
+    RECOMMENDED WORKFLOW:
+    1. Create a history with a descriptive name
+    2. Upload your input data: upload_file() or upload_file_from_url()
+    3. Run tools on the data: run_tool()
+    4. View results: get_history_contents()
 
     Args:
-        history_name: Human-readable name for the new history (e.g., 'RNA-seq Analysis')
+        history_name: Descriptive name for the history.
+                      Best practices:
+                      - Include project/sample name: "RNA-seq Sample A"
+                      - Include date if relevant: "ChIP-seq 2024-01"
+                      - Be specific: "BWA alignment of patient_001"
 
     Returns:
-        GalaxyResult with created history details including the new history ID hash in data field
+        GalaxyResult with:
+        - data.id: The history ID (use this for subsequent operations)
+        - data.name: The history name
+        - data.create_time: When the history was created
+
+    Example:
+        >>> create_history("RNA-seq Analysis - Sample A")
+        GalaxyResult(
+            data={"id": "abc123def456", "name": "RNA-seq Analysis - Sample A", ...},
+            message="Created history 'RNA-seq Analysis - Sample A'"
+        )
+
+    NEXT STEPS:
+    - Upload data: upload_file(file_path, history_id)
+    - Upload from URL: upload_file_from_url(url, history_id)
+    - Run a tool: run_tool(history_id, tool_id, inputs)
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
@@ -783,15 +918,51 @@ def get_histories(
     limit: int | None = None, offset: int = 0, name: str | None = None
 ) -> GalaxyResult:
     """
-    Get paginated list of user histories
+    Get list of user's histories with optional pagination and filtering.
+
+    Histories are Galaxy's primary organizational unit - each contains datasets,
+    collections, and records of analyses. Most operations require a history_id.
+
+    RECOMMENDED WORKFLOW:
+    1. Call get_histories() to see existing histories
+    2. Either use an existing history_id or create_history() for new work
+    3. Upload data or run tools in the selected history
 
     Args:
-        limit: Maximum number of histories to return (default: None for all histories)
-        offset: Number of histories to skip from the beginning (default: 0, for pagination)
-        name: Filter histories by name pattern (optional, case-sensitive partial match)
+        limit: Maximum histories to return. Default None returns all.
+               Use with offset for pagination on large history lists.
+        offset: Skip this many histories (for pagination). Default 0.
+        name: Filter by name pattern (case-sensitive partial match).
+              Example: name="RNA" matches "RNA-seq analysis", "my RNA data"
 
     Returns:
-        GalaxyResult with list of histories in data field and pagination metadata
+        GalaxyResult with:
+        - data: List of history objects with id, name, update_time, etc.
+        - count: Number of histories returned
+        - pagination: PaginationInfo when limit is specified
+
+    Example - Get all histories:
+        >>> get_histories()
+        GalaxyResult(
+            data=[
+                {"id": "abc123", "name": "RNA-seq Analysis", "update_time": "2024-01-15"},
+                {"id": "def456", "name": "ChIP-seq Data", "update_time": "2024-01-10"}
+            ],
+            count=2
+        )
+
+    Example - Paginated with filter:
+        >>> get_histories(limit=10, offset=0, name="RNA")
+        GalaxyResult(
+            data=[...],
+            pagination=PaginationInfo(total_items=25, has_next=True, next_offset=10)
+        )
+
+    NEXT STEPS:
+    - View history contents: get_history_contents(history_id)
+    - Get history details: get_history_details(history_id)
+    - Create new history: create_history("Analysis Name")
+    - Upload data: upload_file(file_path, history_id)
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
@@ -1462,15 +1633,50 @@ def download_dataset(
 @mcp.tool()
 def upload_file(path: str, history_id: str | None = None) -> GalaxyResult:
     """
-    Upload a local file to Galaxy
+    Upload a local file to Galaxy for analysis.
+
+    Galaxy automatically detects the file type (FASTQ, BAM, BED, etc.) and
+    indexes the file appropriately. Large files are uploaded efficiently.
+
+    RECOMMENDED WORKFLOW:
+    1. Create a history: create_history("My Analysis")
+    2. Upload your data files with this function
+    3. Wait for upload to complete (check dataset state)
+    4. Run tools on the uploaded data: run_tool()
 
     Args:
-        path: Local filesystem path to the file to upload (e.g., '/path/to/data.csv')
-        history_id: Galaxy history ID where to upload the file - optional, uses current history
-                   (e.g., '1cd8e2f6b131e5aa', typically 16 characters)
+        path: Local file path to upload. Supports common bioinformatics formats:
+              - Sequences: .fastq, .fasta, .fa, .fq, .fastq.gz
+              - Alignments: .bam, .sam, .cram
+              - Annotations: .bed, .gff, .gtf, .vcf
+              - Tabular: .csv, .tsv, .txt
+        history_id: Target history ID. If None, uses the most recent history.
+                    Recommend always specifying for clarity.
 
     Returns:
-        GalaxyResult with upload status and information about the created dataset(s) in data field
+        GalaxyResult with:
+        - data.outputs: List of created datasets with IDs
+        - data.jobs: Upload job information
+
+    Example:
+        >>> upload_file("/data/reads.fastq.gz", "abc123def456")
+        GalaxyResult(
+            data={
+                "outputs": [{"id": "dataset789", "name": "reads.fastq.gz", "state": "queued"}],
+                "jobs": [{"id": "job123", "state": "ok"}]
+            },
+            message="Uploaded file '/data/reads.fastq.gz'"
+        )
+
+    NEXT STEPS:
+    - Wait for upload: Dataset state changes from "queued" -> "running" -> "ok"
+    - Check status: get_history_contents(history_id) or get_dataset_details(dataset_id)
+    - Run analysis: run_tool(history_id, tool_id, {"input": {"src": "hda", "id": dataset_id}})
+
+    ERROR HANDLING:
+    - "File not found": Check path exists and is readable
+    - "Permission denied": Ensure file has read permissions
+    - "Quota exceeded": User's Galaxy storage quota may be full
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
