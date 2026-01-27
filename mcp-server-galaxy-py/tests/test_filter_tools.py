@@ -60,12 +60,11 @@ class TestSearchTools:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = search_tools_by_keywords_fn(["csv"])
 
-            assert "recommended_tools" in result
-            assert "count" in result
-            assert result["count"] >= 1
+            assert result.success is True
+            assert result.count >= 1
 
             # Check that CSV tool is in results
-            tool_names = [tool["name"] for tool in result["recommended_tools"]]
+            tool_names = [tool["name"] for tool in result.data]
             assert "CSV Parser" in tool_names
 
     def test_search_tool_by_keywords_multiple_keywords(self, mock_galaxy_instance, mock_tool_panel):
@@ -78,12 +77,11 @@ class TestSearchTools:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = search_tools_by_keywords_fn(["csv", "tabular"])
 
-            assert "recommended_tools" in result
-            assert "count" in result
-            assert result["count"] >= 2
+            assert result.success is True
+            assert result.count >= 2
 
             # Check that both CSV and tabular tools are in results
-            tool_names = [tool["name"] for tool in result["recommended_tools"]]
+            tool_names = [tool["name"] for tool in result.data]
             assert "CSV Parser" in tool_names
             assert "Tabular Processor" in tool_names
 
@@ -102,8 +100,9 @@ class TestSearchTools:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = search_tools_by_keywords_fn(["csv"])
 
+            assert result.success is True
             # Generic tool should be included due to csv extension
-            tool_ids = [tool["id"] for tool in result["recommended_tools"]]
+            tool_ids = [tool["id"] for tool in result.data]
             assert "csv_tool" in tool_ids  # matches by name
             assert "generic_tool" in tool_ids  # matches by extension
 
@@ -138,8 +137,9 @@ class TestSearchTools:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = search_tools_by_keywords_fn(["csv"])
 
+            assert result.success is True
             # Only real_tool should be in results
-            tool_ids = [tool["id"] for tool in result["recommended_tools"]]
+            tool_ids = [tool["id"] for tool in result.data]
             assert "section_label" not in tool_ids
             assert "real_tool" in tool_ids
 
@@ -165,7 +165,8 @@ class TestSearchTools:
             # Should not raise, just skip the failing tool
             result = search_tools_by_keywords_fn(["csv"])
 
+            assert result.success is True
             # Only tool1 should be in results
-            tool_ids = [tool["id"] for tool in result["recommended_tools"]]
+            tool_ids = [tool["id"] for tool in result.data]
             assert "tool1" in tool_ids
             assert "tool2" not in tool_ids

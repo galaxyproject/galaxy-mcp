@@ -82,11 +82,12 @@ class TestConnection:
                 ) as mock_constructor:
                     result = connect_fn()
 
-        assert result["connected"] is True
-        assert result["auth"] == "oauth"
-        assert result["url"] == credentials.galaxy_url
+        assert result.success is True
+        assert result.data["connected"] is True
+        assert result.data["auth"] == "oauth"
+        assert result.data["url"] == credentials.galaxy_url
         assert (
-            result["user"]["username"]
+            result.data["user"]["username"]
             == mock_galaxy_instance.users.get_current_user.return_value["username"]
         )
         mock_constructor.assert_called_once_with(
@@ -118,14 +119,15 @@ class TestConnection:
             result = get_server_info_fn()
 
             # Verify the structure and content
-            assert "url" in result
-            assert "version" in result
-            assert "config" in result
+            assert result.success is True
+            assert "url" in result.data
+            assert "version" in result.data
+            assert "config" in result.data
 
-            assert result["url"] == "https://galaxy.test/"
-            assert result["version"] == mock_version
-            assert result["config"]["brand"] == "Test Galaxy"
-            assert result["config"]["allow_user_creation"] is True
+            assert result.data["url"] == "https://galaxy.test/"
+            assert result.data["version"] == mock_version
+            assert result.data["config"]["brand"] == "Test Galaxy"
+            assert result.data["config"]["allow_user_creation"] is True
 
             # Verify API calls were made
             mock_galaxy_instance.config.get_config.assert_called_once()

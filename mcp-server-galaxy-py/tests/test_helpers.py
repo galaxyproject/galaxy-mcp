@@ -2,6 +2,8 @@
 
 # Import all the wrapped functions from server
 from galaxy_mcp.server import (
+    GalaxyResult,
+    PaginationInfo,
     cancel_workflow_invocation,
     connect,
     create_history,
@@ -78,6 +80,8 @@ upload_file_from_url_fn = get_function(upload_file_from_url)
 
 # Re-export non-wrapped items
 __all__ = [
+    "GalaxyResult",
+    "PaginationInfo",
     "cancel_workflow_invocation_fn",
     "connect_fn",
     "create_history_fn",

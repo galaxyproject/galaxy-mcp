@@ -44,9 +44,10 @@ class TestJobOperations:
 
         result = get_job_details_fn(dataset_id, history_id=history_id)
 
-        assert result["job"]["id"] == job_id
-        assert result["dataset_id"] == dataset_id
-        assert result["job_id"] == job_id
+        assert result.success is True
+        assert result.data["job"]["id"] == job_id
+        assert result.data["dataset_id"] == dataset_id
+        assert result.data["job_id"] == job_id
 
     @responses.activate
     def test_get_job_details_fallback_to_dataset_details(self):
@@ -78,9 +79,10 @@ class TestJobOperations:
 
         result = get_job_details_fn(dataset_id)
 
-        assert result["job"]["id"] == job_id
-        assert result["dataset_id"] == dataset_id
-        assert result["job_id"] == job_id
+        assert result.success is True
+        assert result.data["job"]["id"] == job_id
+        assert result.data["dataset_id"] == dataset_id
+        assert result.data["job_id"] == job_id
 
     def test_get_job_details_no_job_found(self):
         """Test error when no job information is found"""

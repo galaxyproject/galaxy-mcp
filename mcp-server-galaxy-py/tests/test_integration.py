@@ -28,8 +28,9 @@ class TestIntegration:
                 "name": "Analysis History",
             }
 
-            history = create_history_fn("Analysis History")
-            assert history["id"] == "new_history_1"
+            history_result = create_history_fn("Analysis History")
+            assert history_result.success is True
+            assert history_result.data["id"] == "new_history_1"
 
             # 2. Upload a file
             mock_galaxy_instance.tools.upload_file.return_value = {
@@ -37,8 +38,9 @@ class TestIntegration:
             }
 
             with patch("os.path.exists", return_value=True):
-                dataset = upload_file_fn("/path/to/input.fasta", history["id"])
-                assert dataset["outputs"][0]["id"] == "uploaded_dataset_1"
+                dataset_result = upload_file_fn("/path/to/input.fasta", history_result.data["id"])
+                assert dataset_result.success is True
+                assert dataset_result.data["outputs"][0]["id"] == "uploaded_dataset_1"
 
             # 3. Run a tool on the uploaded file
 
@@ -48,11 +50,15 @@ class TestIntegration:
             }
 
             tool_result = run_tool_fn(
-                history["id"],
+                history_result.data["id"],
                 "bwa",
-                {"input": {"src": "hda", "id": dataset["outputs"][0]["id"]}, "reference": "hg38"},
+                {
+                    "input": {"src": "hda", "id": dataset_result.data["outputs"][0]["id"]},
+                    "reference": "hg38",
+                },
             )
-            assert tool_result["outputs"][0]["id"] == "output_dataset_1"
+            assert tool_result.success is True
+            assert tool_result.data["outputs"][0]["id"] == "output_dataset_1"
 
             # 4. Download functionality not implemented yet
             # Future: Implement dataset download functionality
@@ -90,7 +96,8 @@ class TestIntegration:
                 }
 
                 result = import_workflow_from_iwc_fn("workflows/rnaseq-pe")
-                assert result["imported_workflow"]["id"] == "imported_workflow_1"
+                assert result.success is True
+                assert result.data["id"] == "imported_workflow_1"
 
             # 2. Prepare input datasets
 
@@ -98,8 +105,9 @@ class TestIntegration:
                 {"id": "history_1", "name": "RNA-seq Data"}
             ]
 
-            histories = list_history_ids_fn()
-            histories[0]["id"]
+            histories_result = list_history_ids_fn()
+            assert histories_result.success is True
+            histories_result.data[0]["id"]
 
             # 3. Workflow execution not directly available in current MCP implementation
             # Future: Add workflow invocation functionality
