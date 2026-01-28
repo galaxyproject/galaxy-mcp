@@ -172,7 +172,6 @@ class GalaxyOAuthProvider(OAuthProvider):
 
         super_init(**super_kwargs)
 
-        self.base_url = normalized_base_url
         self.required_scopes = required_scopes or ["galaxy:full"]
         self._galaxy_url = galaxy_url if galaxy_url.endswith("/") else f"{galaxy_url}/"
         self._transactions: dict[str, AuthorizationTransaction] = {}
@@ -194,6 +193,8 @@ class GalaxyOAuthProvider(OAuthProvider):
 
     @override
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
+        if client_info.client_id is None:
+            raise ValueError("client_id is required for registration")
         self._clients[client_info.client_id] = client_info
         await self._persist_client_registry()
 
@@ -201,6 +202,8 @@ class GalaxyOAuthProvider(OAuthProvider):
     async def authorize(
         self, client: OAuthClientInformationFull, params: AuthorizationParams
     ) -> str:
+        if client.client_id is None:
+            raise ValueError("client_id is required for authorization")
         txn_id = secrets.token_urlsafe(32)
         transaction = AuthorizationTransaction(
             client_id=client.client_id,
@@ -311,7 +314,7 @@ class GalaxyOAuthProvider(OAuthProvider):
         )
 
     @override
-    async def load_access_token(self, token: str) -> AccessToken | None:
+    async def load_access_token(self, token: str) -> AccessToken | None:  # type: ignore[override]
         try:
             payload = self._decrypt_payload(token, expected_type="access")
         except InvalidToken:
@@ -382,9 +385,7 @@ class GalaxyOAuthProvider(OAuthProvider):
         """Return OAuth protected resource metadata."""
         return JSONResponse(self.get_resource_metadata())
 
-    def get_routes(
-        self, mcp_path: str | None = None, mcp_endpoint: Any | None = None
-    ) -> list[Route]:
+    def get_routes(self, mcp_path: str | None = None) -> list[Route]:
         """
         Return the Starlette routes that expose the OAuth surface.
 
@@ -394,7 +395,7 @@ class GalaxyOAuthProvider(OAuthProvider):
         then install our own. This defensive dedupe also shields us from future FastMCP routing
         changes that might otherwise create duplicate routes and confusing behaviour.
         """
-        routes = super().get_routes(mcp_path, mcp_endpoint)  # type: ignore[misc]
+        routes = super().get_routes(mcp_path)
 
         base_path = self._normalize_base_path(
             urlparse(str(self.base_url)).path if self.base_url else None
@@ -445,7 +446,8 @@ class GalaxyOAuthProvider(OAuthProvider):
                 except Exception as exc:  # pragma: no cover - defensive
                     logger.warning("Failed to load client entry from registry: %s", exc)
                     continue
-                self._clients[client.client_id] = client
+                if client.client_id is not None:
+                    self._clients[client.client_id] = client
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning("Failed to load client registry from %s: %s", path, exc)
 
@@ -456,7 +458,7 @@ class GalaxyOAuthProvider(OAuthProvider):
         path = self._client_registry_path
         clients_data = [
             client.model_dump(mode="json")
-            for client in sorted(self._clients.values(), key=lambda c: c.client_id)
+            for client in sorted(self._clients.values(), key=lambda c: c.client_id or "")
         ]
 
         def _write() -> None:
@@ -537,7 +539,7 @@ class GalaxyOAuthProvider(OAuthProvider):
 
         return OAuthToken(
             access_token=access_token,
-            token_type="bearer",
+            token_type="Bearer",
             expires_in=ACCESS_TOKEN_TTL_SECONDS,
             refresh_token=refresh_token,
             scope=" ".join(scopes),
