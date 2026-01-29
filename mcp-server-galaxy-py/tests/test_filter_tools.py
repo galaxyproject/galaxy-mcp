@@ -10,13 +10,13 @@ from .test_helpers import galaxy_state, search_tools_by_keywords_fn
 class TestSearchTools:
     """Test suite for search_tools_by_keywords function"""
 
-    @pytest.fixture()
+    @pytest.fixture
     def mock_galaxy_instance(self):
         """Create a mock Galaxy instance"""
         mock_gi = MagicMock()
         return mock_gi
 
-    @pytest.fixture()
+    @pytest.fixture
     def mock_tool_panel(self):
         """Create a mock tool panel structure"""
         return [

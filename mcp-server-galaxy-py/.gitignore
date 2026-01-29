@@ -45,6 +45,7 @@ Thumbs.db
 
 # Project specific
 .env
+.mcp.json
 *.log
 
 # Build artifacts

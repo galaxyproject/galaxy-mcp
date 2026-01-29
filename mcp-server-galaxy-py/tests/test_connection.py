@@ -5,6 +5,7 @@ Test Galaxy connection and authentication
 from unittest.mock import patch
 
 import pytest
+
 from galaxy_mcp.auth import GalaxyCredentials
 
 from .test_helpers import connect_fn, ensure_connected, galaxy_state, get_server_info_fn
