@@ -3,11 +3,12 @@
 from unittest.mock import patch
 
 import pytest
-from galaxy_mcp.auth import GalaxyCredentials
-from galaxy_mcp.server import _OAuthPublicRoutes, ensure_connected
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse, PlainTextResponse
 from starlette.testclient import TestClient
+
+from galaxy_mcp.auth import GalaxyCredentials
+from galaxy_mcp.server import _OAuthPublicRoutes, ensure_connected
 
 
 @pytest.mark.usefixtures("_test_env")
