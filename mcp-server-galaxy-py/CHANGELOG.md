@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-01-28
+
+### Added
+
+- `recommend_iwc_workflows` MCP tool for semantic search of IWC workflows using BM25 ranking
+- `get_iwc_workflow_details` MCP tool for comprehensive workflow info before importing
+- `GalaxyResult` and `PaginationInfo` structured response models for consistent API responses
+- Browser-based OAuth authentication for Galaxy instances (PR #18)
+- Dataset collection support with robust collection detection (PR #26)
+- Real integration tests against live Galaxy instances
+
+### Changed
+
+- Enriched `search_iwc_workflows` with additional metadata (readme_summary, step_count, authors, categories, tools_used)
+- Improved tool search to support substring matching in name, ID, and description (PR #27)
+- Added `rank-bm25` dependency for semantic workflow search
+
 ## [1.2.0] - 2025-12-19
 
 ### Added
