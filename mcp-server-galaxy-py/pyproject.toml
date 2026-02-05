@@ -33,6 +33,7 @@ dependencies = [
     "requests>=2.32.3",
     "python-dotenv>=1.0.0",
     "rank-bm25>=0.2.2",
+    "tomli>=2.0.0;python_version<'3.11'",
 ]
 
 [project.urls]
@@ -42,6 +43,7 @@ Issues = "https://github.com/galaxyproject/galaxy-mcp/issues"
 
 [project.scripts]
 galaxy-mcp = "galaxy_mcp.__main__:run"
+gxy = "galaxy_mcp.cli.main:app"
 
 [project.optional-dependencies]
 dev = [
