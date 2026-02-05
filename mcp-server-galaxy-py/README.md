@@ -10,6 +10,7 @@ This is the Python implementation of the Galaxy MCP server, providing a Model Co
 - Optional OAuth login flow for HTTP deployments
 - Interactive Workflow Composer (IWC) integration
 - FastMCP2 server with remote deployment support
+- `gxy` CLI for direct terminal access to Galaxy
 - Type-annotated Python codebase
 
 ## Requirements
@@ -102,29 +103,92 @@ uv run galaxy-mcp --transport streamable-http --host 0.0.0.0 --port 8000
 
 See [USAGE_EXAMPLES.md](USAGE_EXAMPLES.md) for detailed tool usage patterns.
 
+### `gxy` CLI
+
+The package also installs `gxy`, a Typer-based CLI that wraps all MCP tools for direct terminal use.
+
+```bash
+# Search for tools
+gxy tools search fastqc
+
+# Pretty-printed output
+gxy --pretty history list --limit 5
+
+# Discover workflows with semantic search
+gxy iwc recommend "differential expression from RNA-seq" --limit 3
+
+# Pipe JSON to jq
+gxy history ids | jq -r '.data[].id'
+```
+
+Global options:
+
+| Option | Description |
+|--------|-------------|
+| `--url`, `-u` | Galaxy server URL (overrides `GALAXY_URL`) |
+| `--api-key`, `-k` | Galaxy API key (overrides `GALAXY_API_KEY`) |
+| `--profile`, `-p` | Named profile from `~/.galaxy-mcp/config.toml` or planemo |
+| `--pretty` | Pretty-print JSON output |
+
+Command groups: `tools`, `history`, `dataset`, `collection`, `workflow`, `iwc`, `server`, `user`. Run `gxy <group> --help` for details.
+
+#### Configuration
+
+`gxy` reads credentials from (in priority order):
+
+1. CLI options (`--url`, `--api-key`)
+2. Environment variables (`GALAXY_URL`, `GALAXY_API_KEY`)
+3. Config file `~/.galaxy-mcp/config.toml`
+4. Planemo profiles (`~/.planemo/profiles/`)
+
+Config file format:
+
+```toml
+[default]
+url = "https://usegalaxy.org/"
+api_key = "your-api-key"
+
+[usegalaxy-eu]
+url = "https://usegalaxy.eu/"
+api_key = "eu-api-key"
+```
+
+Existing planemo external Galaxy profiles work automatically -- just reference them by name with `--profile`.
+
 ## Available MCP Tools
 
 The Python implementation provides the following MCP tools:
 
 - `connect`: Establish connection to a Galaxy instance
-- `search_tools_by_name`: Find Galaxy tools by name
-- `get_tool_details`: Retrieve detailed tool information
-- `run_tool`: Execute a Galaxy tool with parameters
-- `get_tool_panel`: Retrieve the Galaxy tool panel structure
-- `get_tool_run_examples`: Retrieve XML-defined test lessons that show how to run a tool
+- `get_server_info`: Retrieve server version and configuration
 - `get_user`: Get current user information
+- `search_tools_by_name`: Find Galaxy tools by name, ID, or description
+- `search_tools_by_keywords`: Find tools by multiple keywords including input formats
+- `get_tool_details`: Retrieve detailed tool information and parameters
+- `get_tool_run_examples`: Retrieve XML-defined test cases for a tool
+- `get_tool_citations`: Get citation information for a tool
+- `get_tool_panel`: Retrieve the Galaxy tool panel structure
+- `run_tool`: Execute a Galaxy tool with parameters
 - `get_histories`: List available Galaxy histories
 - `list_history_ids`: Get simplified list of history IDs and names
+- `create_history`: Create a new history
 - `get_history_details`: Get detailed information about a specific history
+- `get_history_contents`: Get paginated contents of a history
+- `get_dataset_details`: Get dataset metadata and content preview
+- `download_dataset`: Download a dataset to local filesystem or memory
 - `upload_file`: Upload local files to Galaxy
 - `upload_file_from_url`: Upload files from URLs to Galaxy
+- `get_job_details`: Get job information for a dataset
+- `get_collection_details`: Get dataset collection metadata and elements
 - `list_workflows`: List available workflows in Galaxy instance
 - `get_workflow_details`: Get detailed information about a specific workflow
 - `invoke_workflow`: Execute/run a workflow with specified inputs
 - `cancel_workflow_invocation`: Cancel a running workflow invocation
 - `get_invocations`: View workflow executions
-- `get_iwc_workflows`: Access Interactive Workflow Composer workflows
+- `get_iwc_workflows`: List all IWC workflows
 - `search_iwc_workflows`: Search IWC workflows by keywords
+- `get_iwc_workflow_details`: Get comprehensive details about an IWC workflow
+- `recommend_iwc_workflows`: Semantic search for IWC workflows using BM25 ranking
 - `import_workflow_from_iwc`: Import an IWC workflow to Galaxy
 
 ## Testing
@@ -160,6 +224,7 @@ Tests are organized by functionality:
 - `test_tool_operations.py` - Tool search and execution
 - `test_workflow_operations.py` - Workflow import and invocation
 - `test_integration.py` - End-to-end scenarios
+- `test_cli.py` - `gxy` CLI commands and configuration
 
 See [tests/README.md](tests/README.md) for more details on the testing strategy.
 
