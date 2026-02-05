@@ -4,6 +4,7 @@ import json
 from unittest.mock import Mock, patch
 
 import pytest
+from galaxy_mcp.cli.config import _load_planemo_profile, list_profiles, load_profile
 from galaxy_mcp.cli.main import app
 from galaxy_mcp.server import GalaxyResult
 from typer.testing import CliRunner
@@ -266,3 +267,189 @@ class TestErrorHandling:
         assert result.exit_code == 1
         output = json.loads(result.stderr)
         assert "Connection failed" in output["error"]
+
+
+class TestPlanemoProfiles:
+    """Test planemo profile reading."""
+
+    def test_load_planemo_profile(self, tmp_path):
+        """Test loading an external_galaxy planemo profile."""
+        profile_dir = tmp_path / "myserver"
+        profile_dir.mkdir()
+        options = {
+            "galaxy_url": "https://usegalaxy.eu/",
+            "galaxy_user_key": "eu-key-123",
+            "galaxy_admin_key": None,
+            "engine": "external_galaxy",
+        }
+        (profile_dir / "planemo_profile_options.json").write_text(json.dumps(options))
+
+        with patch("galaxy_mcp.cli.config.PLANEMO_PROFILES_DIR", tmp_path):
+            result = _load_planemo_profile("myserver")
+
+        assert result is not None
+        assert result.url == "https://usegalaxy.eu/"
+        assert result.api_key == "eu-key-123"
+
+    def test_load_planemo_profile_admin_key(self, tmp_path):
+        """Test that admin key is used when user key is absent."""
+        profile_dir = tmp_path / "admin"
+        profile_dir.mkdir()
+        options = {
+            "galaxy_url": "https://galaxy.example.com/",
+            "galaxy_admin_key": "admin-key-456",
+            "engine": "external_galaxy",
+        }
+        (profile_dir / "planemo_profile_options.json").write_text(json.dumps(options))
+
+        with patch("galaxy_mcp.cli.config.PLANEMO_PROFILES_DIR", tmp_path):
+            result = _load_planemo_profile("admin")
+
+        assert result is not None
+        assert result.api_key == "admin-key-456"
+
+    def test_load_planemo_profile_skips_local_engine(self, tmp_path):
+        """Test that local Galaxy profiles are ignored."""
+        profile_dir = tmp_path / "local"
+        profile_dir.mkdir()
+        options = {
+            "database_type": "sqlite",
+            "database_connection": "sqlite:///foo.sqlite",
+            "engine": "galaxy",
+        }
+        (profile_dir / "planemo_profile_options.json").write_text(json.dumps(options))
+
+        with patch("galaxy_mcp.cli.config.PLANEMO_PROFILES_DIR", tmp_path):
+            result = _load_planemo_profile("local")
+
+        assert result is None
+
+    def test_load_planemo_profile_missing(self, tmp_path):
+        """Test that a missing profile returns None."""
+        with patch("galaxy_mcp.cli.config.PLANEMO_PROFILES_DIR", tmp_path):
+            result = _load_planemo_profile("nonexistent")
+
+        assert result is None
+
+    def test_load_profile_falls_back_to_planemo(self, tmp_path, monkeypatch):
+        """Test that load_profile falls back to planemo when gxy config doesn't have the profile."""
+        monkeypatch.delenv("GALAXY_URL", raising=False)
+        monkeypatch.delenv("GALAXY_API_KEY", raising=False)
+
+        # Create a planemo profile
+        profile_dir = tmp_path / "planemo_profiles" / "usegalaxy-eu"
+        profile_dir.mkdir(parents=True)
+        options = {
+            "galaxy_url": "https://usegalaxy.eu/",
+            "galaxy_user_key": "eu-key",
+            "engine": "external_galaxy",
+        }
+        (profile_dir / "planemo_profile_options.json").write_text(json.dumps(options))
+
+        # Point to a nonexistent gxy config so it gets skipped
+        fake_config = tmp_path / "config.toml"
+
+        with (
+            patch("galaxy_mcp.cli.config.CONFIG_FILE", fake_config),
+            patch("galaxy_mcp.cli.config.PLANEMO_PROFILES_DIR", tmp_path / "planemo_profiles"),
+        ):
+            result = load_profile("usegalaxy-eu")
+
+        assert result.url == "https://usegalaxy.eu/"
+        assert result.api_key == "eu-key"
+
+    def test_gxy_profile_takes_precedence(self, tmp_path, monkeypatch):
+        """Test that gxy config profile wins over planemo profile of the same name."""
+        monkeypatch.delenv("GALAXY_URL", raising=False)
+        monkeypatch.delenv("GALAXY_API_KEY", raising=False)
+
+        # Create gxy config
+        config_file = tmp_path / "config.toml"
+        config_file.write_text(
+            '[myserver]\nurl = "https://gxy.example.com/"\napi_key = "gxy-key"\n'
+        )
+
+        # Create planemo profile with same name
+        profile_dir = tmp_path / "planemo_profiles" / "myserver"
+        profile_dir.mkdir(parents=True)
+        options = {
+            "galaxy_url": "https://planemo.example.com/",
+            "galaxy_user_key": "planemo-key",
+            "engine": "external_galaxy",
+        }
+        (profile_dir / "planemo_profile_options.json").write_text(json.dumps(options))
+
+        with (
+            patch("galaxy_mcp.cli.config.CONFIG_FILE", config_file),
+            patch("galaxy_mcp.cli.config.PLANEMO_PROFILES_DIR", tmp_path / "planemo_profiles"),
+        ):
+            result = load_profile("myserver")
+
+        assert result.url == "https://gxy.example.com/"
+        assert result.api_key == "gxy-key"
+
+    def test_list_profiles_includes_planemo(self, tmp_path, monkeypatch):
+        """Test that list_profiles includes planemo external profiles."""
+        # Create gxy config with one profile
+        config_file = tmp_path / "config.toml"
+        config_file.write_text('[default]\nurl = "https://usegalaxy.org/"\napi_key = "key"\n')
+
+        # Create planemo profile
+        profile_dir = tmp_path / "planemo_profiles" / "usegalaxy-eu"
+        profile_dir.mkdir(parents=True)
+        options = {
+            "galaxy_url": "https://usegalaxy.eu/",
+            "galaxy_user_key": "eu-key",
+            "engine": "external_galaxy",
+        }
+        (profile_dir / "planemo_profile_options.json").write_text(json.dumps(options))
+
+        # Create a local-engine planemo profile (should be excluded)
+        local_dir = tmp_path / "planemo_profiles" / "local-dev"
+        local_dir.mkdir(parents=True)
+        local_options = {"engine": "galaxy", "database_type": "sqlite"}
+        (local_dir / "planemo_profile_options.json").write_text(json.dumps(local_options))
+
+        with (
+            patch("galaxy_mcp.cli.config.CONFIG_FILE", config_file),
+            patch("galaxy_mcp.cli.config.PLANEMO_PROFILES_DIR", tmp_path / "planemo_profiles"),
+        ):
+            profiles = list_profiles()
+
+        assert "default" in profiles
+        assert "usegalaxy-eu" in profiles
+        assert "local-dev" not in profiles
+
+    def test_connect_with_planemo_profile(self, monkeypatch, tmp_path):
+        """Test that --profile can load a planemo profile for the connect command."""
+        monkeypatch.delenv("GALAXY_URL", raising=False)
+        monkeypatch.delenv("GALAXY_API_KEY", raising=False)
+
+        profile_dir = tmp_path / "planemo_profiles" / "test-server"
+        profile_dir.mkdir(parents=True)
+        options = {
+            "galaxy_url": "https://test.galaxy.org/",
+            "galaxy_user_key": "test-key",
+            "engine": "external_galaxy",
+        }
+        (profile_dir / "planemo_profile_options.json").write_text(json.dumps(options))
+
+        mock_result = GalaxyResult(
+            data={"connected": True, "user": {"username": "testuser"}},
+            success=True,
+            message="Connected",
+        )
+
+        fake_config = tmp_path / "config.toml"
+
+        with (
+            patch("galaxy_mcp.cli.config.CONFIG_FILE", fake_config),
+            patch("galaxy_mcp.cli.config.PLANEMO_PROFILES_DIR", tmp_path / "planemo_profiles"),
+            patch("galaxy_mcp.cli.main.connect_tool") as mock_connect,
+        ):
+            mock_connect.fn = Mock(return_value=mock_result)
+            result = runner.invoke(app, ["--profile", "test-server", "connect"])
+
+        assert result.exit_code == 0
+        output = json.loads(result.stdout)
+        assert output["data"]["connected"] is True
