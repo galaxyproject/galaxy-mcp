@@ -2,8 +2,8 @@
 
 import pytest
 import responses
-from galaxy_mcp.server import galaxy_state
 
+from galaxy_mcp.server import galaxy_state
 from tests.test_helpers import get_job_details_fn
 
 
