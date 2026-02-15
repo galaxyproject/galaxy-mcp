@@ -91,23 +91,18 @@ def ensure_connected():
     annotations={
         "readOnlyHint": False,
         "destructiveHint": False,
-        "idempotentHint": True,
         "openWorldHint": True
-    },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
         "properties": {
             "connected": {
                 "type": "boolean",
-                "description": "Whether the connection to Galaxy was successful."
+                "description": "True if API key was validated and current user retrieved."
             },
             "user": {
                 "type": "object",
-                "description": "User information returned by Galaxy if the connection is successful."
+                "description": "User information."
             }
         },
         "required": ["connected", "user"]
@@ -198,18 +193,18 @@ def connect(url: str | None = None, api_key: str | None = None) -> dict[str, Any
         "idempotentHint": True,
         "openWorldHint": True
     },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
-    },
     output_schema= {
         "type": "object",
         "properties": {
             "tools": {
                 "type": "array",
-                "description": "List of tools matching the query."
+                "items": {
+                    "type": "object",
+                },
+                "description": "Tools whose names match the query string, returned as an array."
             }
-        }
+        },
+        "required": ["tools"]
     }
 )
 def search_tools(query: str) -> dict[str, Any]:
@@ -226,7 +221,7 @@ def search_tools(query: str) -> dict[str, Any]:
 
     try:
         # The get_tools method is used with name filter parameter
-        tools = galaxy_state["gi"].tools._get(params={"q":"name:rnaseq OR name:assembly"})
+        tools = galaxy_state["gi"].tools.get_tools(name=query)
         return {"tools": tools}
     except Exception as e:
         raise ValueError(format_error("Search tools", e, {"query": query})) from e
@@ -234,7 +229,7 @@ def search_tools(query: str) -> dict[str, Any]:
 
 @mcp.tool(
     name="get_tool_details",
-    description="Retrieve detailed information about a specific Galaxy tool.",
+    description="Retrieve detailed information about a specific Galaxy tool identified by tool_id.",
     tags={"galaxy", "tools", "metadata", "details"},
     annotations={
         "readOnlyHint": True,
@@ -242,33 +237,87 @@ def search_tools(query: str) -> dict[str, Any]:
         "idempotentHint": True,
         "openWorldHint": True
     },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
-    },
     output_schema={
         "type": "object",
         "properties": {
-            "model_class": {"type": "string", "description": "Galaxy model class, typically 'Tool'."},
-            "id": {"type": "string", "description": "Unique Galaxy tool identifier."},
-            "name": {"type": "string", "description": "Human-readable name of the tool."},
-            "version": {"type": "string", "description": "Tool version string."},
-            "description": {"type": "string", "description": "Tool description."},
-            "labels": {"type": "array", "items": {"type": "string"}, "description": "List of labels attached to the tool."},
-            "icon": {"type": ["string", "null"], "description": "Icon URL or null."},
-            "edam_operations": {"type": "array", "items": {"type": "string"}, "description": "EDAM operation terms."},
-            "edam_topics": {"type": "array", "items": {"type": "string"}, "description": "EDAM topic terms."},
-            "hidden": {"type": "string", "description": "Hidden flag, if any."},
-            "is_workflow_compatible": {"type": "boolean", "description": "Whether the tool is workflow compatible."},
-            "xrefs": {"type": "array", "items": {"type": "object"}, "description": "External references associated with the tool."},
-            "tool_shed_repository": {"type": "object", "description": "Information about the tool shed repository."},
-            "inputs": {"type": "array", "items": {"type": "object"}, "description": "List of tool input parameters with metadata."},
-            "outputs": {"type": "array", "items": {"type": "object"}, "description": "List of tool output definitions with metadata."},
-            "panel_section_id": {"type": "string", "description": "Tool panel section ID."},
-            "panel_section_name": {"type": "string", "description": "Tool panel section name."},
-            "form_style": {"type": "string", "description": "Form style used for tool parameters."}
-        },
-        "required": ["model_class", "id", "name"]
+            "model_class": {
+                "type": "string",
+                "description": "Galaxy model class. Typically 'Tool'."
+            },
+            "id": {
+                "type": "string",
+                "description": "Unique Galaxy tool identifier."
+            },
+            "name": {
+                "type": "string",
+                "description": "Human-readable tool name"},
+            "version": {
+                "type": "string",
+                "description": "Version of the tool."
+            },
+            "description": {
+                "type": "string",
+                "description": "Tool description."
+            },
+            "icon": {
+                "type": ["string", "null"],
+                "description": "Icon URL, if available."
+            },
+            "labels": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "List of labels associated with the tool."
+            },
+            "edam_operations": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "List of EDAM operation terms."
+            },
+            "edam_topics": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "List of EDAM topic terms."
+            },
+            "hidden": {
+                "type": "string",
+                "description": "Hidden flag, if any."
+            },
+            "is_workflow_compatible": {
+                "type": "boolean",
+                "description": "Whether the tool is workflow compatible."
+            },
+            "xrefs": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": "External references associated with the tool."
+            },
+            "tool_shed_repository": {
+                "type": "object",
+                "description": "Tool shed repository information."
+            },
+            "inputs": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": "Tool input parameter definitions. Included when io_details is true."
+            },
+            "outputs": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": "Tool output definitions. Included when io_details is true."
+            },
+            "panel_section_id": {
+                "type": "string",
+                "description": "Tool panel section identifier."
+            },
+            "panel_section_name": {
+                "type": "string",
+                "description": "Tool panel section name."
+            },
+            "form_style": {
+                "type": "string",
+                "description": "Form style used for tool parameters."
+            }
+        }
     }
 )
 def get_tool_details(tool_id: str, io_details: bool = False) -> dict[str, Any]:
@@ -296,24 +345,20 @@ def get_tool_details(tool_id: str, io_details: bool = False) -> dict[str, Any]:
 
 @mcp.tool(
     name="get_tool_citations",
-    description="Retrieve citation metadata for a specific Galaxy tool, including description, DOI links, and authors.",
-    tags={"tools", "citations", "metadata"},
+    description="Retrieve citation information for a specific Galaxy tool, tool identified by tool ID.",
+    tags={"tools", "citations"},
     annotations={
         "readOnlyHint": True,
         "destructiveHint": False,
         "idempotentHint": True,
         "openWorldHint": True
     },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
-    },
     output_schema={
         "type": "object",
         "properties": {
             "tool_name": {
                 "type": "string",
-                "description": "The human-readable name of the tool."
+                "description": "Human-readable tool name."
             },
             "tool_version": {
                 "type": "string",
@@ -322,11 +367,11 @@ def get_tool_details(tool_id: str, io_details: bool = False) -> dict[str, Any]:
             "citations": {
                 "type": "array",
                 "items": {"type": "object"},
-                "description": "List of citation objects returned by Galaxy."
+                "description": "Citation metadata objects associated with the tool, returned as an array. May be empty."
             }
         },
         "required": ["tool_name", "tool_version", "citations"]
-    },
+    }
 )
 def get_tool_citations(tool_id: str) -> dict[str, Any]:
     """
@@ -358,17 +403,13 @@ def get_tool_citations(tool_id: str) -> dict[str, Any]:
 
 @mcp.tool(
     name="run_tool",
-    description="Execute a Galaxy tool within a specific history using the provided inputs.",
+    description="Execute a Galaxy tool in an existing history using a tool ID and structured input parameters.",
     tags={"tools", "execution", "jobs"},
     annotations={
         "readOnlyHint": False,
         "destructiveHint": False,
         "idempotentHint": False,
         "openWorldHint": True
-    },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
@@ -381,17 +422,17 @@ def get_tool_citations(tool_id: str) -> dict[str, Any]:
             "outputs": {
                 "type": "array",
                 "items": {"type": "object"},
-                "description": "Output dataset objects produced by the tool."
+                "description": "Output dataset objects produced by the tool execution."
             },
             "implicit_collections": {
                 "type": "array",
                 "items": {"type": "object"},
-                "description": "Implicit collection outputs (if any)."
+                "description": "Implicit collection outputs, if any."
             },
             "output_collections": {
                 "type": "array",
                 "items": {"type": "object"},
-                "description": "Explicit collection outputs (if any)."
+                "description": "Explicit collection outputs, if any."
             }
         }
     }
@@ -426,17 +467,13 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> dict[str,
 
 @mcp.tool(
     name="get_tool_panel",
-    description="Retrieve the hierarchical Galaxy tool panel (toolbox) structure.",
+    description="Retrieve the Galaxy tool panel hierarchy, including sections and their nested tools",
     tags={"tools", "panel", "toolbox"},
     annotations={
         "readOnlyHint": True,
         "destructiveHint": False,
         "idempotentHint": True,
         "openWorldHint": True
-    },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
@@ -445,7 +482,7 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> dict[str,
                 "type": "array",
                 "items": {"type": "object"},
                 "description": (
-                    "List containing tools (if not in sections) or tool sections with nested tool descriptions."
+                    "Array of tool panel items. Each item is either a tool, or a section containing nested tools."
                 )
             }
         },
@@ -471,7 +508,7 @@ def get_tool_panel() -> dict[str, Any]:
 
 @mcp.tool(
     name="create_history",
-    description="Create a new history in Galaxy with the specified name.",
+    description="Create a new history in Galaxy.",
     tags={"history", "creation"},
     annotations={
         "readOnlyHint": False,
@@ -479,34 +516,91 @@ def get_tool_panel() -> dict[str, Any]:
         "idempotentHint": False,
         "openWorldHint": True
     },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
-    },
     output_schema={
         "type": "object",
         "properties": {
-            "model_class": {"type": "string", "description": "Galaxy model class of the object, typically 'History'."},
-            "id": {"type": "string", "description": "Unique Galaxy history ID (hash)."},
-            "name": {"type": "string", "description": "Human-readable name of the history."},
-            "deleted": {"type": "boolean", "description": "Whether the history is deleted."},
-            "purged": {"type": "boolean", "description": "Whether the history is purged."},
-            "archived": {"type": "boolean", "description": "Whether the history is archived."},
-            "url": {"type": "string", "description": "API URL of the history."},
-            "published": {"type": "boolean", "description": "Whether the history is published."},
-            "count": {"type": "number", "description": "Number of datasets in the history."},
-            "annotation": {"type": ["string", "null"], "description": "Annotation text for the history."},
-            "tags": {"type": "array", "items": {"type": "string"}, "description": "List of tags associated with the history."},
-            "update_time": {"type": "string", "description": "Timestamp of the last update."},
-            "contents_url": {"type": "string", "description": "API URL for the contents of the history."},
-            "size": {"type": "number", "description": "Size of the history."},
-            "user_id": {"type": "string", "description": "User ID of the history owner."},
-            "create_time": {"type": "string", "description": "Creation timestamp of the history."},
-            "state": {"type": "string", "description": "Current state of the history."},
-            "state_ids": {"type": "object", "description": "Mapping of dataset state to list of dataset IDs."},
-            "state_details": {"type": "object", "description": "Mapping of dataset state to counts of datasets."}
+            "model_class": {
+                "type": "string",
+                "description":
+                "Galaxy model class of the object. Typically 'History'."
+            },
+            "id": {
+                "type": "string",
+                "description": "Unique Galaxy history identifier."
+            },
+            "name": {
+                "type": "string",
+                "description": "Human-readable name of the history."
+            },
+            "deleted": {
+                "type": "boolean",
+                "description": "Whether the history is deleted."
+            },
+            "purged": {
+                "type": "boolean",
+                "description": "Whether the history is purged."
+            },
+            "archived": {
+                "type": "boolean",
+                "description": "Whether the history is archived."
+            },
+            "url": {
+                "type": "string",
+                "description": "URL of the history."
+            },
+            "published": {
+                "type": "boolean",
+                "description": "Whether the history is published."
+            },
+            "count": {
+                "type": "number",
+                "description": "Number of datasets in the history."
+            },
+            "annotation": {
+                "type": ["string", "null"],
+                "description": "Annotation text for the history."
+            },
+            "tags": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "List of tags associated with the history."
+            },
+            "update_time": {
+                "type": "string",
+                "description": "Timestamp of the last update."
+            },
+            "contents_url": {
+                "type": "string",
+                "description": "URL for the contents of the history."
+            },
+            "size": {
+                "type": "number",
+                "description": "Size of the history."
+            },
+            "user_id": {
+                "type": "string",
+                "description": "User ID of the history owner."
+            },
+            "create_time": {
+                "type": "string",
+                "description": "Creation timestamp of the history."
+            },
+            "state": {
+                "type": "string",
+                "description": "Current state of the history."
+            },
+            "state_ids": {
+                "type": "object",
+                "description": "Mapping of dataset states to list of dataset IDs."
+            },
+            "state_details": {
+                "type": "object",
+                "description": "Mapping of dataset states to counts of datasets."
+            }
         },
-        "required": ["id", "name", "model_class"]
+        "required": ["model_class", "id", "name", "deleted", "purged", "archived", "url", "published", 
+                     "count", "annotation", "tags", "update_time", "contents_url", "size", "user_id", 
+                     "create_time", "state", "state_ids", "state_details"]
     }
 )
 def create_history(history_name: str) -> dict[str, Any]:
@@ -525,17 +619,13 @@ def create_history(history_name: str) -> dict[str, Any]:
 
 @mcp.tool(
     name="filter_tools_by_dataset",
-    description="Filter Galaxy tools that are potentially suitable for a given dataset type.",
+    description="Identify Galaxy tools suitable for one or more dataset types",
     tags={"tools", "dataset", "filter"},
     annotations={
         "readOnlyHint": True,
         "idempotentHint": True,
-        "destructiveHint": True,
+        "destructiveHint": False,
         "openWorldHint": True
-    },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
@@ -552,7 +642,7 @@ def create_history(history_name: str) -> dict[str, Any]:
                     },
                     "required": ["id", "name"]
                 },
-                "description": "List of recommended tools matching the dataset type."
+                "description": "List of tool objects identified as suitable for the specified dataset types. May be empty if no tools match."
             },
             "count": {"type": "number", "description": "Total number of recommended tools."}
         },
@@ -666,24 +756,29 @@ def filter_tools_by_dataset(dataset_type: list[str]) -> dict[str, Any]:
 
 @mcp.tool(
     name="get_server_info",
-    description="Retrieve Galaxy server information including version, URL, and configuration details.",
+    description="Retrieve Galaxy server metadata including version, base URL, and configuration details.",
     tags={"server", "info", "metadata"},
     annotations={
         "readOnlyHint": True,
         "idempotentHint": True,
-        "destructiveHint": True,
+        "destructiveHint": False,
         "openWorldHint": True
-    },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
         "properties": {
-            "url": {"type": "string", "description": "Base URL of the Galaxy server."},
-            "version": {"type": "object", "description": "Galaxy server version information."},
-            "config": {"type": "object", "description": "Server configuration details such as branding, URLs, and feature flags."}
+            "url": {
+                "type": "string", 
+                "description": "Base URL of the Galaxy server."
+            },
+            "version": {
+                "type": "object", 
+                "description": "Galaxy server version."
+            },
+            "config": {
+                "type": "object", 
+                "description": "Server configuration details."
+            }
         },
         "required": ["url", "version", "config"]
     }
@@ -737,36 +832,70 @@ def get_server_info() -> dict[str, Any]:
 
 @mcp.tool(
     name="get_user",
-    description="Retrieve current Galaxy user information including disk usage, quota, and preferences.",
+    description="Retrieve metadata for the current user, including disk usage, quota, and account settings.",
     tags={"user", "metadata", "account"},
     annotations={
         "readOnlyHint": True,
-        "idempotentHint": True,
-        "destructiveHint": True,
+        "destructiveHint": False,
         "openWorldHint": True
-    },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
         "properties": {
-            "total_disk_usage": {"type": "number", "description": "Total disk usage in bytes."},
-            "nice_total_disk_usage": {"type": "string", "description": "Human-readable disk usage."},
-            "quota_percent": {"type": "number", "description": "Percentage of quota used."},
-            "id": {"type": "string", "description": "User ID."},
-            "username": {"type": "string", "description": "Username of the current user."},
-            "email": {"type": "string", "description": "Email of the current user."},
-            "deleted": {"type": "boolean", "description": "Whether the user account is deleted."},
-            "is_admin": {"type": "boolean", "description": "Whether the user is an admin."},
-            "purged": {"type": "boolean", "description": "Whether the user account has been purged."},
-            "preferences": {"type": "object", "description": "User preferences dictionary."},
-            "preferred_object_store_id": {"type": ["string", "null"], "description": "ID of preferred object store or null."},
-            "quota": {"type": "string", "description": "Quota in human-readable format."},
-            "quota_bytes": {"type": "number", "description": "Quota in bytes."}
+            "total_disk_usage": {
+                "type": "number", 
+                "description": "Total disk usage, in bytes."
+            },
+            "nice_total_disk_usage": {
+                "type": "string", 
+                "description": "Human-readable representation of total disk usage."
+            },
+            "quota_percent": {
+                "type": "number", 
+                "description": "Percentage of the user's allocated quota currently in use."
+            },
+            "id": {
+                "type": "string", 
+                "description": "Unique Galaxy user identifier."
+            },
+            "username": {
+                "type": "string", 
+                "description": "Username of the current user."
+            },
+            "email": {
+                "type": "string", 
+                "description": "Email associated with the user account."
+            },
+            "deleted": {
+                "type": "boolean", 
+                "description": "Whether the user account is deleted."
+            },
+            "is_admin": {
+                "type": "boolean", 
+                "description": "Whether the user has administrator privileges."
+            },
+            "purged": {
+                "type": "boolean", 
+                "description": "Whether the user account has been purged."
+            },
+            "preferences": {
+                "type": "object", 
+                "description": "User-specific preference settings, returned as a dictionary."
+            },
+            "preferred_object_store_id": {
+                "type": ["string", "null"], 
+                "description": "ID of the user's preferred object store."
+            },
+            "quota": {
+                "type": "string", 
+                "description": "Human-readable representation of the user's total quota."
+            },
+            "quota_bytes": {
+                "type": "number", 
+                "description": "Total quota allocated to the user, in bytes."
+            }
         },
-        "required": ["id", "username", "email"]
+        "required": ["total_disk_usage", "id", "username", "email", "quota", "quota_bytes"]
     }
 )
 def get_user() -> dict[str, Any]:
@@ -787,17 +916,12 @@ def get_user() -> dict[str, Any]:
 
 @mcp.tool(
     name="get_histories",
-    description="Retrieve a paginated list of Galaxy histories with optional filtering by name.",
-    tags={"history", "list", "pagination"},
+    description="Retrieve a list of Galaxy histories, optionally filtered by name and paginated.",
+    tags={"history", "list", "pagination", "filtered"},
     annotations={
         "readOnlyHint": True,
         "destructiveHint": False,
-        "idempotentHint": True,
         "openWorldHint": True
-    },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
@@ -809,7 +933,58 @@ def get_user() -> dict[str, Any]:
             },
             "pagination": {
                 "type": "object",
-                "description": "Pagination."
+                "description": "Pagination metadata.",
+                "properties": {
+                    "total_items": {
+                        "type": "integer", 
+                        "description": "Total matching histories, ignoring pagination."
+                    },
+                    "returned_items": {
+                        "type": "integer", 
+                        "description": "Number of histories returned in this call."
+                    },
+                    "paginated": {
+                        "type": "boolean",
+                        "description": "Whether pagination is applied."
+                    },
+                    "limit": {
+                        "type": ["integer", "null"], 
+                        "description": "Maximum number of histories per page, null if all returned."
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": "Offset used."
+                    },
+                    "current_page": {
+                        "type": "integer", 
+                        "description": "Current page number based on offset and limit."
+                    },
+                    "total_pages": {
+                        "type": "integer", 
+                        "description": "Total number of pages available based on limit."
+                    },
+                    "has_next": {
+                        "type": "boolean", 
+                        "description": "Whether there is a next page available."
+                    },
+                    "has_previous": {
+                        "type": "boolean", 
+                        "description": "Whether there is a previous page available."
+                    },
+                    "next_offset": {
+                        "type": ["integer", "null"], 
+                        "description": "Offset for next page, if any."
+                    },
+                    "previous_offset": {
+                        "type": ["integer", "null"], 
+                        "description": "Offset for previous page, if any."
+                    },
+                    "helper_text": {
+                        "type": ["string", "null"],
+                        "description": "Human-readable guidance for pagination."
+                    }
+                },
+                "required": ["total_items", "returned_items"]
             }
         },
         "required": ["histories", "pagination"]
@@ -886,32 +1061,33 @@ def get_histories(
 
 @mcp.tool(
     name="list_history_ids",
-    description="Get a simplified list of Galaxy history IDs and names for easy reference.",
+    description="Get a simplified list of Galaxy history IDs and names.",
     tags={"histories", "id", "list"},
     annotations={
         "readOnlyHint": True,
         "destructiveHint": False,
-        "idempotentHint": True,
         "openWorldHint": True
     },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
-    },
     output_schema={
-        "type": "array",
-        "items": {
-            "type": "object",
-            "properties": {
-                "id": {"type": "string", "description": "History ID hash."},
-                "name": {"type": "string", "description": "History name."}
-            },
-            "required": ["id", "name"]
+        "type": "object",
+        "description": "Array of objects containing history IDs and names.",
+        "properties": {
+            "histories": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string", "description": "History ID."},
+                        "name": {"type": "string", "description": "History name."}
+                    },
+                    "required": ["id", "name"]
+                }
+            }
         },
-        "description": "Array of objects containing history IDs and names."
+        "required": ["histories"]
     }
 )
-def list_history_ids() -> list[dict[str, str]]:
+def list_history_ids() -> dict[str, Any]:
     """
     Get a simplified list of history IDs and names for easy reference
 
@@ -923,10 +1099,10 @@ def list_history_ids() -> list[dict[str, str]]:
     try:
         histories = galaxy_state["gi"].histories.get_histories()
         if not histories:
-            return []
+            return {"histories": []}
         # Extract just the id and name for convenience
         simplified = [{"id": h["id"], "name": h.get("name", "Unnamed")} for h in histories]
-        return simplified
+        return {"histories": simplified}
     except Exception as e:
         raise ValueError(f"Failed to list history IDs: {str(e)}") from e
 
@@ -938,12 +1114,7 @@ def list_history_ids() -> list[dict[str, str]]:
     annotations={
         "readOnlyHint": True,
         "destructiveHint": False,
-        "idempotentHint": True,
         "openWorldHint": True
-    },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
@@ -955,11 +1126,10 @@ def list_history_ids() -> list[dict[str, str]]:
             "contents_summary": {
                 "type": "object",
                 "properties": {
-                    "total_items": {"type": "number", "description": "Total number of datasets in the history."},
+                    "total_items": {"type": "number", "description": "Number of datasets in the history."},
                     "note": {"type": "string", "description": "Instruction to get actual datasets using get_history_contents."}
                 },
                 "required": ["total_items", "note"],
-                "description": "Summary of the history contents without loading datasets."
             }
         },
         "required": ["history", "contents_summary"]
@@ -1025,42 +1195,71 @@ def get_history_details(history_id: str) -> dict[str, Any]:
     annotations={
         "readOnlyHint": True,
         "destructiveHint": False,
-        "idempotentHint": True,
         "openWorldHint": True
-    },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
         "properties": {
             "history_id": {
                 "type": "string",
-                "description": "Galaxy history ID (hexadecimal hash string)"
+                "description": "History identifier used for this query."
             },
             "contents": {
                 "type": "array",
                 "items": {"type": "object"},
-                "description": "List of dataset objects in the history"
+                "description": "List of dataset objects in this page of results."
             },
             "pagination": {
                 "type": "object",
                 "description": "Pagination metadata",
                 "properties": {
-                    "total_items": {"type": "integer", "description": "Total number of datasets matching filters"},
-                    "returned_items": {"type": "integer", "description": "Number of datasets returned in this page"},
-                    "limit": {"type": "integer", "description": "Maximum number of items requested per page"},
-                    "offset": {"type": "integer", "description": "Number of items skipped from the beginning"},
-                    "current_page": {"type": "integer", "description": "Current page number"},
-                    "total_pages": {"type": "integer", "description": "Total number of pages available"},
-                    "has_next": {"type": "boolean", "description": "Whether there is a next page"},
-                    "has_previous": {"type": "boolean", "description": "Whether there is a previous page"},
-                    "next_offset": {"type": ["integer", "null"], "description": "Offset to use for next page, null if last page"},
-                    "previous_offset": {"type": ["integer", "null"], "description": "Offset to use for previous page, null if first page"},
-                    "helper_text": {"type": "string", "description": "Textual guide for navigation"}
+                    "total_items": {
+                        "type": "integer", 
+                        "description": "Total number of datasets matching filters."
+                    },
+                    "returned_items": {
+                        "type": "integer", 
+                        "description": "Number of datasets returned."
+                    },
+                    "limit": {
+                        "type": "integer", 
+                        "description": "Maximum number of histories per page."
+                    },
+                    "offset": {
+                        "type": "integer", 
+                        "description": "Number of items skipped from the beginning."
+                    },
+                    "current_page": {
+                        "type": "integer", 
+                        "description": "Current page number based on offset and limit"
+                    },
+                    "total_pages": {
+                        "type": "integer", 
+                        "description": "Total number of pages available based on limit."
+                        },
+                    "has_next": {
+                        "type": "boolean", 
+                        "description": "Whether there is a next page available."
+                    },
+                    "has_previous": {
+                        "type": "boolean", 
+                        "description": "Whether there is a previous page available"
+                    },
+                    "next_offset": {
+                        "type": ["integer", "null"], 
+                        "description": "Offset for next page, if any."
+                    },
+                    "previous_offset": {
+                        "type": ["integer", "null"], 
+                        "description": "Offset for previous page, null if first page"
+                    },
+                    "helper_text": {
+                        "type": "string", 
+                        "description": "Human-readable guidance for pagination."
+                    }
                 },
-                "required": ["total_items", "returned_items", "limit", "offset", "current_page", "total_pages", "has_next", "has_previous", "helper_text"]
+                "required": ["total_items", "returned_items", "limit", "offset", "current_page", 
+                             "total_pages", "has_next", "has_previous", "helper_text"]
             }
         },
         "required": ["history_id", "contents", "pagination"]
@@ -1176,32 +1375,27 @@ def get_history_contents(
 
 @mcp.tool(
     name="get_job_details",
-    description="Retrieve detailed information about the job that created a specific Galaxy dataset.",
-    tags={"galaxy", "jobs", "datasets", "provenance"},
+    description="Retrieve information about the job that created a specific history item.",
+    tags={"galaxy", "jobs", "datasets"},
     annotations={
         "readOnlyHint": True,
         "destructiveHint": False,
-        "idempotentHint": True,
         "openWorldHint": True
-    },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
         "properties": {
             "job": {
                 "type": "object",
-                "description": "Metadata of the job that created the dataset, including tool information, state, and timestamps."
+                "description": "Job metadata including tool, state, and timestamps"
             },
             "dataset_id": {
                 "type": "string",
-                "description": "Galaxy dataset ID for which job details were retrieved."
+                "description": "Dataset ID for which job details were retrieved."
             },
             "job_id": {
                 "type": "string",
-                "description": "Galaxy job ID of the job that created the dataset."
+                "description": "Job ID of the job that created the dataset."
             }
         },
         "required": ["job", "dataset_id", "job_id"]
@@ -1273,17 +1467,12 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str,
 
 @mcp.tool(
     name="get_dataset_details",
-    description="Retrieve detailed information about a Galaxy dataset, optionally including a preview of its content.",
+    description="Returns dataset metadata and an optional content preview.",
     tags={"datasets", "metadata", "preview"},
     annotations={
         "readOnlyHint": True,
         "destructiveHint": False,
-        "idempotentHint": True,
         "openWorldHint": True
-    },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
@@ -1300,11 +1489,26 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str,
                 "type": "object",
                 "description": "Optional content preview of the dataset if include_preview=True and dataset state is 'ok'.",
                 "properties": {
-                    "lines": {"type": "string", "description": "Preview lines as a single string."},
-                    "total_lines": {"type": "integer", "description": "Total number of lines in the dataset."},
-                    "preview_lines": {"type": "integer", "description": "Number of lines returned in the preview."},
-                    "truncated": {"type": "boolean", "description": "Whether the dataset preview was truncated."},
-                    "error": {"type": "string", "description": "Error message if preview could not be retrieved."}
+                    "lines": {
+                        "type": "string", 
+                        "description": "Preview lines as a single string."
+                    },
+                    "total_lines": {
+                        "type": "integer", 
+                        "description": "Total number of lines in the dataset."
+                    },
+                    "preview_lines": {
+                        "type": "integer", 
+                        "description": "Number of lines returned in the preview."
+                    },
+                    "truncated": {
+                        "type": "boolean", 
+                        "description": "Whether the preview was truncated."
+                    },
+                    "error": {
+                        "type": "string", 
+                        "description": "Error message if preview could not be retrieved."
+                    }
                 },
                 "required": ["lines", "total_lines", "preview_lines", "truncated"]
             }
@@ -1397,23 +1601,18 @@ def get_dataset_details(
     annotations={
         "readOnlyHint": True,
         "destructiveHint": False,
-        "idempotentHint": True,
         "openWorldHint": True
-    },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
         "properties": {
             "dataset_id": {
                 "type": "string",
-                "description": "Galaxy dataset ID (hexadecimal hash string)"
+                "description": "Dataset ID; use for follow-up actions."
             },
             "file_path": {
                 "type": ["string", "null"],
-                "description": "Local path where dataset was saved. Null if downloaded to memory."
+                "description": "Local path where dataset was saved, or null if in memory."
             },
             "suggested_filename": {
                 "type": ["string", "null"],
@@ -1421,11 +1620,11 @@ def get_dataset_details(
             },
             "content_available": {
                 "type": "boolean",
-                "description": "Indicates whether the dataset content was successfully downloaded."
+                "description": "Whether the dataset content was successfully downloaded."
             },
             "file_size": {
                 "type": ["integer", "null"],
-                "description": "Size of downloaded content in bytes. Null if unknown or not saved."
+                "description": "Size of downloaded content in bytes."
             },
             "note": {
                 "type": "string",
@@ -1438,8 +1637,8 @@ def get_dataset_details(
                     "name": {"type": "string", "description": "Dataset name"},
                     "extension": {"type": "string", "description": "Dataset file extension"},
                     "state": {"type": "string", "description": "Processing state of the dataset"},
-                    "genome_build": {"type": ["string", "null"], "description": "Associated genome build, if any"},
-                    "file_size": {"type": ["integer", "null"], "description": "Reported size of the dataset in Galaxy"}
+                    "genome_build": {"type": ["string", "null"], "description": "Associated genome build."},
+                    "file_size": {"type": ["integer", "null"], "description": "Reported size in Galaxy"}
                 },
                 "required": ["name", "extension", "state", "genome_build", "file_size"]
             }
@@ -1556,7 +1755,7 @@ def download_dataset(
 
 @mcp.tool(
     name="upload_file",
-    description="Upload a local file to a Galaxy history. Returns details about created datasets and jobs.",
+    description="Upload a local file to a Galaxy history. Returns details about created datasets.",
     tags={"upload", "file", "dataset", "history"},
     annotations={
         "readOnlyHint": False,
@@ -1564,36 +1763,28 @@ def download_dataset(
         "idempotentHint": False,
         "openWorldHint": True
     },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
-    },
     output_schema={
         "type": "object",
         "properties": {
             "outputs": {
                 "type": "array",
-                "description": "List of datasets created from the uploaded file.",
-                "items": {"type": "object"}
-            },
-            "jobs": {
-                "type": "array",
-                "description": "Jobs triggered by the upload process.",
-                "items": {"type": "object"}
+                "description": "List of datasets created from the uploaded file."
             },
             "output_collections": {
                 "type": "array",
-                "description": "List of output collections created, if any.",
-                "items": {"type": "object"}
+                "description": "List of output collections created by the upload, if any."
+            },
+            "jobs": {
+                "type": "array",
+                "description": "Jobs triggered by the upload."
             },
             "implicit_collections": {
                 "type": "array",
-                "description": "Implicit collections generated by the upload, if any.",
-                "items": {"type": "object"}
+                "description": "Implicit collections generated by the upload, if any."
             },
             "produces_entry_points": {
                 "type": "boolean",
-                "description": "Indicates whether the upload produces entry points for workflows."
+                "description": "Whether the upload produces entry oints usable as workflow inputs."
             }
         },
         "required": ["outputs", "jobs", "output_collections", "implicit_collections", "produces_entry_points"]
@@ -1641,44 +1832,24 @@ def upload_file(path: str, history_id: str | None = None) -> dict[str, Any]:
         "idempotentHint": False,
         "openWorldHint": True
     },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
-    },
     output_schema={
         "type": "object",
         "properties": {
             "outputs": {
                 "type": "array",
-                "description": "Datasets created from the uploaded URL.",
-                "items": {
-                    "type": "object",
-                    "description": "Galaxy dataset metadata returned by the upload."
-                }
+                "description": "List of datasets created from the uploaded URL."
             },
             "output_collections": {
                 "type": "array",
-                "description": "Dataset collections created by the upload, if any.",
-                "items": {
-                    "type": "object",
-                    "description": "Metadata for a Galaxy dataset collection."
-                }
+                "description": "List of output collections created by the upload, if any."
             },
             "jobs": {
                 "type": "array",
-                "description": "Galaxy jobs triggered to fetch and process the remote file.",
-                "items": {
-                    "type": "object",
-                    "description": "Job metadata associated with the URL upload."
-                }
+                "description": "Jobs triggered to fetch the remote file."
             },
             "implicit_collections": {
                 "type": "array",
-                "description": "Implicit dataset collections automatically generated by Galaxy.",
-                "items": {
-                    "type": "object",
-                    "description": "Metadata for an implicit dataset collection."
-                }
+                "description": "Implicit dataset collections automatically generated by the upload, if any."
             },
             "produces_entry_points": {
                 "type": "boolean",
@@ -1752,12 +1923,7 @@ def upload_file_from_url(
     annotations={
         "readOnlyHint": True,
         "destructiveHint": False,
-        "idempotentHint": True,
         "openWorldHint": True
-    },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
@@ -1774,11 +1940,7 @@ def upload_file_from_url(
                 "description": (
                     "List of workflow invocations matching the provided filters. "
                     "Present when invocation_id is not specified."
-                ),
-                "items": {
-                    "type": "object",
-                    "description": "Workflow invocation metadata returned by Galaxy."
-                }
+                )
             }
         }
     }
@@ -1841,11 +2003,7 @@ def get_manifest_json() -> list[dict[str, Any]]:
 
 @mcp.tool(
     name="get_iwc_workflows",
-    description=(
-        "Fetch the complete list of workflows published in the "
-        "Interactive Workflow Composer (IWC). "
-        "Aggregates workflows from all entries in the IWC manifest."
-    ),
+    description="Fetch all workflows published in the Interactive Workflow Composer (IWC).",
     tags={"iwc", "workflow", "registry", "manifest"},
     annotations={
         "readOnlyHint": True,
@@ -1853,20 +2011,12 @@ def get_manifest_json() -> list[dict[str, Any]]:
         "idempotentHint": True,
         "openWorldHint": True
     },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
-    },
     output_schema={
         "type": "object",
         "properties": {
             "workflows": {
                 "type": "array",
-                "description": "List of workflows defined in the IWC manifest.",
-                "items": {
-                    "type": "object",
-                    "description": "Workflow metadata."
-                }
+                "description": "List of workflows defined in the IWC manifest."
             }
         },
         "required": ["workflows"],
@@ -2008,22 +2158,14 @@ def search_iwc_workflows(query: str) -> dict[str, Any]:
     annotations={
         "readOnlyHint": False,
         "destructiveHint": False,
-        "idempotentHint": False,
         "openWorldHint": True
-    },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
         "properties": {
             "imported_workflow": {
                 "type": "object",
-                "description": (
-                    "Metadata of the workflow imported into Galaxy, as returned "
-                    "by the Galaxy workflows import API."
-                )
+                "description": "Metadata of the workflow imported into Galaxy."
             }
         }
     }
@@ -2079,18 +2221,13 @@ def import_workflow_from_iwc(trs_id: str) -> dict[str, Any]:
     description=(
         "List workflows available in the connected Galaxy instance. "
         "Can return all accessible workflows or filter by workflow ID or name. "
-        "Optionally includes published (shared) workflows."
+        "Optionally includes published workflows."
     ),
-    tags={"workflow", "list", "metadata"},
+    tags={"workflow", "list", "metadata", "filtered"},
     annotations={
         "readOnlyHint": True,
         "destructiveHint": False,
-        "idempotentHint": True,
         "openWorldHint": True
-    },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
@@ -2100,10 +2237,7 @@ def import_workflow_from_iwc(trs_id: str) -> dict[str, Any]:
                 "description": "List of workflows accessible in the Galaxy instance.",
                 "items": {
                     "type": "object",
-                    "description": (
-                        "Workflow metadata as returned by the Galaxy workflows API, "
-                        "including workflow ID, name, and additional attributes."
-                    )
+                    "description": "Workflow metadata including ID, name, and additional attributes."
                 }
             }
         }
@@ -2143,8 +2277,8 @@ def list_workflows(
 @mcp.tool(
     name="get_workflow_details",
     description=(
-        "Retrieve detailed information for a specific workflow in the Galaxy instance. "
-        "Returns the workflow definition including steps, inputs, outputs, and parameters. "
+        "Retrieve detailed information for a specific workflow in Galaxy, including steps," 
+        "inputs, outputs, and parameters."
         "An optional version may be specified; otherwise the latest version is returned."
     ),
     tags={"workflow", "metadata", "steps", "inputs", "outputs"},
@@ -2154,21 +2288,51 @@ def list_workflows(
         "idempotentHint": True,
         "openWorldHint": True
     },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
-    },
     output_schema={
         "type": "object",
         "properties": {
             "workflow": {
                 "type": "object",
-                "description": (
-                    "Detailed Galaxy workflow definition, including steps, "
-                    "inputs, outputs, and configuration parameters."
-                )
+                "properties": {
+                    "model_class": {"type": "string", "description": "Class type of the workflow object."},
+                    "id": {"type": "string", "description": "Unique Galaxy workflow ID."},
+                    "name": {"type": "string", "description": "Name of the workflow."},
+                    "create_time": {"type": "string", "description": "Timestamp when the workflow was created."},
+                    "update_time": {"type": "string", "description": "Timestamp of the last workflow update."},
+                    "annotations": {"type": ["string", "null"], "description": "Annotations attached to the workflow."},
+                    "tags": {"type": "array", "items": {"type": "string"}, "description": "Tags associated with the workflow."},
+                    "steps": {
+                        "type": "object",
+                        "description": "Workflow steps with inputs, outputs, tools, and configuration.",
+                        "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                                "id": {"type": "integer", "description": "Step ID in the workflow."},
+                                "annotation": {"type": ["string", "null"], "description": "Description of the step."},
+                                "type": {"type": "string", "description": "Step type, e.g., 'tool', 'data_collection_input', 'parameter_input'."},
+                                "tool_id": {"type": ["string", "null"], "description": "Galaxy tool ID used in this step, if applicable."},
+                                "tool_version": {"type": ["string", "null"], "description": "Tool version used in this step."},
+                                "tool_inputs": {"type": "object", "description": "Input parameters provided to the tool."},
+                                "input_steps": {"type": "object", "description": "Connections from previous workflow steps."}
+                            }
+                        }
+                    },
+                    "inputs": {
+                        "type": "object",
+                        "description": "Workflow inputs.",
+                        "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                                "label": {"type": "string", "description": "Input label for display."},
+                                "value": {"type": "string", "description": "Default or assigned value of the input."},
+                                "uuid": {"type": "string", "description": "UUID of the input in the workflow definition."}
+                            }
+                        }
+                    }
+                }
             }
-        }
+        },
+        "required": ["workflow"]
     }
 )
 def get_workflow_details(workflow_id: str, version: int | None = None) -> dict[str, Any]:
@@ -2200,28 +2364,20 @@ def get_workflow_details(workflow_id: str, version: int | None = None) -> dict[s
 @mcp.tool(
     name="invoke_workflow",
     description=(
-        "Invoke (run) a Galaxy workflow with specified inputs and parameter overrides."
+        "Run a Galaxy workflow with specified structured inputs."
     ),
     tags={"workflow", "execution", "invoke", "run", "jobs"},
     annotations={
         "readOnlyHint": False,
         "destructiveHint": False,
-        "idempotentHint": False,
         "openWorldHint": True
-    },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
         "properties": {
             "invocation": {
                 "type": "object",
-                "description": (
-                    "Workflow invocation metadata returned by Galaxy, "
-                    "including invocation ID, state, and associated history."
-                )
+                "description": "Workflow invocation metadata including invocation ID, state, and associated history."
             }
         }
     }
@@ -2285,27 +2441,18 @@ def invoke_workflow(
 
 @mcp.tool(
     name="cancel_workflow_invocation",
-    description=(
-        "Cancel a running Galaxy workflow invocation. "
-        "Updates the invocation state and stops any pending or running jobs associated with it."
-    ),
     tags={"workflow", "invocation", "cancel", "execution", "jobs"},
     annotations={
         "readOnlyHint": False,
         "destructiveHint": False,
-        "idempotentHint": False,
         "openWorldHint": True
-    },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
         "properties": {
             "cancelled": {
                 "type": "boolean",
-                "description": "Indicates whether the cancellation request was successfully processed."
+                "description": "Whether the cancellation request was successful."
             },
             "invocation": {
                 "type": "object",
