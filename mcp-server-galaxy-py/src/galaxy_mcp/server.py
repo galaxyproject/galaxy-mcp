@@ -250,7 +250,8 @@ def search_tools(query: str) -> dict[str, Any]:
             },
             "name": {
                 "type": "string",
-                "description": "Human-readable tool name"},
+                "description": "Human-readable tool name"
+            },
             "version": {
                 "type": "string",
                 "description": "Version of the tool."
@@ -2055,10 +2056,6 @@ def get_iwc_workflows() -> dict[str, Any]:
         "destructiveHint": False,
         "idempotentHint": True,
         "openWorldHint": True
-    },
-    meta={
-        "cacheable": True,
-        "ttl_seconds": 3600,
     },
     output_schema={
         "type": "object",
