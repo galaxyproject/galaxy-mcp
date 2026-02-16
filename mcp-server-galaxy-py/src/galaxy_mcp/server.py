@@ -371,12 +371,7 @@ def get_tool_citations(tool_id: str) -> dict[str, Any]:
     name="run_tool",
     description="Execute a Galaxy tool in an existing history using a tool ID and structured input parameters.",
     tags={"tools", "execution", "jobs"},
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": True,
-    },
+    annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True},
     output_schema={
         "type": "object",
         "properties": {
@@ -388,7 +383,8 @@ def get_tool_citations(tool_id: str) -> dict[str, Any]:
             "outputs": {
                 "type": "array",
                 "items": {"type": "object"},
-                "description": "Output dataset objects produced by the tool execution.",
+                "description": "Output dataset objects produced by the tool execution."
+                "Each object contains an ID field reusable in get_dataset_details.",
             },
             "implicit_collections": {
                 "type": "array",
@@ -477,12 +473,7 @@ def get_tool_panel() -> dict[str, Any]:
     name="create_history",
     description="Create a new history in Galaxy.",
     tags={"history", "creation"},
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": True,
-    },
+    annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True},
     output_schema={
         "type": "object",
         "properties": {
@@ -530,27 +521,9 @@ def get_tool_panel() -> dict[str, Any]:
                 "description": "Mapping of dataset states to counts of datasets.",
             },
         },
-        "required": [
-            "model_class",
-            "id",
-            "name",
-            "deleted",
-            "purged",
-            "archived",
-            "url",
-            "published",
-            "count",
-            "annotation",
-            "tags",
-            "update_time",
-            "contents_url",
-            "size",
-            "user_id",
-            "create_time",
-            "state",
-            "state_ids",
-            "state_details",
-        ],
+        "required": ["model_class", "id", "name", "deleted", "purged", "archived", "url",
+                     "published", "count", "annotation", "tags", "update_time", "contents_url", "size",
+                     "user_id", "create_time", "state", "state_ids", "state_details"],
     },
 )
 def create_history(history_name: str) -> dict[str, Any]:
@@ -599,7 +572,7 @@ def create_history(history_name: str) -> dict[str, Any]:
                     },
                     "required": ["id", "name"],
                 },
-                "description": "List of tool objects identified as suitable for the specified dataset types. May be empty if no tools match.",
+                "description": "List of tool objects identified as suitable for the specified dataset types.",
             },
             "count": {"type": "number", "description": "Total number of recommended tools."},
         },
@@ -1179,17 +1152,8 @@ def get_history_details(history_id: str) -> dict[str, Any]:
                         "description": "Human-readable guidance for pagination.",
                     },
                 },
-                "required": [
-                    "total_items",
-                    "returned_items",
-                    "limit",
-                    "offset",
-                    "current_page",
-                    "total_pages",
-                    "has_next",
-                    "has_previous",
-                    "helper_text",
-                ],
+                "required": ["total_items", "returned_items", "limit", "offset", "current_page",
+                             "total_pages", "has_next", "has_previous", "helper_text"],
             },
         },
         "required": ["history_id", "contents", "pagination"],
@@ -1704,16 +1668,11 @@ def download_dataset(
             },
             "produces_entry_points": {
                 "type": "boolean",
-                "description": "Whether the upload produces entry oints usable as workflow inputs.",
+                "description": "Whether the upload produces entry points usable as workflow inputs.",
             },
         },
-        "required": [
-            "outputs",
-            "jobs",
-            "output_collections",
-            "implicit_collections",
-            "produces_entry_points",
-        ],
+        "required": ["outputs", "jobs", "output_collections", "implicit_collections",
+                     "produces_entry_points"],
     },
 )
 def upload_file(path: str, history_id: str | None = None) -> dict[str, Any]:
