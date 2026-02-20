@@ -18,28 +18,28 @@ import time
 import pytest
 import requests
 
-from galaxy_mcp.server import (
+from tests.test_helpers import (
     GalaxyResult,
-    connect,
-    create_history,
-    download_dataset,
+    connect_fn,
+    create_history_fn,
+    download_dataset_fn,
     galaxy_state,
-    get_histories,
-    get_history_contents,
-    get_history_details,
-    get_iwc_workflow_details,
-    get_iwc_workflows,
-    get_server_info,
-    get_tool_details,
-    get_tool_panel,
-    get_user,
-    import_workflow_from_iwc,
-    list_workflows,
-    recommend_iwc_workflows,
-    run_tool,
-    search_iwc_workflows,
-    search_tools_by_name,
-    upload_file,
+    get_histories_fn,
+    get_history_contents_fn,
+    get_history_details_fn,
+    get_iwc_workflow_details_fn,
+    get_iwc_workflows_fn,
+    get_server_info_fn,
+    get_tool_details_fn,
+    get_tool_panel_fn,
+    get_user_fn,
+    import_workflow_from_iwc_fn,
+    list_workflows_fn,
+    recommend_iwc_workflows_fn,
+    run_tool_fn,
+    search_iwc_workflows_fn,
+    search_tools_fn,
+    upload_file_fn,
 )
 
 # Test configuration
@@ -77,7 +77,7 @@ class TestRealConnection:
 
     def test_connect_to_galaxy(self):
         """Test connecting to a real Galaxy instance."""
-        result = connect.fn(GALAXY_URL, GALAXY_API_KEY)
+        result = connect_fn(GALAXY_URL, GALAXY_API_KEY)
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -88,8 +88,8 @@ class TestRealConnection:
 
     def test_get_server_info(self):
         """Test getting real server information."""
-        connect.fn(GALAXY_URL, GALAXY_API_KEY)
-        result = get_server_info.fn()
+        connect_fn(GALAXY_URL, GALAXY_API_KEY)
+        result = get_server_info_fn()
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -100,8 +100,8 @@ class TestRealConnection:
 
     def test_get_current_user(self):
         """Test getting current user info."""
-        connect.fn(GALAXY_URL, GALAXY_API_KEY)
-        result = get_user.fn()
+        connect_fn(GALAXY_URL, GALAXY_API_KEY)
+        result = get_user_fn()
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -114,7 +114,7 @@ class TestRealToolOperations:
 
     def setup_method(self):
         """Connect to Galaxy before each test."""
-        connect.fn(GALAXY_URL, GALAXY_API_KEY)
+        connect_fn(GALAXY_URL, GALAXY_API_KEY)
 
     def teardown_method(self):
         """Reset connection state after each test."""
@@ -123,7 +123,7 @@ class TestRealToolOperations:
 
     def test_get_tool_panel(self):
         """Test getting the real tool panel."""
-        result = get_tool_panel.fn()
+        result = get_tool_panel_fn()
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -134,7 +134,7 @@ class TestRealToolOperations:
     def test_search_tools_by_name(self):
         """Test searching for tools by name."""
         # Search for a common tool that should exist
-        result = search_tools_by_name.fn("upload")
+        result = search_tools_fn("upload")
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -145,7 +145,7 @@ class TestRealToolOperations:
     def test_get_tool_details(self):
         """Test getting details for a specific tool."""
         # Get details for the upload tool (should always exist)
-        result = get_tool_details.fn("upload1")
+        result = get_tool_details_fn("upload1")
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -160,7 +160,7 @@ class TestRealHistoryOperations:
 
     def setup_method(self):
         """Connect to Galaxy before each test."""
-        connect.fn(GALAXY_URL, GALAXY_API_KEY)
+        connect_fn(GALAXY_URL, GALAXY_API_KEY)
         self.created_histories = []
 
     def teardown_method(self):
@@ -175,7 +175,7 @@ class TestRealHistoryOperations:
 
     def test_get_histories(self):
         """Test getting list of histories."""
-        result = get_histories.fn()
+        result = get_histories_fn()
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -187,7 +187,7 @@ class TestRealHistoryOperations:
     def test_create_history(self):
         """Test creating a new history."""
         test_name = f"MCP Integration Test {int(time.time())}"
-        result = create_history.fn(test_name)
+        result = create_history_fn(test_name)
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -201,12 +201,12 @@ class TestRealHistoryOperations:
         """Test getting history details."""
         # First create a history
         test_name = f"MCP Detail Test {int(time.time())}"
-        create_result = create_history.fn(test_name)
+        create_result = create_history_fn(test_name)
         history_id = create_result.data["id"]
         self.created_histories.append(history_id)
 
         # Get details
-        result = get_history_details.fn(history_id)
+        result = get_history_details_fn(history_id)
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -219,12 +219,12 @@ class TestRealHistoryOperations:
         """Test getting history contents."""
         # First create a history
         test_name = f"MCP Contents Test {int(time.time())}"
-        create_result = create_history.fn(test_name)
+        create_result = create_history_fn(test_name)
         history_id = create_result.data["id"]
         self.created_histories.append(history_id)
 
         # Get contents (should be empty for new history)
-        result = get_history_contents.fn(history_id)
+        result = get_history_contents_fn(history_id)
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -242,7 +242,7 @@ class TestRealDatasetOperations:
 
     def setup_method(self):
         """Connect to Galaxy and create a test history."""
-        connect.fn(GALAXY_URL, GALAXY_API_KEY)
+        connect_fn(GALAXY_URL, GALAXY_API_KEY)
         self.created_histories = []
 
     def teardown_method(self):
@@ -259,7 +259,7 @@ class TestRealDatasetOperations:
         """Test uploading a file and downloading it back."""
         # Create a test history
         test_name = f"MCP Upload Test {int(time.time())}"
-        history_result = create_history.fn(test_name)
+        history_result = create_history_fn(test_name)
         history_id = history_result.data["id"]
         self.created_histories.append(history_id)
 
@@ -271,7 +271,7 @@ class TestRealDatasetOperations:
 
         try:
             # Upload the file
-            upload_result = upload_file.fn(tmp_path, history_id)
+            upload_result = upload_file_fn(tmp_path, history_id)
 
             assert isinstance(upload_result, GalaxyResult)
             assert upload_result.success is True
@@ -293,7 +293,7 @@ class TestRealDatasetOperations:
             # Download the file
             with tempfile.TemporaryDirectory() as tmp_dir:
                 download_path = os.path.join(tmp_dir, "downloaded.txt")
-                download_result = download_dataset.fn(dataset_id, download_path)
+                download_result = download_dataset_fn(dataset_id, download_path)
 
                 assert isinstance(download_result, GalaxyResult)
                 assert download_result.success is True
@@ -316,7 +316,7 @@ class TestRealToolExecution:
 
     def setup_method(self):
         """Connect to Galaxy before each test."""
-        connect.fn(GALAXY_URL, GALAXY_API_KEY)
+        connect_fn(GALAXY_URL, GALAXY_API_KEY)
         self.created_histories = []
 
     def teardown_method(self):
@@ -333,7 +333,7 @@ class TestRealToolExecution:
         """Test running a simple tool (cat1 - concatenate datasets)."""
         # Create a test history
         test_name = f"MCP Tool Test {int(time.time())}"
-        history_result = create_history.fn(test_name)
+        history_result = create_history_fn(test_name)
         history_id = history_result.data["id"]
         self.created_histories.append(history_id)
 
@@ -344,7 +344,7 @@ class TestRealToolExecution:
             tmp_path = tmp_file.name
 
         try:
-            upload_result = upload_file.fn(tmp_path, history_id)
+            upload_result = upload_file_fn(tmp_path, history_id)
             dataset_id = upload_result.data["outputs"][0]["id"]
 
             # Wait for upload
@@ -359,7 +359,7 @@ class TestRealToolExecution:
 
             # Run the cat1 tool (concatenate datasets) - a simple built-in tool
             # This tool just outputs the input, so it's a good simple test
-            tool_result = run_tool.fn(
+            tool_result = run_tool_fn(
                 history_id,
                 "cat1",
                 {"input1": {"src": "hda", "id": dataset_id}},
@@ -385,7 +385,7 @@ class TestRealIWCOperations:
 
     def setup_method(self):
         """Connect to Galaxy before each test."""
-        connect.fn(GALAXY_URL, GALAXY_API_KEY)
+        connect_fn(GALAXY_URL, GALAXY_API_KEY)
         self.imported_workflows = []
 
     def teardown_method(self):
@@ -400,7 +400,7 @@ class TestRealIWCOperations:
 
     def test_get_iwc_workflows(self):
         """Test fetching all workflows from IWC."""
-        result = get_iwc_workflows.fn()
+        result = get_iwc_workflows_fn()
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -417,7 +417,7 @@ class TestRealIWCOperations:
 
     def test_search_iwc_workflows_rna(self):
         """Test searching IWC for RNA-related workflows."""
-        result = search_iwc_workflows.fn("rna")
+        result = search_iwc_workflows_fn("rna")
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -443,7 +443,7 @@ class TestRealIWCOperations:
 
     def test_search_iwc_workflows_assembly(self):
         """Test searching IWC for assembly workflows."""
-        result = search_iwc_workflows.fn("assembly")
+        result = search_iwc_workflows_fn("assembly")
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -453,7 +453,7 @@ class TestRealIWCOperations:
 
     def test_search_iwc_workflows_no_results(self):
         """Test searching IWC with a query that returns no results."""
-        result = search_iwc_workflows.fn("xyznonexistent123")
+        result = search_iwc_workflows_fn("xyznonexistent123")
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -463,7 +463,7 @@ class TestRealIWCOperations:
     def test_import_workflow_from_iwc(self):
         """Test importing a workflow from IWC into Galaxy."""
         # First, search for a simple workflow to import
-        search_result = search_iwc_workflows.fn("quality")
+        search_result = search_iwc_workflows_fn("quality")
 
         assert search_result.success is True
         assert search_result.count >= 1
@@ -472,7 +472,7 @@ class TestRealIWCOperations:
         trs_id = search_result.data[0]["trsID"]
 
         # Import the workflow
-        import_result = import_workflow_from_iwc.fn(trs_id)
+        import_result = import_workflow_from_iwc_fn(trs_id)
 
         assert isinstance(import_result, GalaxyResult)
         assert import_result.success is True
@@ -483,26 +483,26 @@ class TestRealIWCOperations:
         self.imported_workflows.append(import_result.data["id"])
 
         # Verify the workflow appears in user's workflow list
-        workflows_result = list_workflows.fn()
+        workflows_result = list_workflows_fn()
         workflow_ids = [w["id"] for w in workflows_result.data]
         assert import_result.data["id"] in workflow_ids
 
     def test_import_workflow_invalid_trs_id(self):
         """Test importing with an invalid trsID."""
         with pytest.raises(ValueError, match="not found in IWC manifest"):
-            import_workflow_from_iwc.fn("nonexistent/workflow/id")
+            import_workflow_from_iwc_fn("nonexistent/workflow/id")
 
     def test_get_iwc_workflow_details(self):
         """Test getting detailed information about a specific IWC workflow."""
         # First, search to get a valid trsID
-        search_result = search_iwc_workflows.fn("quality")
+        search_result = search_iwc_workflows_fn("quality")
         assert search_result.success is True
         assert search_result.count >= 1
 
         trs_id = search_result.data[0]["trsID"]
 
         # Get full details
-        result = get_iwc_workflow_details.fn(trs_id)
+        result = get_iwc_workflow_details_fn(trs_id)
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -533,11 +533,11 @@ class TestRealIWCOperations:
     def test_get_iwc_workflow_details_invalid_id(self):
         """Test getting details with an invalid trsID."""
         with pytest.raises(ValueError, match="not found in IWC manifest"):
-            get_iwc_workflow_details.fn("nonexistent/workflow/id")
+            get_iwc_workflow_details_fn("nonexistent/workflow/id")
 
     def test_recommend_iwc_workflows_rnaseq(self):
         """Test recommending workflows for RNA-seq analysis."""
-        result = recommend_iwc_workflows.fn(
+        result = recommend_iwc_workflows_fn(
             "I have paired-end RNA-seq data and want to do differential expression analysis"
         )
 
@@ -561,7 +561,7 @@ class TestRealIWCOperations:
 
     def test_recommend_iwc_workflows_assembly(self):
         """Test recommending workflows for genome assembly."""
-        result = recommend_iwc_workflows.fn("assemble bacterial genome nanopore", limit=3)
+        result = recommend_iwc_workflows_fn("assemble bacterial genome nanopore", limit=3)
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -574,7 +574,7 @@ class TestRealIWCOperations:
 
     def test_recommend_iwc_workflows_no_matches(self):
         """Test recommending with a query that matches nothing."""
-        result = recommend_iwc_workflows.fn("xyznonexistent123 abcfake456")
+        result = recommend_iwc_workflows_fn("xyznonexistent123 abcfake456")
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -583,7 +583,7 @@ class TestRealIWCOperations:
 
     def test_recommend_iwc_workflows_with_limit(self):
         """Test that limit parameter is respected."""
-        result = recommend_iwc_workflows.fn("sequencing", limit=2)
+        result = recommend_iwc_workflows_fn("sequencing", limit=2)
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True

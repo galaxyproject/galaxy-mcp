@@ -1,4 +1,9 @@
-"""Test helpers for FastMCP2 functions"""
+"""Test helpers for FastMCP functions.
+
+FastMCP 2.x wraps @mcp.tool() functions in FunctionTool objects; FastMCP 3.x
+returns plain functions.  The get_function() helper and _fn aliases below let
+tests work with either version.
+"""
 
 # Import all the wrapped functions from server
 from galaxy_mcp.server import (
@@ -16,6 +21,7 @@ from galaxy_mcp.server import (
     get_history_contents,
     get_history_details,
     get_invocations,
+    get_iwc_workflow_details,
     get_iwc_workflows,
     get_job_details,
     get_server_info,
@@ -29,6 +35,7 @@ from galaxy_mcp.server import (
     invoke_workflow,
     list_history_ids,
     list_workflows,
+    recommend_iwc_workflows,
     run_tool,
     search_iwc_workflows,
     search_tools_by_keywords,
@@ -38,10 +45,8 @@ from galaxy_mcp.server import (
 )
 
 
-# FastMCP2 wraps functions in FunctionTool objects - extract the underlying functions
-# for testing purposes
 def get_function(tool_or_function):
-    """Extract the underlying function from a FastMCP2 FunctionTool if needed"""
+    """Extract the underlying function from a FastMCP FunctionTool if needed."""
     if hasattr(tool_or_function, "fn"):
         return tool_or_function.fn
     return tool_or_function
@@ -59,6 +64,7 @@ get_histories_fn = get_function(get_histories)
 get_history_contents_fn = get_function(get_history_contents)
 get_history_details_fn = get_function(get_history_details)
 get_invocations_fn = get_function(get_invocations)
+get_iwc_workflow_details_fn = get_function(get_iwc_workflow_details)
 get_iwc_workflows_fn = get_function(get_iwc_workflows)
 get_job_details_fn = get_function(get_job_details)
 get_server_info_fn = get_function(get_server_info)
@@ -72,6 +78,7 @@ import_workflow_from_iwc_fn = get_function(import_workflow_from_iwc)
 invoke_workflow_fn = get_function(invoke_workflow)
 list_history_ids_fn = get_function(list_history_ids)
 list_workflows_fn = get_function(list_workflows)
+recommend_iwc_workflows_fn = get_function(recommend_iwc_workflows)
 run_tool_fn = get_function(run_tool)
 search_iwc_workflows_fn = get_function(search_iwc_workflows)
 search_tools_fn = get_function(search_tools_by_name)
@@ -93,6 +100,7 @@ __all__ = [
     "get_history_contents_fn",
     "get_history_details_fn",
     "get_invocations_fn",
+    "get_iwc_workflow_details_fn",
     "get_iwc_workflows_fn",
     "get_job_details_fn",
     "get_server_info_fn",
@@ -106,6 +114,7 @@ __all__ = [
     "invoke_workflow_fn",
     "list_history_ids_fn",
     "list_workflows_fn",
+    "recommend_iwc_workflows_fn",
     "run_tool_fn",
     "search_iwc_workflows_fn",
     "search_tools_fn",

@@ -53,7 +53,7 @@ run:
 
 # Run FastMCP dev server
 dev:
-	uv run fastmcp dev src/galaxy_mcp/server.py
+	uv run fastmcp dev inspector src/galaxy_mcp/server.py
 
 # Show outdated dependencies (within current pin ranges)
 check-deps:
