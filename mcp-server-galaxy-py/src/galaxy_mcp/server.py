@@ -1823,6 +1823,27 @@ def get_manifest_json() -> list[dict[str, Any]]:
     return manifest
 
 
+def _fetch_iwc_workflows() -> GalaxyResult:
+    """Fetch all workflows from IWC manifest.
+
+    Shared helper called by get_iwc_workflows and other IWC functions.
+    Extracted to avoid relying on fastmcp's FunctionTool.fn attribute,
+    which is unavailable in fastmcp >= 3.0.0 (decorator_mode="function").
+    """
+    manifest = get_manifest_json()
+    all_workflows = []
+    for entry in manifest:
+        if "workflows" in entry:
+            all_workflows.extend(entry["workflows"])
+
+    return GalaxyResult(
+        data=all_workflows,
+        success=True,
+        message=f"Retrieved {len(all_workflows)} workflows from IWC",
+        count=len(all_workflows),
+    )
+
+
 @mcp.tool()
 def get_iwc_workflows() -> GalaxyResult:
     """
@@ -1832,19 +1853,7 @@ def get_iwc_workflows() -> GalaxyResult:
         GalaxyResult with workflow manifest in data field
     """
     try:
-        manifest = get_manifest_json()
-        # Collect workflows from all manifest entries
-        all_workflows = []
-        for entry in manifest:
-            if "workflows" in entry:
-                all_workflows.extend(entry["workflows"])
-
-        return GalaxyResult(
-            data=all_workflows,
-            success=True,
-            message=f"Retrieved {len(all_workflows)} workflows from IWC",
-            count=len(all_workflows),
-        )
+        return _fetch_iwc_workflows()
     except Exception as e:
         raise ValueError(f"Failed to fetch IWC workflows: {str(e)}") from e
 
@@ -2008,7 +2017,7 @@ def search_iwc_workflows(query: str) -> GalaxyResult:
     """
     try:
         # Get the full manifest
-        iwc_result = get_iwc_workflows.fn()
+        iwc_result = _fetch_iwc_workflows()
         manifest = iwc_result.data
 
         # Filter workflows based on the search query
@@ -2109,7 +2118,7 @@ def get_iwc_workflow_details(trs_id: str) -> GalaxyResult:
     """
     try:
         # Get the full manifest
-        iwc_result = get_iwc_workflows.fn()
+        iwc_result = _fetch_iwc_workflows()
         manifest = iwc_result.data
 
         # Find the specified workflow
@@ -2260,7 +2269,7 @@ def recommend_iwc_workflows(intent: str, limit: int = 5) -> GalaxyResult:
         from rank_bm25 import BM25Okapi
 
         # Get the full manifest
-        iwc_result = get_iwc_workflows.fn()
+        iwc_result = _fetch_iwc_workflows()
         manifest = iwc_result.data
 
         if not manifest:
@@ -2348,7 +2357,7 @@ def import_workflow_from_iwc(trs_id: str) -> GalaxyResult:
 
     try:
         # Get the workflow manifest
-        iwc_result = get_iwc_workflows.fn()
+        iwc_result = _fetch_iwc_workflows()
         manifest = iwc_result.data
 
         # Find the specified workflow

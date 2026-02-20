@@ -41,6 +41,9 @@ from galaxy_mcp.server import (
     search_tools_by_name,
     upload_file,
 )
+from tests.test_helpers import get_function
+
+get_iwc_workflows_fn = get_function(get_iwc_workflows)
 
 # Test configuration
 GALAXY_URL = os.environ.get("GALAXY_TEST_URL", "http://localhost:8080")
@@ -400,7 +403,7 @@ class TestRealIWCOperations:
 
     def test_get_iwc_workflows(self):
         """Test fetching all workflows from IWC."""
-        result = get_iwc_workflows.fn()
+        result = get_iwc_workflows_fn()
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
