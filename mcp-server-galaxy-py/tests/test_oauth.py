@@ -7,6 +7,7 @@ from starlette.applications import Starlette
 from starlette.responses import JSONResponse, PlainTextResponse
 from starlette.testclient import TestClient
 
+from galaxy_mcp import server
 from galaxy_mcp.auth import GalaxyCredentials
 from galaxy_mcp.server import _OAuthPublicRoutes, ensure_connected
 
@@ -38,7 +39,9 @@ def test_ensure_connected_prefers_oauth_session(mock_galaxy_instance):
     assert state["connected"] is True
     assert state["gi"] is mock_galaxy_instance
     assert state["url"] == credentials.galaxy_url
-    mock_constructor.assert_called_once_with(url=credentials.galaxy_url, key=credentials.api_key)
+    mock_constructor.assert_called_once_with(
+        url=credentials.galaxy_url, key=credentials.api_key, user_agent=server.USER_AGENT
+    )
 
 
 class _DummyProvider:
