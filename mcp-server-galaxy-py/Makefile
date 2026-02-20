@@ -1,4 +1,4 @@
-.PHONY: help install lint test clean build upload run dev
+.PHONY: help install lint test clean build upload run dev update-deps check-deps
 
 # Default target
 help:
@@ -11,6 +11,11 @@ help:
 	@echo "  make build         Build package"
 	@echo "  make run           Run the MCP server"
 	@echo "  make dev           Run MCP dev server"
+	@echo ""
+	@echo "Dependency Management"
+	@echo "====================="
+	@echo "  make check-deps    Show outdated dependencies"
+	@echo "  make update-deps   Update all deps within pinned ranges and re-lock"
 
 # Install all dependencies
 install:
@@ -46,6 +51,16 @@ build: clean
 run:
 	uv run galaxy-mcp
 
-# Run FastMCP2 dev server
+# Run FastMCP dev server
 dev:
 	uv run fastmcp dev src/galaxy_mcp/server.py
+
+# Show outdated dependencies (within current pin ranges)
+check-deps:
+	uv pip list --outdated
+
+# Update all dependencies within pinned ranges and regenerate lock file.
+# After running, review changes with `git diff uv.lock` and run `make test`.
+update-deps:
+	uv lock --upgrade
+	uv sync --all-extras
