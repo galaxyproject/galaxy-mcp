@@ -26,13 +26,13 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "anyio>=4.0.0",
-    "bioblend>=1.7.0",
-    "cryptography>=41.0.0",
-    "fastmcp>=2.14.0",
-    "requests>=2.32.3",
-    "python-dotenv>=1.0.0",
-    "rank-bm25>=0.2.2",
+    "anyio>=4.0.0,<5",
+    "bioblend>=1.7.0,<2",
+    "cryptography>=41.0.0,<48",
+    "fastmcp>=2.14.0,<3",
+    "requests>=2.32.3,<3",
+    "python-dotenv>=1.0.0,<2",
+    "rank-bm25>=0.2.2,<1",
 ]
 
 [project.urls]
