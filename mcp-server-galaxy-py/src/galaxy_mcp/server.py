@@ -1,8 +1,10 @@
 # Galaxy MCP Server
 import concurrent.futures
 import importlib.metadata
+import json
 import logging
 import os
+import re
 import threading
 import types
 from functools import lru_cache
@@ -24,6 +26,11 @@ from galaxy_mcp.auth import (
     GalaxyOAuthProvider,
     configure_auth_provider,
     get_active_session,
+)
+from galaxy_mcp.tool_contract import (
+    build_agent_hints,
+    build_tool_contract,
+    validate_payload_against_contract,
 )
 
 _galaxy_mcp_version = importlib.metadata.version("galaxy-mcp")
@@ -510,6 +517,748 @@ def get_tool_details(tool_id: str, io_details: bool = False) -> GalaxyResult:
         ) from e
 
 
+def _validate_tool_inputs_internal(
+    gi: GalaxyInstance,
+    history_id: str,
+    tool_id: str,
+    inputs: dict[str, Any],
+    input_format: Literal["legacy", "21.01"],
+    require_explicit_conditionals: bool,
+    strict_unknown_keys: bool,
+) -> dict[str, Any]:
+    return _validate_tool_inputs_internal_with_preflight(
+        gi=gi,
+        history_id=history_id,
+        tool_id=tool_id,
+        inputs=inputs,
+        input_format=input_format,
+        require_explicit_conditionals=require_explicit_conditionals,
+        strict_unknown_keys=strict_unknown_keys,
+    )
+
+
+_REPEAT_SEGMENT_PATTERN = re.compile(r"^(?P<base>.+_repeat)_\d+$")
+_DATASET_ERROR_STATES = {"error", "discarded", "failed"}
+_DATASET_PENDING_STATES = {"new", "queued", "running", "upload", "setting_metadata", "deferred"}
+_COLLECTION_SRCS = {"hdca", "dataset_collection", "collection", "dca"}
+
+
+def _join_pipe_key(prefix: str, name: str) -> str:
+    return f"{prefix}|{name}" if prefix else name
+
+
+def _normalize_lookup_key(key: str) -> str:
+    normalized_parts: list[str] = []
+    for part in key.split("|"):
+        if part.isdigit():
+            continue
+        match = _REPEAT_SEGMENT_PATTERN.match(part)
+        normalized_parts.append(str(match.group("base")) if match else part)
+    return "|".join(normalized_parts)
+
+
+def _is_reference_dict(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and isinstance(value.get("src"), str)
+        and value.get("src") != ""
+        and isinstance(value.get("id"), str)
+        and value.get("id") != ""
+    )
+
+
+def _flatten_input_values(payload: Any, prefix: str = "") -> dict[str, Any]:
+    flattened: dict[str, Any] = {}
+
+    if isinstance(payload, dict):
+        for raw_key, value in payload.items():
+            key = _join_pipe_key(prefix, str(raw_key))
+            if _is_reference_dict(value):
+                flattened[key] = value
+                continue
+
+            if isinstance(value, dict):
+                if value:
+                    flattened.update(_flatten_input_values(value, key))
+                else:
+                    flattened[key] = value
+                continue
+
+            if isinstance(value, list):
+                if not value:
+                    flattened[key] = value
+                    continue
+                for idx, item in enumerate(value):
+                    item_key = _join_pipe_key(key, str(idx))
+                    if _is_reference_dict(item):
+                        flattened[item_key] = item
+                    elif isinstance(item, dict | list):
+                        flattened.update(_flatten_input_values(item, item_key))
+                    else:
+                        flattened[item_key] = item
+                continue
+
+            flattened[key] = value
+        return flattened
+
+    if isinstance(payload, list):
+        for idx, item in enumerate(payload):
+            item_key = _join_pipe_key(prefix, str(idx))
+            if _is_reference_dict(item):
+                flattened[item_key] = item
+            elif isinstance(item, dict | list):
+                flattened.update(_flatten_input_values(item, item_key))
+            else:
+                flattened[item_key] = item
+    return flattened
+
+
+def _pipe_values_to_nested(values: dict[str, Any]) -> dict[str, Any]:
+    nested: dict[str, Any] = {}
+    for key, value in sorted(values.items(), key=lambda item: item[0].count("|")):
+        parts = [part for part in key.split("|") if part]
+        if not parts:
+            continue
+        cursor = nested
+        for part in parts[:-1]:
+            existing = cursor.get(part)
+            if not isinstance(existing, dict):
+                existing = {}
+                cursor[part] = existing
+            cursor = existing
+        cursor[parts[-1]] = value
+    return nested
+
+
+def _collect_agent_explicit_values(
+    inputs: dict[str, Any], input_format: Literal["legacy", "21.01"]
+) -> dict[str, Any]:
+    if input_format == "legacy":
+        return {str(key): value for key, value in inputs.items()}
+    return _flatten_input_values(inputs)
+
+
+def _stable_payload_signature(values: dict[str, Any]) -> str:
+    serialized_items = []
+    for key, value in sorted(values.items()):
+        try:
+            rendered = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+        except Exception:
+            rendered = repr(value)
+        serialized_items.append((key, rendered))
+    return json.dumps(serialized_items, separators=(",", ":"))
+
+
+def _is_data_field_type(field_type: str) -> bool:
+    lowered = field_type.strip().lower()
+    if "column" in lowered:
+        return False
+    if "data_collection" in lowered or "datasetcollection" in lowered:
+        return True
+    return lowered in {"data", "hidden_data"} or "datatoolparameter" in lowered
+
+
+def _is_collection_src(src: str) -> bool:
+    return src.strip().lower() in _COLLECTION_SRCS
+
+
+def _extract_dataset_refs(value: Any) -> list[dict[str, str]]:
+    refs: list[dict[str, str]] = []
+    if _is_reference_dict(value):
+        refs.append({"src": str(value["src"]), "id": str(value["id"])})
+        return refs
+
+    if isinstance(value, dict):
+        if isinstance(value.get("values"), list):
+            for item in value["values"]:
+                refs.extend(_extract_dataset_refs(item))
+            return refs
+        for nested_value in value.values():
+            refs.extend(_extract_dataset_refs(nested_value))
+        return refs
+
+    if isinstance(value, list):
+        for item in value:
+            refs.extend(_extract_dataset_refs(item))
+    return refs
+
+
+def _collect_field_refs(
+    flat_values: dict[str, Any], fields: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    refs: list[dict[str, Any]] = []
+    for field in fields:
+        field_key = field.get("key")
+        if not isinstance(field_key, str) or not field_key:
+            continue
+
+        normalized_field_key = _normalize_lookup_key(field_key)
+        expected_extensions = field.get("extensions")
+        expected_collection_types = field.get("collection_types")
+
+        for input_key, value in flat_values.items():
+            if _normalize_lookup_key(input_key) != normalized_field_key:
+                continue
+            for ref in _extract_dataset_refs(value):
+                refs.append(
+                    {
+                        "field": field_key,
+                        "input_key": input_key,
+                        "src": ref["src"],
+                        "id": ref["id"],
+                        "expected_extensions": expected_extensions or [],
+                        "expected_collection_types": expected_collection_types or [],
+                    }
+                )
+    return refs
+
+
+def _iterative_build_with_immutable_agent_values(
+    gi: GalaxyInstance,
+    tool_id: str,
+    history_id: str,
+    original_inputs: dict[str, Any],
+    input_format: Literal["legacy", "21.01"],
+    max_rounds: int = 3,
+) -> dict[str, Any]:
+    warnings: list[dict[str, Any]] = []
+    agent_explicit_values = _collect_agent_explicit_values(original_inputs, input_format)
+    current_inputs = _pipe_values_to_nested(agent_explicit_values)
+    if not current_inputs:
+        current_inputs = {}
+
+    last_result: dict[str, Any] | None = None
+    last_state_inputs: dict[str, Any] = {}
+    rounds = 0
+    converged = False
+    seen_signatures: set[str] = set()
+    last_signature: str | None = None
+    oscillation_detected = False
+
+    for round_number in range(1, max_rounds + 1):
+        rounds = round_number
+        try:
+            build_result = gi.tools.build(tool_id, inputs=current_inputs, history_id=history_id)
+        except Exception as exc:
+            warnings.append(
+                {
+                    "code": "build_round_error",
+                    "field": None,
+                    "message": f"Galaxy build round {round_number} failed.",
+                    "details": {"round": round_number, "error": str(exc)},
+                }
+            )
+            return {
+                "warnings": warnings,
+                "rounds": rounds - 1,
+                "converged": False,
+                "oscillation_detected": False,
+                "final_inputs": current_inputs,
+                "resolved_state_inputs": last_state_inputs,
+                "build_result": last_result,
+            }
+
+        last_result = build_result
+        raw_state_inputs = build_result.get("state_inputs")
+        state_inputs = raw_state_inputs if isinstance(raw_state_inputs, dict) else {}
+        last_state_inputs = state_inputs
+        state_values = _flatten_input_values(state_inputs)
+
+        # Agent-provided keys are immutable. Build can only fill keys the agent did not set.
+        merged_values = {**state_values, **agent_explicit_values}
+        merged_inputs = _pipe_values_to_nested(merged_values)
+        signature = _stable_payload_signature(merged_values)
+
+        if signature == last_signature:
+            converged = True
+            current_inputs = merged_inputs
+            break
+
+        if signature in seen_signatures:
+            oscillation_detected = True
+            current_inputs = merged_inputs
+            warnings.append(
+                {
+                    "code": "build_oscillation_detected",
+                    "field": None,
+                    "message": "Iterative build payload oscillated before convergence.",
+                    "details": {"round": round_number, "max_rounds": max_rounds},
+                }
+            )
+            break
+
+        seen_signatures.add(signature)
+        last_signature = signature
+        current_inputs = merged_inputs
+
+    if not converged and not oscillation_detected and rounds >= max_rounds:
+        warnings.append(
+            {
+                "code": "build_not_converged",
+                "field": None,
+                "message": "Iterative build reached max rounds without convergence.",
+                "details": {"rounds": rounds, "max_rounds": max_rounds},
+            }
+        )
+
+    return {
+        "warnings": warnings,
+        "rounds": rounds,
+        "converged": converged,
+        "oscillation_detected": oscillation_detected,
+        "final_inputs": current_inputs,
+        "resolved_state_inputs": last_state_inputs,
+        "build_result": last_result,
+    }
+
+
+def _preflight_tool_datasets(
+    gi: GalaxyInstance,
+    history_id: str,
+    contract: dict[str, Any],
+    original_inputs: dict[str, Any],
+    resolved_inputs: dict[str, Any],
+) -> dict[str, Any]:
+    errors: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
+
+    fields = [
+        field
+        for field in contract.get("fields", [])
+        if isinstance(field, dict) and _is_data_field_type(str(field.get("type", "")))
+    ]
+
+    original_flat = _flatten_input_values(original_inputs)
+    resolved_flat = _flatten_input_values(resolved_inputs)
+    original_refs = _collect_field_refs(original_flat, fields)
+    resolved_refs = _collect_field_refs(resolved_flat, fields)
+
+    original_ref_index: dict[tuple[str, str], list[str]] = {}
+    for ref in original_refs:
+        key = (ref["src"], ref["id"])
+        original_ref_index.setdefault(key, []).append(ref["field"])
+
+    resolved_ref_index = {(ref["src"], ref["id"]) for ref in resolved_refs}
+    dropped_refs = sorted(original_ref_index.keys() - resolved_ref_index)
+    if dropped_refs:
+        warnings.append(
+            {
+                "code": "dataset_reference_removed_by_resolution",
+                "field": None,
+                "message": (
+                    "Some dataset references from the original payload were removed after "
+                    "conditional resolution."
+                ),
+                "details": {
+                    "dropped": [
+                        {
+                            "src": src,
+                            "id": dataset_id,
+                            "fields": sorted(set(original_ref_index[(src, dataset_id)])),
+                        }
+                        for src, dataset_id in dropped_refs
+                    ],
+                    "hint": "Check conditional selectors and branch-specific dataset inputs.",
+                },
+            }
+        )
+
+    try:
+        history_info = gi.histories.show_history(history_id, contents=False)
+        if isinstance(history_info, dict) and history_info.get("deleted"):
+            errors.append(
+                {
+                    "code": "history_deleted",
+                    "field": None,
+                    "message": f"Target history '{history_id}' is deleted.",
+                    "details": {"history_id": history_id},
+                }
+            )
+    except Exception as exc:
+        errors.append(
+            {
+                "code": "history_unavailable",
+                "field": None,
+                "message": f"Unable to access target history '{history_id}'.",
+                "details": {"history_id": history_id, "error": str(exc)},
+            }
+        )
+
+    dataset_cache: dict[str, dict[str, Any] | Exception] = {}
+    collection_cache: dict[str, dict[str, Any] | Exception] = {}
+
+    for ref in resolved_refs:
+        src = str(ref["src"])
+        dataset_id = str(ref["id"])
+        field_key = str(ref["field"])
+        expected_extensions = {
+            str(extension).lower()
+            for extension in ref.get("expected_extensions", [])
+            if str(extension).strip()
+        }
+        expected_collection_types = {
+            str(collection_type).lower()
+            for collection_type in ref.get("expected_collection_types", [])
+            if str(collection_type).strip()
+        }
+
+        if _is_collection_src(src):
+            if dataset_id not in collection_cache:
+                try:
+                    collection_cache[dataset_id] = gi.dataset_collections.show_dataset_collection(dataset_id)
+                except Exception as exc:
+                    collection_cache[dataset_id] = exc
+            collection_info = collection_cache[dataset_id]
+            if isinstance(collection_info, Exception):
+                errors.append(
+                    {
+                        "code": "dataset_collection_not_found",
+                        "field": field_key,
+                        "message": f"Dataset collection '{dataset_id}' is not accessible.",
+                        "details": {"src": src, "id": dataset_id, "error": str(collection_info)},
+                    }
+                )
+                continue
+
+            collection_type = str(collection_info.get("collection_type", "")).lower()
+            if expected_collection_types and collection_type not in expected_collection_types:
+                errors.append(
+                    {
+                        "code": "collection_type_mismatch",
+                        "field": field_key,
+                        "message": (
+                            f"Collection '{dataset_id}' type '{collection_type}' does not match expected "
+                            f"types for '{field_key}'."
+                        ),
+                        "details": {
+                            "expected_collection_types": sorted(expected_collection_types),
+                            "actual_collection_type": collection_type,
+                        },
+                    }
+                )
+
+            collection_history_id = collection_info.get("history_id")
+            if isinstance(collection_history_id, str) and collection_history_id != history_id:
+                warnings.append(
+                    {
+                        "code": "collection_cross_history_reference",
+                        "field": field_key,
+                        "message": (
+                            f"Collection '{dataset_id}' belongs to history '{collection_history_id}', "
+                            f"not target history '{history_id}'."
+                        ),
+                        "details": {"collection_history_id": collection_history_id},
+                    }
+                )
+            continue
+
+        if dataset_id not in dataset_cache:
+            try:
+                dataset_cache[dataset_id] = gi.datasets.show_dataset(dataset_id)
+            except Exception as exc:
+                dataset_cache[dataset_id] = exc
+        dataset_info = dataset_cache[dataset_id]
+        if isinstance(dataset_info, Exception):
+            errors.append(
+                {
+                    "code": "dataset_not_found",
+                    "field": field_key,
+                    "message": f"Dataset '{dataset_id}' is not accessible.",
+                    "details": {"src": src, "id": dataset_id, "error": str(dataset_info)},
+                }
+            )
+            continue
+
+        if dataset_info.get("deleted") or dataset_info.get("purged"):
+            errors.append(
+                {
+                    "code": "dataset_deleted",
+                    "field": field_key,
+                    "message": f"Dataset '{dataset_id}' is deleted or purged.",
+                    "details": {"id": dataset_id},
+                }
+            )
+
+        state = str(dataset_info.get("state", "")).lower()
+        if state in _DATASET_ERROR_STATES:
+            errors.append(
+                {
+                    "code": "dataset_invalid_state",
+                    "field": field_key,
+                    "message": f"Dataset '{dataset_id}' is in state '{state}'.",
+                    "details": {"id": dataset_id, "state": state},
+                }
+            )
+        elif state in _DATASET_PENDING_STATES:
+            warnings.append(
+                {
+                    "code": "dataset_not_ready",
+                    "field": field_key,
+                    "message": f"Dataset '{dataset_id}' is still processing (state '{state}').",
+                    "details": {"id": dataset_id, "state": state},
+                }
+            )
+
+        dataset_history_id = dataset_info.get("history_id")
+        if isinstance(dataset_history_id, str) and dataset_history_id != history_id:
+            warnings.append(
+                {
+                    "code": "dataset_cross_history_reference",
+                    "field": field_key,
+                    "message": (
+                        f"Dataset '{dataset_id}' belongs to history '{dataset_history_id}', "
+                        f"not target history '{history_id}'."
+                    ),
+                    "details": {"dataset_history_id": dataset_history_id},
+                }
+            )
+
+        dataset_extension = str(dataset_info.get("extension", "")).lower()
+        if expected_extensions and dataset_extension:
+            if "data" not in expected_extensions and dataset_extension not in expected_extensions:
+                warnings.append(
+                    {
+                        "code": "dataset_extension_mismatch",
+                        "field": field_key,
+                        "message": (
+                            f"Dataset '{dataset_id}' extension '{dataset_extension}' is not in expected "
+                            f"extensions for '{field_key}'."
+                        ),
+                        "details": {
+                            "id": dataset_id,
+                            "actual_extension": dataset_extension,
+                            "expected_extensions": sorted(expected_extensions),
+                        },
+                    }
+                )
+
+    return {
+        "errors": errors,
+        "warnings": warnings,
+        "checked_dataset_references": len(resolved_refs),
+        "dropped_dataset_references": len(dropped_refs),
+    }
+
+
+def _validate_tool_inputs_internal_with_preflight(
+    gi: GalaxyInstance,
+    history_id: str,
+    tool_id: str,
+    inputs: dict[str, Any],
+    input_format: Literal["legacy", "21.01"],
+    require_explicit_conditionals: bool,
+    strict_unknown_keys: bool,
+) -> dict[str, Any]:
+    tool_info = gi.tools.show_tool(tool_id, io_details=True)
+    contract = build_tool_contract(tool_info)
+    lint = validate_payload_against_contract(
+        contract,
+        inputs,
+        input_format=input_format,
+        require_explicit_conditionals=require_explicit_conditionals,
+        strict_unknown_keys=strict_unknown_keys,
+    )
+
+    iterative_build = _iterative_build_with_immutable_agent_values(
+        gi=gi,
+        tool_id=tool_id,
+        history_id=history_id,
+        original_inputs=inputs,
+        input_format=input_format,
+    )
+    lint["warnings"].extend(iterative_build["warnings"])
+
+    build_result = iterative_build["build_result"]
+    build_errors: dict[str, Any] = {}
+    tool_errors: Any = None
+    if isinstance(build_result, dict):
+        build_errors = build_result.get("errors") or {}
+        tool_errors = build_result.get("tool_errors")
+        if build_errors:
+            lint["errors"].append(
+                {
+                    "code": "build_errors",
+                    "field": None,
+                    "message": "Galaxy build endpoint reported input errors.",
+                    "details": build_errors,
+                }
+            )
+        if tool_errors:
+            lint["errors"].append(
+                {
+                    "code": "tool_errors",
+                    "field": None,
+                    "message": "Galaxy tool parser reported errors.",
+                    "details": tool_errors,
+                }
+            )
+
+    resolved_inputs = iterative_build["resolved_state_inputs"]
+    preflight = _preflight_tool_datasets(
+        gi=gi,
+        history_id=history_id,
+        contract=contract,
+        original_inputs=inputs,
+        resolved_inputs=resolved_inputs,
+    )
+    lint["errors"].extend(preflight["errors"])
+    lint["warnings"].extend(preflight["warnings"])
+
+    lint["valid"] = len(lint["errors"]) == 0
+    return {
+        "tool_id": tool_id,
+        "history_id": history_id,
+        "input_format": input_format,
+        "require_explicit_conditionals": require_explicit_conditionals,
+        "strict_unknown_keys": strict_unknown_keys,
+        "contract": contract,
+        "validation": lint,
+        "resolved_inputs": resolved_inputs,
+        "iterative_inputs": iterative_build["final_inputs"],
+        "build_rounds": iterative_build["rounds"],
+        "build_converged": iterative_build["converged"],
+        "build_oscillation_detected": iterative_build["oscillation_detected"],
+        "build_errors": build_errors,
+        "tool_errors": tool_errors,
+        "dataset_preflight": preflight,
+    }
+
+
+@mcp.tool()
+def inspect_tool_contract(
+    tool_id: str,
+    history_id: str | None = None,
+    include_test_cases: bool = False,
+    tool_version: str | None = None,
+) -> GalaxyResult:
+    """
+    Return an agent-friendly tool contract with canonical keys, conditionals, and templates.
+
+    This is intended for payload construction and setup validation before calling run_tool().
+
+    Args:
+        tool_id: Galaxy tool identifier.
+        history_id: Optional history ID for dynamic build context.
+        include_test_cases: Include tool tests for additional examples.
+        tool_version: Optional version selector for test cases.
+
+    Returns:
+        GalaxyResult containing:
+        - tool metadata
+        - structured contract (fields, required keys, conditional groups)
+        - agent_hints with type-specific setup constraints
+        - optional build preview (state_inputs) for canonical payload shape
+        - optional test cases
+    """
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+
+    try:
+        tool_info = gi.tools.show_tool(tool_id, io_details=True)
+        contract = build_tool_contract(tool_info)
+        agent_hints = build_agent_hints(contract)
+
+        build_preview: dict[str, Any] | None = None
+        build_warning: str | None = None
+        try:
+            build_preview = gi.tools.build(tool_id, history_id=history_id)
+        except Exception as exc:
+            build_warning = str(exc)
+
+        test_cases: list[dict[str, Any]] | None = None
+        if include_test_cases:
+            test_cases = gi.tools.get_tool_tests(tool_id, tool_version=tool_version)
+
+        return GalaxyResult(
+            data={
+                "tool": {
+                    "id": tool_info.get("id", tool_id),
+                    "name": tool_info.get("name"),
+                    "version": tool_info.get("version"),
+                    "description": tool_info.get("description"),
+                },
+                "contract": contract,
+                "agent_hints": agent_hints,
+                "build_preview": {
+                    "state_inputs": (build_preview or {}).get("state_inputs"),
+                    "errors": (build_preview or {}).get("errors"),
+                    "tool_errors": (build_preview or {}).get("tool_errors"),
+                    "warning": build_warning,
+                },
+                "test_cases": test_cases,
+                "agent_identity": USER_AGENT,
+            },
+            success=True,
+            message=f"Retrieved structured contract for tool '{tool_id}'",
+        )
+    except Exception as e:
+        context = {"tool_id": tool_id, "history_id": history_id}
+        if tool_version:
+            context["tool_version"] = tool_version
+        raise ValueError(format_error("Inspect tool contract", e, context)) from e
+
+
+@mcp.tool()
+def validate_tool_inputs(
+    history_id: str,
+    tool_id: str,
+    inputs: dict[str, Any],
+    input_format: Literal["legacy", "21.01"] = "legacy",
+    require_explicit_conditionals: bool = True,
+    strict_unknown_keys: bool = True,
+) -> GalaxyResult:
+    """
+    Validate a tool payload before submission and return resolved input preview.
+
+    Args:
+        history_id: Galaxy history ID where the tool would run.
+        tool_id: Galaxy tool identifier.
+        inputs: Proposed tool payload.
+        input_format: Galaxy input format ('legacy' or '21.01').
+        require_explicit_conditionals: Require explicit conditional selection keys.
+        strict_unknown_keys: Treat unknown input keys as errors (True) or warnings (False).
+
+    Returns:
+        GalaxyResult with deterministic validation diagnostics.
+    """
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+
+    try:
+        details = _validate_tool_inputs_internal(
+            gi=gi,
+            history_id=history_id,
+            tool_id=tool_id,
+            inputs=inputs,
+            input_format=input_format,
+            require_explicit_conditionals=require_explicit_conditionals,
+            strict_unknown_keys=strict_unknown_keys,
+        )
+        valid = bool(details["validation"]["valid"])
+        return GalaxyResult(
+            data={**details, "agent_identity": USER_AGENT},
+            success=True,
+            message=(
+                f"Tool payload is valid for '{tool_id}'"
+                if valid
+                else f"Tool payload is invalid for '{tool_id}'"
+            ),
+        )
+    except Exception as e:
+        raise ValueError(
+            format_error(
+                "Validate tool inputs",
+                e,
+                {
+                    "history_id": history_id,
+                    "tool_id": tool_id,
+                    "input_format": input_format,
+                    "strict_unknown_keys": strict_unknown_keys,
+                },
+            )
+        ) from e
+
+
 @mcp.tool()
 def get_tool_run_examples(tool_id: str, tool_version: str | None = None) -> GalaxyResult:
     """
@@ -584,7 +1333,12 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyRes
     """
     Run a Galaxy tool on datasets in a history.
 
-    RECOMMENDED WORKFLOW:
+    RECOMMENDED WORKFLOW FOR AGENTS:
+    1. inspect_tool_contract(tool_id) to understand canonical keys and constraints
+    2. validate_tool_inputs(history_id, tool_id, inputs) before submission
+    3. run_tool_validated(history_id, tool_id, inputs) to execute with guardrails
+
+    BASIC WORKFLOW (when payload is already trusted):
     1. Create or select a history: create_history() or get_histories()
     2. Upload data: upload_file() or upload_file_from_url()
     3. Get tool parameters: get_tool_details(tool_id, io_details=True)
@@ -640,6 +1394,8 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyRes
     - "Tool not found": Verify tool_id with search_tools_by_name()
     - "Invalid input": Check input format with get_tool_details(io_details=True)
     - "Dataset not found": Verify dataset_id exists in the history
+
+    For stricter, agent-oriented safety checks, use run_tool_validated().
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
@@ -656,6 +1412,85 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyRes
         raise ValueError(
             format_error(
                 "Run tool", e, {"history_id": history_id, "tool_id": tool_id, "inputs": inputs}
+            )
+        ) from e
+
+
+@mcp.tool()
+def run_tool_validated(
+    history_id: str,
+    tool_id: str,
+    inputs: dict[str, Any],
+    input_format: Literal["legacy", "21.01"] = "legacy",
+    require_explicit_conditionals: bool = True,
+    strict_unknown_keys: bool = True,
+) -> GalaxyResult:
+    """
+    Validate a payload and run the tool only when validation passes.
+
+    Args:
+        history_id: Galaxy history ID for the run.
+        tool_id: Galaxy tool identifier.
+        inputs: Tool input parameters.
+        input_format: Galaxy input format ('legacy' or '21.01').
+        require_explicit_conditionals: Require explicit selection for conditional inputs.
+        strict_unknown_keys: Treat unknown input keys as errors (True) or warnings (False).
+
+    Returns:
+        GalaxyResult with submission response and validation diagnostics.
+    """
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+
+    try:
+        details = _validate_tool_inputs_internal(
+            gi=gi,
+            history_id=history_id,
+            tool_id=tool_id,
+            inputs=inputs,
+            input_format=input_format,
+            require_explicit_conditionals=require_explicit_conditionals,
+            strict_unknown_keys=strict_unknown_keys,
+        )
+        validation = details["validation"]
+        if not validation["valid"]:
+            raise ValueError(
+                "Tool payload validation failed. "
+                f"Errors: {validation.get('errors', [])}. "
+                "Use validate_tool_inputs() to inspect and fix the payload."
+            )
+
+        if input_format == "legacy":
+            submission = gi.tools.run_tool(history_id, tool_id, inputs)
+        else:
+            submission = gi.tools.run_tool(history_id, tool_id, inputs, input_format=input_format)
+
+        return GalaxyResult(
+            data={
+                "submission": submission,
+                "validation": validation,
+                "resolved_inputs": details.get("resolved_inputs"),
+                "iterative_inputs": details.get("iterative_inputs"),
+                "build_rounds": details.get("build_rounds"),
+                "build_converged": details.get("build_converged"),
+                "build_oscillation_detected": details.get("build_oscillation_detected"),
+                "dataset_preflight": details.get("dataset_preflight"),
+                "agent_identity": USER_AGENT,
+            },
+            success=True,
+            message=f"Started validated tool run '{tool_id}' in history '{history_id}'",
+        )
+    except Exception as e:
+        raise ValueError(
+            format_error(
+                "Run tool validated",
+                e,
+                {
+                    "history_id": history_id,
+                    "tool_id": tool_id,
+                    "input_format": input_format,
+                    "strict_unknown_keys": strict_unknown_keys,
+                },
             )
         ) from e
 
