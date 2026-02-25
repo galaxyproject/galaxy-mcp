@@ -1,5 +1,6 @@
 # Galaxy MCP Server
 import concurrent.futures
+import importlib.metadata
 import logging
 import os
 import threading
@@ -8,6 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal, cast
 
+import bioblend
 import requests
 from bioblend.galaxy import GalaxyInstance
 from dotenv import find_dotenv, load_dotenv
@@ -23,6 +25,9 @@ from galaxy_mcp.auth import (
     configure_auth_provider,
     get_active_session,
 )
+
+_galaxy_mcp_version = importlib.metadata.version("galaxy-mcp")
+USER_AGENT = f"galaxy-mcp/{_galaxy_mcp_version} bioblend/{bioblend.__version__}"
 
 
 class PaginationInfo(BaseModel):
@@ -224,7 +229,9 @@ mcp.http_app = types.MethodType(_http_app_with_preflight, mcp)  # type: ignore[m
 # Initialize Galaxy client if environment variables are set
 if galaxy_state["url"] and galaxy_state["api_key"]:
     try:
-        galaxy_state["gi"] = GalaxyInstance(url=galaxy_state["url"], key=galaxy_state["api_key"])
+        galaxy_state["gi"] = GalaxyInstance(
+            url=galaxy_state["url"], key=galaxy_state["api_key"], user_agent=USER_AGENT
+        )
         galaxy_state["connected"] = True
         logger.info(
             "Galaxy client initialized from environment variables (URL: %s)",
@@ -243,7 +250,7 @@ def _get_request_connection_state() -> dict[str, Any]:
         credentials, api_key = get_active_session(get_access_token)
         if credentials and api_key:
             try:
-                gi = GalaxyInstance(url=credentials.galaxy_url, key=api_key)
+                gi = GalaxyInstance(url=credentials.galaxy_url, key=api_key, user_agent=USER_AGENT)
             except Exception as exc:  # pragma: no cover - defensive logging
                 logger.error("Failed to create Galaxy client for OAuth session: %s", exc)
             else:
@@ -338,7 +345,7 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
         galaxy_url = use_url if use_url.endswith("/") else f"{use_url}/"
 
         # Create a new Galaxy instance to test connection
-        gi = GalaxyInstance(url=galaxy_url, key=use_api_key)
+        gi = GalaxyInstance(url=galaxy_url, key=use_api_key, user_agent=USER_AGENT)
 
         # Test the connection by fetching user info
         user_info = gi.users.get_current_user()

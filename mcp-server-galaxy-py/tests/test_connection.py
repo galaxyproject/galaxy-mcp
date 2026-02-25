@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
+from galaxy_mcp import server
 from galaxy_mcp.auth import GalaxyCredentials
 
 from .test_helpers import connect_fn, ensure_connected, galaxy_state, get_server_info_fn
@@ -92,7 +93,9 @@ class TestConnection:
             == mock_galaxy_instance.users.get_current_user.return_value["username"]
         )
         mock_constructor.assert_called_once_with(
-            url=credentials.galaxy_url, key=credentials.api_key
+            url=credentials.galaxy_url,
+            key=credentials.api_key,
+            user_agent=server.USER_AGENT,
         )
 
     def test_get_server_info_success(self, mock_galaxy_instance):
