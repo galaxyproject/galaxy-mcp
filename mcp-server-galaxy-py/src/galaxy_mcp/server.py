@@ -86,7 +86,10 @@ def ensure_connected():
 
 @mcp.tool(
     name="connect",
-    description="Connect to a Galaxy server using a URL and API key. Uses environment variables or a .env file when values are not provided.",
+    description=(
+        "Connect to a Galaxy server using a URL and API key. "
+        "Uses environment variables or a .env file when values are not provided."
+    ),
     tags={"api", "connection", "auth"},
     annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True},
     output_schema={
@@ -194,8 +197,11 @@ def connect(url: str | None = None, api_key: str | None = None) -> dict[str, Any
                 "items": {
                     "type": "object",
                 },
-                "description": "Tools whose names match the query string, returned as an array."
-                "Each object contains a tool id that can be used as the 'tool_id' parameter in run_tool or get_tool_details.",
+                "description": (
+                    "Tools whose names match the query string, returned as an array. "
+                    "Each object contains a tool id that can be used as the 'tool_id' "
+                    "parameter in run_tool or get_tool_details."
+                ),
             }
         },
         "required": ["tools"],
@@ -278,8 +284,10 @@ def search_tools(query: str) -> dict[str, Any]:
             "inputs": {
                 "type": "array",
                 "items": {"type": "object"},
-                "description": "Tool input parameter definitions. Included when io_details is true. "
-                "Use this to construct valid inputs when calling run_tool.",
+                "description": (
+                    "Tool input parameter definitions. Included when io_details is true. "
+                    "Use this to construct valid inputs when calling run_tool."
+                ),
             },
             "outputs": {
                 "type": "array",
@@ -317,7 +325,9 @@ def get_tool_details(tool_id: str, io_details: bool = False) -> dict[str, Any]:
 
 @mcp.tool(
     name="get_tool_citations",
-    description="Retrieve citation information for a specific Galaxy tool, tool identified by tool ID.",
+    description=(
+        "Retrieve citation information for a specific Galaxy tool, tool identified by tool ID."
+    ),
     tags={"tools", "citations"},
     annotations={
         "readOnlyHint": True,
@@ -333,7 +343,9 @@ def get_tool_details(tool_id: str, io_details: bool = False) -> dict[str, Any]:
             "citations": {
                 "type": "array",
                 "items": {"type": "object"},
-                "description": "Citation metadata objects associated with the tool, returned as an array.",
+                "description": (
+                    "Citation metadata objects associated with the tool, returned as an array."
+                ),
             },
         },
         "required": ["tool_name", "tool_version", "citations"],
@@ -369,7 +381,10 @@ def get_tool_citations(tool_id: str) -> dict[str, Any]:
 
 @mcp.tool(
     name="run_tool",
-    description="Execute a Galaxy tool in an existing history using a tool ID and structured input parameters.",
+    description=(
+        "Execute a Galaxy tool in an existing history using a tool ID and "
+        "structured input parameters."
+    ),
     tags={"tools", "execution", "jobs"},
     annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True},
     output_schema={
@@ -383,8 +398,10 @@ def get_tool_citations(tool_id: str) -> dict[str, Any]:
             "outputs": {
                 "type": "array",
                 "items": {"type": "object"},
-                "description": "Output dataset objects produced by the tool execution."
-                "Each object contains an ID field reusable in get_dataset_details.",
+                "description": (
+                    "Output dataset objects produced by the tool execution. "
+                    "Each object contains an ID field reusable in get_dataset_details."
+                ),
             },
             "implicit_collections": {
                 "type": "array",
@@ -429,7 +446,9 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> dict[str,
 
 @mcp.tool(
     name="get_tool_panel",
-    description="Retrieve the Galaxy tool panel hierarchy, including sections and their nested tools",
+    description=(
+        "Retrieve the Galaxy tool panel hierarchy, including sections and their nested tools"
+    ),
     tags={"tools", "panel", "toolbox"},
     annotations={
         "readOnlyHint": True,
@@ -444,7 +463,8 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> dict[str,
                 "type": "array",
                 "items": {"type": "object"},
                 "description": (
-                    "Array of tool panel items. Each item is either a tool, or a section containing nested tools."
+                    "Array of tool panel items. Each item is either a tool, or a section "
+                    "containing nested tools. "
                     "Each tool contains an id usable as 'tool_id' in run_tool."
                 ),
             }
@@ -483,9 +503,12 @@ def get_tool_panel() -> dict[str, Any]:
             },
             "id": {
                 "type": "string",
-                "description": "Unique Galaxy history identifier."
-                "This value can be used as the 'history_id' parameter in tools such as:"
-                "run_tool, get_history_contents, upload_file, get_history_details and get_invocations.",
+                "description": (
+                    "Unique Galaxy history identifier. "
+                    "This value can be used as the 'history_id' parameter in tools such as: "
+                    "run_tool, get_history_contents, upload_file, get_history_details and "
+                    "get_invocations."
+                ),
             },
             "name": {"type": "string", "description": "Human-readable name of the history."},
             "deleted": {"type": "boolean", "description": "Whether the history is deleted."},
@@ -522,8 +545,8 @@ def get_tool_panel() -> dict[str, Any]:
             },
         },
         "required": ["model_class", "id", "name", "deleted", "purged", "archived", "url",
-                     "published", "count", "annotation", "tags", "update_time", "contents_url", "size",
-                     "user_id", "create_time", "state", "state_ids", "state_details"],
+                     "published", "count", "annotation", "tags", "update_time", "contents_url",
+                     "size", "user_id", "create_time", "state", "state_ids", "state_details"],
     },
 )
 def create_history(history_name: str) -> dict[str, Any]:
@@ -572,7 +595,9 @@ def create_history(history_name: str) -> dict[str, Any]:
                     },
                     "required": ["id", "name"],
                 },
-                "description": "List of tool objects identified as suitable for the specified dataset types.",
+                "description": (
+                    "List of tool objects identified as suitable for the specified dataset types."
+                ),
             },
             "count": {"type": "number", "description": "Total number of recommended tools."},
         },
@@ -753,7 +778,9 @@ def get_server_info() -> dict[str, Any]:
 
 @mcp.tool(
     name="get_user",
-    description="Retrieve metadata for the current user, including disk usage, quota, and account settings.",
+    description=(
+        "Retrieve metadata for the current user, including disk usage, quota, and account settings."
+    ),
     tags={"user", "metadata", "account"},
     annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": True},
     output_schema={
@@ -827,8 +854,10 @@ def get_user() -> dict[str, Any]:
             "histories": {
                 "type": "array",
                 "items": {"type": "object"},
-                "description": "List of Galaxy history objects. Each object contains an id usable in "
-                "run_tool, get_history_contents, and uploads.",
+                "description": (
+                    "List of Galaxy history objects. Each object contains an id usable in "
+                    "run_tool, get_history_contents, and uploads."
+                ),
             },
             "pagination": {
                 "type": "object",
@@ -962,9 +991,11 @@ def get_histories(
     annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": True},
     output_schema={
         "type": "object",
-        "description": "Array of objects containing history IDs and names. "
-        "Each id can be used as history_id in tools such as run_tool, "
-        "get_history_contents, upload_file, or get_history_details.",
+        "description": (
+            "Array of objects containing history IDs and names. "
+            "Each id can be used as history_id in tools such as run_tool, "
+            "get_history_contents, upload_file, or get_history_details."
+        ),
         "properties": {
             "histories": {
                 "type": "array",
@@ -1003,7 +1034,9 @@ def list_history_ids() -> dict[str, Any]:
 
 @mcp.tool(
     name="get_history_details",
-    description="Retrieve basic metadata and summary count of a Galaxy history without returning datasets.",
+    description=(
+        "Retrieve basic metadata and summary count of a Galaxy history without returning datasets."
+    ),
     tags={"history", "metadata", "summary"},
     annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": True},
     output_schema={
@@ -1099,9 +1132,11 @@ def get_history_details(history_id: str) -> dict[str, Any]:
             "contents": {
                 "type": "array",
                 "items": {"type": "object"},
-                "description": "Dataset objects. Each dataset includes an 'id' "
-                "field usable with get_dataset_details, download_dataset, "
-                "and get_job_details.",
+                "description": (
+                    "Dataset objects. Each dataset includes an 'id' "
+                    "field usable with get_dataset_details, download_dataset, "
+                    "and get_job_details."
+                ),
             },
             "pagination": {
                 "type": "object",
@@ -1277,12 +1312,14 @@ def get_history_contents(
         "properties": {
             "job": {
                 "type": "object",
-                "description": "Job metadata including tool, state, and timestamps",
+                "description": "Job metadata including tool, state, and timestamps.",
             },
             "dataset_id": {
                 "type": "string",
-                "description": "Dataset ID for which job details were retrieved."
-                "Reusable with get_dataset_details and download_dataset.",
+                "description": (
+                    "Dataset ID for which job details were retrieved. "
+                    "Reusable with get_dataset_details and download_dataset."
+                ),
             },
             "job_id": {
                 "type": "string",
@@ -1366,7 +1403,9 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str,
         "properties": {
             "dataset": {
                 "type": "object",
-                "description": "Metadata of the dataset including name, size, state, id, and other attributes.",
+                "description": (
+                    "Metadata of the dataset including name, size, state, id, and other attributes."
+                ),
             },
             "dataset_id": {
                 "type": "string",
@@ -1374,7 +1413,10 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> dict[str,
             },
             "preview": {
                 "type": "object",
-                "description": "Optional content preview of the dataset if include_preview=True and dataset state is 'ok'.",
+                "description": (
+                    "Optional content preview of the dataset if include_preview=True and "
+                    "dataset state is 'ok'."
+                ),
                 "properties": {
                     "lines": {"type": "string", "description": "Preview lines as a single string."},
                     "total_lines": {
@@ -1488,7 +1530,9 @@ def get_dataset_details(
         "properties": {
             "dataset_id": {
                 "type": "string",
-                "description": "Dataset ID. Can be reused with get_dataset_details or get_job_details.",
+                "description": (
+                    "Dataset ID. Can be reused with get_dataset_details or get_job_details."
+                ),
             },
             "file_path": {
                 "type": ["string", "null"],
@@ -1508,7 +1552,9 @@ def get_dataset_details(
             },
             "note": {
                 "type": "string",
-                "description": "Explanation of whether content was saved to file or returned in memory.",
+                "description": (
+                    "Explanation of whether content was saved to file or returned in memory."
+                ),
             },
             "dataset_info": {
                 "type": "object",
@@ -1654,8 +1700,10 @@ def download_dataset(
         "properties": {
             "outputs": {
                 "type": "array",
-                "description": "List of datasets created from the uploaded file. "
-                "Each object contains an ID field reusable in get_dataset_details.",
+                "description": (
+                    "List of datasets created from the uploaded file. "
+                    "Each object contains an ID field reusable in get_dataset_details."
+                ),
             },
             "output_collections": {
                 "type": "array",
@@ -1668,7 +1716,9 @@ def download_dataset(
             },
             "produces_entry_points": {
                 "type": "boolean",
-                "description": "Whether the upload produces entry points usable as workflow inputs.",
+                "description": (
+                    "Whether the upload produces entry points usable as workflow inputs."
+                ),
             },
         },
         "required": ["outputs", "jobs", "output_collections", "implicit_collections",
@@ -1722,8 +1772,10 @@ def upload_file(path: str, history_id: str | None = None) -> dict[str, Any]:
         "properties": {
             "outputs": {
                 "type": "array",
-                "description": "List of datasets created from the uploaded URL."
-                "Each object contains an ID field reusable in get_dataset_details.",
+                "description": (
+                    "List of datasets created from the uploaded URL. "
+                    "Each object contains an ID field reusable in get_dataset_details."
+                ),
             },
             "output_collections": {
                 "type": "array",
@@ -1732,7 +1784,9 @@ def upload_file(path: str, history_id: str | None = None) -> dict[str, Any]:
             "jobs": {"type": "array", "description": "Jobs triggered to fetch the remote file."},
             "implicit_collections": {
                 "type": "array",
-                "description": "Implicit dataset collections automatically generated by the upload, if any.",
+                "description": (
+                    "Implicit dataset collections automatically generated by the upload, if any."
+                ),
             },
             "produces_entry_points": {
                 "type": "boolean",
@@ -1741,6 +1795,8 @@ def upload_file(path: str, history_id: str | None = None) -> dict[str, Any]:
                 ),
             },
         },
+        "required": ["outputs", "jobs", "output_collections", "implicit_collections",
+                     "produces_entry_points"],
     },
 )
 def upload_file_from_url(
@@ -1895,8 +1951,10 @@ def get_manifest_json() -> list[dict[str, Any]]:
         "properties": {
             "workflows": {
                 "type": "array",
-                "description": "List of workflows defined in the IWC manifest."
-                "'trsID' can be used with import_workflow_from_iwc.",
+                "description": (
+                    "List of workflows defined in the IWC manifest. "
+                    "'trsID' can be used with import_workflow_from_iwc."
+                ),
             }
         },
         "required": ["workflows"],
@@ -1947,8 +2005,10 @@ def get_iwc_workflows() -> dict[str, Any]:
                     "properties": {
                         "trsID": {
                             "type": "string",
-                            "description": "Tool Registry Service (TRS) identifier for the workflow."
-                            "Can be used with import_workflow_from_iwc.",
+                            "description": (
+                                "Tool Registry Service (TRS) identifier for the workflow. "
+                                "Can be used with import_workflow_from_iwc."
+                            ),
                         },
                         "name": {"type": "string", "description": "Human-readable workflow name."},
                         "description": {
@@ -2100,8 +2160,10 @@ def import_workflow_from_iwc(trs_id: str) -> dict[str, Any]:
                 "description": "List of workflows accessible in the Galaxy instance.",
                 "items": {
                     "type": "object",
-                    "description": "Workflow metadata including ID, name, and additional attributes."
-                    "The 'id' field can be used with get_workflow_details or invoke_workflow.",
+                    "description": (
+                        "Workflow metadata including ID, name, and additional attributes. "
+                        "The 'id' field can be used with get_workflow_details or invoke_workflow."
+                    ),
                 },
             }
         },
@@ -2141,8 +2203,8 @@ def list_workflows(
 @mcp.tool(
     name="get_workflow_details",
     description=(
-        "Retrieve detailed information for a specific workflow in Galaxy, including steps,"
-        "inputs, outputs, and parameters."
+        "Retrieve detailed information for a specific workflow in Galaxy, including steps, "
+        "inputs, outputs, and parameters. "
         "An optional version may be specified; otherwise the latest version is returned."
     ),
     tags={"workflow", "metadata", "steps", "inputs", "outputs"},
@@ -2200,7 +2262,10 @@ def list_workflows(
                                 },
                                 "type": {
                                     "type": "string",
-                                    "description": "Step type, e.g., 'tool', 'data_collection_input', 'parameter_input'.",
+                                    "description": (
+                                        "Step type, e.g., 'tool', 'data_collection_input', "
+                                        "'parameter_input'."
+                                    ),
                                 },
                                 "tool_id": {
                                     "type": ["string", "null"],
@@ -2284,7 +2349,10 @@ def get_workflow_details(workflow_id: str, version: int | None = None) -> dict[s
         "properties": {
             "invocation": {
                 "type": "object",
-                "description": "Workflow invocation metadata including invocation ID, state, and associated history.",
+                "description": (
+                    "Workflow invocation metadata including invocation ID, "
+                    "state, and associated history."
+                ),
             }
         },
     },
@@ -2348,6 +2416,11 @@ def invoke_workflow(
 
 @mcp.tool(
     name="cancel_workflow_invocation",
+    description=(
+        "Request cancellation of a currently executing workflow invocation. "
+        "Returns a boolean indicating success and the updated invocation "
+        "object after the operation completes."
+    ),
     tags={"workflow", "invocation", "cancel", "execution", "jobs"},
     annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True},
     output_schema={
