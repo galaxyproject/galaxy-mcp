@@ -732,6 +732,46 @@ def create_history(history_name: str) -> GalaxyResult:
     )
 
 
+@mcp.tool(annotations={"readOnlyHint": False})
+def rename_history(history_id: str, new_name: str) -> GalaxyResult:
+    """
+    Rename an existing Galaxy history.
+
+    Args:
+        history_id: The ID of the history to rename. Obtain this from get_histories()
+                    or list_history_ids().
+        new_name: The new name for the history. Use a descriptive name that reflects
+                  the content or purpose of the history.
+
+    Returns:
+        GalaxyResult with:
+        - data: The updated history object, including the new name and other metadata.
+        - message: Confirmation message with the old and new history names.
+
+    Example:
+        >>> rename_history("abc123def456", "RNA-seq Analysis - Final")
+        GalaxyResult(
+            data={"id": "abc123def456", "name": "RNA-seq Analysis - Final", ...},
+            message="Renamed history to 'RNA-seq Analysis - Final'"
+        )
+
+    NEXT STEPS:
+    - View updated history: get_history_details(history_id)
+    - List all histories: get_histories()
+    """
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+    try:
+        updated = gi.histories.update_history(history_id, name=new_name)
+        return GalaxyResult(
+            data=updated,
+            success=True,
+            message=f"Renamed history to '{new_name}'",
+        )
+    except Exception as e:
+        raise ValueError(format_error("Rename history", e)) from e
+
+
 @mcp.tool()
 def search_tools_by_keywords(keywords: list[str]) -> GalaxyResult:
     """

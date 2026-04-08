@@ -11,6 +11,7 @@ from .test_helpers import (
     get_histories_fn,
     get_history_details_fn,
     list_history_ids_fn,
+    rename_history_fn,
 )
 
 
@@ -192,6 +193,39 @@ class TestHistoryOperations:
             mock_galaxy_instance.histories.show_history.assert_called_once_with(
                 "test_history_1", contents=True
             )
+
+    def test_rename_history(self, mock_galaxy_instance):
+        """Test rename_history updates the history name"""
+        mock_galaxy_instance.histories.update_history.return_value = {
+            "id": "test_history_1",
+            "name": "Renamed History",
+            "state": "ok",
+        }
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = rename_history_fn("test_history_1", "Renamed History")
+
+            assert result.success is True
+            assert result.data["id"] == "test_history_1"
+            assert result.data["name"] == "Renamed History"
+            assert "Renamed History" in result.message
+            mock_galaxy_instance.histories.update_history.assert_called_once_with(
+                "test_history_1", name="Renamed History"
+            )
+
+    def test_rename_history_invalid_id(self, mock_galaxy_instance):
+        """Test rename_history raises ValueError for an invalid history ID"""
+        mock_galaxy_instance.histories.update_history.side_effect = Exception("404 Not Found")
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError, match="Rename history"):
+                rename_history_fn("nonexistent_id", "New Name")
+
+    def test_rename_history_not_connected(self):
+        """Test rename_history raises when not connected"""
+        with patch.dict(galaxy_state, {"connected": False, "gi": None}):
+            with pytest.raises(Exception):
+                rename_history_fn("test_history_1", "New Name")
 
     def test_get_history_contents_with_collections(self, mock_galaxy_instance):
         """Test get_history_contents returns both datasets and collections with proper type flags"""
