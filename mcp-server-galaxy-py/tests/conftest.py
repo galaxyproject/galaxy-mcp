@@ -88,6 +88,7 @@ def mock_galaxy_instance():
         "email": "test@example.com",
         "username": "testuser",
     }
+    mock_users.get_credentials_for_tool.return_value = None
     mock_gi.users = mock_users
 
     return mock_gi

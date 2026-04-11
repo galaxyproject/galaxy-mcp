@@ -74,7 +74,7 @@ class TestToolOperations:
             assert result.data[0]["id"] == "tool1"
 
     def test_run_tool_fn(self, mock_galaxy_instance):
-        """Test running a tool"""
+        """Test running a tool without stored credentials"""
         mock_galaxy_instance.tools.run_tool.return_value = {
             "jobs": [{"id": "job_1", "state": "ok"}],
             "outputs": [{"id": "output_1", "name": "aligned.bam"}],
@@ -98,7 +98,44 @@ class TestToolOperations:
                 "tool1",
                 {"input1": {"src": "hda", "id": "dataset_1"}, "param1": "value1"},
             )
-            assert "credentials_context" in call_args[1]
+            assert call_args[1] == {}
+
+    def test_run_tool_with_credentials(self, mock_galaxy_instance):
+        """Test running a tool with stored credentials"""
+        mock_galaxy_instance.users.get_credentials_for_tool.return_value = [
+            {
+                "user_credentials_id": "cred-1",
+                "name": "external_service",
+                "version": "1.0",
+                "selected_group": {"id": "group-1", "name": "default"},
+            }
+        ]
+        mock_galaxy_instance.tools.run_tool.return_value = {
+            "jobs": [{"id": "job_1", "state": "ok"}],
+            "outputs": [{"id": "output_1", "name": "aligned.bam"}],
+        }
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = run_tool_fn("test_history_1", "tool1", {"param1": "value1"})
+
+            assert result.success is True
+            assert result.message.endswith("(with credentials)")
+            mock_galaxy_instance.users.get_credentials_for_tool.assert_called_once_with(
+                "user1", "tool1"
+            )
+            mock_galaxy_instance.tools.run_tool.assert_called_once_with(
+                "test_history_1",
+                "tool1",
+                {"param1": "value1"},
+                credentials_context=[
+                    {
+                        "user_credentials_id": "cred-1",
+                        "name": "external_service",
+                        "version": "1.0",
+                        "selected_group": {"id": "group-1", "name": "default"},
+                    }
+                ],
+            )
 
     def test_run_tool_error(self, mock_galaxy_instance):
         """Test tool execution error handling"""
@@ -106,6 +143,34 @@ class TestToolOperations:
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             with pytest.raises(ValueError, match="Run tool failed"):
+                run_tool_fn("test_history_1", "tool1", {})
+
+    def test_run_tool_missing_credentials_error(self, mock_galaxy_instance):
+        """Test agent-friendly error when Galaxy requires credentials and none are stored."""
+        mock_galaxy_instance.tools.run_tool.side_effect = Exception(
+            "Tool execution failed: missing credentials for service"
+        )
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError, match="no stored credentials were found"):
+                run_tool_fn("test_history_1", "tool1", {})
+
+    def test_run_tool_invalid_stored_credentials_error(self, mock_galaxy_instance):
+        """Test agent-friendly error when stored credentials are rejected."""
+        mock_galaxy_instance.users.get_credentials_for_tool.return_value = [
+            {
+                "user_credentials_id": "cred-1",
+                "name": "external_service",
+                "version": "1.0",
+                "selected_group": {"id": "group-1", "name": "default"},
+            }
+        ]
+        mock_galaxy_instance.tools.run_tool.side_effect = Exception(
+            "Tool execution failed: invalid user_credentials selection"
+        )
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError, match="using stored credentials"):
                 run_tool_fn("test_history_1", "tool1", {})
 
     def test_tool_operations_not_connected(self):
