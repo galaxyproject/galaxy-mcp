@@ -2557,6 +2557,202 @@ def cancel_workflow_invocation(invocation_id: str) -> GalaxyResult:
         ) from e
 
 
+@mcp.tool()
+def create_user_tool(representation: dict[str, Any]) -> GalaxyResult:
+    """Create a user-defined tool in Galaxy from a YAML tool definition.
+
+    User-defined tools are lightweight, containerized tools that can be created
+    without admin privileges. They are stored in the database, scoped to the
+    creating user, and can be embedded in workflows (importing the workflow
+    automatically creates the tool for the importing user).
+
+    Args:
+        representation: The tool definition as a dictionary matching the
+            GalaxyUserTool schema. Required fields:
+            - class: "GalaxyUserTool" (exactly this string)
+            - id: tool identifier (lowercase, no spaces, 3-255 chars)
+            - version: version string (e.g. "0.1.0")
+            - name: display name shown in Galaxy tool menu
+            - container: container image as a STRING (e.g. "python:3.12-slim"),
+              NOT a dict -- this is a common mistake
+            - shell_command: the command to execute, with $(inputs.name.path)
+              for data inputs and $(inputs.name) for parameter inputs
+            - inputs: list of input dicts, each with "name" and "type"
+              (type can be: "data", "integer", "float", "text", "boolean")
+            - outputs: list of output dicts, each with "name", "type": "data",
+              "format" (e.g. "tabular", "vcf", "bed"), and "from_work_dir"
+
+    Returns:
+        GalaxyResult with the created tool's id, uuid, tool_id, and active status.
+
+    Example:
+        >>> create_user_tool({
+        ...     "class": "GalaxyUserTool",
+        ...     "id": "my_filter",
+        ...     "version": "0.1.0",
+        ...     "name": "My Filter",
+        ...     "description": "Filter rows by threshold",
+        ...     "container": "python:3.12-slim",
+        ...     "shell_command": "python3 -c 'import sys; ...'",
+        ...     "inputs": [{"name": "input1", "type": "data", "format": "tabular"}],
+        ...     "outputs": [
+        ...         {"name": "output1", "type": "data",
+        ...          "format": "tabular", "from_work_dir": "out.tsv"}
+        ...     ]
+        ... })
+
+    NEXT STEPS:
+    - Run the tool: run_tool(history_id, tool_id, inputs)
+    - List your tools: list_user_tools()
+    - Delete a tool: delete_user_tool(uuid)
+    """
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+
+    for field in ("class", "id", "version", "name", "shell_command", "container"):
+        if field not in representation:
+            raise ValueError(f"representation is missing required field: '{field}'")
+    if representation["class"] != "GalaxyUserTool":
+        raise ValueError(f"class must be 'GalaxyUserTool', got '{representation['class']}'")
+    if not isinstance(representation["container"], str):
+        raise ValueError(
+            f"container must be a string (e.g. 'python:3.12-slim'), "
+            f"got {type(representation['container']).__name__}: {representation['container']}"
+        )
+
+    try:
+        payload = {"src": "representation", "representation": representation}
+        url = f"{gi.url}/unprivileged_tools"
+        response = gi.make_post_request(url, payload=payload)
+        return GalaxyResult(
+            data=response,
+            success=True,
+            message=(
+                f"Created user-defined tool "
+                f"'{representation.get('name', representation.get('id', 'unknown'))}'"
+            ),
+        )
+    except Exception as e:
+        raise ValueError(
+            format_error("Create user tool", e, {"tool_id": representation.get("id")})
+        ) from e
+
+
+@mcp.tool()
+def list_user_tools(active: bool = True) -> GalaxyResult:
+    """List user-defined tools belonging to the current user.
+
+    Args:
+        active: If True (default), only show active tools. Set False to include deactivated tools.
+
+    Returns:
+        GalaxyResult with list of user tools including id, uuid, tool_id, name, and active status.
+    """
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+
+    try:
+        url = f"{gi.url}/unprivileged_tools?active={str(active).lower()}"
+        response = gi.make_get_request(url)
+        tools = response.json()
+        return GalaxyResult(
+            data=tools,
+            success=True,
+            message=f"Found {len(tools)} user-defined tool(s)",
+            count=len(tools),
+        )
+    except Exception as e:
+        raise ValueError(format_error("List user tools", e)) from e
+
+
+@mcp.tool()
+def delete_user_tool(uuid: str) -> GalaxyResult:
+    """Deactivate a user-defined tool. Deactivated tools are not loaded into the toolbox.
+
+    Args:
+        uuid: The UUID of the tool to deactivate. Get this from list_user_tools().
+
+    Returns:
+        GalaxyResult confirming deactivation.
+    """
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+
+    try:
+        url = f"{gi.url}/unprivileged_tools/{uuid}"
+        gi.make_delete_request(url)
+        return GalaxyResult(
+            data={"uuid": uuid, "deactivated": True},
+            success=True,
+            message=f"Deactivated user-defined tool '{uuid}'",
+        )
+    except Exception as e:
+        raise ValueError(format_error("Delete user tool", e, {"uuid": uuid})) from e
+
+
+@mcp.tool()
+def run_user_tool(history_id: str, tool_uuid: str, inputs: dict[str, Any]) -> GalaxyResult:
+    """Run a user-defined tool via the Galaxy jobs API.
+
+    User-defined tools cannot be run via the standard run_tool() endpoint.
+    This function uses POST /api/jobs with the tool UUID, matching how
+    the Galaxy UI submits user-defined tool jobs.
+
+    Args:
+        history_id: Galaxy history ID where outputs will be placed.
+        tool_uuid: The UUID of the user-defined tool (from create_user_tool or list_user_tools).
+        inputs: Tool input parameters. Dataset inputs use:
+                {"input_name": {"src": "hda", "id": "dataset_id"}}
+                Scalar parameters use direct values:
+                {"param_name": value}
+
+    Returns:
+        GalaxyResult with job info and output dataset IDs.
+
+    Example:
+        >>> run_user_tool(
+        ...     history_id="abc123",
+        ...     tool_uuid="61d15277-a911-45ef-aa66-5385146578cc",
+        ...     inputs={
+        ...         "scorer_output": {"src": "hda", "id": "59ace41fc068d3ad"},
+        ...         "top_tracks_per_variant": 5
+        ...     }
+        ... )
+    """
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+
+    try:
+        url = f"{gi.url}/unprivileged_tools/{tool_uuid}"
+        response = gi.make_get_request(url)
+        tool_info = response.json()
+        tool_id = tool_info.get("tool_id")
+        if not tool_id:
+            raise ValueError(f"No user-defined tool found with UUID '{tool_uuid}'")
+        tool_version = tool_info.get("representation", {}).get("version", "0.1.0")
+
+        payload = {
+            "tool_id": tool_id,
+            "tool_uuid": tool_uuid,
+            "tool_version": tool_version,
+            "history_id": history_id,
+            "inputs": inputs,
+            "use_cached_jobs": False,
+        }
+        job_url = f"{gi.url}/jobs"
+        result = gi.make_post_request(job_url, payload=payload)
+
+        return GalaxyResult(
+            data=result,
+            success=True,
+            message=f"Started user tool '{tool_id}' (UUID: {tool_uuid}) in history '{history_id}'",
+        )
+    except Exception as e:
+        raise ValueError(
+            format_error("Run user tool", e, {"history_id": history_id, "tool_uuid": tool_uuid})
+        ) from e
+
+
 def run_http_server(
     *,
     host: str | None = None,
