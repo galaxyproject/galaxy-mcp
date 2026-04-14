@@ -29,6 +29,31 @@ from galaxy_mcp.auth import (
 _galaxy_mcp_version = importlib.metadata.version("galaxy-mcp")
 USER_AGENT = f"galaxy-mcp/{_galaxy_mcp_version} bioblend/{bioblend.__version__}"
 
+_gi_lock = threading.Lock()
+
+
+def _make_thread_safe(gi: GalaxyInstance) -> GalaxyInstance:
+    """Wrap a GalaxyInstance's HTTP methods with a lock for thread safety.
+
+    bioblend's GalaxyClient uses shared mutable state (json_headers dict)
+    and bare requests.get/post calls that aren't safe under concurrent access.
+    """
+    for method_name in (
+        "make_get_request",
+        "make_post_request",
+        "make_put_request",
+        "make_delete_request",
+        "make_patch_request",
+    ):
+        original = getattr(gi, method_name)
+
+        def locked_method(*args, _orig=original, **kwargs):
+            with _gi_lock:
+                return _orig(*args, **kwargs)
+
+        setattr(gi, method_name, locked_method)
+    return gi
+
 
 class PaginationInfo(BaseModel):
     """Pagination metadata for list operations."""
@@ -229,8 +254,10 @@ mcp.http_app = types.MethodType(_http_app_with_preflight, mcp)  # type: ignore[m
 # Initialize Galaxy client if environment variables are set
 if galaxy_state["url"] and galaxy_state["api_key"]:
     try:
-        galaxy_state["gi"] = GalaxyInstance(
-            url=galaxy_state["url"], key=galaxy_state["api_key"], user_agent=USER_AGENT
+        galaxy_state["gi"] = _make_thread_safe(
+            GalaxyInstance(
+                url=galaxy_state["url"], key=galaxy_state["api_key"], user_agent=USER_AGENT
+            )
         )
         galaxy_state["connected"] = True
         logger.info(
@@ -250,7 +277,9 @@ def _get_request_connection_state() -> dict[str, Any]:
         credentials, api_key = get_active_session(get_access_token)
         if credentials and api_key:
             try:
-                gi = GalaxyInstance(url=credentials.galaxy_url, key=api_key, user_agent=USER_AGENT)
+                gi = _make_thread_safe(
+                    GalaxyInstance(url=credentials.galaxy_url, key=api_key, user_agent=USER_AGENT)
+                )
             except Exception as exc:  # pragma: no cover - defensive logging
                 logger.error("Failed to create Galaxy client for OAuth session: %s", exc)
             else:
@@ -345,7 +374,9 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
         galaxy_url = use_url if use_url.endswith("/") else f"{use_url}/"
 
         # Create a new Galaxy instance to test connection
-        gi = GalaxyInstance(url=galaxy_url, key=use_api_key, user_agent=USER_AGENT)
+        gi = _make_thread_safe(
+            GalaxyInstance(url=galaxy_url, key=use_api_key, user_agent=USER_AGENT)
+        )
 
         # Test the connection by fetching user info
         user_info = gi.users.get_current_user()
