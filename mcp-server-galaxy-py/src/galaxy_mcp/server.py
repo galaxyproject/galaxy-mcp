@@ -645,12 +645,25 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyRes
     gi: GalaxyInstance = state["gi"]
 
     try:
-        # Run the tool with provided inputs
-        result = gi.tools.run_tool(history_id, tool_id, inputs)
+        credentials_context = None
+        try:
+            user_info = gi.users.get_current_user()
+            user_id = user_info["id"]
+            credentials_context = gi.users.get_credentials_for_tool(user_id, tool_id)  # type: ignore[attr-defined]
+        except Exception:
+            pass  # Credentials lookup is best-effort
+
+        result = gi.tools.run_tool(
+            history_id,
+            tool_id,
+            inputs,
+            credentials_context=credentials_context,  # type: ignore[call-arg]
+        )
+        cred_msg = " (with credentials)" if credentials_context else ""
         return GalaxyResult(
             data=result,
             success=True,
-            message=f"Started tool '{tool_id}' in history '{history_id}'",
+            message=f"Started tool '{tool_id}' in history '{history_id}'{cred_msg}",
         )
     except Exception as e:
         raise ValueError(

@@ -91,11 +91,14 @@ class TestToolOperations:
             assert "outputs" in result.data
             assert result.data["outputs"][0]["name"] == "aligned.bam"
 
-            mock_galaxy_instance.tools.run_tool.assert_called_once_with(
+            mock_galaxy_instance.tools.run_tool.assert_called_once()
+            call_args = mock_galaxy_instance.tools.run_tool.call_args
+            assert call_args[0] == (
                 "test_history_1",
                 "tool1",
                 {"input1": {"src": "hda", "id": "dataset_1"}, "param1": "value1"},
             )
+            assert "credentials_context" in call_args[1]
 
     def test_run_tool_error(self, mock_galaxy_instance):
         """Test tool execution error handling"""
