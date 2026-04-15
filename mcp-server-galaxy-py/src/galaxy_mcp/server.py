@@ -2,7 +2,6 @@
 import concurrent.futures
 import contextlib
 import importlib.metadata
-import inspect
 import logging
 import os
 import threading
@@ -89,28 +88,10 @@ logger = logging.getLogger(__name__)
 
 
 def _get_tool_credentials_context(gi: GalaxyInstance, tool_id: str) -> list[dict[str, Any]] | None:
-    """Return stored credentials for a tool when the BioBlend client supports it."""
-    get_credentials_for_tool = getattr(gi.users, "get_credentials_for_tool", None)
-    if get_credentials_for_tool is None:
-        return None
-
+    """Return stored credentials for a tool, if any are configured for the current user."""
     user_info = gi.users.get_current_user()
     user_id = user_info["id"]
-    return cast(list[dict[str, Any]] | None, get_credentials_for_tool(user_id, tool_id))
-
-
-def _supports_credentials_context(run_tool_method: Any) -> bool:
-    """Detect whether BioBlend's tools.run_tool() accepts credentials_context."""
-    try:
-        signature = inspect.signature(run_tool_method)
-    except (TypeError, ValueError):
-        return False
-
-    parameters = signature.parameters.values()
-    return any(
-        parameter.kind == inspect.Parameter.VAR_KEYWORD or parameter.name == "credentials_context"
-        for parameter in parameters
-    )
+    return cast(list[dict[str, Any]] | None, gi.users.get_credentials_for_tool(user_id, tool_id))
 
 
 def _is_credential_related_error(error: Exception) -> bool:
@@ -744,19 +725,10 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyRes
         with contextlib.suppress(Exception):
             credentials_context = _get_tool_credentials_context(gi, tool_id)
 
-        run_tool_kwargs: dict[str, Any] = {}
-        if credentials_context:
-            if _supports_credentials_context(gi.tools.run_tool):
-                run_tool_kwargs["credentials_context"] = credentials_context
-            else:
-                logger.warning(
-                    "Stored credentials found for tool '%s', but installed BioBlend "
-                    "does not support credentials_context. Run will proceed without credentials.",
-                    tool_id,
-                )
-
-        used_credentials = "credentials_context" in run_tool_kwargs
-        result = gi.tools.run_tool(history_id, tool_id, inputs, **run_tool_kwargs)
+        used_credentials = credentials_context is not None
+        result = gi.tools.run_tool(
+            history_id, tool_id, inputs, credentials_context=credentials_context
+        )
         cred_msg = " (with credentials)" if used_credentials else ""
         return GalaxyResult(
             data=result,

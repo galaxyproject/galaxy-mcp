@@ -98,7 +98,8 @@ class TestToolOperations:
                 "tool1",
                 {"input1": {"src": "hda", "id": "dataset_1"}, "param1": "value1"},
             )
-            assert call_args[1] == {}
+            assert "credentials_context" in call_args.kwargs
+            assert call_args.kwargs["credentials_context"] is None
 
     def test_run_tool_with_credentials(self, mock_galaxy_instance):
         """Test running a tool with stored credentials"""
