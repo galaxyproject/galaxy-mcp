@@ -26,6 +26,7 @@ from galaxy_mcp.auth import (
     configure_auth_provider,
     get_active_session,
 )
+from galaxy_mcp.middleware import ToolVisibilityMiddleware
 
 _galaxy_mcp_version = importlib.metadata.version("galaxy-mcp")
 USER_AGENT = f"galaxy-mcp/{_galaxy_mcp_version} bioblend/{bioblend.__version__}"
@@ -357,6 +358,23 @@ def ensure_connected() -> dict[str, Any]:
             "api_key='your-key')"
         )
     return state
+
+
+def _parse_tag_env(var_name: str) -> set[str] | None:
+    raw = os.environ.get(var_name)
+    if not raw:
+        return None
+    tags = {tag.strip() for tag in raw.split(",") if tag.strip()}
+    return tags or None
+
+
+mcp.add_middleware(
+    ToolVisibilityMiddleware(
+        get_session_state=_get_request_connection_state,
+        include_tags=_parse_tag_env("GALAXY_MCP_INCLUDE_TAGS"),
+        exclude_tags=_parse_tag_env("GALAXY_MCP_EXCLUDE_TAGS"),
+    )
+)
 
 
 @mcp.tool(tags={"connection", "write", "core"})
