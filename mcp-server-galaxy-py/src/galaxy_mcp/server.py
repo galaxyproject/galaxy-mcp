@@ -1,6 +1,8 @@
 # Galaxy MCP Server
 import concurrent.futures
+import contextlib
 import importlib.metadata
+import inspect
 import logging
 import os
 import threading
@@ -84,6 +86,68 @@ class GalaxyResult(BaseModel):
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _get_tool_credentials_context(gi: GalaxyInstance, tool_id: str) -> list[dict[str, Any]] | None:
+    """Return stored credentials for a tool when the BioBlend client supports it."""
+    get_credentials_for_tool = getattr(gi.users, "get_credentials_for_tool", None)
+    if get_credentials_for_tool is None:
+        return None
+
+    user_info = gi.users.get_current_user()
+    user_id = user_info["id"]
+    return cast(list[dict[str, Any]] | None, get_credentials_for_tool(user_id, tool_id))
+
+
+def _supports_credentials_context(run_tool_method: Any) -> bool:
+    """Detect whether BioBlend's tools.run_tool() accepts credentials_context."""
+    try:
+        signature = inspect.signature(run_tool_method)
+    except (TypeError, ValueError):
+        return False
+
+    parameters = signature.parameters.values()
+    return any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD or parameter.name == "credentials_context"
+        for parameter in parameters
+    )
+
+
+def _is_credential_related_error(error: Exception) -> bool:
+    """Return True when a tool run failure appears to involve Galaxy credentials."""
+    error_text = str(error).lower()
+    credential_markers = (
+        "credential",
+        "credentials",
+        "credentials_context",
+        "user_credentials",
+        "service credential",
+        "service credentials",
+    )
+    return any(marker in error_text for marker in credential_markers)
+
+
+def _format_run_tool_credential_error(
+    error: Exception,
+    *,
+    history_id: str,
+    tool_id: str,
+    used_credentials: bool,
+) -> str:
+    """Return an agent-friendly error for missing or invalid tool credentials."""
+    base = format_error("Run tool", error, {"history_id": history_id, "tool_id": tool_id})
+    if used_credentials:
+        return (
+            f"{base}. Galaxy rejected the run while using stored credentials for tool "
+            f"'{tool_id}'. Check the configured credential values or active credential group "
+            "for this tool, then try again."
+        )
+
+    return (
+        f"{base}. This tool appears to require Galaxy tool credentials, but no stored "
+        f"credentials were found for tool '{tool_id}'. Configure credentials for this tool "
+        "in Galaxy, then retry the run."
+    )
 
 
 def format_error(action: str, error: Exception, context: dict | None = None) -> str:
@@ -676,14 +740,39 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyRes
     gi: GalaxyInstance = state["gi"]
 
     try:
-        # Run the tool with provided inputs
-        result = gi.tools.run_tool(history_id, tool_id, inputs)
+        credentials_context = None
+        with contextlib.suppress(Exception):
+            credentials_context = _get_tool_credentials_context(gi, tool_id)
+
+        run_tool_kwargs: dict[str, Any] = {}
+        if credentials_context:
+            if _supports_credentials_context(gi.tools.run_tool):
+                run_tool_kwargs["credentials_context"] = credentials_context
+            else:
+                logger.warning(
+                    "Stored credentials found for tool '%s', but installed BioBlend "
+                    "does not support credentials_context. Run will proceed without credentials.",
+                    tool_id,
+                )
+
+        used_credentials = "credentials_context" in run_tool_kwargs
+        result = gi.tools.run_tool(history_id, tool_id, inputs, **run_tool_kwargs)
+        cred_msg = " (with credentials)" if used_credentials else ""
         return GalaxyResult(
             data=result,
             success=True,
-            message=f"Started tool '{tool_id}' in history '{history_id}'",
+            message=f"Started tool '{tool_id}' in history '{history_id}'{cred_msg}",
         )
     except Exception as e:
+        if _is_credential_related_error(e):
+            raise ValueError(
+                _format_run_tool_credential_error(
+                    e,
+                    history_id=history_id,
+                    tool_id=tool_id,
+                    used_credentials=used_credentials if "used_credentials" in locals() else False,
+                )
+            ) from e
         raise ValueError(
             format_error(
                 "Run tool", e, {"history_id": history_id, "tool_id": tool_id, "inputs": inputs}
