@@ -285,7 +285,7 @@ def ensure_connected() -> dict[str, Any]:
     return state
 
 
-@mcp.tool()
+@mcp.tool(tags={"connection", "write", "core"})
 def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
     """
     Connect to Galaxy server
@@ -382,7 +382,7 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
         raise ValueError(error_msg) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"tools", "read", "extended"})
 def search_tools_by_name(query: str) -> GalaxyResult:
     """
     Search Galaxy tools whose name, ID, or description contains the given query (substring match).
@@ -447,7 +447,7 @@ def search_tools_by_name(query: str) -> GalaxyResult:
         raise ValueError(format_error("Search tools", e, {"query": query})) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"tools", "read", "extended"})
 def get_tool_details(tool_id: str, io_details: bool = False) -> GalaxyResult:
     """
     Get detailed information about a specific tool including its input parameters.
@@ -510,7 +510,7 @@ def get_tool_details(tool_id: str, io_details: bool = False) -> GalaxyResult:
         ) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"tools", "read", "extended"})
 def get_tool_run_examples(tool_id: str, tool_version: str | None = None) -> GalaxyResult:
     """
     Return the exact XML test definitions (inputs, outputs, assertions, required files)
@@ -544,7 +544,7 @@ def get_tool_run_examples(tool_id: str, tool_version: str | None = None) -> Gala
         raise ValueError(format_error("Get tool run examples", e, context)) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"tools", "read", "extended"})
 def get_tool_citations(tool_id: str) -> GalaxyResult:
     """
     Get citation information for a specific tool
@@ -579,7 +579,7 @@ def get_tool_citations(tool_id: str) -> GalaxyResult:
         raise ValueError(format_error("Get tool citations", e, {"tool_id": tool_id})) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"tools", "write", "core"})
 def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyResult:
     """
     Run a Galaxy tool on datasets in a history.
@@ -660,7 +660,7 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyRes
         ) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"tools", "read", "extended"})
 def get_tool_panel() -> GalaxyResult:
     """
     Get the tool panel structure (toolbox)
@@ -683,7 +683,7 @@ def get_tool_panel() -> GalaxyResult:
         raise ValueError(format_error("Get tool panel", e)) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"histories", "write", "core"})
 def create_history(history_name: str) -> GalaxyResult:
     """
     Create a new history to organize datasets and analyses.
@@ -732,7 +732,7 @@ def create_history(history_name: str) -> GalaxyResult:
     )
 
 
-@mcp.tool()
+@mcp.tool(tags={"tools", "read", "extended"})
 def search_tools_by_keywords(keywords: list[str]) -> GalaxyResult:
     """
     Recommend Galaxy tools based on a list of keywords.
@@ -844,7 +844,7 @@ def search_tools_by_keywords(keywords: list[str]) -> GalaxyResult:
         raise ValueError(f"Failed to search tools by keywords: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"connection", "read", "core"})
 def get_server_info() -> GalaxyResult:
     """
     Get Galaxy server information including version, URL, and configuration details
@@ -898,7 +898,7 @@ def get_server_info() -> GalaxyResult:
         raise ValueError(f"Failed to get server information: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"user", "read", "core"})
 def get_user() -> GalaxyResult:
     """
     Get current user information
@@ -920,7 +920,7 @@ def get_user() -> GalaxyResult:
         raise ValueError(f"Failed to get user: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"histories", "read", "core"})
 def get_histories(
     limit: int | None = None, offset: int = 0, name: str | None = None
 ) -> GalaxyResult:
@@ -1030,7 +1030,7 @@ def get_histories(
         )
 
 
-@mcp.tool()
+@mcp.tool(tags={"histories", "read", "core"})
 def list_history_ids() -> GalaxyResult:
     """
     Get a simplified list of history IDs and names for easy reference
@@ -1062,7 +1062,7 @@ def list_history_ids() -> GalaxyResult:
         raise ValueError(f"Failed to list history IDs: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"histories", "read", "core"})
 def get_history_details(history_id: str) -> GalaxyResult:
     """
     Get history metadata and summary count ONLY - does not return actual datasets
@@ -1118,7 +1118,7 @@ def get_history_details(history_id: str) -> GalaxyResult:
         raise ValueError(f"Failed to get history details for ID '{history_id}': {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"histories", "read", "core"})
 def get_history_contents(
     history_id: str,
     limit: int = 100,
@@ -1255,7 +1255,7 @@ def get_history_contents(
         raise ValueError(f"Failed to get history contents for ID '{history_id}': {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"jobs", "read", "core"})
 def get_job_details(dataset_id: str, history_id: str | None = None) -> GalaxyResult:
     """
     Get detailed information about the job that created a specific dataset
@@ -1335,7 +1335,7 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> GalaxyRes
         raise ValueError(f"Failed to get job details for dataset '{dataset_id}': {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"datasets", "read", "core"})
 def get_dataset_details(
     dataset_id: str, include_preview: bool = True, preview_lines: int = 10
 ) -> GalaxyResult:
@@ -1437,7 +1437,7 @@ def get_dataset_details(
         raise ValueError(f"Failed to get dataset details for '{dataset_id}': {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"datasets", "read", "extended"})
 def get_collection_details(collection_id: str, max_elements: int = 100) -> GalaxyResult:
     """
     Get detailed information about a dataset collection and its members
@@ -1523,7 +1523,7 @@ def get_collection_details(collection_id: str, max_elements: int = 100) -> Galax
         raise ValueError(f"Failed to get collection details for '{collection_id}': {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"datasets", "read", "core"})
 def download_dataset(
     dataset_id: str,
     file_path: str | None = None,
@@ -1637,7 +1637,7 @@ def download_dataset(
         raise ValueError(f"Failed to download dataset '{dataset_id}': {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"datasets", "write", "core"})
 def upload_file(path: str, history_id: str | None = None) -> GalaxyResult:
     """
     Upload a local file to Galaxy for analysis.
@@ -1707,7 +1707,7 @@ def upload_file(path: str, history_id: str | None = None) -> GalaxyResult:
         raise ValueError(f"Failed to upload file: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"datasets", "write", "core"})
 def upload_file_from_url(
     url: str,
     history_id: str | None = None,
@@ -1763,7 +1763,7 @@ def upload_file_from_url(
         ) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"workflows", "read", "extended"})
 def get_invocations(
     invocation_id: str | None = None,
     workflow_id: str | None = None,
@@ -1851,7 +1851,7 @@ def _fetch_iwc_workflows() -> GalaxyResult:
     )
 
 
-@mcp.tool()
+@mcp.tool(tags={"iwc", "read", "niche"})
 def get_iwc_workflows() -> GalaxyResult:
     """
     Fetch all workflows from the IWC (Interactive Workflow Composer)
@@ -1966,7 +1966,7 @@ def _enrich_workflow_result(workflow: dict[str, Any], include_full_readme: bool 
     return result
 
 
-@mcp.tool()
+@mcp.tool(tags={"iwc", "read", "niche"})
 def search_iwc_workflows(query: str) -> GalaxyResult:
     """
     Search for workflows in the IWC (Intergalactic Workflow Commission) manifest.
@@ -2063,7 +2063,7 @@ def search_iwc_workflows(query: str) -> GalaxyResult:
         raise ValueError(f"Failed to search IWC workflows: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"iwc", "read", "niche"})
 def get_iwc_workflow_details(trs_id: str) -> GalaxyResult:
     """
     Get comprehensive details about a specific IWC workflow before importing.
@@ -2220,7 +2220,7 @@ def _tokenize_for_search(text: str) -> list[str]:
     ]
 
 
-@mcp.tool()
+@mcp.tool(tags={"iwc", "read", "niche"})
 def recommend_iwc_workflows(intent: str, limit: int = 5) -> GalaxyResult:
     """
     Semantic search for IWC workflows based on natural language description.
@@ -2348,7 +2348,7 @@ def recommend_iwc_workflows(intent: str, limit: int = 5) -> GalaxyResult:
         raise ValueError(f"Failed to recommend IWC workflows: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"iwc", "write", "niche"})
 def import_workflow_from_iwc(trs_id: str) -> GalaxyResult:
     """
     Import a workflow from IWC to the user's Galaxy instance
@@ -2401,7 +2401,7 @@ def import_workflow_from_iwc(trs_id: str) -> GalaxyResult:
         raise ValueError(f"Failed to import workflow from IWC: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"workflows", "read", "extended"})
 def list_workflows(
     workflow_id: str | None = None, name: str | None = None, published: bool = False
 ) -> GalaxyResult:
@@ -2438,7 +2438,7 @@ def list_workflows(
         ) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"workflows", "read", "extended"})
 def get_workflow_details(workflow_id: str, version: int | None = None) -> GalaxyResult:
     """
     Get detailed information about a specific workflow
@@ -2469,7 +2469,7 @@ def get_workflow_details(workflow_id: str, version: int | None = None) -> Galaxy
         ) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"workflows", "write", "extended"})
 def invoke_workflow(
     workflow_id: str,
     inputs: dict[str, Any] | None = None,
@@ -2531,7 +2531,7 @@ def invoke_workflow(
         ) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"workflows", "write", "extended"})
 def cancel_workflow_invocation(invocation_id: str) -> GalaxyResult:
     """
     Cancel a running workflow invocation
