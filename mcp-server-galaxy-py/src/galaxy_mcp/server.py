@@ -796,7 +796,14 @@ def update_history(
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
     try:
-        updated = gi.histories.update_history(history_id, **updates)
+        updated = gi.histories.update_history(
+            history_id,
+            name=name,
+            annotation=annotation,
+            tags=tags,
+            deleted=deleted,
+            published=published,
+        )
         return GalaxyResult(
             data=updated,
             success=True,
