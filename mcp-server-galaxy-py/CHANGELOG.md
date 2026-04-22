@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-04-22
+
+### Added
+
+- User-defined tool support: `create_user_tool`, `list_user_tools`, `delete_user_tool`, and `run_user_tool` for managing and executing unprivileged tools (PR #40)
+- Galaxy tool credentials integration -- auto-discover and supply user credentials when running tools (PRs #41, #44)
+- `User-Agent` header on all GalaxyInstance requests (`galaxy-mcp/{version} bioblend/{version}`) so Galaxy can identify agent traffic
+
+### Changed
+
+- Shared `GalaxyInstance` is now thread-safe, enabling concurrent MCP calls (PR #38)
+- Upgraded to fastmcp >=3.0.0; IWC functions and integration tests updated for the new API (PR #35)
+- Added upper-bound version pins to all production dependencies (PR #36)
+
+### Fixed
+
+- IWC workflow functions no longer break under fastmcp >= 3.0.0
+
 ## [1.3.0] - 2026-01-28
 
 ### Added
