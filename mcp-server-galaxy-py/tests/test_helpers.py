@@ -25,6 +25,7 @@ from galaxy_mcp.server import (
     get_iwc_workflows,
     get_job_details,
     get_server_info,
+    inspect_tool_contract,
     get_tool_citations,
     get_tool_details,
     get_tool_panel,
@@ -37,11 +38,13 @@ from galaxy_mcp.server import (
     list_workflows,
     recommend_iwc_workflows,
     run_tool,
+    run_tool_validated,
     search_iwc_workflows,
     search_tools_by_keywords,
     search_tools_by_name,
     upload_file,
     upload_file_from_url,
+    validate_tool_inputs,
 )
 
 
@@ -68,6 +71,7 @@ get_iwc_workflow_details_fn = get_function(get_iwc_workflow_details)
 get_iwc_workflows_fn = get_function(get_iwc_workflows)
 get_job_details_fn = get_function(get_job_details)
 get_server_info_fn = get_function(get_server_info)
+inspect_tool_contract_fn = get_function(inspect_tool_contract)
 get_tool_citations_fn = get_function(get_tool_citations)
 get_tool_details_fn = get_function(get_tool_details)
 get_tool_run_examples_fn = get_function(get_tool_run_examples)
@@ -80,10 +84,12 @@ list_history_ids_fn = get_function(list_history_ids)
 list_workflows_fn = get_function(list_workflows)
 recommend_iwc_workflows_fn = get_function(recommend_iwc_workflows)
 run_tool_fn = get_function(run_tool)
+run_tool_validated_fn = get_function(run_tool_validated)
 search_iwc_workflows_fn = get_function(search_iwc_workflows)
 search_tools_fn = get_function(search_tools_by_name)
 upload_file_fn = get_function(upload_file)
 upload_file_from_url_fn = get_function(upload_file_from_url)
+validate_tool_inputs_fn = get_function(validate_tool_inputs)
 
 # Re-export non-wrapped items
 __all__ = [
@@ -104,6 +110,7 @@ __all__ = [
     "get_iwc_workflows_fn",
     "get_job_details_fn",
     "get_server_info_fn",
+    "inspect_tool_contract_fn",
     "get_tool_citations_fn",
     "get_tool_details_fn",
     "get_tool_run_examples_fn",
@@ -116,10 +123,12 @@ __all__ = [
     "list_workflows_fn",
     "recommend_iwc_workflows_fn",
     "run_tool_fn",
+    "run_tool_validated_fn",
     "search_iwc_workflows_fn",
     "search_tools_fn",
     "upload_file_fn",
     "upload_file_from_url_fn",
+    "validate_tool_inputs_fn",
     "galaxy_state",
     "ensure_connected",
 ]
