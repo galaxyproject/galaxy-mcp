@@ -20,7 +20,7 @@ from typing import Any
 import mcp.types as mt
 from fastmcp.exceptions import ToolError
 from fastmcp.server.middleware.middleware import CallNext, Middleware, MiddlewareContext
-from fastmcp.tools.tool import Tool, ToolResult
+from fastmcp.tools import Tool, ToolResult
 
 logger = logging.getLogger(__name__)
 
