@@ -102,6 +102,20 @@ uv run galaxy-mcp --transport streamable-http --host 0.0.0.0 --port 8000
 
 See [USAGE_EXAMPLES.md](USAGE_EXAMPLES.md) for detailed tool usage patterns.
 
+### Tool discovery mode (experimental)
+
+Galaxy MCP exposes 30+ `@mcp.tool` registrations, which costs tokens on every turn for agents that only ever use a handful. `--discovery-mode code` (also honored via `GALAXY_MCP_DISCOVERY_MODE=code`) collapses the whole catalog into three meta-tools:
+
+- `search` -- BM25 search over tool names and descriptions
+- `get_schema` -- fetch the full schema for specific tools
+- `run_galaxy_tool` -- execute any tool by name
+
+```bash
+galaxy-mcp --discovery-mode code
+```
+
+Default is `full`, which keeps the existing catalog unchanged. CodeMode is useful when you want to keep the agent's context lean and are willing to trade a few extra turns (search -> schema -> execute) per tool call. It's built on FastMCP's experimental `CodeMode` transform, so the API may shift before it stabilizes.
+
 ## Available MCP Tools
 
 The Python implementation provides the following MCP tools:
