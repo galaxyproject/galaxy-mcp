@@ -40,6 +40,7 @@ from galaxy_mcp.server import (
     search_iwc_workflows,
     search_tools_by_keywords,
     search_tools_by_name,
+    update_history,
     upload_file,
     upload_file_from_url,
 )
@@ -82,6 +83,7 @@ recommend_iwc_workflows_fn = get_function(recommend_iwc_workflows)
 run_tool_fn = get_function(run_tool)
 search_iwc_workflows_fn = get_function(search_iwc_workflows)
 search_tools_fn = get_function(search_tools_by_name)
+update_history_fn = get_function(update_history)
 upload_file_fn = get_function(upload_file)
 upload_file_from_url_fn = get_function(upload_file_from_url)
 
@@ -118,6 +120,7 @@ __all__ = [
     "run_tool_fn",
     "search_iwc_workflows_fn",
     "search_tools_fn",
+    "update_history_fn",
     "upload_file_fn",
     "upload_file_from_url_fn",
     "galaxy_state",

@@ -824,6 +824,87 @@ def create_history(history_name: str) -> GalaxyResult:
     )
 
 
+@mcp.tool(annotations={"readOnlyHint": False})
+def update_history(
+    history_id: str,
+    name: str | None = None,
+    annotation: str | None = None,
+    tags: list[str] | None = None,
+    deleted: bool | None = None,
+    published: bool | None = None,
+) -> GalaxyResult:
+    """
+    Update an existing Galaxy history's metadata.
+
+    Any combination of name, annotation, tags, deleted, and published can be updated
+    in a single call. Fields left as None are not modified.
+
+    Args:
+        history_id: The ID of the history to update. Obtain this from get_histories()
+                    or list_history_ids().
+        name: New name for the history (optional).
+        annotation: New annotation/description text for the history (optional).
+        tags: New list of tags for the history (optional). Replaces any existing tags.
+        deleted: If True, soft-delete the history; if False, restore a deleted history
+                 (optional).
+        published: If True, publish the history (make it public); if False, unpublish
+                   (optional).
+
+    Returns:
+        GalaxyResult with:
+        - data: The updated history object, including the new metadata.
+        - message: Confirmation message listing which fields were updated.
+
+    Example:
+        >>> update_history("abc123def456", name="RNA-seq Analysis - Final")
+        GalaxyResult(
+            data={"id": "abc123def456", "name": "RNA-seq Analysis - Final", ...},
+            message="Updated history abc123def456 (name)"
+        )
+        >>> update_history("abc123def456", annotation="QC'd and ready", tags=["rnaseq", "final"])
+        GalaxyResult(
+            data={...},
+            message="Updated history abc123def456 (annotation, tags)"
+        )
+
+    NEXT STEPS:
+    - View updated history: get_history_details(history_id)
+    - List all histories: get_histories()
+    """
+    updates = {
+        "name": name,
+        "annotation": annotation,
+        "tags": tags,
+        "deleted": deleted,
+        "published": published,
+    }
+    updates = {k: v for k, v in updates.items() if v is not None}
+    if not updates:
+        raise ValueError(
+            "No fields provided to update. Pass at least one of: "
+            "name, annotation, tags, deleted, published."
+        )
+
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+    try:
+        updated = gi.histories.update_history(
+            history_id,
+            name=name,
+            annotation=annotation,
+            tags=tags,
+            deleted=deleted,
+            published=published,
+        )
+        return GalaxyResult(
+            data=updated,
+            success=True,
+            message=f"Updated history {history_id} ({', '.join(updates.keys())})",
+        )
+    except Exception as e:
+        raise ValueError(format_error("Update history", e)) from e
+
+
 @mcp.tool()
 def search_tools_by_keywords(keywords: list[str]) -> GalaxyResult:
     """
