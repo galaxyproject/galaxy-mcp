@@ -2649,7 +2649,7 @@ def cancel_workflow_invocation(invocation_id: str) -> GalaxyResult:
         ) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"tools", "write", "extended"})
 def create_user_tool(representation: dict[str, Any]) -> GalaxyResult:
     """Create a user-defined tool in Galaxy from a YAML tool definition.
 
@@ -2730,7 +2730,7 @@ def create_user_tool(representation: dict[str, Any]) -> GalaxyResult:
         ) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"tools", "read", "extended"})
 def list_user_tools(active: bool = True) -> GalaxyResult:
     """List user-defined tools belonging to the current user.
 
@@ -2757,7 +2757,7 @@ def list_user_tools(active: bool = True) -> GalaxyResult:
         raise ValueError(format_error("List user tools", e)) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"tools", "write", "extended"})
 def delete_user_tool(uuid: str) -> GalaxyResult:
     """Deactivate a user-defined tool. Deactivated tools are not loaded into the toolbox.
 
@@ -2782,7 +2782,7 @@ def delete_user_tool(uuid: str) -> GalaxyResult:
         raise ValueError(format_error("Delete user tool", e, {"uuid": uuid})) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"tools", "write", "extended"})
 def run_user_tool(history_id: str, tool_uuid: str, inputs: dict[str, Any]) -> GalaxyResult:
     """Run a user-defined tool via the Galaxy jobs API.
 
