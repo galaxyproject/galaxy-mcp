@@ -209,10 +209,36 @@ else:
     )
 
 # Create an MCP server (inject auth provider when available)
+_discovery_mode = os.environ.get("GALAXY_MCP_DISCOVERY_MODE", "full").lower()
+_transforms: list[Any] = []
+if _discovery_mode == "code":
+    try:
+        import pydantic_monty  # noqa: F401
+    except ImportError as exc:
+        raise RuntimeError(
+            "GALAXY_MCP_DISCOVERY_MODE=code requires the 'code-mode' extra. "
+            "Install it with `pip install galaxy-mcp[code-mode]` (or "
+            "`uv sync --extra code-mode`)."
+        ) from exc
+
+    from fastmcp.experimental.transforms.code_mode import CodeMode
+
+    # Galaxy-mcp already ships a `run_tool` for Galaxy tool execution, so the
+    # CodeMode execute meta-tool gets a distinct name to avoid collision.
+    _transforms.append(CodeMode(execute_tool_name="run_galaxy_tool"))
+    logger.info(
+        "CodeMode discovery enabled -- tools exposed via search / get_schemas / run_galaxy_tool."
+    )
+elif _discovery_mode != "full":
+    logger.warning("Unknown GALAXY_MCP_DISCOVERY_MODE=%r; falling back to 'full'.", _discovery_mode)
+
+_mcp_kwargs: dict[str, Any] = {}
+if _transforms:
+    _mcp_kwargs["transforms"] = _transforms
 if auth_provider:
-    mcp: FastMCP = FastMCP("Galaxy", auth=auth_provider)
+    mcp: FastMCP = FastMCP("Galaxy", auth=auth_provider, **_mcp_kwargs)
 else:
-    mcp = FastMCP("Galaxy")
+    mcp = FastMCP("Galaxy", **_mcp_kwargs)
 
 # Allow browser preflight CORS requests to bypass FastMCP auth
 
