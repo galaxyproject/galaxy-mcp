@@ -119,6 +119,8 @@ The `code-mode` extra installs `pydantic-monty`, the sandboxed Python interprete
 
 Default is `full`, which keeps the existing catalog unchanged. CodeMode is useful when you want to keep the agent's context lean and are willing to trade a few extra turns (search -> schema -> execute) per tool call. It's built on FastMCP's experimental `CodeMode` transform, so the API may shift before it stabilizes.
 
+The server also ships agent-facing usage guidance via the MCP `instructions` field (returned during the initial handshake). It explains the typical workflow, the difference between MCP tools and Galaxy tools (e.g. FastQC isn't an MCP tool -- find it via `search_tools_by_name`), and -- when code mode is active -- how to use `run_galaxy_tool` and `call_tool`. Agents that respect the `instructions` field will read this without you having to prompt them.
+
 ## Available MCP Tools
 
 The Python implementation provides the following MCP tools:

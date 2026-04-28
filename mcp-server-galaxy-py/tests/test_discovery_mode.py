@@ -54,6 +54,41 @@ def test_unknown_mode_falls_back_to_full():
     assert "run_galaxy_tool" not in names
 
 
+def _instructions(env_mode: str | None) -> str:
+    env = os.environ.copy()
+    env.pop("GALAXY_MCP_DISCOVERY_MODE", None)
+    if env_mode is not None:
+        env["GALAXY_MCP_DISCOVERY_MODE"] = env_mode
+
+    script = textwrap.dedent(
+        """
+        from galaxy_mcp import server
+        print(server.mcp.instructions or '')
+        """
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script], env=env, capture_output=True, text=True, check=True
+    )
+    return result.stdout
+
+
+def test_full_mode_instructions_cover_galaxy_workflow():
+    text = _instructions(None)
+    assert "Galaxy MCP" in text
+    assert "search_tools_by_name" in text  # the MCP-tool vs Galaxy-tool gotcha
+    assert "search_iwc_workflows" in text
+    # Code-mode-specific guidance must NOT leak into full mode
+    assert "run_galaxy_tool" not in text
+    assert "call_tool" not in text
+
+
+def test_code_mode_instructions_add_meta_tool_guidance():
+    text = _instructions("code")
+    assert "search_tools_by_name" in text  # base content still present
+    assert "run_galaxy_tool" in text
+    assert "call_tool" in text
+
+
 def test_code_mode_without_pydantic_monty_raises_clear_error():
     """If pydantic_monty is missing, server import should fail with a setup hint."""
     env = os.environ.copy()
