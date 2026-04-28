@@ -52,3 +52,30 @@ def test_unknown_mode_falls_back_to_full():
     names = _tool_names("bogus")
     assert "connect" in names
     assert "run_galaxy_tool" not in names
+
+
+def test_code_mode_without_pydantic_monty_raises_clear_error():
+    """If pydantic_monty is missing, server import should fail with a setup hint."""
+    env = os.environ.copy()
+    env["GALAXY_MCP_DISCOVERY_MODE"] = "code"
+
+    script = textwrap.dedent(
+        """
+        import sys
+        import importlib.abc
+
+        class Blocker(importlib.abc.MetaPathFinder):
+            def find_spec(self, name, path, target=None):
+                if name == 'pydantic_monty' or name.startswith('pydantic_monty.'):
+                    raise ImportError('blocked for test')
+                return None
+
+        sys.modules.pop('pydantic_monty', None)
+        sys.meta_path.insert(0, Blocker())
+        from galaxy_mcp import server  # noqa: F401
+        """
+    )
+    result = subprocess.run([sys.executable, "-c", script], env=env, capture_output=True, text=True)
+    assert result.returncode != 0
+    assert "code-mode" in result.stderr
+    assert "galaxy-mcp[code-mode]" in result.stderr

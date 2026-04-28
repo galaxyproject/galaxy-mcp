@@ -111,8 +111,11 @@ Galaxy MCP exposes 30+ `@mcp.tool` registrations, which costs tokens on every tu
 - `run_galaxy_tool` -- execute any tool by name
 
 ```bash
+pip install 'galaxy-mcp[code-mode]'   # pulls in pydantic-monty sandbox
 galaxy-mcp --discovery-mode code
 ```
+
+The `code-mode` extra installs `pydantic-monty`, the sandboxed Python interpreter that backs `run_galaxy_tool`. Without it the server still starts in `full` mode but raises a clear error if `--discovery-mode code` is requested.
 
 Default is `full`, which keeps the existing catalog unchanged. CodeMode is useful when you want to keep the agent's context lean and are willing to trade a few extra turns (search -> schema -> execute) per tool call. It's built on FastMCP's experimental `CodeMode` transform, so the API may shift before it stabilizes.
 

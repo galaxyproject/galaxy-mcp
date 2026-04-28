@@ -212,6 +212,15 @@ else:
 _discovery_mode = os.environ.get("GALAXY_MCP_DISCOVERY_MODE", "full").lower()
 _transforms: list[Any] = []
 if _discovery_mode == "code":
+    try:
+        import pydantic_monty  # noqa: F401
+    except ImportError as exc:
+        raise RuntimeError(
+            "GALAXY_MCP_DISCOVERY_MODE=code requires the 'code-mode' extra. "
+            "Install it with `pip install galaxy-mcp[code-mode]` (or "
+            "`uv sync --extra code-mode`)."
+        ) from exc
+
     from fastmcp.experimental.transforms.code_mode import CodeMode
 
     # Galaxy-mcp already ships a `run_tool` for Galaxy tool execution, so the
