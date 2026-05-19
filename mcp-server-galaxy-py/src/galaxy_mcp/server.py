@@ -6,6 +6,7 @@ import logging
 import os
 import threading
 import types
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -15,6 +16,7 @@ import requests
 from bioblend.galaxy import GalaxyInstance
 from dotenv import find_dotenv, load_dotenv
 from fastmcp import FastMCP
+from fastmcp.server.dependencies import get_context
 from mcp.server.auth.middleware.auth_context import get_access_token
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -38,6 +40,18 @@ _galaxy_mcp_version = importlib.metadata.version("galaxy-mcp")
 USER_AGENT = f"galaxy-mcp/{_galaxy_mcp_version} bioblend/{bioblend.__version__}"
 
 _gi_lock = threading.Lock()
+_session_state_lock = threading.Lock()
+
+
+@dataclass
+class SessionGalaxyConnection:
+    url: str
+    api_key: str
+    gi: GalaxyInstance
+    connected: bool = True
+
+
+_session_connections: dict[str, SessionGalaxyConnection] = {}
 
 
 def _make_thread_safe(gi: GalaxyInstance) -> GalaxyInstance:
@@ -61,6 +75,32 @@ def _make_thread_safe(gi: GalaxyInstance) -> GalaxyInstance:
 
         setattr(gi, method_name, locked_method)
     return gi
+
+
+def _get_current_session_id() -> str | None:
+    try:
+        return get_context().session_id
+    except Exception:
+        return None
+
+
+def _get_session_connection(session_id: str) -> SessionGalaxyConnection | None:
+    with _session_state_lock:
+        return _session_connections.get(session_id)
+
+
+def _set_session_connection(
+    session_id: str, *, url: str, api_key: str, gi: GalaxyInstance, connected: bool = True
+) -> None:
+    with _session_state_lock:
+        _session_connections[session_id] = SessionGalaxyConnection(
+            url=url, api_key=api_key, gi=gi, connected=connected
+        )
+
+
+def _clear_session_connection(session_id: str) -> None:
+    with _session_state_lock:
+        _session_connections.pop(session_id, None)
 
 
 class PaginationInfo(BaseModel):
@@ -461,12 +501,25 @@ def _get_request_connection_state() -> dict[str, Any]:
                     "session": credentials,
                 }
 
+    session_id = _get_current_session_id()
+    if session_id:
+        session_connection = _get_session_connection(session_id)
+        if session_connection and session_connection.connected and session_connection.gi:
+            return {
+                "url": session_connection.url,
+                "api_key": session_connection.api_key,
+                "gi": session_connection.gi,
+                "connected": True,
+                "source": "session",
+                "session": {"id": session_id},
+            }
+
     return {
         "url": galaxy_state.get("url") or normalized_galaxy_url,
         "api_key": galaxy_state.get("api_key"),
         "gi": galaxy_state.get("gi"),
         "connected": galaxy_state.get("connected", False) and bool(galaxy_state.get("gi")),
-        "source": "api_key" if galaxy_state.get("connected") else None,
+        "source": "global" if galaxy_state.get("connected") else None,
         "session": None,
     }
 
@@ -512,10 +565,21 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
     Returns:
         GalaxyResult with connection status and user information in data field
     """
+    use_url = url
+    use_api_key = api_key
+    galaxy_url: str | None = None
+
     try:
-        # Reuse current OAuth session when available
+        # Reuse the active connection when no replacement credentials were supplied.
         state = _get_request_connection_state()
-        if state["connected"] and state.get("source") == "oauth" and state["gi"]:
+        session_id = _get_current_session_id()
+        if (
+            state["connected"]
+            and state["gi"]
+            and not url
+            and not api_key
+            and state.get("source") in {"oauth", "session", "global"}
+        ):
             gi: GalaxyInstance = state["gi"]
             user_info = gi.users.get_current_user()
             return GalaxyResult(
@@ -523,10 +587,16 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
                     "connected": True,
                     "user": user_info,
                     "url": state["url"],
-                    "auth": "oauth",
+                    "auth": cast(str, state["source"]),
                 },
                 success=True,
-                message=f"Connected to Galaxy at {state['url']} via OAuth",
+                message=f"Connected to Galaxy at {state['url']} via {state['source']}",
+            )
+
+        if session_id and not url and not api_key and not state["connected"]:
+            raise ValueError(
+                "No Galaxy connection is configured for this MCP session. "
+                "Call connect(url='https://your-galaxy.org', api_key='your-key') first."
             )
 
         # Use provided parameters or fall back to environment variables
@@ -567,25 +637,29 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
         # Test the connection by fetching user info
         user_info = gi.users.get_current_user()
 
-        # Update galaxy state
-        galaxy_state["url"] = galaxy_url
-        galaxy_state["api_key"] = use_api_key
-        galaxy_state["gi"] = gi
-        galaxy_state["connected"] = True
+        if session_id:
+            _set_session_connection(session_id, url=galaxy_url, api_key=use_api_key, gi=gi)
 
         return GalaxyResult(
-            data={"connected": True, "user": user_info},
+            data={
+                "connected": True,
+                "user": user_info,
+                "url": galaxy_url,
+                "auth": "session" if session_id else "global",
+            },
             success=True,
-            message=f"Connected to Galaxy at {galaxy_url}",
+            message=(
+                f"Connected to Galaxy at {galaxy_url} for the current MCP session"
+                if session_id
+                else f"Validated global Galaxy connection at {galaxy_url}"
+            ),
         )
     except Exception as e:
-        # Reset state on failure
-        galaxy_state["url"] = None
-        galaxy_state["api_key"] = None
-        galaxy_state["gi"] = None
-        galaxy_state["connected"] = False
+        session_id = _get_current_session_id()
+        if session_id:
+            _clear_session_connection(session_id)
 
-        galaxy_url = locals().get("galaxy_url") or use_url or normalized_galaxy_url or "unknown"
+        galaxy_url = galaxy_url or use_url or normalized_galaxy_url or "unknown"
         error_msg = f"Failed to connect to Galaxy at {galaxy_url}: {str(e)}"
         if "401" in str(e) or "authentication" in str(e).lower():
             error_msg += " Check that your API key is valid and has the necessary permissions."
@@ -2074,9 +2148,10 @@ def upload_file_from_url(
     Returns:
         GalaxyResult with upload status and information about the created dataset(s) in data field
     """
-    ensure_connected()
+    state = ensure_connected()
 
     try:
+        gi: GalaxyInstance = state["gi"]
         # Prepare kwargs for put_url
         kwargs = {
             "file_type": file_type,
@@ -2085,7 +2160,7 @@ def upload_file_from_url(
         if file_name:
             kwargs["file_name"] = file_name
 
-        result = galaxy_state["gi"].tools.put_url(url, history_id=history_id, **kwargs)
+        result = gi.tools.put_url(url, history_id=history_id, **kwargs)
         return GalaxyResult(
             data=result,
             success=True,
@@ -2760,10 +2835,11 @@ def list_workflows(
     Returns:
         GalaxyResult with list of workflows in data field
     """
-    ensure_connected()
+    state = ensure_connected()
 
     try:
-        workflows = galaxy_state["gi"].workflows.get_workflows(
+        gi: GalaxyInstance = state["gi"]
+        workflows = gi.workflows.get_workflows(
             workflow_id=workflow_id, name=name, published=published
         )
         return GalaxyResult(
@@ -2794,12 +2870,11 @@ def get_workflow_details(workflow_id: str, version: int | None = None) -> Galaxy
     Returns:
         GalaxyResult with workflow information including steps, inputs, and parameters in data field
     """
-    ensure_connected()
+    state = ensure_connected()
 
     try:
-        workflow = galaxy_state["gi"].workflows.show_workflow(
-            workflow_id=workflow_id, version=version
-        )
+        gi: GalaxyInstance = state["gi"]
+        workflow = gi.workflows.show_workflow(workflow_id=workflow_id, version=version)
         return GalaxyResult(
             data=workflow,
             success=True,
@@ -2843,10 +2918,11 @@ def invoke_workflow(
     Returns:
         GalaxyResult with workflow invocation information including invocation ID in data field
     """
-    ensure_connected()
+    state = ensure_connected()
 
     try:
-        invocation = galaxy_state["gi"].workflows.invoke_workflow(
+        gi: GalaxyInstance = state["gi"]
+        invocation = gi.workflows.invoke_workflow(
             workflow_id=workflow_id,
             inputs=inputs,
             params=params,
@@ -2886,10 +2962,11 @@ def cancel_workflow_invocation(invocation_id: str) -> GalaxyResult:
     Returns:
         GalaxyResult with cancellation status and updated invocation information in data field
     """
-    ensure_connected()
+    state = ensure_connected()
 
     try:
-        result = galaxy_state["gi"].workflows.cancel_invocation(invocation_id)
+        gi: GalaxyInstance = state["gi"]
+        result = gi.workflows.cancel_invocation(invocation_id)
         return GalaxyResult(
             data={"cancelled": True, "invocation": result},
             success=True,

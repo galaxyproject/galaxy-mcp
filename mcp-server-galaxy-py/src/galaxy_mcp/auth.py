@@ -376,7 +376,7 @@ class GalaxyOAuthProvider(OAuthProvider):
         """Return OAuth protected resource metadata."""
         return {
             "resource": self._galaxy_url,
-            "authorization_servers": [self.base_url],
+            "authorization_servers": [str(self.base_url)],
             "scopes_supported": self.required_scopes,
             "token_types_supported": ["Bearer"],
         }
