@@ -45,16 +45,7 @@ from starlette.responses import (
     Response,
 )
 from starlette.routing import Route
-
-try:  # pragma: no cover - fallback import for Python < 3.12
-    from typing import override
-except ImportError:  # pragma: no cover - Python < 3.12 without typing.override
-    try:
-        from typing_extensions import override  # type: ignore
-    except ImportError:  # pragma: no cover - hard fallback if typing_extensions missing
-
-        def override(func):  # type: ignore
-            return func
+from typing_extensions import override
 
 
 logger = logging.getLogger(__name__)
