@@ -232,7 +232,51 @@ if _discovery_mode == "code":
 elif _discovery_mode != "full":
     logger.warning("Unknown GALAXY_MCP_DISCOVERY_MODE=%r; falling back to 'full'.", _discovery_mode)
 
-_mcp_kwargs: dict[str, Any] = {}
+_BASE_INSTRUCTIONS = """\
+Galaxy MCP exposes the Galaxy bioinformatics platform. Most tasks follow the
+same shape: pick or create a history, upload data, run a Galaxy tool on the
+data, then read results back from the history.
+
+Two kinds of "tool" exist here and are easy to confuse:
+- MCP tools (registered by this server) are operations like `upload_file`,
+  `run_tool`, `get_histories`, `invoke_workflow`. They appear in tools/list.
+- Galaxy tools (FastQC, Trimmomatic, Bowtie2, ...) are bioinformatics programs
+  inside a Galaxy instance. They are NOT in the MCP tools/list. Find them with
+  the MCP tools `search_tools_by_name` or `search_tools_by_keywords` (which
+  query the connected Galaxy's tool catalog), then execute via
+  `run_tool(history_id, tool_id, inputs)`.
+
+For curated multi-step analyses, prefer `search_iwc_workflows` to find a
+vetted Interactive Workflow Composer (IWC) workflow, then
+`import_workflow_from_iwc` and `invoke_workflow`.
+
+User-defined tools (created via `create_user_tool`) are run with
+`run_user_tool`, not `run_tool` -- they use a different Galaxy endpoint.
+"""
+
+_CODE_MODE_INSTRUCTIONS = """\
+
+This server is running in `--discovery-mode code`. The MCP tool catalog is
+collapsed into three meta-tools:
+- `search(query, ...)` -- find MCP tools by BM25 over names/descriptions
+- `get_schema(tools=[...])` -- fetch parameter schemas for specific tools
+- `run_galaxy_tool(code=...)` -- execute a Python script that calls MCP tools
+
+Inside `run_galaxy_tool`, the only injected callable is
+`call_tool(name: str, params: dict) -> Any`. Chain multiple calls in one
+script and `return` the final answer to avoid round-trips.
+
+`search` indexes the MCP tools (above), NOT Galaxy's full tool catalog. To
+find a Galaxy tool like FastQC, call
+`await call_tool('search_tools_by_name', {'name': 'fastqc'})` from inside
+`run_galaxy_tool`.
+"""
+
+_instructions = _BASE_INSTRUCTIONS
+if _discovery_mode == "code":
+    _instructions += _CODE_MODE_INSTRUCTIONS
+
+_mcp_kwargs: dict[str, Any] = {"instructions": _instructions}
 if _transforms:
     _mcp_kwargs["transforms"] = _transforms
 if auth_provider:
