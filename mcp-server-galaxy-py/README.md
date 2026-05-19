@@ -66,6 +66,10 @@ How you authenticate depends on your transport:
 
   Optionally set `GALAXY_MCP_CLIENT_REGISTRY` to control where OAuth client registrations are stored.
 
+  For non-OAuth HTTP clients, `connect(url=..., api_key=...)` stores Galaxy credentials per MCP
+  session rather than globally. Clients normally preserve MCP sessions by default, which allows
+  multiple users to share the same MCP server while keeping their Galaxy credentials isolated.
+
 You can also steer the transport with `GALAXY_MCP_TRANSPORT` (`stdio`, `streamable-http`, or `sse`).
 All variables can be placed in a `.env` file for convenience.
 

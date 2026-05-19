@@ -45,6 +45,10 @@ export GALAXY_API_KEY="your-api-key"
 For OAuth flows the server exchanges user credentials for short-lived Galaxy API keys on demand, so
 you typically leave `GALAXY_API_KEY` unset.
 
+For non-OAuth HTTP clients, `connect(url=..., api_key=...)` stores Galaxy credentials per MCP
+session rather than globally. Clients normally preserve MCP sessions by default, which allows
+multiple users to share the same MCP server while keeping their Galaxy credentials isolated.
+
 ### Alternative Installation
 
 ```bash
