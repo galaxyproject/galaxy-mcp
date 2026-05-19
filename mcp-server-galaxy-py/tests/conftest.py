@@ -45,7 +45,11 @@ def mock_galaxy_instance():
     # Mock invocations
     mock_invocations = Mock()
     mock_invocations.get_invocations.return_value = []
-    mock_invocations.show_invocation.return_value = {"id": "inv1", "state": "ok"}
+    mock_invocations.show_invocation.return_value = {
+        "id": "inv1",
+        "state": "ok",
+        "workflow_id": "workflow1",
+    }
     mock_gi.invocations = mock_invocations
 
     # Mock datasets
