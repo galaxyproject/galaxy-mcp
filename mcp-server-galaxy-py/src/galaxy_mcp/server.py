@@ -2992,7 +2992,8 @@ def cancel_workflow_invocation(invocation_id: str) -> GalaxyResult:
         workflow_id = invocation.get("workflow_id")
         if not isinstance(workflow_id, str) or not workflow_id:
             raise ValueError(
-                f"Invocation '{invocation_id}' did not include a workflow_id, so it cannot be cancelled."
+                f"Invocation '{invocation_id}' did not include a workflow_id,"
+                f" so it cannot be cancelled."
             )
         result = gi.workflows.cancel_invocation(workflow_id, invocation_id)
         return GalaxyResult(

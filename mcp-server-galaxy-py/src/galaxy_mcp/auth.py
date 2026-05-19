@@ -47,7 +47,6 @@ from starlette.responses import (
 from starlette.routing import Route
 from typing_extensions import override
 
-
 logger = logging.getLogger(__name__)
 
 AUTH_CODE_TTL_SECONDS = 5 * 60
