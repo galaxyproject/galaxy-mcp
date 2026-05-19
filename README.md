@@ -102,6 +102,22 @@ docker run --rm -it -p 8000:8000 \
   }
 }
 ```
+- Optional local guardrail with [Armorer Guard](https://github.com/ArmorerLabs/Armorer-Guard):
+```
+{
+  "mcpServers": {
+    "galaxy-mcp": {
+      "command": "armorer-guard",
+      "args": ["mcp-proxy", "--", "uvx", "galaxy-mcp"],
+      "env": {
+        "GALAXY_URL": "https://usegalaxy.org",
+        "GALAXY_API_KEY": "SECRETS"
+      }
+    }
+  }
+}
+```
+- This wraps the same GalaxyMCP server with a local proxy that inspects tool-call arguments for prompt injection, credential leakage, exfiltration risk, and dangerous actions before forwarding safe calls.
 - Under the developer menu, you should now see `galaxy-mcp` as running (you may need to restart Claude desktop)
 - Prompt Claude with "can you connect to galaxy"
 - If you have not provided the optional env config you'll be asked for connection details which you can provide like "Use my Galaxy API key: XXXXXXX"
