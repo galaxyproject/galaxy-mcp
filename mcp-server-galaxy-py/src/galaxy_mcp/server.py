@@ -161,16 +161,14 @@ def format_error(action: str, error: Exception, context: dict | None = None) -> 
     return msg
 
 
-# Cache tool io_details schemas. Keyed by (server base URL, tool_id, version)
-# because the same tool id on two servers can have different schemas.
-_TOOL_SCHEMA_CACHE: dict[tuple[str | None, str, str | None], dict[str, Any]] = {}
+# Cache tool io_details schemas. Keyed by (server base URL, tool_id);
+# version is not part of the key because bioblend's show_tool fetches the default version only.
+_TOOL_SCHEMA_CACHE: dict[tuple[str | None, str], dict[str, Any]] = {}
 
 
-def _get_tool_schema(
-    gi: GalaxyInstance, tool_id: str, tool_version: str | None = None
-) -> dict[str, Any]:
+def _get_tool_schema(gi: GalaxyInstance, tool_id: str) -> dict[str, Any]:
     """Fetch (and cache) a tool's io_details schema using the given request-scoped client."""
-    key = (getattr(gi, "base_url", None), tool_id, tool_version)
+    key = (getattr(gi, "base_url", None), tool_id)
     if key not in _TOOL_SCHEMA_CACHE:
         _TOOL_SCHEMA_CACHE[key] = gi.tools.show_tool(tool_id, io_details=True)
     return _TOOL_SCHEMA_CACHE[key]
@@ -197,7 +195,9 @@ def _format_tool_input_error(
     with contextlib.suppress(Exception):
         schema_summary = summarize_tool_inputs(_get_tool_schema(gi, tool_id))
     with contextlib.suppress(Exception):
-        tests = gi.tools.get_tool_tests(tool_id)
+        tests = gi.tools.get_tool_tests(
+            tool_id
+        )  # any version's example is fine -- structural hint only
         if tests:
             example = tests[0].get("inputs")
     original = format_error(
