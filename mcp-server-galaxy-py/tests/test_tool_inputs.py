@@ -26,3 +26,7 @@ def test_auth_and_notfound_are_not_input_related():
 
 def test_plain_exception_is_not_input_related():
     assert is_input_related_error(RuntimeError("network down")) is False
+
+
+def test_valueerror_is_not_input_related():
+    assert is_input_related_error(ValueError("bad inputs")) is False

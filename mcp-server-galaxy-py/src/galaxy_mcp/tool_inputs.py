@@ -17,6 +17,6 @@ def is_input_related_error(exc: Exception) -> bool:
     malformed inputs dict) counts too. Auth (401/403), 404, and 5xx do not.
     """
     status = getattr(exc, "status_code", None)
-    if status is not None:
+    if isinstance(status, int):
         return status == 400
     return isinstance(exc, TypeError)
