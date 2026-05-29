@@ -27,6 +27,10 @@ from galaxy_mcp.auth import (
     get_active_session,
 )
 from galaxy_mcp.middleware import ToolVisibilityMiddleware
+from galaxy_mcp.tool_inputs import (
+    format_input_mismatch_error,
+    summarize_tool_inputs,
+)
 
 _galaxy_mcp_version = importlib.metadata.version("galaxy-mcp")
 USER_AGENT = f"galaxy-mcp/{_galaxy_mcp_version} bioblend/{bioblend.__version__}"
@@ -155,6 +159,53 @@ def format_error(action: str, error: Exception, context: dict | None = None) -> 
         msg += f". Context: {context_str}"
 
     return msg
+
+
+# Cache tool io_details schemas. Keyed by (server base URL, tool_id, version)
+# because the same tool id on two servers can have different schemas.
+_TOOL_SCHEMA_CACHE: dict[tuple[str | None, str, str | None], dict[str, Any]] = {}
+
+
+def _get_tool_schema(
+    gi: GalaxyInstance, tool_id: str, tool_version: str | None = None
+) -> dict[str, Any]:
+    """Fetch (and cache) a tool's io_details schema using the given request-scoped client."""
+    key = (getattr(gi, "base_url", None), tool_id, tool_version)
+    if key not in _TOOL_SCHEMA_CACHE:
+        _TOOL_SCHEMA_CACHE[key] = gi.tools.show_tool(tool_id, io_details=True)
+    return _TOOL_SCHEMA_CACHE[key]
+
+
+def _format_tool_input_error(
+    error: Exception,
+    *,
+    gi: GalaxyInstance,
+    tool_id: str,
+    history_id: str,
+    inputs: dict[str, Any],
+    action: str = "Run tool",
+) -> str:
+    """Build a truthful enriched error for an input-related tool failure.
+
+    Fetches the schema and one structural example using the SAME request-scoped
+    ``gi`` (never the module global). Both fetches are best-effort: if either
+    fails we still return the disclaimer + original error. This function must
+    never raise.
+    """
+    schema_summary = None
+    example = None
+    with contextlib.suppress(Exception):
+        schema_summary = summarize_tool_inputs(_get_tool_schema(gi, tool_id))
+    with contextlib.suppress(Exception):
+        tests = gi.tools.get_tool_tests(tool_id)
+        if tests:
+            example = tests[0].get("inputs")
+    original = format_error(
+        action, error, {"history_id": history_id, "tool_id": tool_id, "inputs": inputs}
+    )
+    return format_input_mismatch_error(
+        original_error=original, tool_id=tool_id, schema_summary=schema_summary, example=example
+    )
 
 
 # Try to load environment variables from .env file
