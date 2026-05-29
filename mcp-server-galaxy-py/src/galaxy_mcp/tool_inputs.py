@@ -98,7 +98,7 @@ def _fill_param(p: dict[str, Any], prefix: str, out: dict[str, Any]) -> None:
         tp_name = tp.get("name")
         cases = p.get("cases", [])
         first = cases[0] if cases else None
-        sel_value = first.get("value") if first else _placeholder(tp)
+        sel_value = first.get("value") if first else "<choice>"
         if tp_name:
             out[f"{key}|{tp_name}"] = sel_value
         if first:

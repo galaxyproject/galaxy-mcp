@@ -103,3 +103,15 @@ def test_template_conditional_uses_first_case():
     # first case is "idx" -> selector set, no extra params
     assert t["datasets_0|id_cond|id_select"] == "idx"
     assert "datasets_0|id_cond|identifier" not in t
+
+
+def test_template_non_dict_returns_empty():
+    assert build_input_template(None) == {}
+    assert build_input_template("not a dict") == {}
+
+
+def test_template_section_flattens():
+    schema = {
+        "inputs": [{"name": "adv", "type": "section", "inputs": [{"name": "p", "type": "integer"}]}]
+    }
+    assert build_input_template(schema)["adv|p"] == 0
