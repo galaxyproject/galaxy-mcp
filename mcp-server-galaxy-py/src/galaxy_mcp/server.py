@@ -2917,6 +2917,7 @@ def run_user_tool(history_id: str, tool_uuid: str, inputs: dict[str, Any]) -> Ga
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
+    tool_id: str | None = None
     try:
         url = f"{gi.url}/unprivileged_tools/{tool_uuid}"
         response = gi.make_get_request(url)
@@ -2943,6 +2944,17 @@ def run_user_tool(history_id: str, tool_uuid: str, inputs: dict[str, Any]) -> Ga
             message=f"Started user tool '{tool_id}' (UUID: {tool_uuid}) in history '{history_id}'",
         )
     except Exception as e:
+        if tool_id and is_input_related_error(e):
+            raise ValueError(
+                _format_tool_input_error(
+                    e,
+                    gi=gi,
+                    tool_id=tool_id,
+                    history_id=history_id,
+                    inputs=inputs,
+                    action="Run user tool",
+                )
+            ) from e
         raise ValueError(
             format_error("Run user tool", e, {"history_id": history_id, "tool_uuid": tool_uuid})
         ) from e

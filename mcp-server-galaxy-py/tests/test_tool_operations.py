@@ -11,6 +11,7 @@ from .test_helpers import (
     galaxy_state,
     get_tool_run_examples_fn,
     run_tool_fn,
+    run_user_tool_fn,
     search_tools_fn,
 )
 
@@ -273,3 +274,27 @@ class TestToolOperations:
             with pytest.raises(ValueError, match="Run tool failed"):
                 run_tool_fn("hist1", "cat1", {"input1": {"src": "hda", "id": "d1"}})
         mock_galaxy_instance.tools.show_tool.assert_not_called()
+
+    def test_run_user_tool_enriches_input_error(self, mock_galaxy_instance):
+        # resolve uuid -> tool_id succeeds
+        mock_galaxy_instance.url = "http://galaxy/api"
+        resolve = type(
+            "R",
+            (),
+            {"json": lambda self: {"tool_id": "utool", "representation": {"version": "0.1.0"}}},
+        )()
+        mock_galaxy_instance.make_get_request.return_value = resolve
+        # the job POST fails with a 400
+        mock_galaxy_instance.make_post_request.side_effect = bioblend.ConnectionError(
+            "Unexpected HTTP status code: 400", body="kwd not provided", status_code=400
+        )
+        mock_galaxy_instance.tools.show_tool.return_value = {
+            "id": "utool",
+            "inputs": [{"name": "in", "type": "data"}],
+        }
+        mock_galaxy_instance.tools.get_tool_tests.return_value = []
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError) as exc:
+                run_user_tool_fn("hist1", "uuid-123", {"wrong": "x"})
+        assert "not a sign" in str(exc.value).lower()
+        assert '"in"' in str(exc.value) or "'in'" in str(exc.value)
