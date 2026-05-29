@@ -695,10 +695,11 @@ def get_tool_run_examples(tool_id: str, tool_version: str | None = None) -> Gala
     Returns:
         GalaxyResult with test cases in data field
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
-        test_cases = galaxy_state["gi"].tools.get_tool_tests(tool_id, tool_version=tool_version)
+        test_cases = gi.tools.get_tool_tests(tool_id, tool_version=tool_version)
         return GalaxyResult(
             data={
                 "tool_id": tool_id,

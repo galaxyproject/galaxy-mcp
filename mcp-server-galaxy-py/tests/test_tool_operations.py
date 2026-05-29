@@ -225,6 +225,14 @@ class TestToolOperations:
             "tool1", tool_version=None
         )
 
+    def test_get_tool_run_examples_uses_request_scoped_gi(self, mock_galaxy_instance):
+        """Must read the per-request gi (state['gi']), not the module global."""
+        mock_galaxy_instance.tools.get_tool_tests.return_value = [{"inputs": {"input1": "x"}}]
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_tool_run_examples_fn("cat1")
+        assert result.success is True
+        mock_galaxy_instance.tools.get_tool_tests.assert_called_once_with("cat1", tool_version=None)
+
     def test_get_tool_run_examples_error(self, mock_galaxy_instance):
         """Test error handling when fetching tool run lessons fails"""
         mock_galaxy_instance.tools.get_tool_tests.side_effect = Exception("Boom")
