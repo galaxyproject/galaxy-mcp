@@ -2,6 +2,7 @@ import bioblend
 
 from galaxy_mcp.tool_inputs import (
     build_input_template,
+    format_input_mismatch_error,
     is_input_related_error,
     summarize_tool_inputs,
 )
@@ -115,3 +116,29 @@ def test_template_section_flattens():
         "inputs": [{"name": "adv", "type": "section", "inputs": [{"name": "p", "type": "integer"}]}]
     }
     assert build_input_template(schema)["adv|p"] == 0
+
+
+def test_message_includes_schema_and_disclaimer_and_original():
+    msg = format_input_mismatch_error(
+        original_error="Run tool failed: Unexpected HTTP status code: 400: kwd not provided",
+        tool_id="cat1",
+        schema_summary=[{"name": "input1", "type": "data"}],
+        example={"input1": {"src": "hda", "id": "1"}},
+    )
+    assert "Run tool failed" in msg  # original preserved verbatim
+    assert "not a sign" in msg.lower()  # disclaimer
+    assert "kwd" in msg.lower()  # names the misleading wording
+    assert "input1" in msg  # schema embedded
+    assert "NOT runnable" in msg  # example caveat
+    assert "cat1" in msg
+
+
+def test_message_degrades_without_schema_or_example():
+    msg = format_input_mismatch_error(
+        original_error="Run tool failed: boom",
+        tool_id="cat1",
+        schema_summary=None,
+        example=None,
+    )
+    assert "get_tool_details" in msg
+    assert "Run tool failed: boom" in msg

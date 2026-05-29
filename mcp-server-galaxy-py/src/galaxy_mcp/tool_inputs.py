@@ -6,6 +6,7 @@ function of its arguments so it is trivially unit-testable. The I/O wiring
 server.py.
 """
 
+import json
 from typing import Any
 
 
@@ -134,3 +135,51 @@ def summarize_tool_inputs(tool_info: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(tool_info, dict):
         return []
     return [_summarize_param(p) for p in tool_info.get("inputs", [])]
+
+
+def format_input_mismatch_error(
+    *,
+    original_error: str,
+    tool_id: str,
+    schema_summary: list[dict[str, Any]] | None,
+    example: Any | None,
+) -> str:
+    """Assemble a truthful, actionable error for a likely input-shape mismatch.
+
+    Preserves the original error verbatim and offers the schema as help; it does
+    NOT assert a specific cause (we cannot reliably tell a wrong name from a
+    missing value from a bad dataset id).
+    """
+    lines = [
+        original_error,
+        "",
+        f"This most likely means the `inputs` you provided do not match the parameter "
+        f"schema for tool '{tool_id}'. It is not a sign that the MCP or the Galaxy "
+        f"version is incompatible. (Galaxy sometimes reports input problems as a "
+        f'misleading "Required parameter(s) kwd not provided in request" error -- '
+        f"ignore that wording.)",
+    ]
+    if schema_summary is not None:
+        lines += [
+            "",
+            f"Expected input parameters for '{tool_id}' (build flattened keys like "
+            f"`section|param`, `cond|selector`, `repeat_0|param`):",
+            json.dumps(schema_summary, indent=2, default=str),
+        ]
+    if example is not None:
+        lines += [
+            "",
+            "Structural example from a tool test -- NOT runnable: the dataset IDs below "
+            "will not exist in your history. Copy the shape, not the values:",
+            json.dumps(example, indent=2, default=str),
+        ]
+    if schema_summary is None and example is None:
+        lines += [
+            "",
+            "Call get_tool_details(tool_id, io_details=True) (or "
+            "get_tool_input_template(tool_id)) to see the parameter schema, then rebuild "
+            "`inputs` and retry.",
+        ]
+    else:
+        lines += ["", "Rebuild `inputs` to match the schema above and call the tool again."]
+    return "\n".join(lines)
