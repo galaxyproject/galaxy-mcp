@@ -63,6 +63,67 @@ def _option_values(p: dict[str, Any]) -> list[Any]:
     return values
 
 
+def _placeholder(p: dict[str, Any]) -> Any:
+    ptype = p.get("type")
+    if ptype == "data":
+        return {"src": "hda", "id": "<dataset_id>"}
+    if ptype == "data_collection":
+        return {"src": "hdca", "id": "<collection_id>"}
+    if ptype == "select":
+        choices = _option_values(p)
+        return choices[0] if choices else "<choice>"
+    if ptype == "boolean":
+        return False
+    if ptype == "integer":
+        return 0
+    if ptype == "float":
+        return 0.0
+    return "<value>"
+
+
+def _fill_param(p: dict[str, Any], prefix: str, out: dict[str, Any]) -> None:
+    name = p.get("name")
+    if name is None:
+        return
+    key = f"{prefix}{name}"
+    ptype = p.get("type")
+    if ptype == "repeat":
+        for child in p.get("inputs", []):
+            _fill_param(child, prefix=f"{key}_0|", out=out)
+    elif ptype == "section":
+        for child in p.get("inputs", []):
+            _fill_param(child, prefix=f"{key}|", out=out)
+    elif ptype == "conditional":
+        tp = p.get("test_param") or {}
+        tp_name = tp.get("name")
+        cases = p.get("cases", [])
+        first = cases[0] if cases else None
+        sel_value = first.get("value") if first else _placeholder(tp)
+        if tp_name:
+            out[f"{key}|{tp_name}"] = sel_value
+        if first:
+            for child in first.get("inputs", []):
+                _fill_param(child, prefix=f"{key}|", out=out)
+    else:
+        out[key] = _placeholder(p)
+
+
+def build_input_template(tool_info: dict[str, Any]) -> dict[str, Any]:
+    """Build a ready-to-fill flattened ``inputs`` skeleton from a tool schema.
+
+    Data params -> ``{"src": "hda", "id": "<dataset_id>"}``; selects -> a valid
+    choice; conditionals -> the first case's selector + that branch's params;
+    repeats -> one ``name_0|...`` instance (duplicate with ``name_1|...`` to add
+    more); sections -> ``name|...``.
+    """
+    out: dict[str, Any] = {}
+    if not isinstance(tool_info, dict):
+        return out
+    for p in tool_info.get("inputs", []):
+        _fill_param(p, prefix="", out=out)
+    return out
+
+
 def summarize_tool_inputs(tool_info: dict[str, Any]) -> list[dict[str, Any]]:
     """Compact a tool's io_details schema into a model-friendly parameter list.
 

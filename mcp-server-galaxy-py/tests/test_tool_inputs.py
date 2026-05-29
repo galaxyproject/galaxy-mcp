@@ -1,6 +1,10 @@
 import bioblend
 
-from galaxy_mcp.tool_inputs import is_input_related_error, summarize_tool_inputs
+from galaxy_mcp.tool_inputs import (
+    build_input_template,
+    is_input_related_error,
+    summarize_tool_inputs,
+)
 
 
 def _conn_err(status, body="boom"):
@@ -76,3 +80,26 @@ def test_summarize_walks_repeat_conditional():
 def test_summarize_handles_missing_inputs_key():
     assert summarize_tool_inputs({}) == []
     assert summarize_tool_inputs({"inputs": []}) == []
+
+
+CAT1_SCHEMA = {
+    "id": "cat1",
+    "inputs": [
+        {"name": "input1", "type": "data", "optional": False},
+        {"name": "queries", "type": "repeat", "inputs": [{"name": "input2", "type": "data"}]},
+    ],
+}
+
+
+def test_template_flattens_data_and_repeat():
+    t = build_input_template(CAT1_SCHEMA)
+    assert t["input1"] == {"src": "hda", "id": "<dataset_id>"}
+    assert t["queries_0|input2"] == {"src": "hda", "id": "<dataset_id>"}
+
+
+def test_template_conditional_uses_first_case():
+    t = build_input_template(BUILD_LIST_SCHEMA)
+    assert t["datasets_0|input"] == {"src": "hda", "id": "<dataset_id>"}
+    # first case is "idx" -> selector set, no extra params
+    assert t["datasets_0|id_cond|id_select"] == "idx"
+    assert "datasets_0|id_cond|identifier" not in t
