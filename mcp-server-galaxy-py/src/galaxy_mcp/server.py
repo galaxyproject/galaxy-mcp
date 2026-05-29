@@ -29,6 +29,7 @@ from galaxy_mcp.auth import (
 from galaxy_mcp.middleware import ToolVisibilityMiddleware
 from galaxy_mcp.tool_inputs import (
     format_input_mismatch_error,
+    is_input_related_error,
     summarize_tool_inputs,
 )
 
@@ -838,6 +839,12 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyRes
                     history_id=history_id,
                     tool_id=tool_id,
                     used_credentials=used_credentials if "used_credentials" in locals() else False,
+                )
+            ) from e
+        if is_input_related_error(e):
+            raise ValueError(
+                _format_tool_input_error(
+                    e, gi=gi, tool_id=tool_id, history_id=history_id, inputs=inputs
                 )
             ) from e
         raise ValueError(

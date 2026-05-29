@@ -4,6 +4,7 @@ Test tool-related operations
 
 from unittest.mock import patch
 
+import bioblend
 import pytest
 
 from .test_helpers import (
@@ -231,3 +232,36 @@ class TestToolOperations:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             with pytest.raises(ValueError, match="Get tool run examples failed"):
                 get_tool_run_examples_fn("tool1")
+
+    def test_run_tool_enriches_input_error(self, mock_galaxy_instance):
+        """A 400 from Galaxy yields a truthful enriched error with the schema."""
+        mock_galaxy_instance.tools.run_tool.side_effect = bioblend.ConnectionError(
+            "Unexpected HTTP status code: 400",
+            body="Required parameter(s) kwd not provided in request.",
+            status_code=400,
+        )
+        mock_galaxy_instance.tools.show_tool.return_value = {
+            "id": "cat1",
+            "inputs": [{"name": "input1", "type": "data", "optional": False}],
+        }
+        mock_galaxy_instance.tools.get_tool_tests.return_value = []
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError) as exc:
+                run_tool_fn("hist1", "cat1", {"input": {"src": "hda", "id": "d1"}})
+
+        msg = str(exc.value)
+        assert "input1" in msg  # real param name surfaced
+        assert "not a sign" in msg.lower()  # disclaimer
+        assert "kwd" in msg.lower()  # original + wording note preserved
+        mock_galaxy_instance.tools.show_tool.assert_called_once_with("cat1", io_details=True)
+
+    def test_run_tool_non_input_error_uses_plain_format(self, mock_galaxy_instance):
+        """A 404 is NOT treated as input-related -- no schema fetch."""
+        mock_galaxy_instance.tools.run_tool.side_effect = bioblend.ConnectionError(
+            "Unexpected HTTP status code: 404", body="not found", status_code=404
+        )
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError, match="Run tool failed"):
+                run_tool_fn("hist1", "cat1", {"input1": {"src": "hda", "id": "d1"}})
+        mock_galaxy_instance.tools.show_tool.assert_not_called()
