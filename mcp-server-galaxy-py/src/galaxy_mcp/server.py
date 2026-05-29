@@ -718,7 +718,7 @@ def get_tool_run_examples(tool_id: str, tool_version: str | None = None) -> Gala
         raise ValueError(format_error("Get tool run examples", e, context)) from e
 
 
-@mcp.tool(tags={"tools", "read", "core"})
+@mcp.tool(tags={"tools", "read", "extended"})
 def get_tool_input_template(tool_id: str) -> GalaxyResult:
     """Return a ready-to-fill ``inputs`` skeleton for a tool, plus a compact schema.
 
