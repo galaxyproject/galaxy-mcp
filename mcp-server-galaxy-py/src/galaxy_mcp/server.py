@@ -28,6 +28,7 @@ from galaxy_mcp.auth import (
 )
 from galaxy_mcp.middleware import ToolVisibilityMiddleware
 from galaxy_mcp.tool_inputs import (
+    build_input_template,
     format_input_mismatch_error,
     is_input_related_error,
     summarize_tool_inputs,
@@ -715,6 +716,36 @@ def get_tool_run_examples(tool_id: str, tool_version: str | None = None) -> Gala
         if tool_version:
             context["tool_version"] = tool_version
         raise ValueError(format_error("Get tool run examples", e, context)) from e
+
+
+@mcp.tool(tags={"tools", "read", "core"})
+def get_tool_input_template(tool_id: str) -> GalaxyResult:
+    """Return a ready-to-fill ``inputs`` skeleton for a tool, plus a compact schema.
+
+    Call this before run_tool when you are unsure how to shape ``inputs``. Replace
+    placeholders (e.g. ``<dataset_id>``) with real values. Repeats show one
+    instance (``name_0|...``); duplicate with ``name_1|...`` to add more. The
+    flattened-key convention is ``section|param``, ``cond|selector``,
+    ``repeat_0|param``.
+    """
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+    try:
+        info = _get_tool_schema(gi, tool_id)
+        return GalaxyResult(
+            data={
+                "tool_id": tool_id,
+                "inputs_template": build_input_template(info),
+                "parameters": summarize_tool_inputs(info),
+            },
+            success=True,
+            message=(
+                f"Built an input template for tool '{tool_id}'. Replace placeholders "
+                f"(e.g. <dataset_id>) and pass the result as `inputs` to run_tool."
+            ),
+        )
+    except Exception as e:
+        raise ValueError(format_error("Get tool input template", e, {"tool_id": tool_id})) from e
 
 
 @mcp.tool(tags={"tools", "read", "extended"})

@@ -9,6 +9,7 @@ import pytest
 
 from .test_helpers import (
     galaxy_state,
+    get_tool_input_template_fn,
     get_tool_run_examples_fn,
     run_tool_fn,
     run_user_tool_fn,
@@ -298,3 +299,23 @@ class TestToolOperations:
                 run_user_tool_fn("hist1", "uuid-123", {"wrong": "x"})
         assert "not a sign" in str(exc.value).lower()
         assert '"in"' in str(exc.value) or "'in'" in str(exc.value)
+
+    def test_get_tool_input_template(self, mock_galaxy_instance):
+        mock_galaxy_instance.tools.show_tool.return_value = {
+            "id": "cat1",
+            "inputs": [
+                {"name": "input1", "type": "data"},
+                {
+                    "name": "queries",
+                    "type": "repeat",
+                    "inputs": [{"name": "input2", "type": "data"}],
+                },
+            ],
+        }
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_tool_input_template_fn("cat1")
+        assert result.success is True
+        tmpl = result.data["inputs_template"]
+        assert tmpl["input1"] == {"src": "hda", "id": "<dataset_id>"}
+        assert tmpl["queries_0|input2"] == {"src": "hda", "id": "<dataset_id>"}
+        assert result.data["parameters"][0]["name"] == "input1"
