@@ -1,6 +1,6 @@
 import bioblend
 
-from galaxy_mcp.tool_inputs import is_input_related_error
+from galaxy_mcp.tool_inputs import is_input_related_error, summarize_tool_inputs
 
 
 def _conn_err(status, body="boom"):
@@ -30,3 +30,49 @@ def test_plain_exception_is_not_input_related():
 
 def test_valueerror_is_not_input_related():
     assert is_input_related_error(ValueError("bad inputs")) is False
+
+
+# Shape mirrors Galaxy's /api/tools/{id}?io_details=true output.
+BUILD_LIST_SCHEMA = {
+    "id": "__BUILD_LIST__",
+    "inputs": [
+        {
+            "name": "datasets",
+            "type": "repeat",
+            "inputs": [
+                {"name": "input", "type": "data", "optional": False},
+                {
+                    "name": "id_cond",
+                    "type": "conditional",
+                    "test_param": {
+                        "name": "id_select",
+                        "type": "select",
+                        "options": [["use index", "idx", True], ["manual", "manual", False]],
+                    },
+                    "cases": [
+                        {"value": "idx", "inputs": []},
+                        {"value": "manual", "inputs": [{"name": "identifier", "type": "text"}]},
+                    ],
+                },
+            ],
+        }
+    ],
+}
+
+
+def test_summarize_walks_repeat_conditional():
+    summ = summarize_tool_inputs(BUILD_LIST_SCHEMA)
+    assert summ[0]["name"] == "datasets"
+    assert summ[0]["type"] == "repeat"
+    assert summ[0]["repeat_key_hint"] == "datasets_0|<param>"
+    child_names = [c["name"] for c in summ[0]["children"]]
+    assert child_names == ["input", "id_cond"]
+    cond = summ[0]["children"][1]
+    assert cond["type"] == "conditional"
+    assert cond["selector"]["name"] == "id_select"
+    assert {c["when"] for c in cond["cases"]} == {"idx", "manual"}
+
+
+def test_summarize_handles_missing_inputs_key():
+    assert summarize_tool_inputs({}) == []
+    assert summarize_tool_inputs({"inputs": []}) == []
