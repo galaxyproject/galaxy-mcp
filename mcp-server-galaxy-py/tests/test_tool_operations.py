@@ -2,7 +2,8 @@
 Test tool-related operations
 """
 
-from unittest.mock import patch
+import asyncio
+from unittest.mock import MagicMock, patch
 
 import bioblend
 import pytest
@@ -227,13 +228,29 @@ class TestToolOperations:
             "tool1", tool_version=None
         )
 
-    def test_get_tool_run_examples_uses_request_scoped_gi(self, mock_galaxy_instance):
-        """Must read the per-request gi (state['gi']), not the module global."""
-        mock_galaxy_instance.tools.get_tool_tests.return_value = [{"inputs": {"input1": "x"}}]
-        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+    def test_get_tool_run_examples_uses_request_scoped_gi(self):
+        """Must read the per-request gi (state['gi']), not the module global.
+
+        Uses a request-scoped client distinct from galaxy_state['gi'] so the test
+        actually fails if the code reverts to reaching for the global client (the
+        OAuth regression the request-scoped path guards against).
+        """
+        request_gi = MagicMock(name="request_gi")
+        request_gi.tools.get_tool_tests.return_value = [{"inputs": {"input1": "x"}}]
+        global_gi = MagicMock(name="global_gi")
+
+        with (
+            patch.dict(galaxy_state, {"connected": True, "gi": global_gi}),
+            patch(
+                "galaxy_mcp.server._get_request_connection_state",
+                return_value={"connected": True, "gi": request_gi},
+            ),
+        ):
             result = get_tool_run_examples_fn("cat1")
+
         assert result.success is True
-        mock_galaxy_instance.tools.get_tool_tests.assert_called_once_with("cat1", tool_version=None)
+        request_gi.tools.get_tool_tests.assert_called_once_with("cat1", tool_version=None)
+        global_gi.tools.get_tool_tests.assert_not_called()
 
     def test_get_tool_run_examples_error(self, mock_galaxy_instance):
         """Test error handling when fetching tool run lessons fails"""
@@ -265,6 +282,70 @@ class TestToolOperations:
         assert "not a sign" in msg.lower()  # disclaimer
         assert "kwd" in msg.lower()  # original + wording note preserved
         mock_galaxy_instance.tools.show_tool.assert_called_once_with("cat1", io_details=True)
+
+    def test_run_tool_enrichment_uses_request_scoped_gi(self):
+        """Enrichment must fetch the schema via the per-request gi, not the global."""
+        request_gi = MagicMock(name="request_gi")
+        request_gi.tools.run_tool.side_effect = bioblend.ConnectionError(
+            "Unexpected HTTP status code: 400", body="kwd not provided", status_code=400
+        )
+        request_gi.tools.show_tool.return_value = {
+            "id": "cat1",
+            "inputs": [{"name": "input1", "type": "data"}],
+        }
+        request_gi.tools.get_tool_tests.return_value = []
+        global_gi = MagicMock(name="global_gi")
+
+        with (
+            patch.dict(galaxy_state, {"connected": True, "gi": global_gi}),
+            patch(
+                "galaxy_mcp.server._get_request_connection_state",
+                return_value={"connected": True, "gi": request_gi},
+            ),
+            pytest.raises(ValueError) as exc,
+        ):
+            run_tool_fn("hist1", "cat1", {"wrong": "x"})
+
+        assert "input1" in str(exc.value)  # enriched from the request-scoped schema
+        request_gi.tools.show_tool.assert_called_once_with("cat1", io_details=True)
+        global_gi.tools.show_tool.assert_not_called()
+
+    def test_run_tool_enrichment_applies_through_code_mode_dispatch(self):
+        """Code-mode coverage: the run_galaxy_tool meta-tool executes tools via
+        ``ctx.fastmcp.call_tool("run_tool", ...)``, so enrichment must survive the
+        server dispatch path, not just a direct call to run_tool's function. This
+        drives that same dispatch (``mcp.call_tool``) and asserts the enriched error
+        comes back instead of the raw 400.
+        """
+        from fastmcp.exceptions import ToolError
+
+        from galaxy_mcp.server import mcp
+
+        request_gi = MagicMock(name="request_gi")
+        request_gi.tools.run_tool.side_effect = bioblend.ConnectionError(
+            "Unexpected HTTP status code: 400", body="kwd not provided", status_code=400
+        )
+        request_gi.tools.show_tool.return_value = {
+            "id": "cat1",
+            "inputs": [{"name": "input1", "type": "data"}],
+        }
+        request_gi.tools.get_tool_tests.return_value = []
+
+        async def _dispatch():
+            return await mcp.call_tool(
+                "run_tool", {"history_id": "h1", "tool_id": "cat1", "inputs": {"wrong": "x"}}
+            )
+
+        with patch(
+            "galaxy_mcp.server._get_request_connection_state",
+            return_value={"connected": True, "gi": request_gi},
+        ):
+            with pytest.raises(ToolError) as exc:
+                asyncio.run(_dispatch())
+
+        msg = str(exc.value)
+        assert "input1" in msg  # schema-enriched
+        assert "not a sign" in msg.lower()  # disclaimer survived the dispatch
 
     def test_run_tool_non_input_error_uses_plain_format(self, mock_galaxy_instance):
         """A 404 is NOT treated as input-related -- no schema fetch."""
