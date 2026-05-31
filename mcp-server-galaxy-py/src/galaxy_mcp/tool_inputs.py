@@ -44,6 +44,8 @@ def _summarize_param(p: dict[str, Any]) -> dict[str, Any]:
             "choices": _option_values(tp),
             "key_hint": f"{p.get('name')}|{tp.get('name')}",
         }
+        if _options_truncated(tp):
+            out["selector"]["choices_truncated"] = True
         out["cases"] = [
             {
                 "when": case.get("value"),
@@ -53,15 +55,26 @@ def _summarize_param(p: dict[str, Any]) -> dict[str, Any]:
         ]
     elif ptype == "select":
         out["choices"] = _option_values(p)
+        if _options_truncated(p):
+            out["choices_truncated"] = True
     return out
 
 
+_MAX_OPTIONS = 25
+
+
 def _option_values(p: dict[str, Any]) -> list[Any]:
-    # Galaxy options are [label, value, selected] triples.
-    values = []
-    for o in (p.get("options") or [])[:25]:
-        values.append(o[1] if isinstance(o, (list, tuple)) and len(o) > 1 else o)
-    return values
+    # Galaxy options are [label, value, selected] triples; cap to keep summaries compact.
+    options = p.get("options") or []
+    return [
+        o[1] if isinstance(o, (list, tuple)) and len(o) > 1 else o for o in options[:_MAX_OPTIONS]
+    ]
+
+
+def _options_truncated(p: dict[str, Any]) -> bool:
+    # Signal when the cap dropped choices so a model doesn't read a clipped list as
+    # the full set. Mirrors the `*_truncated` fields used elsewhere (see server.py).
+    return len(p.get("options") or []) > _MAX_OPTIONS
 
 
 def _placeholder(p: dict[str, Any]) -> Any:

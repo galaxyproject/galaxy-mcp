@@ -83,6 +83,33 @@ def test_summarize_handles_missing_inputs_key():
     assert summarize_tool_inputs({"inputs": []}) == []
 
 
+def test_summarize_select_truncates_long_option_lists():
+    schema = {
+        "inputs": [
+            {
+                "name": "genome",
+                "type": "select",
+                "options": [[f"label{i}", f"val{i}", False] for i in range(40)],
+            }
+        ]
+    }
+    param = summarize_tool_inputs(schema)[0]
+    assert param["choices"][:3] == ["val0", "val1", "val2"]
+    assert len(param["choices"]) == 25  # capped at _MAX_OPTIONS, values only
+    assert param["choices_truncated"] is True
+
+
+def test_summarize_select_keeps_short_option_lists_intact():
+    schema = {
+        "inputs": [
+            {"name": "fmt", "type": "select", "options": [["A", "a", False], ["B", "b", True]]}
+        ]
+    }
+    param = summarize_tool_inputs(schema)[0]
+    assert param["choices"] == ["a", "b"]
+    assert "choices_truncated" not in param
+
+
 CAT1_SCHEMA = {
     "id": "cat1",
     "inputs": [
