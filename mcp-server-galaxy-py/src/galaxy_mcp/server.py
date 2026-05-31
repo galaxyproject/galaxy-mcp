@@ -27,6 +27,12 @@ from galaxy_mcp.auth import (
     get_active_session,
 )
 from galaxy_mcp.middleware import ToolVisibilityMiddleware
+from galaxy_mcp.tool_inputs import (
+    build_input_template,
+    format_input_mismatch_error,
+    is_input_related_error,
+    summarize_tool_inputs,
+)
 
 _galaxy_mcp_version = importlib.metadata.version("galaxy-mcp")
 USER_AGENT = f"galaxy-mcp/{_galaxy_mcp_version} bioblend/{bioblend.__version__}"
@@ -155,6 +161,53 @@ def format_error(action: str, error: Exception, context: dict | None = None) -> 
         msg += f". Context: {context_str}"
 
     return msg
+
+
+# Cache tool io_details schemas. Keyed by (server base URL, tool_id);
+# version is not part of the key because bioblend's show_tool fetches the default version only.
+_TOOL_SCHEMA_CACHE: dict[tuple[str | None, str], dict[str, Any]] = {}
+
+
+def _get_tool_schema(gi: GalaxyInstance, tool_id: str) -> dict[str, Any]:
+    """Fetch (and cache) a tool's io_details schema using the given request-scoped client."""
+    key = (getattr(gi, "base_url", None), tool_id)
+    if key not in _TOOL_SCHEMA_CACHE:
+        _TOOL_SCHEMA_CACHE[key] = gi.tools.show_tool(tool_id, io_details=True)
+    return _TOOL_SCHEMA_CACHE[key]
+
+
+def _format_tool_input_error(
+    error: Exception,
+    *,
+    gi: GalaxyInstance,
+    tool_id: str,
+    history_id: str,
+    inputs: dict[str, Any],
+    action: str = "Run tool",
+) -> str:
+    """Build a truthful enriched error for an input-related tool failure.
+
+    Fetches the schema and one structural example using the SAME request-scoped
+    ``gi`` (never the module global). Both fetches are best-effort: if either
+    fails we still return the disclaimer + original error. This function must
+    never raise.
+    """
+    schema_summary = None
+    example = None
+    with contextlib.suppress(Exception):
+        schema_summary = summarize_tool_inputs(_get_tool_schema(gi, tool_id))
+    with contextlib.suppress(Exception):
+        tests = gi.tools.get_tool_tests(
+            tool_id
+        )  # any version's example is fine -- structural hint only
+        if tests:
+            example = tests[0].get("inputs")
+    original = format_error(
+        action, error, {"history_id": history_id, "tool_id": tool_id, "inputs": inputs}
+    )
+    return format_input_mismatch_error(
+        original_error=original, tool_id=tool_id, schema_summary=schema_summary, example=example
+    )
 
 
 # Try to load environment variables from .env file
@@ -687,10 +740,11 @@ def get_tool_run_examples(tool_id: str, tool_version: str | None = None) -> Gala
     Returns:
         GalaxyResult with test cases in data field
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
-        test_cases = galaxy_state["gi"].tools.get_tool_tests(tool_id, tool_version=tool_version)
+        test_cases = gi.tools.get_tool_tests(tool_id, tool_version=tool_version)
         return GalaxyResult(
             data={
                 "tool_id": tool_id,
@@ -706,6 +760,36 @@ def get_tool_run_examples(tool_id: str, tool_version: str | None = None) -> Gala
         if tool_version:
             context["tool_version"] = tool_version
         raise ValueError(format_error("Get tool run examples", e, context)) from e
+
+
+@mcp.tool(tags={"tools", "read", "extended"})
+def get_tool_input_template(tool_id: str) -> GalaxyResult:
+    """Return a ready-to-fill ``inputs`` skeleton for a tool, plus a compact schema.
+
+    Call this before run_tool when you are unsure how to shape ``inputs``. Replace
+    placeholders (e.g. ``<dataset_id>``) with real values. Repeats show one
+    instance (``name_0|...``); duplicate with ``name_1|...`` to add more. The
+    flattened-key convention is ``section|param``, ``cond|selector``,
+    ``repeat_0|param``.
+    """
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+    try:
+        info = _get_tool_schema(gi, tool_id)
+        return GalaxyResult(
+            data={
+                "tool_id": tool_id,
+                "inputs_template": build_input_template(info),
+                "parameters": summarize_tool_inputs(info),
+            },
+            success=True,
+            message=(
+                f"Built an input template for tool '{tool_id}'. Replace placeholders "
+                f"(e.g. <dataset_id>) and pass the result as `inputs` to run_tool."
+            ),
+        )
+    except Exception as e:
+        raise ValueError(format_error("Get tool input template", e, {"tool_id": tool_id})) from e
 
 
 @mcp.tool(tags={"tools", "read", "extended"})
@@ -831,6 +915,12 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyRes
                     history_id=history_id,
                     tool_id=tool_id,
                     used_credentials=used_credentials if "used_credentials" in locals() else False,
+                )
+            ) from e
+        if is_input_related_error(e):
+            raise ValueError(
+                _format_tool_input_error(
+                    e, gi=gi, tool_id=tool_id, history_id=history_id, inputs=inputs
                 )
             ) from e
         raise ValueError(
@@ -2902,6 +2992,7 @@ def run_user_tool(history_id: str, tool_uuid: str, inputs: dict[str, Any]) -> Ga
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
+    tool_id: str | None = None
     try:
         url = f"{gi.url}/unprivileged_tools/{tool_uuid}"
         response = gi.make_get_request(url)
@@ -2928,6 +3019,17 @@ def run_user_tool(history_id: str, tool_uuid: str, inputs: dict[str, Any]) -> Ga
             message=f"Started user tool '{tool_id}' (UUID: {tool_uuid}) in history '{history_id}'",
         )
     except Exception as e:
+        if tool_id and is_input_related_error(e):
+            raise ValueError(
+                _format_tool_input_error(
+                    e,
+                    gi=gi,
+                    tool_id=tool_id,
+                    history_id=history_id,
+                    inputs=inputs,
+                    action="Run user tool",
+                )
+            ) from e
         raise ValueError(
             format_error("Run user tool", e, {"history_id": history_id, "tool_uuid": tool_uuid})
         ) from e

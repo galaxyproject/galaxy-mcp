@@ -131,6 +131,7 @@ The Python implementation provides the following MCP tools:
 - `run_tool`: Execute a Galaxy tool with parameters
 - `get_tool_panel`: Retrieve the Galaxy tool panel structure
 - `get_tool_run_examples`: Retrieve XML-defined test lessons that show how to run a tool
+- `get_tool_input_template`: Returns a ready-to-fill `inputs` skeleton (with placeholders) plus the parameter schema for a tool, to build correct `run_tool` inputs
 - `get_user`: Get current user information
 - `get_histories`: List available Galaxy histories
 - `list_history_ids`: Get simplified list of history IDs and names

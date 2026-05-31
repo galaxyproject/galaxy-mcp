@@ -27,6 +27,7 @@ from galaxy_mcp.server import (
     get_server_info,
     get_tool_citations,
     get_tool_details,
+    get_tool_input_template,
     get_tool_panel,
     get_tool_run_examples,
     get_user,
@@ -37,6 +38,7 @@ from galaxy_mcp.server import (
     list_workflows,
     recommend_iwc_workflows,
     run_tool,
+    run_user_tool,
     search_iwc_workflows,
     search_tools_by_keywords,
     search_tools_by_name,
@@ -70,6 +72,7 @@ get_job_details_fn = get_function(get_job_details)
 get_server_info_fn = get_function(get_server_info)
 get_tool_citations_fn = get_function(get_tool_citations)
 get_tool_details_fn = get_function(get_tool_details)
+get_tool_input_template_fn = get_function(get_tool_input_template)
 get_tool_run_examples_fn = get_function(get_tool_run_examples)
 get_tool_panel_fn = get_function(get_tool_panel)
 get_user_fn = get_function(get_user)
@@ -80,6 +83,7 @@ list_history_ids_fn = get_function(list_history_ids)
 list_workflows_fn = get_function(list_workflows)
 recommend_iwc_workflows_fn = get_function(recommend_iwc_workflows)
 run_tool_fn = get_function(run_tool)
+run_user_tool_fn = get_function(run_user_tool)
 search_iwc_workflows_fn = get_function(search_iwc_workflows)
 search_tools_fn = get_function(search_tools_by_name)
 upload_file_fn = get_function(upload_file)
@@ -106,6 +110,7 @@ __all__ = [
     "get_server_info_fn",
     "get_tool_citations_fn",
     "get_tool_details_fn",
+    "get_tool_input_template_fn",
     "get_tool_run_examples_fn",
     "get_tool_panel_fn",
     "get_user_fn",
@@ -116,6 +121,7 @@ __all__ = [
     "list_workflows_fn",
     "recommend_iwc_workflows_fn",
     "run_tool_fn",
+    "run_user_tool_fn",
     "search_iwc_workflows_fn",
     "search_tools_fn",
     "upload_file_fn",
