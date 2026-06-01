@@ -1,5 +1,6 @@
 # Galaxy MCP Server
 import concurrent.futures
+import contextlib
 import importlib.metadata
 import logging
 import os
@@ -25,9 +26,41 @@ from galaxy_mcp.auth import (
     configure_auth_provider,
     get_active_session,
 )
+from galaxy_mcp.middleware import ToolVisibilityMiddleware
+from galaxy_mcp.tool_inputs import (
+    build_input_template,
+    format_input_mismatch_error,
+    is_input_related_error,
+    summarize_tool_inputs,
+)
 
 _galaxy_mcp_version = importlib.metadata.version("galaxy-mcp")
 USER_AGENT = f"galaxy-mcp/{_galaxy_mcp_version} bioblend/{bioblend.__version__}"
+
+_gi_lock = threading.Lock()
+
+
+def _make_thread_safe(gi: GalaxyInstance) -> GalaxyInstance:
+    """Wrap a GalaxyInstance's HTTP methods with a lock for thread safety.
+
+    bioblend's GalaxyClient uses shared mutable state (json_headers dict)
+    and bare requests.get/post calls that aren't safe under concurrent access.
+    """
+    for method_name in (
+        "make_get_request",
+        "make_post_request",
+        "make_put_request",
+        "make_delete_request",
+        "make_patch_request",
+    ):
+        original = getattr(gi, method_name)
+
+        def locked_method(*args, _orig=original, **kwargs):
+            with _gi_lock:
+                return _orig(*args, **kwargs)
+
+        setattr(gi, method_name, locked_method)
+    return gi
 
 
 class PaginationInfo(BaseModel):
@@ -61,6 +94,50 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def _get_tool_credentials_context(gi: GalaxyInstance, tool_id: str) -> list[dict[str, Any]] | None:
+    """Return stored credentials for a tool, if any are configured for the current user."""
+    user_info = gi.users.get_current_user()
+    user_id = user_info["id"]
+    return cast(list[dict[str, Any]] | None, gi.users.get_credentials_for_tool(user_id, tool_id))
+
+
+def _is_credential_related_error(error: Exception) -> bool:
+    """Return True when a tool run failure appears to involve Galaxy credentials."""
+    error_text = str(error).lower()
+    credential_markers = (
+        "credential",
+        "credentials",
+        "credentials_context",
+        "user_credentials",
+        "service credential",
+        "service credentials",
+    )
+    return any(marker in error_text for marker in credential_markers)
+
+
+def _format_run_tool_credential_error(
+    error: Exception,
+    *,
+    history_id: str,
+    tool_id: str,
+    used_credentials: bool,
+) -> str:
+    """Return an agent-friendly error for missing or invalid tool credentials."""
+    base = format_error("Run tool", error, {"history_id": history_id, "tool_id": tool_id})
+    if used_credentials:
+        return (
+            f"{base}. Galaxy rejected the run while using stored credentials for tool "
+            f"'{tool_id}'. Check the configured credential values or active credential group "
+            "for this tool, then try again."
+        )
+
+    return (
+        f"{base}. This tool appears to require Galaxy tool credentials, but no stored "
+        f"credentials were found for tool '{tool_id}'. Configure credentials for this tool "
+        "in Galaxy, then retry the run."
+    )
+
+
 def format_error(action: str, error: Exception, context: dict | None = None) -> str:
     """Format error messages consistently"""
     if context is None:
@@ -84,6 +161,53 @@ def format_error(action: str, error: Exception, context: dict | None = None) -> 
         msg += f". Context: {context_str}"
 
     return msg
+
+
+# Cache tool io_details schemas. Keyed by (server base URL, tool_id);
+# version is not part of the key because bioblend's show_tool fetches the default version only.
+_TOOL_SCHEMA_CACHE: dict[tuple[str | None, str], dict[str, Any]] = {}
+
+
+def _get_tool_schema(gi: GalaxyInstance, tool_id: str) -> dict[str, Any]:
+    """Fetch (and cache) a tool's io_details schema using the given request-scoped client."""
+    key = (getattr(gi, "base_url", None), tool_id)
+    if key not in _TOOL_SCHEMA_CACHE:
+        _TOOL_SCHEMA_CACHE[key] = gi.tools.show_tool(tool_id, io_details=True)
+    return _TOOL_SCHEMA_CACHE[key]
+
+
+def _format_tool_input_error(
+    error: Exception,
+    *,
+    gi: GalaxyInstance,
+    tool_id: str,
+    history_id: str,
+    inputs: dict[str, Any],
+    action: str = "Run tool",
+) -> str:
+    """Build a truthful enriched error for an input-related tool failure.
+
+    Fetches the schema and one structural example using the SAME request-scoped
+    ``gi`` (never the module global). Both fetches are best-effort: if either
+    fails we still return the disclaimer + original error. This function must
+    never raise.
+    """
+    schema_summary = None
+    example = None
+    with contextlib.suppress(Exception):
+        schema_summary = summarize_tool_inputs(_get_tool_schema(gi, tool_id))
+    with contextlib.suppress(Exception):
+        tests = gi.tools.get_tool_tests(
+            tool_id
+        )  # any version's example is fine -- structural hint only
+        if tests:
+            example = tests[0].get("inputs")
+    original = format_error(
+        action, error, {"history_id": history_id, "tool_id": tool_id, "inputs": inputs}
+    )
+    return format_input_mismatch_error(
+        original_error=original, tool_id=tool_id, schema_summary=schema_summary, example=example
+    )
 
 
 # Try to load environment variables from .env file
@@ -138,10 +262,80 @@ else:
     )
 
 # Create an MCP server (inject auth provider when available)
+_discovery_mode = os.environ.get("GALAXY_MCP_DISCOVERY_MODE", "full").lower()
+_transforms: list[Any] = []
+if _discovery_mode == "code":
+    try:
+        import pydantic_monty  # noqa: F401
+    except ImportError as exc:
+        raise RuntimeError(
+            "GALAXY_MCP_DISCOVERY_MODE=code requires the 'code-mode' extra. "
+            "Install it with `pip install galaxy-mcp[code-mode]` (or "
+            "`uv sync --extra code-mode`)."
+        ) from exc
+
+    from fastmcp.experimental.transforms.code_mode import CodeMode
+
+    # Galaxy-mcp already ships a `run_tool` for Galaxy tool execution, so the
+    # CodeMode execute meta-tool gets a distinct name to avoid collision.
+    _transforms.append(CodeMode(execute_tool_name="run_galaxy_tool"))
+    logger.info(
+        "CodeMode discovery enabled -- tools exposed via search / get_schemas / run_galaxy_tool."
+    )
+elif _discovery_mode != "full":
+    logger.warning("Unknown GALAXY_MCP_DISCOVERY_MODE=%r; falling back to 'full'.", _discovery_mode)
+
+_BASE_INSTRUCTIONS = """\
+Galaxy MCP exposes the Galaxy bioinformatics platform. Most tasks follow the
+same shape: pick or create a history, upload data, run a Galaxy tool on the
+data, then read results back from the history.
+
+Two kinds of "tool" exist here and are easy to confuse:
+- MCP tools (registered by this server) are operations like `upload_file`,
+  `run_tool`, `get_histories`, `invoke_workflow`. They appear in tools/list.
+- Galaxy tools (FastQC, Trimmomatic, Bowtie2, ...) are bioinformatics programs
+  inside a Galaxy instance. They are NOT in the MCP tools/list. Find them with
+  the MCP tools `search_tools_by_name` or `search_tools_by_keywords` (which
+  query the connected Galaxy's tool catalog), then execute via
+  `run_tool(history_id, tool_id, inputs)`.
+
+For curated multi-step analyses, prefer `search_iwc_workflows` to find a
+vetted Interactive Workflow Composer (IWC) workflow, then
+`import_workflow_from_iwc` and `invoke_workflow`.
+
+User-defined tools (created via `create_user_tool`) are run with
+`run_user_tool`, not `run_tool` -- they use a different Galaxy endpoint.
+"""
+
+_CODE_MODE_INSTRUCTIONS = """\
+
+This server is running in `--discovery-mode code`. The MCP tool catalog is
+collapsed into three meta-tools:
+- `search(query, ...)` -- find MCP tools by BM25 over names/descriptions
+- `get_schema(tools=[...])` -- fetch parameter schemas for specific tools
+- `run_galaxy_tool(code=...)` -- execute a Python script that calls MCP tools
+
+Inside `run_galaxy_tool`, the only injected callable is
+`call_tool(name: str, params: dict) -> Any`. Chain multiple calls in one
+script and `return` the final answer to avoid round-trips.
+
+`search` indexes the MCP tools (above), NOT Galaxy's full tool catalog. To
+find a Galaxy tool like FastQC, call
+`await call_tool('search_tools_by_name', {'name': 'fastqc'})` from inside
+`run_galaxy_tool`.
+"""
+
+_instructions = _BASE_INSTRUCTIONS
+if _discovery_mode == "code":
+    _instructions += _CODE_MODE_INSTRUCTIONS
+
+_mcp_kwargs: dict[str, Any] = {"instructions": _instructions}
+if _transforms:
+    _mcp_kwargs["transforms"] = _transforms
 if auth_provider:
-    mcp: FastMCP = FastMCP("Galaxy", auth=auth_provider)
+    mcp: FastMCP = FastMCP("Galaxy", auth=auth_provider, **_mcp_kwargs)
 else:
-    mcp = FastMCP("Galaxy")
+    mcp = FastMCP("Galaxy", **_mcp_kwargs)
 
 # Allow browser preflight CORS requests to bypass FastMCP auth
 
@@ -229,8 +423,10 @@ mcp.http_app = types.MethodType(_http_app_with_preflight, mcp)  # type: ignore[m
 # Initialize Galaxy client if environment variables are set
 if galaxy_state["url"] and galaxy_state["api_key"]:
     try:
-        galaxy_state["gi"] = GalaxyInstance(
-            url=galaxy_state["url"], key=galaxy_state["api_key"], user_agent=USER_AGENT
+        galaxy_state["gi"] = _make_thread_safe(
+            GalaxyInstance(
+                url=galaxy_state["url"], key=galaxy_state["api_key"], user_agent=USER_AGENT
+            )
         )
         galaxy_state["connected"] = True
         logger.info(
@@ -250,7 +446,9 @@ def _get_request_connection_state() -> dict[str, Any]:
         credentials, api_key = get_active_session(get_access_token)
         if credentials and api_key:
             try:
-                gi = GalaxyInstance(url=credentials.galaxy_url, key=api_key, user_agent=USER_AGENT)
+                gi = _make_thread_safe(
+                    GalaxyInstance(url=credentials.galaxy_url, key=api_key, user_agent=USER_AGENT)
+                )
             except Exception as exc:  # pragma: no cover - defensive logging
                 logger.error("Failed to create Galaxy client for OAuth session: %s", exc)
             else:
@@ -285,7 +483,24 @@ def ensure_connected() -> dict[str, Any]:
     return state
 
 
-@mcp.tool()
+def _parse_tag_env(var_name: str) -> set[str] | None:
+    raw = os.environ.get(var_name)
+    if not raw:
+        return None
+    tags = {tag.strip() for tag in raw.split(",") if tag.strip()}
+    return tags or None
+
+
+mcp.add_middleware(
+    ToolVisibilityMiddleware(
+        get_session_state=_get_request_connection_state,
+        include_tags=_parse_tag_env("GALAXY_MCP_INCLUDE_TAGS"),
+        exclude_tags=_parse_tag_env("GALAXY_MCP_EXCLUDE_TAGS"),
+    )
+)
+
+
+@mcp.tool(tags={"connection", "write", "core"})
 def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
     """
     Connect to Galaxy server
@@ -345,7 +560,9 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
         galaxy_url = use_url if use_url.endswith("/") else f"{use_url}/"
 
         # Create a new Galaxy instance to test connection
-        gi = GalaxyInstance(url=galaxy_url, key=use_api_key, user_agent=USER_AGENT)
+        gi = _make_thread_safe(
+            GalaxyInstance(url=galaxy_url, key=use_api_key, user_agent=USER_AGENT)
+        )
 
         # Test the connection by fetching user info
         user_info = gi.users.get_current_user()
@@ -382,7 +599,7 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
         raise ValueError(error_msg) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"tools", "read", "extended"})
 def search_tools_by_name(query: str) -> GalaxyResult:
     """
     Search Galaxy tools whose name, ID, or description contains the given query (substring match).
@@ -447,7 +664,7 @@ def search_tools_by_name(query: str) -> GalaxyResult:
         raise ValueError(format_error("Search tools", e, {"query": query})) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"tools", "read", "extended"})
 def get_tool_details(tool_id: str, io_details: bool = False) -> GalaxyResult:
     """
     Get detailed information about a specific tool including its input parameters.
@@ -510,7 +727,7 @@ def get_tool_details(tool_id: str, io_details: bool = False) -> GalaxyResult:
         ) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"tools", "read", "extended"})
 def get_tool_run_examples(tool_id: str, tool_version: str | None = None) -> GalaxyResult:
     """
     Return the exact XML test definitions (inputs, outputs, assertions, required files)
@@ -523,10 +740,11 @@ def get_tool_run_examples(tool_id: str, tool_version: str | None = None) -> Gala
     Returns:
         GalaxyResult with test cases in data field
     """
-    ensure_connected()
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
 
     try:
-        test_cases = galaxy_state["gi"].tools.get_tool_tests(tool_id, tool_version=tool_version)
+        test_cases = gi.tools.get_tool_tests(tool_id, tool_version=tool_version)
         return GalaxyResult(
             data={
                 "tool_id": tool_id,
@@ -544,7 +762,37 @@ def get_tool_run_examples(tool_id: str, tool_version: str | None = None) -> Gala
         raise ValueError(format_error("Get tool run examples", e, context)) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"tools", "read", "extended"})
+def get_tool_input_template(tool_id: str) -> GalaxyResult:
+    """Return a ready-to-fill ``inputs`` skeleton for a tool, plus a compact schema.
+
+    Call this before run_tool when you are unsure how to shape ``inputs``. Replace
+    placeholders (e.g. ``<dataset_id>``) with real values. Repeats show one
+    instance (``name_0|...``); duplicate with ``name_1|...`` to add more. The
+    flattened-key convention is ``section|param``, ``cond|selector``,
+    ``repeat_0|param``.
+    """
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+    try:
+        info = _get_tool_schema(gi, tool_id)
+        return GalaxyResult(
+            data={
+                "tool_id": tool_id,
+                "inputs_template": build_input_template(info),
+                "parameters": summarize_tool_inputs(info),
+            },
+            success=True,
+            message=(
+                f"Built an input template for tool '{tool_id}'. Replace placeholders "
+                f"(e.g. <dataset_id>) and pass the result as `inputs` to run_tool."
+            ),
+        )
+    except Exception as e:
+        raise ValueError(format_error("Get tool input template", e, {"tool_id": tool_id})) from e
+
+
+@mcp.tool(tags={"tools", "read", "extended"})
 def get_tool_citations(tool_id: str) -> GalaxyResult:
     """
     Get citation information for a specific tool
@@ -579,7 +827,7 @@ def get_tool_citations(tool_id: str) -> GalaxyResult:
         raise ValueError(format_error("Get tool citations", e, {"tool_id": tool_id})) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"tools", "write", "core"})
 def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyResult:
     """
     Run a Galaxy tool on datasets in a history.
@@ -645,14 +893,36 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyRes
     gi: GalaxyInstance = state["gi"]
 
     try:
-        # Run the tool with provided inputs
-        result = gi.tools.run_tool(history_id, tool_id, inputs)
+        credentials_context = None
+        with contextlib.suppress(Exception):
+            credentials_context = _get_tool_credentials_context(gi, tool_id)
+
+        used_credentials = credentials_context is not None
+        result = gi.tools.run_tool(
+            history_id, tool_id, inputs, credentials_context=credentials_context
+        )
+        cred_msg = " (with credentials)" if used_credentials else ""
         return GalaxyResult(
             data=result,
             success=True,
-            message=f"Started tool '{tool_id}' in history '{history_id}'",
+            message=f"Started tool '{tool_id}' in history '{history_id}'{cred_msg}",
         )
     except Exception as e:
+        if _is_credential_related_error(e):
+            raise ValueError(
+                _format_run_tool_credential_error(
+                    e,
+                    history_id=history_id,
+                    tool_id=tool_id,
+                    used_credentials=used_credentials if "used_credentials" in locals() else False,
+                )
+            ) from e
+        if is_input_related_error(e):
+            raise ValueError(
+                _format_tool_input_error(
+                    e, gi=gi, tool_id=tool_id, history_id=history_id, inputs=inputs
+                )
+            ) from e
         raise ValueError(
             format_error(
                 "Run tool", e, {"history_id": history_id, "tool_id": tool_id, "inputs": inputs}
@@ -660,7 +930,7 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyRes
         ) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"tools", "read", "extended"})
 def get_tool_panel() -> GalaxyResult:
     """
     Get the tool panel structure (toolbox)
@@ -683,7 +953,7 @@ def get_tool_panel() -> GalaxyResult:
         raise ValueError(format_error("Get tool panel", e)) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"histories", "write", "core"})
 def create_history(history_name: str) -> GalaxyResult:
     """
     Create a new history to organize datasets and analyses.
@@ -813,7 +1083,7 @@ def update_history(
         raise ValueError(format_error("Update history", e)) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"tools", "read", "extended"})
 def search_tools_by_keywords(keywords: list[str]) -> GalaxyResult:
     """
     Recommend Galaxy tools based on a list of keywords.
@@ -925,7 +1195,7 @@ def search_tools_by_keywords(keywords: list[str]) -> GalaxyResult:
         raise ValueError(f"Failed to search tools by keywords: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"connection", "read", "core"})
 def get_server_info() -> GalaxyResult:
     """
     Get Galaxy server information including version, URL, and configuration details
@@ -979,7 +1249,7 @@ def get_server_info() -> GalaxyResult:
         raise ValueError(f"Failed to get server information: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"user", "read", "core"})
 def get_user() -> GalaxyResult:
     """
     Get current user information
@@ -1001,7 +1271,7 @@ def get_user() -> GalaxyResult:
         raise ValueError(f"Failed to get user: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"histories", "read", "core"})
 def get_histories(
     limit: int | None = None, offset: int = 0, name: str | None = None
 ) -> GalaxyResult:
@@ -1111,7 +1381,7 @@ def get_histories(
         )
 
 
-@mcp.tool()
+@mcp.tool(tags={"histories", "read", "core"})
 def list_history_ids() -> GalaxyResult:
     """
     Get a simplified list of history IDs and names for easy reference
@@ -1143,7 +1413,7 @@ def list_history_ids() -> GalaxyResult:
         raise ValueError(f"Failed to list history IDs: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"histories", "read", "core"})
 def get_history_details(history_id: str) -> GalaxyResult:
     """
     Get history metadata and summary count ONLY - does not return actual datasets
@@ -1199,7 +1469,7 @@ def get_history_details(history_id: str) -> GalaxyResult:
         raise ValueError(f"Failed to get history details for ID '{history_id}': {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"histories", "read", "core"})
 def get_history_contents(
     history_id: str,
     limit: int = 100,
@@ -1336,7 +1606,7 @@ def get_history_contents(
         raise ValueError(f"Failed to get history contents for ID '{history_id}': {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"jobs", "read", "core"})
 def get_job_details(dataset_id: str, history_id: str | None = None) -> GalaxyResult:
     """
     Get detailed information about the job that created a specific dataset
@@ -1416,7 +1686,7 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> GalaxyRes
         raise ValueError(f"Failed to get job details for dataset '{dataset_id}': {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"datasets", "read", "core"})
 def get_dataset_details(
     dataset_id: str, include_preview: bool = True, preview_lines: int = 10
 ) -> GalaxyResult:
@@ -1518,7 +1788,7 @@ def get_dataset_details(
         raise ValueError(f"Failed to get dataset details for '{dataset_id}': {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"datasets", "read", "extended"})
 def get_collection_details(collection_id: str, max_elements: int = 100) -> GalaxyResult:
     """
     Get detailed information about a dataset collection and its members
@@ -1604,7 +1874,7 @@ def get_collection_details(collection_id: str, max_elements: int = 100) -> Galax
         raise ValueError(f"Failed to get collection details for '{collection_id}': {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"datasets", "read", "core"})
 def download_dataset(
     dataset_id: str,
     file_path: str | None = None,
@@ -1718,7 +1988,7 @@ def download_dataset(
         raise ValueError(f"Failed to download dataset '{dataset_id}': {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"datasets", "write", "core"})
 def upload_file(path: str, history_id: str | None = None) -> GalaxyResult:
     """
     Upload a local file to Galaxy for analysis.
@@ -1788,7 +2058,7 @@ def upload_file(path: str, history_id: str | None = None) -> GalaxyResult:
         raise ValueError(f"Failed to upload file: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"datasets", "write", "core"})
 def upload_file_from_url(
     url: str,
     history_id: str | None = None,
@@ -1844,7 +2114,7 @@ def upload_file_from_url(
         ) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"workflows", "read", "extended"})
 def get_invocations(
     invocation_id: str | None = None,
     workflow_id: str | None = None,
@@ -1932,7 +2202,7 @@ def _fetch_iwc_workflows() -> GalaxyResult:
     )
 
 
-@mcp.tool()
+@mcp.tool(tags={"iwc", "read", "niche"})
 def get_iwc_workflows() -> GalaxyResult:
     """
     Fetch all workflows from the IWC (Interactive Workflow Composer)
@@ -2047,7 +2317,7 @@ def _enrich_workflow_result(workflow: dict[str, Any], include_full_readme: bool 
     return result
 
 
-@mcp.tool()
+@mcp.tool(tags={"iwc", "read", "niche"})
 def search_iwc_workflows(query: str) -> GalaxyResult:
     """
     Search for workflows in the IWC (Intergalactic Workflow Commission) manifest.
@@ -2144,7 +2414,7 @@ def search_iwc_workflows(query: str) -> GalaxyResult:
         raise ValueError(f"Failed to search IWC workflows: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"iwc", "read", "niche"})
 def get_iwc_workflow_details(trs_id: str) -> GalaxyResult:
     """
     Get comprehensive details about a specific IWC workflow before importing.
@@ -2301,7 +2571,7 @@ def _tokenize_for_search(text: str) -> list[str]:
     ]
 
 
-@mcp.tool()
+@mcp.tool(tags={"iwc", "read", "niche"})
 def recommend_iwc_workflows(intent: str, limit: int = 5) -> GalaxyResult:
     """
     Semantic search for IWC workflows based on natural language description.
@@ -2429,7 +2699,7 @@ def recommend_iwc_workflows(intent: str, limit: int = 5) -> GalaxyResult:
         raise ValueError(f"Failed to recommend IWC workflows: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"iwc", "write", "niche"})
 def import_workflow_from_iwc(trs_id: str) -> GalaxyResult:
     """
     Import a workflow from IWC to the user's Galaxy instance
@@ -2482,7 +2752,7 @@ def import_workflow_from_iwc(trs_id: str) -> GalaxyResult:
         raise ValueError(f"Failed to import workflow from IWC: {str(e)}") from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"workflows", "read", "extended"})
 def list_workflows(
     workflow_id: str | None = None, name: str | None = None, published: bool = False
 ) -> GalaxyResult:
@@ -2519,7 +2789,7 @@ def list_workflows(
         ) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"workflows", "read", "extended"})
 def get_workflow_details(workflow_id: str, version: int | None = None) -> GalaxyResult:
     """
     Get detailed information about a specific workflow
@@ -2550,7 +2820,7 @@ def get_workflow_details(workflow_id: str, version: int | None = None) -> Galaxy
         ) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"workflows", "write", "extended"})
 def invoke_workflow(
     workflow_id: str,
     inputs: dict[str, Any] | None = None,
@@ -2612,7 +2882,7 @@ def invoke_workflow(
         ) from e
 
 
-@mcp.tool()
+@mcp.tool(tags={"workflows", "write", "extended"})
 def cancel_workflow_invocation(invocation_id: str) -> GalaxyResult:
     """
     Cancel a running workflow invocation
@@ -2635,6 +2905,214 @@ def cancel_workflow_invocation(invocation_id: str) -> GalaxyResult:
     except Exception as e:
         raise ValueError(
             format_error("Cancel workflow invocation", e, {"invocation_id": invocation_id})
+        ) from e
+
+
+@mcp.tool(tags={"tools", "write", "extended"})
+def create_user_tool(representation: dict[str, Any]) -> GalaxyResult:
+    """Create a user-defined tool in Galaxy from a YAML tool definition.
+
+    User-defined tools are lightweight, containerized tools that can be created
+    without admin privileges. They are stored in the database, scoped to the
+    creating user, and can be embedded in workflows (importing the workflow
+    automatically creates the tool for the importing user).
+
+    Args:
+        representation: The tool definition as a dictionary matching the
+            GalaxyUserTool schema. Required fields:
+            - class: "GalaxyUserTool" (exactly this string)
+            - id: tool identifier (lowercase, no spaces, 3-255 chars)
+            - version: version string (e.g. "0.1.0")
+            - name: display name shown in Galaxy tool menu
+            - container: container image as a STRING (e.g. "python:3.12-slim"),
+              NOT a dict -- this is a common mistake
+            - shell_command: the command to execute, with $(inputs.name.path)
+              for data inputs and $(inputs.name) for parameter inputs
+            - inputs: list of input dicts, each with "name" and "type"
+              (type can be: "data", "integer", "float", "text", "boolean")
+            - outputs: list of output dicts, each with "name", "type": "data",
+              "format" (e.g. "tabular", "vcf", "bed"), and "from_work_dir"
+
+    Returns:
+        GalaxyResult with the created tool's id, uuid, tool_id, and active status.
+
+    Example:
+        >>> create_user_tool({
+        ...     "class": "GalaxyUserTool",
+        ...     "id": "my_filter",
+        ...     "version": "0.1.0",
+        ...     "name": "My Filter",
+        ...     "description": "Filter rows by threshold",
+        ...     "container": "python:3.12-slim",
+        ...     "shell_command": "python3 -c 'import sys; ...'",
+        ...     "inputs": [{"name": "input1", "type": "data", "format": "tabular"}],
+        ...     "outputs": [
+        ...         {"name": "output1", "type": "data",
+        ...          "format": "tabular", "from_work_dir": "out.tsv"}
+        ...     ]
+        ... })
+
+    NEXT STEPS:
+    - Run the tool: run_tool(history_id, tool_id, inputs)
+    - List your tools: list_user_tools()
+    - Delete a tool: delete_user_tool(uuid)
+    """
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+
+    for field in ("class", "id", "version", "name", "shell_command", "container"):
+        if field not in representation:
+            raise ValueError(f"representation is missing required field: '{field}'")
+    if representation["class"] != "GalaxyUserTool":
+        raise ValueError(f"class must be 'GalaxyUserTool', got '{representation['class']}'")
+    if not isinstance(representation["container"], str):
+        raise ValueError(
+            f"container must be a string (e.g. 'python:3.12-slim'), "
+            f"got {type(representation['container']).__name__}: {representation['container']}"
+        )
+
+    try:
+        payload = {"src": "representation", "representation": representation}
+        url = f"{gi.url}/unprivileged_tools"
+        response = gi.make_post_request(url, payload=payload)
+        return GalaxyResult(
+            data=response,
+            success=True,
+            message=(
+                f"Created user-defined tool "
+                f"'{representation.get('name', representation.get('id', 'unknown'))}'"
+            ),
+        )
+    except Exception as e:
+        raise ValueError(
+            format_error("Create user tool", e, {"tool_id": representation.get("id")})
+        ) from e
+
+
+@mcp.tool(tags={"tools", "read", "extended"})
+def list_user_tools(active: bool = True) -> GalaxyResult:
+    """List user-defined tools belonging to the current user.
+
+    Args:
+        active: If True (default), only show active tools. Set False to include deactivated tools.
+
+    Returns:
+        GalaxyResult with list of user tools including id, uuid, tool_id, name, and active status.
+    """
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+
+    try:
+        url = f"{gi.url}/unprivileged_tools?active={str(active).lower()}"
+        response = gi.make_get_request(url)
+        tools = response.json()
+        return GalaxyResult(
+            data=tools,
+            success=True,
+            message=f"Found {len(tools)} user-defined tool(s)",
+            count=len(tools),
+        )
+    except Exception as e:
+        raise ValueError(format_error("List user tools", e)) from e
+
+
+@mcp.tool(tags={"tools", "write", "extended"})
+def delete_user_tool(uuid: str) -> GalaxyResult:
+    """Deactivate a user-defined tool. Deactivated tools are not loaded into the toolbox.
+
+    Args:
+        uuid: The UUID of the tool to deactivate. Get this from list_user_tools().
+
+    Returns:
+        GalaxyResult confirming deactivation.
+    """
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+
+    try:
+        url = f"{gi.url}/unprivileged_tools/{uuid}"
+        gi.make_delete_request(url)
+        return GalaxyResult(
+            data={"uuid": uuid, "deactivated": True},
+            success=True,
+            message=f"Deactivated user-defined tool '{uuid}'",
+        )
+    except Exception as e:
+        raise ValueError(format_error("Delete user tool", e, {"uuid": uuid})) from e
+
+
+@mcp.tool(tags={"tools", "write", "extended"})
+def run_user_tool(history_id: str, tool_uuid: str, inputs: dict[str, Any]) -> GalaxyResult:
+    """Run a user-defined tool via the Galaxy jobs API.
+
+    User-defined tools cannot be run via the standard run_tool() endpoint.
+    This function uses POST /api/jobs with the tool UUID, matching how
+    the Galaxy UI submits user-defined tool jobs.
+
+    Args:
+        history_id: Galaxy history ID where outputs will be placed.
+        tool_uuid: The UUID of the user-defined tool (from create_user_tool or list_user_tools).
+        inputs: Tool input parameters. Dataset inputs use:
+                {"input_name": {"src": "hda", "id": "dataset_id"}}
+                Scalar parameters use direct values:
+                {"param_name": value}
+
+    Returns:
+        GalaxyResult with job info and output dataset IDs.
+
+    Example:
+        >>> run_user_tool(
+        ...     history_id="abc123",
+        ...     tool_uuid="61d15277-a911-45ef-aa66-5385146578cc",
+        ...     inputs={
+        ...         "scorer_output": {"src": "hda", "id": "59ace41fc068d3ad"},
+        ...         "top_tracks_per_variant": 5
+        ...     }
+        ... )
+    """
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+
+    tool_id: str | None = None
+    try:
+        url = f"{gi.url}/unprivileged_tools/{tool_uuid}"
+        response = gi.make_get_request(url)
+        tool_info = response.json()
+        tool_id = tool_info.get("tool_id")
+        if not tool_id:
+            raise ValueError(f"No user-defined tool found with UUID '{tool_uuid}'")
+        tool_version = tool_info.get("representation", {}).get("version", "0.1.0")
+
+        payload = {
+            "tool_id": tool_id,
+            "tool_uuid": tool_uuid,
+            "tool_version": tool_version,
+            "history_id": history_id,
+            "inputs": inputs,
+            "use_cached_jobs": False,
+        }
+        job_url = f"{gi.url}/jobs"
+        result = gi.make_post_request(job_url, payload=payload)
+
+        return GalaxyResult(
+            data=result,
+            success=True,
+            message=f"Started user tool '{tool_id}' (UUID: {tool_uuid}) in history '{history_id}'",
+        )
+    except Exception as e:
+        if tool_id and is_input_related_error(e):
+            raise ValueError(
+                _format_tool_input_error(
+                    e,
+                    gi=gi,
+                    tool_id=tool_id,
+                    history_id=history_id,
+                    inputs=inputs,
+                    action="Run user tool",
+                )
+            ) from e
+        raise ValueError(
+            format_error("Run user tool", e, {"history_id": history_id, "tool_uuid": tool_uuid})
         ) from e
 
 

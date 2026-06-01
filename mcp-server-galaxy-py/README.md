@@ -102,6 +102,25 @@ uv run galaxy-mcp --transport streamable-http --host 0.0.0.0 --port 8000
 
 See [USAGE_EXAMPLES.md](USAGE_EXAMPLES.md) for detailed tool usage patterns.
 
+### Tool discovery mode (experimental)
+
+Galaxy MCP exposes 30+ `@mcp.tool` registrations, which costs tokens on every turn for agents that only ever use a handful. `--discovery-mode code` (also honored via `GALAXY_MCP_DISCOVERY_MODE=code`) collapses the whole catalog into three meta-tools:
+
+- `search` -- BM25 search over tool names and descriptions
+- `get_schema` -- fetch the full schema for specific tools
+- `run_galaxy_tool` -- execute any tool by name
+
+```bash
+pip install 'galaxy-mcp[code-mode]'   # pulls in pydantic-monty sandbox
+galaxy-mcp --discovery-mode code
+```
+
+The `code-mode` extra installs `pydantic-monty`, the sandboxed Python interpreter that backs `run_galaxy_tool`. Without it the server still starts in `full` mode but raises a clear error if `--discovery-mode code` is requested.
+
+Default is `full`, which keeps the existing catalog unchanged. CodeMode is useful when you want to keep the agent's context lean and are willing to trade a few extra turns (search -> schema -> execute) per tool call. It's built on FastMCP's experimental `CodeMode` transform, so the API may shift before it stabilizes.
+
+The server also ships agent-facing usage guidance via the MCP `instructions` field (returned during the initial handshake). It explains the typical workflow, the difference between MCP tools and Galaxy tools (e.g. FastQC isn't an MCP tool -- find it via `search_tools_by_name`), and -- when code mode is active -- how to use `run_galaxy_tool` and `call_tool`. Agents that respect the `instructions` field will read this without you having to prompt them.
+
 ## Available MCP Tools
 
 The Python implementation provides the following MCP tools:
@@ -112,6 +131,7 @@ The Python implementation provides the following MCP tools:
 - `run_tool`: Execute a Galaxy tool with parameters
 - `get_tool_panel`: Retrieve the Galaxy tool panel structure
 - `get_tool_run_examples`: Retrieve XML-defined test lessons that show how to run a tool
+- `get_tool_input_template`: Returns a ready-to-fill `inputs` skeleton (with placeholders) plus the parameter schema for a tool, to build correct `run_tool` inputs
 - `get_user`: Get current user information
 - `get_histories`: List available Galaxy histories
 - `list_history_ids`: Get simplified list of history IDs and names

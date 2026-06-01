@@ -88,6 +88,7 @@ def mock_galaxy_instance():
         "email": "test@example.com",
         "username": "testuser",
     }
+    mock_users.get_credentials_for_tool.return_value = None
     mock_gi.users = mock_users
 
     return mock_gi
@@ -96,10 +97,13 @@ def mock_galaxy_instance():
 @pytest.fixture(autouse=True)
 def _reset_galaxy_state():
     """Reset galaxy state for each test"""
-    from galaxy_mcp.server import galaxy_state, get_manifest_json
+    from galaxy_mcp.server import _TOOL_SCHEMA_CACHE, galaxy_state, get_manifest_json
 
     # Clear lru_cache to prevent test pollution
     get_manifest_json.cache_clear()
+
+    # Clear schema cache to prevent cross-test pollution
+    _TOOL_SCHEMA_CACHE.clear()
 
     # Save original state
     original_state = galaxy_state.copy()
