@@ -11,6 +11,7 @@ from .test_helpers import (
     get_histories_fn,
     get_history_details_fn,
     list_history_ids_fn,
+    update_history_fn,
 )
 
 
@@ -192,6 +193,84 @@ class TestHistoryOperations:
             mock_galaxy_instance.histories.show_history.assert_called_once_with(
                 "test_history_1", contents=True
             )
+
+    def test_update_history_name(self, mock_galaxy_instance):
+        """Test update_history updates the history name"""
+        mock_galaxy_instance.histories.update_history.return_value = {
+            "id": "test_history_1",
+            "name": "Renamed History",
+            "state": "ok",
+        }
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = update_history_fn("test_history_1", name="Renamed History")
+
+            assert result.success is True
+            assert result.data["id"] == "test_history_1"
+            assert result.data["name"] == "Renamed History"
+            assert "name" in result.message
+            mock_galaxy_instance.histories.update_history.assert_called_once_with(
+                "test_history_1", name="Renamed History"
+            )
+
+    def test_update_history_multiple_fields(self, mock_galaxy_instance):
+        """Test update_history can update several fields in a single call"""
+        mock_galaxy_instance.histories.update_history.return_value = {
+            "id": "test_history_1",
+            "name": "New Name",
+            "annotation": "QC'd",
+            "tags": ["rnaseq", "final"],
+        }
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = update_history_fn(
+                "test_history_1",
+                name="New Name",
+                annotation="QC'd",
+                tags=["rnaseq", "final"],
+            )
+
+            assert result.success is True
+            mock_galaxy_instance.histories.update_history.assert_called_once_with(
+                "test_history_1",
+                name="New Name",
+                annotation="QC'd",
+                tags=["rnaseq", "final"],
+            )
+
+    def test_update_history_omits_none_fields(self, mock_galaxy_instance):
+        """Test that None fields are not forwarded to bioblend"""
+        mock_galaxy_instance.histories.update_history.return_value = {
+            "id": "test_history_1",
+            "deleted": True,
+        }
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            update_history_fn("test_history_1", deleted=True)
+
+            mock_galaxy_instance.histories.update_history.assert_called_once_with(
+                "test_history_1", deleted=True
+            )
+
+    def test_update_history_no_fields_raises(self, mock_galaxy_instance):
+        """Test update_history raises when no fields are provided"""
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError, match="No fields provided"):
+                update_history_fn("test_history_1")
+
+    def test_update_history_invalid_id(self, mock_galaxy_instance):
+        """Test update_history raises ValueError for an invalid history ID"""
+        mock_galaxy_instance.histories.update_history.side_effect = Exception("404 Not Found")
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError, match="Update history"):
+                update_history_fn("nonexistent_id", name="New Name")
+
+    def test_update_history_not_connected(self):
+        """Test update_history raises when not connected"""
+        with patch.dict(galaxy_state, {"connected": False, "gi": None}):
+            with pytest.raises(Exception):
+                update_history_fn("test_history_1", name="New Name")
 
     def test_get_history_contents_with_collections(self, mock_galaxy_instance):
         """Test get_history_contents returns both datasets and collections with proper type flags"""
