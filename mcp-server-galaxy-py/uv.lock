@@ -903,6 +903,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "rank-bm25" },
     { name = "requests" },
+    { name = "typing-extensions" },
 ]
 
 [package.optional-dependencies]
@@ -950,6 +951,7 @@ requires-dist = [
     { name = "tox", marker = "extra == 'dev'", specifier = ">=4.11.0" },
     { name = "twine", marker = "extra == 'dev'", specifier = ">=5.0.0" },
     { name = "types-requests", marker = "extra == 'dev'", specifier = ">=2.31.0" },
+    { name = "typing-extensions", specifier = ">=4.0.0,<5" },
 ]
 provides-extras = ["code-mode", "dev"]
 
