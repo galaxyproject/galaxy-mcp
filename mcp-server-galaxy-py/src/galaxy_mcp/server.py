@@ -5,6 +5,7 @@ import importlib.metadata
 import logging
 import os
 import threading
+import time
 import types
 from dataclasses import dataclass
 from functools import lru_cache
@@ -41,6 +42,7 @@ USER_AGENT = f"galaxy-mcp/{_galaxy_mcp_version} bioblend/{bioblend.__version__}"
 
 _gi_lock = threading.Lock()
 _session_state_lock = threading.Lock()
+_MAX_SESSION_CONNECTIONS = int(os.environ.get("GALAXY_MCP_MAX_SESSION_CONNECTIONS", 128))
 
 
 @dataclass
@@ -48,10 +50,20 @@ class SessionGalaxyConnection:
     url: str
     api_key: str
     gi: GalaxyInstance
+    last_accessed_at: float
     connected: bool = True
 
 
 _session_connections: dict[str, SessionGalaxyConnection] = {}
+
+
+def _prune_session_connections() -> None:
+    while len(_session_connections) > _MAX_SESSION_CONNECTIONS:
+        least_recently_used_session_id = min(
+            _session_connections,
+            key=lambda session_id: _session_connections[session_id].last_accessed_at,
+        )
+        _session_connections.pop(least_recently_used_session_id, None)
 
 
 def _make_thread_safe(gi: GalaxyInstance) -> GalaxyInstance:
@@ -86,16 +98,26 @@ def _get_current_session_id() -> str | None:
 
 def _get_session_connection(session_id: str) -> SessionGalaxyConnection | None:
     with _session_state_lock:
-        return _session_connections.get(session_id)
+        session_connection = _session_connections.get(session_id)
+        if not session_connection:
+            return None
+        session_connection.last_accessed_at = time.monotonic()
+        return session_connection
 
 
 def _set_session_connection(
     session_id: str, *, url: str, api_key: str, gi: GalaxyInstance, connected: bool = True
 ) -> None:
     with _session_state_lock:
+        now = time.monotonic()
         _session_connections[session_id] = SessionGalaxyConnection(
-            url=url, api_key=api_key, gi=gi, connected=connected
+            url=url,
+            api_key=api_key,
+            gi=gi,
+            connected=connected,
+            last_accessed_at=now,
         )
+        _prune_session_connections()
 
 
 def _clear_session_connection(session_id: str) -> None:
@@ -595,8 +617,10 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
 
         if session_id and not url and not api_key and not state["connected"]:
             raise ValueError(
-                "No Galaxy connection is configured for this MCP session. "
-                "Call connect(url='https://your-galaxy.org', api_key='your-key') first."
+                "No Galaxy connection is available for this MCP session. "
+                "It may not have been configured yet, or it may have been evicted from the "
+                "session connection cache. Call connect(url='https://your-galaxy.org', "
+                "api_key='your-key') again."
             )
 
         # Use provided parameters or fall back to environment variables

@@ -120,6 +120,7 @@ class TestConnection:
             url="https://session.galaxy/",
             api_key="session-key",
             gi=mock_galaxy_instance,
+            last_accessed_at=1.0,
         )
         mock_context = type("Ctx", (), {"session_id": "session-123"})()
 
@@ -134,13 +135,42 @@ class TestConnection:
             == mock_galaxy_instance.users.get_current_user.return_value["username"]
         )
 
+    def test_session_connection_cache_evicts_lru_entry(self, mock_galaxy_instance):
+        """Session-bound connections should be capped by least-recently-used eviction."""
+        with patch("galaxy_mcp.server._MAX_SESSION_CONNECTIONS", 2):
+            with patch(
+                "galaxy_mcp.server.time.monotonic",
+                side_effect=[1.0, 2.0, 3.0, 4.0],
+            ):
+                server._set_session_connection(
+                    "session-1",
+                    url="https://session-1.galaxy/",
+                    api_key="session-key-1",
+                    gi=mock_galaxy_instance,
+                )
+                server._set_session_connection(
+                    "session-2",
+                    url="https://session-2.galaxy/",
+                    api_key="session-key-2",
+                    gi=mock_galaxy_instance,
+                )
+                assert server._get_session_connection("session-1") is not None
+                server._set_session_connection(
+                    "session-3",
+                    url="https://session-3.galaxy/",
+                    api_key="session-key-3",
+                    gi=mock_galaxy_instance,
+                )
+
+        assert set(server._session_connections) == {"session-1", "session-3"}
+
     def test_connect_requires_explicit_credentials_for_new_session(self):
         """A fresh session should not bootstrap itself from global env credentials."""
         mock_context = type("Ctx", (), {"session_id": "session-456"})()
 
         with patch("galaxy_mcp.server.get_context", return_value=mock_context):
             with pytest.raises(
-                ValueError, match="No Galaxy connection is configured for this MCP session"
+                ValueError, match="No Galaxy connection is available for this MCP session"
             ):
                 connect_fn()
 
@@ -192,6 +222,7 @@ class TestConnection:
             url="https://session.galaxy/",
             api_key="session-key",
             gi=mock_galaxy_instance,
+            last_accessed_at=1.0,
         )
 
         with patch.dict(
