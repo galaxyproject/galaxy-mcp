@@ -103,23 +103,6 @@ def _clear_session_connection(session_id: str) -> None:
         _session_connections.pop(session_id, None)
 
 
-def _resolve_history_id(gi: GalaxyInstance, history_id: str | None) -> str:
-    if history_id is not None:
-        return history_id
-
-    histories = gi.histories.get_histories()
-    if not histories:
-        raise ValueError(
-            "No Galaxy histories found. Create a history first or provide history_id explicitly."
-        )
-
-    resolved_history_id = histories[0].get("id")
-    if not isinstance(resolved_history_id, str) or not resolved_history_id:
-        raise ValueError("Failed to resolve a usable history_id from the current Galaxy histories.")
-
-    return resolved_history_id
-
-
 class PaginationInfo(BaseModel):
     """Pagination metadata for list operations."""
 
@@ -2131,8 +2114,8 @@ def upload_file(path: str, history_id: str | None = None) -> GalaxyResult:
                 "Check that the file exists and you have read permissions."
             )
 
-        resolved_history_id = _resolve_history_id(gi, history_id)
-        result = gi.tools.upload_file(path, history_id=resolved_history_id)
+        # BioBlend accepts None for history_id and uses the most recently used history
+        result = gi.tools.upload_file(path, history_id=history_id)  # type: ignore[arg-type]
         return GalaxyResult(
             data=result,
             success=True,
@@ -2176,9 +2159,7 @@ def upload_file_from_url(
         }
         if file_name:
             kwargs["file_name"] = file_name
-        resolved_history_id = _resolve_history_id(gi, history_id)
-
-        result = gi.tools.put_url(url, history_id=resolved_history_id, **kwargs)
+        result = gi.tools.put_url(url, history_id=history_id, **kwargs)  # type: ignore[arg-type]
         return GalaxyResult(
             data=result,
             success=True,

@@ -242,7 +242,7 @@ class TestDatasetOperations:
             assert result.data["outputs"][0]["name"] == "custom_name.txt"
             mock_galaxy_instance.tools.put_url.assert_called_once_with(
                 url,
-                history_id="test_history_1",
+                history_id=None,
                 file_type="tabular",
                 dbkey="?",
                 file_name="custom_name.txt",
