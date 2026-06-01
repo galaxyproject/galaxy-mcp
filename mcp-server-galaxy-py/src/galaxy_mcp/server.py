@@ -1002,7 +1002,7 @@ def create_history(history_name: str) -> GalaxyResult:
     )
 
 
-@mcp.tool(annotations={"readOnlyHint": False})
+@mcp.tool(tags={"histories", "write", "core"})
 def update_history(
     history_id: str,
     name: str | None = None,
@@ -1049,7 +1049,7 @@ def update_history(
     - View updated history: get_history_details(history_id)
     - List all histories: get_histories()
     """
-    updates = {
+    updates: dict[str, Any] = {
         "name": name,
         "annotation": annotation,
         "tags": tags,
@@ -1066,14 +1066,7 @@ def update_history(
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
     try:
-        updated = gi.histories.update_history(
-            history_id,
-            name=name,
-            annotation=annotation,
-            tags=tags,
-            deleted=deleted,
-            published=published,
-        )
+        updated = gi.histories.update_history(history_id, **updates)
         return GalaxyResult(
             data=updated,
             success=True,
