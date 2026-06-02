@@ -241,7 +241,11 @@ class TestDatasetOperations:
             assert result.success is True
             assert result.data["outputs"][0]["name"] == "custom_name.txt"
             mock_galaxy_instance.tools.put_url.assert_called_once_with(
-                url, history_id=None, file_type="tabular", dbkey="?", file_name="custom_name.txt"
+                url,
+                history_id=None,
+                file_type="tabular",
+                dbkey="?",
+                file_name="custom_name.txt",
             )
 
     def test_upload_file_from_url_error(self, mock_galaxy_instance):

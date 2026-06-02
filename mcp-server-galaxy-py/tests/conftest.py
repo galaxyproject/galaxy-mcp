@@ -45,7 +45,11 @@ def mock_galaxy_instance():
     # Mock invocations
     mock_invocations = Mock()
     mock_invocations.get_invocations.return_value = []
-    mock_invocations.show_invocation.return_value = {"id": "inv1", "state": "ok"}
+    mock_invocations.show_invocation.return_value = {
+        "id": "inv1",
+        "state": "ok",
+        "workflow_id": "workflow1",
+    }
     mock_gi.invocations = mock_invocations
 
     # Mock datasets
@@ -97,7 +101,12 @@ def mock_galaxy_instance():
 @pytest.fixture(autouse=True)
 def _reset_galaxy_state():
     """Reset galaxy state for each test"""
-    from galaxy_mcp.server import _TOOL_SCHEMA_CACHE, galaxy_state, get_manifest_json
+    from galaxy_mcp.server import (
+        _TOOL_SCHEMA_CACHE,
+        _session_connections,
+        galaxy_state,
+        get_manifest_json,
+    )
 
     # Clear lru_cache to prevent test pollution
     get_manifest_json.cache_clear()
@@ -107,16 +116,20 @@ def _reset_galaxy_state():
 
     # Save original state
     original_state = galaxy_state.copy()
+    original_session_connections = _session_connections.copy()
 
     # Clear state
     galaxy_state.clear()
     galaxy_state.update({"url": None, "api_key": None, "gi": None, "connected": False})
+    _session_connections.clear()
 
     yield
 
     # Restore original state
     galaxy_state.clear()
     galaxy_state.update(original_state)
+    _session_connections.clear()
+    _session_connections.update(original_session_connections)
 
 
 @pytest.fixture

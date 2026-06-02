@@ -33,6 +33,7 @@ dependencies = [
     "requests>=2.32.3,<3",
     "python-dotenv>=1.0.0,<2",
     "rank-bm25>=0.2.2,<1",
+    "typing-extensions>=4.0.0,<5",
 ]
 
 [project.urls]

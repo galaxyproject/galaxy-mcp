@@ -98,6 +98,151 @@ class TestConnection:
             user_agent=server.USER_AGENT,
         )
 
+    def test_connect_stores_credentials_per_session(self, mock_galaxy_instance):
+        """Non-OAuth connect() should bind credentials to the current MCP session."""
+        mock_context = type("Ctx", (), {"session_id": "session-123"})()
+
+        with patch("galaxy_mcp.server.get_context", return_value=mock_context):
+            with patch("galaxy_mcp.server.GalaxyInstance", return_value=mock_galaxy_instance):
+                result = connect_fn(url="https://session.galaxy", api_key="session-key")
+
+        assert result.success is True
+        assert result.data["auth"] == "session"
+        session_state = server._session_connections["session-123"]
+        assert session_state.url == "https://session.galaxy/"
+        assert session_state.api_key == "session-key"
+        assert session_state.gi is mock_galaxy_instance
+        assert galaxy_state["connected"] is False
+
+    def test_connect_reuses_existing_session_connection(self, mock_galaxy_instance):
+        """connect() should reuse a session-bound connection when no new creds are given."""
+        server._session_connections["session-123"] = server.SessionGalaxyConnection(
+            url="https://session.galaxy/",
+            api_key="session-key",
+            gi=mock_galaxy_instance,
+            last_accessed_at=1.0,
+        )
+        mock_context = type("Ctx", (), {"session_id": "session-123"})()
+
+        with patch("galaxy_mcp.server.get_context", return_value=mock_context):
+            result = connect_fn()
+
+        assert result.success is True
+        assert result.data["auth"] == "session"
+        assert result.data["url"] == "https://session.galaxy/"
+        assert (
+            result.data["user"]["username"]
+            == mock_galaxy_instance.users.get_current_user.return_value["username"]
+        )
+
+    def test_session_connection_cache_evicts_lru_entry(self, mock_galaxy_instance):
+        """Session-bound connections should be capped by least-recently-used eviction."""
+        with patch("galaxy_mcp.server._MAX_SESSION_CONNECTIONS", 2):
+            with patch(
+                "galaxy_mcp.server.time.monotonic",
+                side_effect=[1.0, 2.0, 3.0, 4.0],
+            ):
+                server._set_session_connection(
+                    "session-1",
+                    url="https://session-1.galaxy/",
+                    api_key="session-key-1",
+                    gi=mock_galaxy_instance,
+                )
+                server._set_session_connection(
+                    "session-2",
+                    url="https://session-2.galaxy/",
+                    api_key="session-key-2",
+                    gi=mock_galaxy_instance,
+                )
+                assert server._get_session_connection("session-1") is not None
+                server._set_session_connection(
+                    "session-3",
+                    url="https://session-3.galaxy/",
+                    api_key="session-key-3",
+                    gi=mock_galaxy_instance,
+                )
+
+        assert set(server._session_connections) == {"session-1", "session-3"}
+
+    def test_connect_requires_explicit_credentials_for_new_session(self):
+        """A fresh session should not bootstrap itself from global env credentials."""
+        mock_context = type("Ctx", (), {"session_id": "session-456"})()
+
+        with patch("galaxy_mcp.server.get_context", return_value=mock_context):
+            with pytest.raises(
+                ValueError, match="No Galaxy connection is available for this MCP session"
+            ):
+                connect_fn()
+
+    def test_connect_allows_global_fallback_for_new_session(self, mock_galaxy_instance):
+        """A fresh session may reuse a configured global fallback without seeding session state."""
+        mock_context = type("Ctx", (), {"session_id": "session-789"})()
+
+        with patch.dict(
+            galaxy_state,
+            {
+                "url": "https://global.galaxy/",
+                "api_key": "global-key",
+                "gi": mock_galaxy_instance,
+                "connected": True,
+            },
+        ):
+            with patch("galaxy_mcp.server.get_context", return_value=mock_context):
+                result = connect_fn()
+
+        assert result.success is True
+        assert result.data["auth"] == "global"
+        assert "session-789" not in server._session_connections
+
+    def test_connect_without_session_does_not_mutate_global_fallback(self, mock_galaxy_instance):
+        """Sessionless connect() should not rewrite the configured global fallback state."""
+        with patch.dict(
+            galaxy_state,
+            {
+                "url": "https://global.galaxy/",
+                "api_key": "global-key",
+                "gi": mock_galaxy_instance,
+                "connected": True,
+            },
+        ):
+            with patch("galaxy_mcp.server.get_context", side_effect=RuntimeError("no session")):
+                with patch("galaxy_mcp.server.GalaxyInstance", return_value=mock_galaxy_instance):
+                    result = connect_fn(url="https://other.galaxy", api_key="other-key")
+
+            assert result.success is True
+            assert result.data["auth"] == "global"
+            assert galaxy_state["url"] == "https://global.galaxy/"
+            assert galaxy_state["api_key"] == "global-key"
+            assert galaxy_state["gi"] is mock_galaxy_instance
+            assert galaxy_state["connected"] is True
+
+    def test_request_state_prefers_session_credentials(self, mock_galaxy_instance):
+        """Session-bound credentials should override process-global API-key state."""
+        server._session_connections["session-123"] = server.SessionGalaxyConnection(
+            url="https://session.galaxy/",
+            api_key="session-key",
+            gi=mock_galaxy_instance,
+            last_accessed_at=1.0,
+        )
+
+        with patch.dict(
+            galaxy_state,
+            {
+                "url": "https://global.galaxy/",
+                "api_key": "global-key",
+                "gi": object(),
+                "connected": True,
+            },
+        ):
+            mock_context = type("Ctx", (), {"session_id": "session-123"})()
+            with patch("galaxy_mcp.server.get_context", return_value=mock_context):
+                state = server._get_request_connection_state()
+
+        assert state["source"] == "session"
+        assert state["url"] == "https://session.galaxy/"
+        assert state["api_key"] == "session-key"
+        assert state["gi"] is mock_galaxy_instance
+
     def test_get_server_info_success(self, mock_galaxy_instance):
         """Test successful server info retrieval"""
         # Mock server config and version responses

@@ -45,17 +45,7 @@ from starlette.responses import (
     Response,
 )
 from starlette.routing import Route
-
-try:  # pragma: no cover - fallback import for Python < 3.12
-    from typing import override
-except ImportError:  # pragma: no cover - Python < 3.12 without typing.override
-    try:
-        from typing_extensions import override  # type: ignore
-    except ImportError:  # pragma: no cover - hard fallback if typing_extensions missing
-
-        def override(func):  # type: ignore
-            return func
-
+from typing_extensions import override
 
 logger = logging.getLogger(__name__)
 
@@ -376,7 +366,7 @@ class GalaxyOAuthProvider(OAuthProvider):
         """Return OAuth protected resource metadata."""
         return {
             "resource": self._galaxy_url,
-            "authorization_servers": [self.base_url],
+            "authorization_servers": [str(self.base_url)],
             "scopes_supported": self.required_scopes,
             "token_types_supported": ["Bearer"],
         }

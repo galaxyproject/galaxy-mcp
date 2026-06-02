@@ -921,6 +921,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "rank-bm25" },
     { name = "requests" },
+    { name = "typing-extensions" },
 ]
 
 [package.optional-dependencies]
@@ -949,7 +950,7 @@ requires-dist = [
     { name = "anyio", specifier = ">=4.0.0,<5" },
     { name = "bioblend", specifier = ">=1.9.0,<2" },
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.2.1" },
-    { name = "cryptography", specifier = ">=41.0.0,<48" },
+    { name = "cryptography", specifier = ">=41.0.0,<49" },
     { name = "fastmcp", specifier = ">=3.1.0,<4" },
     { name = "fastmcp", extras = ["code-mode"], marker = "extra == 'code-mode'", specifier = ">=3.1.0,<4" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27.0" },
@@ -968,6 +969,7 @@ requires-dist = [
     { name = "tox", marker = "extra == 'dev'", specifier = ">=4.11.0" },
     { name = "twine", marker = "extra == 'dev'", specifier = ">=5.0.0" },
     { name = "types-requests", marker = "extra == 'dev'", specifier = ">=2.31.0" },
+    { name = "typing-extensions", specifier = ">=4.0.0,<5" },
 ]
 provides-extras = ["code-mode", "dev"]
 

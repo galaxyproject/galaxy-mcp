@@ -319,7 +319,7 @@ class TestWorkflowOperations:
             "workflow_id": "workflow1",
         }
 
-        mock_galaxy_instance.workflows.cancel_invocation.return_value = mock_cancelled_invocation
+        mock_galaxy_instance.invocations.cancel_invocation.return_value = mock_cancelled_invocation
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = cancel_workflow_invocation_fn("invocation123")
@@ -329,7 +329,7 @@ class TestWorkflowOperations:
             assert result.data["invocation"]["state"] == "cancelled"
 
             # Verify function was called correctly
-            mock_galaxy_instance.workflows.cancel_invocation.assert_called_with("invocation123")
+            mock_galaxy_instance.invocations.cancel_invocation.assert_called_with("invocation123")
 
     def test_workflow_operations_error_handling(self, mock_galaxy_instance):
         """Test error handling in workflow operations"""
@@ -355,7 +355,7 @@ class TestWorkflowOperations:
                 invoke_workflow_fn("workflow1")
 
         # Test cancel_workflow_invocation error
-        mock_galaxy_instance.workflows.cancel_invocation.side_effect = Exception(
+        mock_galaxy_instance.invocations.cancel_invocation.side_effect = Exception(
             "Invocation not found"
         )
 
