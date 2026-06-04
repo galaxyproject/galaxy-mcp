@@ -37,8 +37,11 @@ from galaxy_mcp.tool_inputs import (
     summarize_tool_inputs,
 )
 from galaxy_mcp.workflow_inputs import (
+    build_workflow_input_template,
+    find_legacy_warnings,
     normalize_ga_steps,
     normalize_run_model,
+    validate_inputs,  # noqa: F401 -- used in Task 11's invoke_workflow preflight
 )
 
 _galaxy_mcp_version = importlib.metadata.version("galaxy-mcp")
@@ -2958,6 +2961,41 @@ def _resolve_workflow_slots(
         logger.info("style=run unavailable for %s (%s); falling back to .ga", workflow_id, e)
     definition = gi.workflows.export_workflow_dict(workflow_id)
     return normalize_ga_steps(definition), "ga-fallback"
+
+
+@mcp.tool(tags={"workflows", "read", "extended"})
+def get_workflow_input_template(workflow_id: str, history_id: str | None = None) -> GalaxyResult:
+    """Return a ready-to-fill template of a workflow's input slots.
+
+    Call this before invoke_workflow. Each slot lists its label, expected source
+    (hda/hdca), accepted datatypes, and collection type so you map datasets to
+    the right inputs. Fill `inputs_template` (keyed by step_index) and invoke
+    with `inputs_by="step_index|step_uuid"`. `warnings` flags legacy patterns.
+    """
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+    try:
+        slots, provenance = _resolve_workflow_slots(gi, workflow_id, history_id)
+        try:
+            definition = gi.workflows.export_workflow_dict(workflow_id)
+            warnings = find_legacy_warnings(definition)
+        except Exception:  # noqa: BLE001 -- warnings are best-effort
+            warnings = []
+        template = build_workflow_input_template(slots, warnings=warnings)
+        return GalaxyResult(
+            data=template,
+            success=True,
+            message=(
+                f"Built an input template for workflow '{workflow_id}' "
+                f"({len(slots)} slot(s), source: {provenance}). Fill inputs_template "
+                f"and invoke with inputs_by='step_index|step_uuid'."
+            ),
+            count=len(slots),
+        )
+    except Exception as e:
+        raise ValueError(
+            format_error("Get workflow input template", e, {"workflow_id": workflow_id})
+        ) from e
 
 
 @mcp.tool(tags={"workflows", "write", "extended"})

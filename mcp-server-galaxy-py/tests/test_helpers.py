@@ -32,6 +32,7 @@ from galaxy_mcp.server import (
     get_tool_run_examples,
     get_user,
     get_workflow_details,
+    get_workflow_input_template,
     import_workflow_from_iwc,
     invoke_workflow,
     list_history_ids,
@@ -78,6 +79,7 @@ get_tool_run_examples_fn = get_function(get_tool_run_examples)
 get_tool_panel_fn = get_function(get_tool_panel)
 get_user_fn = get_function(get_user)
 get_workflow_details_fn = get_function(get_workflow_details)
+get_workflow_input_template_fn = get_function(get_workflow_input_template)
 import_workflow_from_iwc_fn = get_function(import_workflow_from_iwc)
 invoke_workflow_fn = get_function(invoke_workflow)
 list_history_ids_fn = get_function(list_history_ids)
@@ -117,6 +119,7 @@ __all__ = [
     "get_tool_panel_fn",
     "get_user_fn",
     "get_workflow_details_fn",
+    "get_workflow_input_template_fn",
     "import_workflow_from_iwc_fn",
     "invoke_workflow_fn",
     "list_history_ids_fn",

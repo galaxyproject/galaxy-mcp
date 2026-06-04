@@ -10,14 +10,15 @@ from galaxy_mcp.server import (
     _DATATYPES_MAPPING_CACHE,
     _get_datatypes_mapping,
     _resolve_workflow_slots,
+    galaxy_state,
 )
 
 from .test_helpers import (
     cancel_workflow_invocation_fn,
-    galaxy_state,
     get_invocations_fn,
     get_iwc_workflows_fn,
     get_workflow_details_fn,
+    get_workflow_input_template_fn,
     import_workflow_from_iwc_fn,
     invoke_workflow_fn,
     list_workflows_fn,
@@ -439,3 +440,32 @@ def test_resolve_slots_falls_back_to_ga_on_missing_tools_500():
     slots, provenance = _resolve_workflow_slots(gi, "wfid")
     assert provenance == "ga-fallback"
     assert slots[0]["accepted_formats"] == ["tabular"]
+
+
+# ---------------------------------------------------------------------------
+# Task 10: get_workflow_input_template MCP tool
+# ---------------------------------------------------------------------------
+
+
+def test_get_workflow_input_template_tool(mock_galaxy_instance):
+    mock_galaxy_instance.url = "https://g/api"
+    run_resp = Mock()
+    run_resp.status_code = 200
+    run_resp.json.return_value = {
+        "steps": [
+            {
+                "step_type": "data_input",
+                "step_index": 0,
+                "step_label": "barcodes",
+                "inputs": [{"extensions": ["tabular"], "optional": False}],
+            }
+        ]
+    }
+    mock_galaxy_instance.make_get_request.return_value = run_resp
+    mock_galaxy_instance.workflows.export_workflow_dict.return_value = {"steps": {}}
+    with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        result = get_workflow_input_template_fn("wfid")
+    assert result.success is True
+    assert result.data["inputs_by"] == "step_index|step_uuid"
+    assert result.data["inputs_template"]["0"] == {"src": "hda", "id": "<dataset_id>"}
+    assert result.data["slots"][0]["label"] == "barcodes"
