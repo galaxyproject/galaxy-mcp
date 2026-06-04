@@ -1,6 +1,8 @@
 """Tests for the Galaxy MCP CLI (gxy)."""
 
 import json
+import subprocess
+import sys
 from unittest.mock import Mock, patch
 
 import pytest
@@ -543,3 +545,40 @@ class TestIwcWithoutCredentials:
         output = json.loads(result.stdout)
         assert output["count"] == 1
         mock.assert_called_once()
+
+
+class TestStdoutCleanliness:
+    """stdout is the JSON data channel; nothing diagnostic may leak onto it.
+
+    This runs gxy as a real subprocess because the offending message is emitted
+    at server-module import time, which the in-process CliRunner never captures.
+    """
+
+    def test_dotenv_message_does_not_pollute_stdout(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("GALAXY_URL=https://example.org/\nGALAXY_API_KEY=dummy\n")
+
+        proc = subprocess.run(
+            [sys.executable, "-m", "galaxy_mcp.cli.main", "--help"],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+        )
+
+        assert "Loaded environment variables" not in proc.stdout
+        # Confirm it was relocated to stderr, not silently dropped.
+        assert "Loaded environment variables" in proc.stderr
+
+
+class TestProfileCommand:
+    def test_profile_list_outputs_configured_profiles(self):
+        with patch(
+            "galaxy_mcp.cli.commands.profile.list_profiles",
+            return_value=["default", "eu"],
+        ):
+            result = runner.invoke(app, ["profile", "list"])
+
+        assert result.exit_code == 0
+        output = json.loads(result.stdout)
+        assert output["count"] == 2
+        assert output["data"] == ["default", "eu"]
