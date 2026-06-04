@@ -106,6 +106,7 @@ def test_normalize_ga_steps_data_input_restricted():
         "input_type": "data",
         "src": "hda",
         "accepted_formats": ["tabular"],
+        "acceptable_extensions": [],
         "collection_type": None,
         "parameter_type": None,
         "optional": False,
@@ -153,6 +154,7 @@ def test_normalize_run_model_returns_slot_contract():
             "input_type",
             "src",
             "accepted_formats",
+            "acceptable_extensions",
             "collection_type",
             "parameter_type",
             "optional",
@@ -496,3 +498,76 @@ def test_validate_duplicate_step_index_warns():
     ]
     res = validate_inputs(dup_slots, {}, MAPPING)
     assert any("0" in w["message"] for w in res["warnings"])
+
+
+# ---------------------------------------------------------------------------
+# Converter parity: acceptable_extensions membership vs subclass closure
+# ---------------------------------------------------------------------------
+
+
+def test_validate_uses_acceptable_extensions_for_converter_parity():
+    slot = {
+        "step_index": 0,
+        "step_uuid": None,
+        "label": "counts",
+        "input_type": "data",
+        "src": "hda",
+        "accepted_formats": ["tabular"],
+        "acceptable_extensions": ["tabular", "tsv", "csv"],  # Galaxy's converter-aware set
+        "collection_type": None,
+        "parameter_type": None,
+        "optional": False,
+    }
+    # csv is NOT a Tabular subclass, but Galaxy lists it as acceptable -> must NOT reject
+    ok = validate_inputs([slot], {"0": {"src": "hda", "id": "d1", "ext": "csv"}}, MAPPING)
+    assert ok["rejects"] == []
+    # bam is not in Galaxy's accept-set -> provable reject
+    bad = validate_inputs([slot], {"0": {"src": "hda", "id": "d2", "ext": "bam"}}, MAPPING)
+    assert any(r["step_index"] == 0 for r in bad["rejects"])
+
+
+def test_validate_falls_back_to_subtype_closure_without_acceptable_extensions():
+    slot = {
+        "step_index": 0,
+        "step_uuid": None,
+        "label": "x",
+        "input_type": "data",
+        "src": "hda",
+        "accepted_formats": ["tabular"],
+        "acceptable_extensions": [],
+        "collection_type": None,
+        "parameter_type": None,
+        "optional": False,
+    }
+    # bed IS-A tabular per MAPPING -> accepted via closure
+    assert (
+        validate_inputs([slot], {"0": {"src": "hda", "id": "d1", "ext": "bed"}}, MAPPING)["rejects"]
+        == []
+    )
+    # bam is not -> rejected via closure
+    assert any(
+        r["step_index"] == 0
+        for r in validate_inputs([slot], {"0": {"src": "hda", "id": "d2", "ext": "bam"}}, MAPPING)[
+            "rejects"
+        ]
+    )
+
+
+def test_build_template_omits_acceptable_extensions_from_display_slots():
+    slots = [
+        {
+            "step_index": 0,
+            "step_uuid": None,
+            "label": "x",
+            "input_type": "data",
+            "src": "hda",
+            "accepted_formats": ["txt"],
+            "acceptable_extensions": ["txt", "csv", "tsv"],
+            "collection_type": None,
+            "parameter_type": None,
+            "optional": False,
+        }
+    ]
+    tmpl = build_workflow_input_template(slots)
+    assert "acceptable_extensions" not in tmpl["slots"][0]
+    assert tmpl["slots"][0]["accepted_formats"] == ["txt"]

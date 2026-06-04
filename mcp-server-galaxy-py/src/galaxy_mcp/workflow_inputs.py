@@ -107,6 +107,7 @@ def normalize_ga_steps(definition: dict[str, Any]) -> list[dict[str, Any]]:
                 label=label,
                 input_type=input_type,
                 accepted_formats=_as_list(state.get("format")),
+                acceptable_extensions=[],
                 collection_type=state.get("collection_type"),
                 parameter_type=state.get("parameter_type"),
                 optional=bool(state.get("optional", False)),
@@ -122,11 +123,12 @@ def _make_slot(
     label: str,
     input_type: str,
     accepted_formats: list,
+    acceptable_extensions: list,
     collection_type: str | None,
     parameter_type: str | None,
     optional: bool,
 ) -> dict[str, Any]:
-    """Build the 9-key slot contract dict shared by both normalizers."""
+    """Build the 10-key slot contract dict shared by both normalizers."""
     return {
         "step_index": step_index,
         "step_uuid": step_uuid,
@@ -134,6 +136,7 @@ def _make_slot(
         "input_type": input_type,
         "src": _SRC_MAP[input_type],
         "accepted_formats": accepted_formats,
+        "acceptable_extensions": acceptable_extensions,
         "collection_type": collection_type,
         "parameter_type": parameter_type,
         "optional": optional,
@@ -189,6 +192,7 @@ def normalize_run_model(run_dict: dict[str, Any]) -> list[dict[str, Any]]:
                 label=label,
                 input_type=input_type,
                 accepted_formats=_as_list(param.get("extensions")),
+                acceptable_extensions=_as_list(param.get("acceptable_extensions")),
                 collection_type=ctype,
                 parameter_type=param.get("parameter_type") or step.get("parameter_type"),
                 optional=bool(param.get("optional", False)),
@@ -243,6 +247,19 @@ def _collection_type_compatible(supplied: str | None, required: str | None) -> b
     # map-over: a list:paired collection can feed a 'paired' (or 'list:paired') slot.
     # Compare colon-delimited segments, not a raw string suffix.
     return supplied.split(":")[-1] == required or supplied.endswith(":" + required)
+
+
+def _ext_accepted(supplied_ext: str, slot: dict[str, Any], mapping: dict[str, Any]) -> bool:
+    """True if a dataset of supplied_ext is acceptable for this slot.
+
+    Prefer Galaxy's own converter+subclass-aware acceptable_extensions (exact GUI
+    parity, available from style=run); fall back to subclass closure on the
+    declared accepted_formats (the .ga path, which lacks the converter set).
+    """
+    acc = slot.get("acceptable_extensions") or []
+    if acc:
+        return supplied_ext in acc
+    return subtype_satisfies(supplied_ext, slot["accepted_formats"], mapping)
 
 
 def validate_inputs(
@@ -328,7 +345,7 @@ def validate_inputs(
                 )
                 continue
             ext = value.get("ext")
-            if ext and not subtype_satisfies(ext, slot["accepted_formats"], mapping):
+            if ext and not _ext_accepted(ext, slot, mapping):
                 rejects.append(
                     {
                         "step_index": slot["step_index"],
@@ -375,7 +392,7 @@ def validate_inputs(
                 )
                 continue
             for el_ext in value.get("element_extensions") or []:
-                if not subtype_satisfies(el_ext, slot["accepted_formats"], mapping):
+                if not _ext_accepted(el_ext, slot, mapping):
                     rejects.append(
                         {
                             "step_index": slot["step_index"],
@@ -418,9 +435,10 @@ def build_workflow_input_template(
     step_index, the per-slot constraint summary, the invoke key hint, and any
     legacy warnings.
     """
+    display_slots = [{k: v for k, v in s.items() if k != "acceptable_extensions"} for s in slots]
     return {
         "inputs_template": {str(s["step_index"]): _placeholder_for(s) for s in slots},
-        "slots": slots,
+        "slots": display_slots,
         "inputs_by": "step_index|step_uuid",
         "warnings": warnings or [],
     }

@@ -16,8 +16,7 @@
             "a2m",
             "a3m",
             "ab1",
-            "acedb",
-            "...(+770 more, trimmed for fixture)"
+            "acedb"
           ],
           "argument": null,
           "collection_types": [
@@ -81,8 +80,7 @@
             "a2m",
             "a3m",
             "ab1",
-            "acedb",
-            "...(+770 more, trimmed for fixture)"
+            "acedb"
           ],
           "argument": null,
           "collection_types": [
@@ -146,8 +144,7 @@
             "a2m",
             "a3m",
             "acedb",
-            "affybatch",
-            "...(+490 more, trimmed for fixture)"
+            "affybatch"
           ],
           "argument": null,
           "edam": {
@@ -216,8 +213,7 @@
             "a2m",
             "a3m",
             "acedb",
-            "affybatch",
-            "...(+490 more, trimmed for fixture)"
+            "affybatch"
           ],
           "argument": null,
           "edam": {
@@ -292,8 +288,7 @@
             "a2m",
             "a3m",
             "ab1",
-            "acedb",
-            "...(+770 more, trimmed for fixture)"
+            "acedb"
           ],
           "argument": null,
           "edam": {
@@ -368,8 +363,7 @@
             "a2m",
             "a3m",
             "acedb",
-            "affybatch",
-            "...(+490 more, trimmed for fixture)"
+            "affybatch"
           ],
           "argument": null,
           "edam": {
@@ -444,8 +438,7 @@
             "a2m",
             "a3m",
             "ab1",
-            "acedb",
-            "...(+770 more, trimmed for fixture)"
+            "acedb"
           ],
           "argument": null,
           "edam": {
@@ -1647,5 +1640,5 @@
   "version": 4,
   "workflow_id": "509728dd2e69bcd0",
   "workflow_resource_parameters": null,
-  "_fixture_note": "Captured from test.galaxyproject.org 26.1.rc1 via style=run&instance=true (history required). owner/history_id scrubbed; acceptable_extensions trimmed (code consumes `extensions`)."
+  "_fixture_note": "Captured from test.galaxyproject.org 26.1.rc1 via style=run&instance=true (history required). owner/history_id scrubbed; acceptable_extensions arrays subset to the first real entries for fixture size."
 }
