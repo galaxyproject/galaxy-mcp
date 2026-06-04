@@ -318,7 +318,9 @@ def _format_tool_input_error(
 dotenv_path = find_dotenv(usecwd=True)
 if dotenv_path:
     load_dotenv(dotenv_path)
-    print(f"Loaded environment variables from {dotenv_path}")
+    # Log to stderr, not stdout -- stdout is the data channel for the gxy CLI
+    # (JSON) and the MCP stdio transport (JSON-RPC); a stray print corrupts both.
+    logger.info("Loaded environment variables from %s", dotenv_path)
 
 # Configure Galaxy target and client state
 raw_galaxy_url = os.environ.get("GALAXY_URL")
