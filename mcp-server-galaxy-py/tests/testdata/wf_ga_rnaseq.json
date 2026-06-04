@@ -1,0 +1,480 @@
+{
+  "a_galaxy_workflow": "true",
+  "comments": [],
+  "format-version": "0.1",
+  "name": "Protein Interaction Protocol - All against All",
+  "steps": {
+    "0": {
+      "annotation": "",
+      "content_id": null,
+      "errors": null,
+      "id": 0,
+      "input_connections": {},
+      "inputs": [
+        {
+          "description": "",
+          "name": "Target Sequence"
+        }
+      ],
+      "label": "Target Sequence",
+      "name": "Input dataset collection",
+      "outputs": [],
+      "position": {
+        "bottom": 266.5,
+        "height": 63,
+        "left": 145.5,
+        "right": 345.5,
+        "top": 203.5,
+        "width": 200,
+        "x": 145.5,
+        "y": 203.5
+      },
+      "tool_id": null,
+      "tool_state": "{\"optional\": false, \"tag\": null, \"collection_type\": \"list\", \"fields\": null, \"column_definitions\": null}",
+      "tool_version": null,
+      "type": "data_collection_input",
+      "uuid": "541ffc1c-a670-4722-8185-858a282e161b",
+      "when": null,
+      "workflow_outputs": [
+        {
+          "label": null,
+          "output_name": "output",
+          "uuid": "061c621d-2220-46ed-8890-f51a135fbcff"
+        }
+      ]
+    },
+    "1": {
+      "annotation": "",
+      "content_id": null,
+      "errors": null,
+      "id": 1,
+      "input_connections": {},
+      "inputs": [
+        {
+          "description": "",
+          "name": "Input Sequences"
+        }
+      ],
+      "label": "Input Sequences",
+      "name": "Input dataset collection",
+      "outputs": [],
+      "position": {
+        "bottom": 357.5,
+        "height": 63,
+        "left": 145.5,
+        "right": 345.5,
+        "top": 294.5,
+        "width": 200,
+        "x": 145.5,
+        "y": 294.5
+      },
+      "tool_id": null,
+      "tool_state": "{\"optional\": false, \"tag\": null, \"collection_type\": \"list\", \"fields\": null, \"column_definitions\": null}",
+      "tool_version": null,
+      "type": "data_collection_input",
+      "uuid": "e272d95b-7ed4-42d0-bcc3-b2dbd50e067d",
+      "when": null,
+      "workflow_outputs": [
+        {
+          "label": null,
+          "output_name": "output",
+          "uuid": "78057d90-a114-43f2-a9e1-08ecc3fee272"
+        }
+      ]
+    },
+    "2": {
+      "annotation": "",
+      "content_id": null,
+      "errors": null,
+      "id": 2,
+      "input_connections": {},
+      "inputs": [
+        {
+          "description": "",
+          "name": "SPRING Index"
+        }
+      ],
+      "label": "SPRING Index",
+      "name": "Input dataset",
+      "outputs": [],
+      "position": {
+        "bottom": 448.5,
+        "height": 63,
+        "left": 145.5,
+        "right": 345.5,
+        "top": 385.5,
+        "width": 200,
+        "x": 145.5,
+        "y": 385.5
+      },
+      "tool_id": null,
+      "tool_state": "{\"optional\": false, \"tag\": null}",
+      "tool_version": null,
+      "type": "data_input",
+      "uuid": "b4641ee9-0b1c-4ac4-b841-579331073d09",
+      "when": null,
+      "workflow_outputs": [
+        {
+          "label": null,
+          "output_name": "output",
+          "uuid": "a197c552-3fc8-4462-8825-86c2757ad958"
+        }
+      ]
+    },
+    "3": {
+      "annotation": "",
+      "content_id": null,
+      "errors": null,
+      "id": 3,
+      "input_connections": {},
+      "inputs": [
+        {
+          "description": "",
+          "name": "HHM Index"
+        }
+      ],
+      "label": "HHM Index",
+      "name": "Input dataset",
+      "outputs": [],
+      "position": {
+        "bottom": 539.5,
+        "height": 63,
+        "left": 145.5,
+        "right": 345.5,
+        "top": 476.5,
+        "width": 200,
+        "x": 145.5,
+        "y": 476.5
+      },
+      "tool_id": null,
+      "tool_state": "{\"optional\": false, \"tag\": null}",
+      "tool_version": null,
+      "type": "data_input",
+      "uuid": "4c5c1022-90ce-470f-8935-d09b23ed5d05",
+      "when": null,
+      "workflow_outputs": [
+        {
+          "label": null,
+          "output_name": "output",
+          "uuid": "50d47a9d-2113-4553-9248-bbe67951915d"
+        }
+      ]
+    },
+    "4": {
+      "annotation": "",
+      "content_id": null,
+      "errors": null,
+      "id": 4,
+      "input_connections": {},
+      "inputs": [
+        {
+          "description": "",
+          "name": "HHM Data"
+        }
+      ],
+      "label": "HHM Data",
+      "name": "Input dataset",
+      "outputs": [],
+      "position": {
+        "bottom": 630.5,
+        "height": 63,
+        "left": 145.5,
+        "right": 345.5,
+        "top": 567.5,
+        "width": 200,
+        "x": 145.5,
+        "y": 567.5
+      },
+      "tool_id": null,
+      "tool_state": "{\"optional\": false, \"tag\": null}",
+      "tool_version": null,
+      "type": "data_input",
+      "uuid": "fe74b7f0-502c-4c8b-b3d2-5e781c9ad38b",
+      "when": null,
+      "workflow_outputs": [
+        {
+          "label": null,
+          "output_name": "output",
+          "uuid": "b9f2bff7-1657-4895-b9bd-3c608ee6f36e"
+        }
+      ]
+    },
+    "5": {
+      "annotation": "",
+      "content_id": null,
+      "errors": null,
+      "id": 5,
+      "input_connections": {},
+      "inputs": [
+        {
+          "description": "",
+          "name": "cs219 Index"
+        }
+      ],
+      "label": "cs219 Index",
+      "name": "Input dataset",
+      "outputs": [],
+      "position": {
+        "bottom": 721.5,
+        "height": 63,
+        "left": 145.5,
+        "right": 345.5,
+        "top": 658.5,
+        "width": 200,
+        "x": 145.5,
+        "y": 658.5
+      },
+      "tool_id": null,
+      "tool_state": "{\"optional\": false, \"tag\": null}",
+      "tool_version": null,
+      "type": "data_input",
+      "uuid": "fb79b4d3-4877-4210-8c6b-8035e8a0f260",
+      "when": null,
+      "workflow_outputs": [
+        {
+          "label": null,
+          "output_name": "output",
+          "uuid": "2c307ddd-5ea7-4a9d-90f1-343b7dfa89bb"
+        }
+      ]
+    },
+    "6": {
+      "annotation": "",
+      "content_id": null,
+      "errors": null,
+      "id": 6,
+      "input_connections": {},
+      "inputs": [
+        {
+          "description": "",
+          "name": "cs219 Data"
+        }
+      ],
+      "label": "cs219 Data",
+      "name": "Input dataset",
+      "outputs": [],
+      "position": {
+        "bottom": 812.5,
+        "height": 63,
+        "left": 145.5,
+        "right": 345.5,
+        "top": 749.5,
+        "width": 200,
+        "x": 145.5,
+        "y": 749.5
+      },
+      "tool_id": null,
+      "tool_state": "{\"optional\": false, \"tag\": null}",
+      "tool_version": null,
+      "type": "data_input",
+      "uuid": "1f947d18-c8e0-410e-989e-b7f766c21fb5",
+      "when": null,
+      "workflow_outputs": [
+        {
+          "label": null,
+          "output_name": "output",
+          "uuid": "343556b7-b582-4652-a920-1d6a6ddbce4c"
+        }
+      ]
+    },
+    "7": {
+      "annotation": "",
+      "content_id": "toolshed.g2.bx.psu.edu/repos/guerler/hhsuite/hhsearch/0.1.0",
+      "errors": null,
+      "id": 7,
+      "input_connections": {
+        "cs219_ffdata": {
+          "id": 6,
+          "output_name": "output"
+        },
+        "cs219_ffindex": {
+          "id": 5,
+          "output_name": "output"
+        },
+        "hhm_ffdata": {
+          "id": 4,
+          "output_name": "output"
+        },
+        "hhm_ffindex": {
+          "id": 3,
+          "output_name": "output"
+        },
+        "input": {
+          "id": 0,
+          "output_name": "output"
+        }
+      },
+      "inputs": [],
+      "label": null,
+      "name": "HHsearch",
+      "outputs": [
+        {
+          "name": "output",
+          "type": "txt"
+        }
+      ],
+      "position": {
+        "bottom": 457.5,
+        "height": 219,
+        "left": 427.5,
+        "right": 627.5,
+        "top": 238.5,
+        "width": 200,
+        "x": 427.5,
+        "y": 238.5
+      },
+      "post_job_actions": {},
+      "tool_id": "toolshed.g2.bx.psu.edu/repos/guerler/hhsuite/hhsearch/0.1.0",
+      "tool_shed_repository": {
+        "changeset_revision": "cec2aa4d6c0d",
+        "name": "hhsuite",
+        "owner": "guerler",
+        "tool_shed": "toolshed.g2.bx.psu.edu"
+      },
+      "tool_state": "{\"cs219_ffdata\": {\"__class__\": \"ConnectedValue\"}, \"cs219_ffindex\": {\"__class__\": \"ConnectedValue\"}, \"e\": \"0.001\", \"hhm_ffdata\": {\"__class__\": \"ConnectedValue\"}, \"hhm_ffindex\": {\"__class__\": \"ConnectedValue\"}, \"input\": {\"__class__\": \"ConnectedValue\"}, \"method\": \"hhsearch\", \"__page__\": null, \"__rerun_remap_job_id__\": null}",
+      "tool_uuid": null,
+      "tool_version": null,
+      "type": "tool",
+      "uuid": "f6e764e2-6a21-4dc5-b541-9feb11704de0",
+      "when": null,
+      "workflow_outputs": [
+        {
+          "label": null,
+          "output_name": "output",
+          "uuid": "8c9f24c3-599b-4c53-bcd0-5fb9a4b83af4"
+        }
+      ]
+    },
+    "8": {
+      "annotation": "",
+      "content_id": "toolshed.g2.bx.psu.edu/repos/guerler/hhsuite/hhsearch/0.1.0",
+      "errors": null,
+      "id": 8,
+      "input_connections": {
+        "cs219_ffdata": {
+          "id": 6,
+          "output_name": "output"
+        },
+        "cs219_ffindex": {
+          "id": 5,
+          "output_name": "output"
+        },
+        "hhm_ffdata": {
+          "id": 4,
+          "output_name": "output"
+        },
+        "hhm_ffindex": {
+          "id": 3,
+          "output_name": "output"
+        },
+        "input": {
+          "id": 1,
+          "output_name": "output"
+        }
+      },
+      "inputs": [],
+      "label": null,
+      "name": "HHsearch",
+      "outputs": [
+        {
+          "name": "output",
+          "type": "txt"
+        }
+      ],
+      "position": {
+        "bottom": 765.5,
+        "height": 219,
+        "left": 428.5,
+        "right": 628.5,
+        "top": 546.5,
+        "width": 200,
+        "x": 428.5,
+        "y": 546.5
+      },
+      "post_job_actions": {},
+      "tool_id": "toolshed.g2.bx.psu.edu/repos/guerler/hhsuite/hhsearch/0.1.0",
+      "tool_shed_repository": {
+        "changeset_revision": "cec2aa4d6c0d",
+        "name": "hhsuite",
+        "owner": "guerler",
+        "tool_shed": "toolshed.g2.bx.psu.edu"
+      },
+      "tool_state": "{\"cs219_ffdata\": {\"__class__\": \"ConnectedValue\"}, \"cs219_ffindex\": {\"__class__\": \"ConnectedValue\"}, \"e\": \"0.001\", \"hhm_ffdata\": {\"__class__\": \"ConnectedValue\"}, \"hhm_ffindex\": {\"__class__\": \"ConnectedValue\"}, \"input\": {\"__class__\": \"ConnectedValue\"}, \"method\": \"hhsearch\", \"__page__\": null, \"__rerun_remap_job_id__\": null}",
+      "tool_uuid": null,
+      "tool_version": null,
+      "type": "tool",
+      "uuid": "1990f66b-f909-45bf-a585-f14c9ebc5d2d",
+      "when": null,
+      "workflow_outputs": [
+        {
+          "label": null,
+          "output_name": "output",
+          "uuid": "83e01e09-9e80-4f70-93c4-5bfb8326b61a"
+        }
+      ]
+    },
+    "9": {
+      "annotation": "",
+      "content_id": "toolshed.g2.bx.psu.edu/repos/guerler/springsuite/spring_minz/0.1.0",
+      "errors": null,
+      "id": 9,
+      "input_connections": {
+        "crossreference": {
+          "id": 2,
+          "output_name": "output"
+        },
+        "inputs": {
+          "id": 8,
+          "output_name": "output"
+        },
+        "target": {
+          "id": 7,
+          "output_name": "output"
+        }
+      },
+      "inputs": [],
+      "label": null,
+      "name": "SPRING min-Z",
+      "outputs": [
+        {
+          "name": "output",
+          "type": "txt"
+        }
+      ],
+      "position": {
+        "bottom": 583.5,
+        "height": 157,
+        "left": 725.5,
+        "right": 925.5,
+        "top": 426.5,
+        "width": 200,
+        "x": 725.5,
+        "y": 426.5
+      },
+      "post_job_actions": {},
+      "tool_id": "toolshed.g2.bx.psu.edu/repos/guerler/springsuite/spring_minz/0.1.0",
+      "tool_shed_repository": {
+        "changeset_revision": "0ea00dce62ab",
+        "name": "springsuite",
+        "owner": "guerler",
+        "tool_shed": "toolshed.g2.bx.psu.edu"
+      },
+      "tool_state": "{\"crossreference\": {\"__class__\": \"ConnectedValue\"}, \"idx\": \"6\", \"inputs\": {\"__class__\": \"ConnectedValue\"}, \"minscore\": \"10\", \"target\": {\"__class__\": \"ConnectedValue\"}, \"__page__\": null, \"__rerun_remap_job_id__\": null}",
+      "tool_uuid": null,
+      "tool_version": null,
+      "type": "tool",
+      "uuid": "410783f5-7b37-4753-9f41-8e8cf861be00",
+      "when": null,
+      "workflow_outputs": [
+        {
+          "label": null,
+          "output_name": "output",
+          "uuid": "a1357ef6-0e7b-4137-a7a5-3dbb5b6b10b9"
+        }
+      ]
+    }
+  },
+  "tags": [],
+  "uuid": "0d7a19f7-0dbe-49dc-b6c1-ff6763d97445",
+  "version": 4
+}

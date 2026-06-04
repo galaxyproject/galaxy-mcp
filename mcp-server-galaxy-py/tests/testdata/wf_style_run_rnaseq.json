@@ -1,0 +1,1644 @@
+{
+  "has_upgrade_messages": true,
+  "help": null,
+  "id": "cbfaeab6dcda4c1f",
+  "name": "RNA-Seq PE (fixture)",
+  "step_version_changes": [],
+  "steps": [
+    {
+      "inputs": [
+        {
+          "acceptable_extensions": [
+            "4dn_pairs",
+            "4dn_pairs.gz",
+            "4dn_pairsam",
+            "4dn_pairsam.gz",
+            "a2m",
+            "a3m",
+            "ab1",
+            "acedb"
+          ],
+          "argument": null,
+          "collection_types": [
+            "list"
+          ],
+          "column_definitions": null,
+          "extensions": [
+            "data"
+          ],
+          "fields": null,
+          "help": null,
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "Target Sequence",
+          "model_class": "DataCollectionToolParameter",
+          "multiple": false,
+          "name": "input",
+          "optional": false,
+          "options": {
+            "dce": [],
+            "hda": [],
+            "hdca": []
+          },
+          "options_meta": {},
+          "pinned": {
+            "dce": [],
+            "hda": [],
+            "hdca": []
+          },
+          "refresh_on_change": true,
+          "tag": null,
+          "type": "data_collection",
+          "value": null
+        }
+      ],
+      "output_connections": [
+        {
+          "input_name": "input",
+          "input_step_index": 7,
+          "output_name": "output",
+          "output_step_index": 0
+        }
+      ],
+      "replacement_parameters": [],
+      "step_index": 0,
+      "step_label": "Target Sequence",
+      "step_name": "Input dataset collection",
+      "step_type": "data_collection_input",
+      "step_version": null,
+      "when": null
+    },
+    {
+      "inputs": [
+        {
+          "acceptable_extensions": [
+            "4dn_pairs",
+            "4dn_pairs.gz",
+            "4dn_pairsam",
+            "4dn_pairsam.gz",
+            "a2m",
+            "a3m",
+            "ab1",
+            "acedb"
+          ],
+          "argument": null,
+          "collection_types": [
+            "list"
+          ],
+          "column_definitions": null,
+          "extensions": [
+            "data"
+          ],
+          "fields": null,
+          "help": null,
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "Input Sequences",
+          "model_class": "DataCollectionToolParameter",
+          "multiple": false,
+          "name": "input",
+          "optional": false,
+          "options": {
+            "dce": [],
+            "hda": [],
+            "hdca": []
+          },
+          "options_meta": {},
+          "pinned": {
+            "dce": [],
+            "hda": [],
+            "hdca": []
+          },
+          "refresh_on_change": true,
+          "tag": null,
+          "type": "data_collection",
+          "value": null
+        }
+      ],
+      "output_connections": [
+        {
+          "input_name": "input",
+          "input_step_index": 8,
+          "output_name": "output",
+          "output_step_index": 1
+        }
+      ],
+      "replacement_parameters": [],
+      "step_index": 1,
+      "step_label": "Input Sequences",
+      "step_name": "Input dataset collection",
+      "step_type": "data_collection_input",
+      "step_version": null,
+      "when": null
+    },
+    {
+      "inputs": [
+        {
+          "acceptable_extensions": [
+            "4dn_pairs",
+            "4dn_pairs.gz",
+            "4dn_pairsam",
+            "4dn_pairsam.gz",
+            "a2m",
+            "a3m",
+            "acedb",
+            "affybatch"
+          ],
+          "argument": null,
+          "edam": {
+            "edam_data": [
+              "data_0006"
+            ],
+            "edam_formats": [
+              "format_2330"
+            ]
+          },
+          "extensions": [
+            "txt"
+          ],
+          "help": null,
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "SPRING Index",
+          "model_class": "DataToolParameter",
+          "multiple": false,
+          "name": "input",
+          "optional": false,
+          "options": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "options_meta": {},
+          "pinned": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "refresh_on_change": true,
+          "tag": null,
+          "type": "data",
+          "value": null
+        }
+      ],
+      "output_connections": [
+        {
+          "input_name": "crossreference",
+          "input_step_index": 9,
+          "output_name": "output",
+          "output_step_index": 2
+        }
+      ],
+      "replacement_parameters": [],
+      "step_index": 2,
+      "step_label": "SPRING Index",
+      "step_name": "Input dataset",
+      "step_type": "data_input",
+      "step_version": null,
+      "when": null
+    },
+    {
+      "inputs": [
+        {
+          "acceptable_extensions": [
+            "4dn_pairs",
+            "4dn_pairs.gz",
+            "4dn_pairsam",
+            "4dn_pairsam.gz",
+            "a2m",
+            "a3m",
+            "acedb",
+            "affybatch"
+          ],
+          "argument": null,
+          "edam": {
+            "edam_data": [
+              "data_0006"
+            ],
+            "edam_formats": [
+              "format_2330"
+            ]
+          },
+          "extensions": [
+            "txt"
+          ],
+          "help": null,
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "HHM Index",
+          "model_class": "DataToolParameter",
+          "multiple": false,
+          "name": "input",
+          "optional": false,
+          "options": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "options_meta": {},
+          "pinned": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "refresh_on_change": true,
+          "tag": null,
+          "type": "data",
+          "value": null
+        }
+      ],
+      "output_connections": [
+        {
+          "input_name": "hhm_ffindex",
+          "input_step_index": 7,
+          "output_name": "output",
+          "output_step_index": 3
+        },
+        {
+          "input_name": "hhm_ffindex",
+          "input_step_index": 8,
+          "output_name": "output",
+          "output_step_index": 3
+        }
+      ],
+      "replacement_parameters": [],
+      "step_index": 3,
+      "step_label": "HHM Index",
+      "step_name": "Input dataset",
+      "step_type": "data_input",
+      "step_version": null,
+      "when": null
+    },
+    {
+      "inputs": [
+        {
+          "acceptable_extensions": [
+            "4dn_pairs",
+            "4dn_pairs.gz",
+            "4dn_pairsam",
+            "4dn_pairsam.gz",
+            "a2m",
+            "a3m",
+            "ab1",
+            "acedb"
+          ],
+          "argument": null,
+          "edam": {
+            "edam_data": [
+              "data_0006"
+            ],
+            "edam_formats": [
+              "format_1915"
+            ]
+          },
+          "extensions": [
+            "data"
+          ],
+          "help": null,
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "HHM Data",
+          "model_class": "DataToolParameter",
+          "multiple": false,
+          "name": "input",
+          "optional": false,
+          "options": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "options_meta": {},
+          "pinned": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "refresh_on_change": true,
+          "tag": null,
+          "type": "data",
+          "value": null
+        }
+      ],
+      "output_connections": [
+        {
+          "input_name": "hhm_ffdata",
+          "input_step_index": 7,
+          "output_name": "output",
+          "output_step_index": 4
+        },
+        {
+          "input_name": "hhm_ffdata",
+          "input_step_index": 8,
+          "output_name": "output",
+          "output_step_index": 4
+        }
+      ],
+      "replacement_parameters": [],
+      "step_index": 4,
+      "step_label": "HHM Data",
+      "step_name": "Input dataset",
+      "step_type": "data_input",
+      "step_version": null,
+      "when": null
+    },
+    {
+      "inputs": [
+        {
+          "acceptable_extensions": [
+            "4dn_pairs",
+            "4dn_pairs.gz",
+            "4dn_pairsam",
+            "4dn_pairsam.gz",
+            "a2m",
+            "a3m",
+            "acedb",
+            "affybatch"
+          ],
+          "argument": null,
+          "edam": {
+            "edam_data": [
+              "data_0006"
+            ],
+            "edam_formats": [
+              "format_2330"
+            ]
+          },
+          "extensions": [
+            "txt"
+          ],
+          "help": null,
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "cs219 Index",
+          "model_class": "DataToolParameter",
+          "multiple": false,
+          "name": "input",
+          "optional": false,
+          "options": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "options_meta": {},
+          "pinned": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "refresh_on_change": true,
+          "tag": null,
+          "type": "data",
+          "value": null
+        }
+      ],
+      "output_connections": [
+        {
+          "input_name": "cs219_ffindex",
+          "input_step_index": 7,
+          "output_name": "output",
+          "output_step_index": 5
+        },
+        {
+          "input_name": "cs219_ffindex",
+          "input_step_index": 8,
+          "output_name": "output",
+          "output_step_index": 5
+        }
+      ],
+      "replacement_parameters": [],
+      "step_index": 5,
+      "step_label": "cs219 Index",
+      "step_name": "Input dataset",
+      "step_type": "data_input",
+      "step_version": null,
+      "when": null
+    },
+    {
+      "inputs": [
+        {
+          "acceptable_extensions": [
+            "4dn_pairs",
+            "4dn_pairs.gz",
+            "4dn_pairsam",
+            "4dn_pairsam.gz",
+            "a2m",
+            "a3m",
+            "ab1",
+            "acedb"
+          ],
+          "argument": null,
+          "edam": {
+            "edam_data": [
+              "data_0006"
+            ],
+            "edam_formats": [
+              "format_1915"
+            ]
+          },
+          "extensions": [
+            "data"
+          ],
+          "help": null,
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "cs219 Data",
+          "model_class": "DataToolParameter",
+          "multiple": false,
+          "name": "input",
+          "optional": false,
+          "options": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "options_meta": {},
+          "pinned": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "refresh_on_change": true,
+          "tag": null,
+          "type": "data",
+          "value": null
+        }
+      ],
+      "output_connections": [
+        {
+          "input_name": "cs219_ffdata",
+          "input_step_index": 7,
+          "output_name": "output",
+          "output_step_index": 6
+        },
+        {
+          "input_name": "cs219_ffdata",
+          "input_step_index": 8,
+          "output_name": "output",
+          "output_step_index": 6
+        }
+      ],
+      "replacement_parameters": [],
+      "step_index": 6,
+      "step_label": "cs219 Data",
+      "step_name": "Input dataset",
+      "step_type": "data_input",
+      "step_version": null,
+      "when": null
+    },
+    {
+      "action": "/tool_runner/index",
+      "citations": true,
+      "config_file": "/cvmfs/test.galaxyproject.org/shed_tools/toolshed.g2.bx.psu.edu/repos/guerler/hhsuite/3e4d88784254/hhsuite/hhsearch.xml",
+      "creator": null,
+      "credentials": [],
+      "description": "detecting remote homologues of proteins",
+      "display": true,
+      "edam_operations": [],
+      "edam_topics": [],
+      "enctype": "application/x-www-form-urlencoded",
+      "errors": {},
+      "form_style": "regular",
+      "has_parameters": true,
+      "help": "<p>HHsearch aligns a profile HMM against a database of target profile HMMs. The search first aligns the\nquery HMM with each of the target HMMs using the Viterbi dynamic programming algorithm, which finds the\nalignment with the maximum score. The E-value for the target HMM is calculated from the Viterbi score.\nTarget HMMs that reach sufficient significance to be reported are realigned using the Maximum Accuracy algorithm (MAC).\nThis algorithm maximizes the expected number of correctly aligned pairs of residues minus a penalty between 0 and 1.\nValues near 0 produce greedy, long, nearly global alignments, values above 0.3 result in shorter, local alignments.</p>\n<p>HHblits is an accelerated version of HHsearch that is fast enough to perform iterative searches through millions of profile HMMs,\ne.g. through the Uniclust profile HMM databases, generated by clustering the UniProt database into clusters of globally alignable sequences.\nAnalogously to PSI-BLAST and HMMER3, such iterative searches can be used to build MSAs by starting from a single query sequence.\nSequences from matches to profile HMMs below some E-value threshold (e.g. 10\u22123) are added to the query MSA for the next search iteration.</p>\n<p>Download databases from: <a class=\"reference external\" href=\"http://wwwuser.gwdg.de/~compbiol/data/hhsuite/databases/hhsuite_dbs/\">http://wwwuser.gwdg.de/~compbiol/data/hhsuite/databases/hhsuite_dbs/</a></p>\n",
+      "help_format": "restructuredtext",
+      "hidden": "",
+      "hidden_versions": [],
+      "history_id": "1affb3d848eeea7c",
+      "icon": null,
+      "id": "toolshed.g2.bx.psu.edu/repos/guerler/hhsuite/hhsearch/0.1.0",
+      "inputs": [
+        {
+          "argument": null,
+          "default_value": null,
+          "edam": {
+            "edam_data": [
+              "data_0006"
+            ],
+            "edam_formats": [
+              "format_1915"
+            ]
+          },
+          "extensions": [
+            "data"
+          ],
+          "help": "Single sequence or multiple sequence alignment (MSA)                 in a3m, a2m, or FASTA format, or HMM in hhm format. (-i)",
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "Query Sequence",
+          "model_class": "DataToolParameter",
+          "multiple": false,
+          "name": "input",
+          "optional": false,
+          "options": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "options_meta": {
+            "hda": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            },
+            "hdca": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            }
+          },
+          "pinned": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "refresh_on_change": true,
+          "tag": null,
+          "text_value": "Not available.",
+          "type": "data",
+          "value": {
+            "__class__": "ConnectedValue"
+          }
+        },
+        {
+          "argument": null,
+          "default_value": null,
+          "edam": {
+            "edam_data": [
+              "data_0006"
+            ],
+            "edam_formats": [
+              "format_2330"
+            ]
+          },
+          "extensions": [
+            "txt"
+          ],
+          "help": "Database file ending with 'hhm.ffindex'.",
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "HHM Index file",
+          "model_class": "DataToolParameter",
+          "multiple": false,
+          "name": "hhm_ffindex",
+          "optional": false,
+          "options": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "options_meta": {
+            "hda": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            },
+            "hdca": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            }
+          },
+          "pinned": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "refresh_on_change": true,
+          "tag": null,
+          "text_value": "Not available.",
+          "type": "data",
+          "value": {
+            "__class__": "ConnectedValue"
+          }
+        },
+        {
+          "argument": null,
+          "default_value": null,
+          "edam": {
+            "edam_data": [
+              "data_0006"
+            ],
+            "edam_formats": [
+              "format_1915"
+            ]
+          },
+          "extensions": [
+            "data"
+          ],
+          "help": "Database file ending with 'hhm.ffdata'.",
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "HHM Data file",
+          "model_class": "DataToolParameter",
+          "multiple": false,
+          "name": "hhm_ffdata",
+          "optional": false,
+          "options": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "options_meta": {
+            "hda": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            },
+            "hdca": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            }
+          },
+          "pinned": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "refresh_on_change": true,
+          "tag": null,
+          "text_value": "Not available.",
+          "type": "data",
+          "value": {
+            "__class__": "ConnectedValue"
+          }
+        },
+        {
+          "argument": null,
+          "default_value": null,
+          "edam": {
+            "edam_data": [
+              "data_0006"
+            ],
+            "edam_formats": [
+              "format_2330"
+            ]
+          },
+          "extensions": [
+            "txt"
+          ],
+          "help": "Database file ending with 'cs219.ffindex'.",
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "cs219 Index file",
+          "model_class": "DataToolParameter",
+          "multiple": false,
+          "name": "cs219_ffindex",
+          "optional": false,
+          "options": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "options_meta": {
+            "hda": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            },
+            "hdca": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            }
+          },
+          "pinned": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "refresh_on_change": true,
+          "tag": null,
+          "text_value": "Not available.",
+          "type": "data",
+          "value": {
+            "__class__": "ConnectedValue"
+          }
+        },
+        {
+          "argument": null,
+          "default_value": null,
+          "edam": {
+            "edam_data": [
+              "data_0006"
+            ],
+            "edam_formats": [
+              "format_1915"
+            ]
+          },
+          "extensions": [
+            "data"
+          ],
+          "help": "Database file ending with 'cs219.ffdata'.",
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "cs219 Data file",
+          "model_class": "DataToolParameter",
+          "multiple": false,
+          "name": "cs219_ffdata",
+          "optional": false,
+          "options": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "options_meta": {
+            "hda": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            },
+            "hdca": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            }
+          },
+          "pinned": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "refresh_on_change": true,
+          "tag": null,
+          "text_value": "Not available.",
+          "type": "data",
+          "value": {
+            "__class__": "ConnectedValue"
+          }
+        },
+        {
+          "argument": null,
+          "default_value": "hhsearch",
+          "display": "radio",
+          "help": "Select a search method. See help below for more information.",
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "Search Method",
+          "model_class": "SelectToolParameter",
+          "multiple": false,
+          "name": "method",
+          "optional": false,
+          "options": [
+            [
+              "HHsearch",
+              "hhsearch",
+              true
+            ],
+            [
+              "HHblits",
+              "hhblits",
+              false
+            ]
+          ],
+          "refresh_on_change": false,
+          "text_value": "HHsearch",
+          "textable": true,
+          "type": "select",
+          "value": "hhsearch"
+        },
+        {
+          "area": false,
+          "argument": null,
+          "datalist": [],
+          "default_value": "0.001",
+          "help": "",
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "E-value cutoff for inclusion in result alignment. (-e)",
+          "max": 1.0,
+          "min": 0.0,
+          "model_class": "FloatToolParameter",
+          "name": "e",
+          "optional": false,
+          "refresh_on_change": false,
+          "text_value": "0.001",
+          "type": "float",
+          "value": "0.001"
+        }
+      ],
+      "is_workflow_compatible": true,
+      "job_credentials_context": null,
+      "job_id": null,
+      "job_remap": null,
+      "labels": [],
+      "license": null,
+      "message": "",
+      "method": "post",
+      "model_class": "Tool",
+      "name": "HHsearch",
+      "output_connections": [
+        {
+          "input_name": "target",
+          "input_step_index": 9,
+          "output_name": "output",
+          "output_step_index": 7
+        }
+      ],
+      "panel_section_id": "tool_toolshed.g2.bx.psu.edu/repos/guerler/hhsuite/hhsearch/0.1.0",
+      "panel_section_name": "HHsearch",
+      "post_job_actions": [],
+      "replacement_parameters": [],
+      "requirements": [
+        {
+          "name": "hhsuite",
+          "version": "3.2.0"
+        }
+      ],
+      "sharable_url": "https://toolshed.g2.bx.psu.edu/view/guerler/hhsuite",
+      "state_inputs": {
+        "cs219_ffdata": {
+          "__class__": "ConnectedValue"
+        },
+        "cs219_ffindex": {
+          "__class__": "ConnectedValue"
+        },
+        "e": "0.001",
+        "hhm_ffdata": {
+          "__class__": "ConnectedValue"
+        },
+        "hhm_ffindex": {
+          "__class__": "ConnectedValue"
+        },
+        "input": {
+          "__class__": "ConnectedValue"
+        },
+        "method": "hhsearch"
+      },
+      "step_index": 7,
+      "step_label": null,
+      "step_name": "HHsearch",
+      "step_type": "tool",
+      "step_version": "0.1.0",
+      "tool_errors": null,
+      "tool_shed_repository": {
+        "changeset_revision": "cec2aa4d6c0d",
+        "name": "hhsuite",
+        "owner": "guerler",
+        "tool_shed": "toolshed.g2.bx.psu.edu"
+      },
+      "version": "0.1.0",
+      "versions": [
+        "0.1.0"
+      ],
+      "warnings": null,
+      "when": null,
+      "xrefs": [
+        {
+          "type": "bio.tools",
+          "value": "hhsuite"
+        }
+      ]
+    },
+    {
+      "action": "/tool_runner/index",
+      "citations": true,
+      "config_file": "/cvmfs/test.galaxyproject.org/shed_tools/toolshed.g2.bx.psu.edu/repos/guerler/hhsuite/3e4d88784254/hhsuite/hhsearch.xml",
+      "creator": null,
+      "credentials": [],
+      "description": "detecting remote homologues of proteins",
+      "display": true,
+      "edam_operations": [],
+      "edam_topics": [],
+      "enctype": "application/x-www-form-urlencoded",
+      "errors": {},
+      "form_style": "regular",
+      "has_parameters": true,
+      "help": "<p>HHsearch aligns a profile HMM against a database of target profile HMMs. The search first aligns the\nquery HMM with each of the target HMMs using the Viterbi dynamic programming algorithm, which finds the\nalignment with the maximum score. The E-value for the target HMM is calculated from the Viterbi score.\nTarget HMMs that reach sufficient significance to be reported are realigned using the Maximum Accuracy algorithm (MAC).\nThis algorithm maximizes the expected number of correctly aligned pairs of residues minus a penalty between 0 and 1.\nValues near 0 produce greedy, long, nearly global alignments, values above 0.3 result in shorter, local alignments.</p>\n<p>HHblits is an accelerated version of HHsearch that is fast enough to perform iterative searches through millions of profile HMMs,\ne.g. through the Uniclust profile HMM databases, generated by clustering the UniProt database into clusters of globally alignable sequences.\nAnalogously to PSI-BLAST and HMMER3, such iterative searches can be used to build MSAs by starting from a single query sequence.\nSequences from matches to profile HMMs below some E-value threshold (e.g. 10\u22123) are added to the query MSA for the next search iteration.</p>\n<p>Download databases from: <a class=\"reference external\" href=\"http://wwwuser.gwdg.de/~compbiol/data/hhsuite/databases/hhsuite_dbs/\">http://wwwuser.gwdg.de/~compbiol/data/hhsuite/databases/hhsuite_dbs/</a></p>\n",
+      "help_format": "restructuredtext",
+      "hidden": "",
+      "hidden_versions": [],
+      "history_id": "1affb3d848eeea7c",
+      "icon": null,
+      "id": "toolshed.g2.bx.psu.edu/repos/guerler/hhsuite/hhsearch/0.1.0",
+      "inputs": [
+        {
+          "argument": null,
+          "default_value": null,
+          "edam": {
+            "edam_data": [
+              "data_0006"
+            ],
+            "edam_formats": [
+              "format_1915"
+            ]
+          },
+          "extensions": [
+            "data"
+          ],
+          "help": "Single sequence or multiple sequence alignment (MSA)                 in a3m, a2m, or FASTA format, or HMM in hhm format. (-i)",
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "Query Sequence",
+          "model_class": "DataToolParameter",
+          "multiple": false,
+          "name": "input",
+          "optional": false,
+          "options": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "options_meta": {
+            "hda": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            },
+            "hdca": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            }
+          },
+          "pinned": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "refresh_on_change": true,
+          "tag": null,
+          "text_value": "Not available.",
+          "type": "data",
+          "value": {
+            "__class__": "ConnectedValue"
+          }
+        },
+        {
+          "argument": null,
+          "default_value": null,
+          "edam": {
+            "edam_data": [
+              "data_0006"
+            ],
+            "edam_formats": [
+              "format_2330"
+            ]
+          },
+          "extensions": [
+            "txt"
+          ],
+          "help": "Database file ending with 'hhm.ffindex'.",
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "HHM Index file",
+          "model_class": "DataToolParameter",
+          "multiple": false,
+          "name": "hhm_ffindex",
+          "optional": false,
+          "options": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "options_meta": {
+            "hda": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            },
+            "hdca": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            }
+          },
+          "pinned": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "refresh_on_change": true,
+          "tag": null,
+          "text_value": "Not available.",
+          "type": "data",
+          "value": {
+            "__class__": "ConnectedValue"
+          }
+        },
+        {
+          "argument": null,
+          "default_value": null,
+          "edam": {
+            "edam_data": [
+              "data_0006"
+            ],
+            "edam_formats": [
+              "format_1915"
+            ]
+          },
+          "extensions": [
+            "data"
+          ],
+          "help": "Database file ending with 'hhm.ffdata'.",
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "HHM Data file",
+          "model_class": "DataToolParameter",
+          "multiple": false,
+          "name": "hhm_ffdata",
+          "optional": false,
+          "options": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "options_meta": {
+            "hda": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            },
+            "hdca": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            }
+          },
+          "pinned": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "refresh_on_change": true,
+          "tag": null,
+          "text_value": "Not available.",
+          "type": "data",
+          "value": {
+            "__class__": "ConnectedValue"
+          }
+        },
+        {
+          "argument": null,
+          "default_value": null,
+          "edam": {
+            "edam_data": [
+              "data_0006"
+            ],
+            "edam_formats": [
+              "format_2330"
+            ]
+          },
+          "extensions": [
+            "txt"
+          ],
+          "help": "Database file ending with 'cs219.ffindex'.",
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "cs219 Index file",
+          "model_class": "DataToolParameter",
+          "multiple": false,
+          "name": "cs219_ffindex",
+          "optional": false,
+          "options": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "options_meta": {
+            "hda": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            },
+            "hdca": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            }
+          },
+          "pinned": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "refresh_on_change": true,
+          "tag": null,
+          "text_value": "Not available.",
+          "type": "data",
+          "value": {
+            "__class__": "ConnectedValue"
+          }
+        },
+        {
+          "argument": null,
+          "default_value": null,
+          "edam": {
+            "edam_data": [
+              "data_0006"
+            ],
+            "edam_formats": [
+              "format_1915"
+            ]
+          },
+          "extensions": [
+            "data"
+          ],
+          "help": "Database file ending with 'cs219.ffdata'.",
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "cs219 Data file",
+          "model_class": "DataToolParameter",
+          "multiple": false,
+          "name": "cs219_ffdata",
+          "optional": false,
+          "options": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "options_meta": {
+            "hda": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            },
+            "hdca": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            }
+          },
+          "pinned": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "refresh_on_change": true,
+          "tag": null,
+          "text_value": "Not available.",
+          "type": "data",
+          "value": {
+            "__class__": "ConnectedValue"
+          }
+        },
+        {
+          "argument": null,
+          "default_value": "hhsearch",
+          "display": "radio",
+          "help": "Select a search method. See help below for more information.",
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "Search Method",
+          "model_class": "SelectToolParameter",
+          "multiple": false,
+          "name": "method",
+          "optional": false,
+          "options": [
+            [
+              "HHsearch",
+              "hhsearch",
+              true
+            ],
+            [
+              "HHblits",
+              "hhblits",
+              false
+            ]
+          ],
+          "refresh_on_change": false,
+          "text_value": "HHsearch",
+          "textable": true,
+          "type": "select",
+          "value": "hhsearch"
+        },
+        {
+          "area": false,
+          "argument": null,
+          "datalist": [],
+          "default_value": "0.001",
+          "help": "",
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "E-value cutoff for inclusion in result alignment. (-e)",
+          "max": 1.0,
+          "min": 0.0,
+          "model_class": "FloatToolParameter",
+          "name": "e",
+          "optional": false,
+          "refresh_on_change": false,
+          "text_value": "0.001",
+          "type": "float",
+          "value": "0.001"
+        }
+      ],
+      "is_workflow_compatible": true,
+      "job_credentials_context": null,
+      "job_id": null,
+      "job_remap": null,
+      "labels": [],
+      "license": null,
+      "message": "",
+      "method": "post",
+      "model_class": "Tool",
+      "name": "HHsearch",
+      "output_connections": [
+        {
+          "input_name": "inputs",
+          "input_step_index": 9,
+          "output_name": "output",
+          "output_step_index": 8
+        }
+      ],
+      "panel_section_id": "tool_toolshed.g2.bx.psu.edu/repos/guerler/hhsuite/hhsearch/0.1.0",
+      "panel_section_name": "HHsearch",
+      "post_job_actions": [],
+      "replacement_parameters": [],
+      "requirements": [
+        {
+          "name": "hhsuite",
+          "version": "3.2.0"
+        }
+      ],
+      "sharable_url": "https://toolshed.g2.bx.psu.edu/view/guerler/hhsuite",
+      "state_inputs": {
+        "cs219_ffdata": {
+          "__class__": "ConnectedValue"
+        },
+        "cs219_ffindex": {
+          "__class__": "ConnectedValue"
+        },
+        "e": "0.001",
+        "hhm_ffdata": {
+          "__class__": "ConnectedValue"
+        },
+        "hhm_ffindex": {
+          "__class__": "ConnectedValue"
+        },
+        "input": {
+          "__class__": "ConnectedValue"
+        },
+        "method": "hhsearch"
+      },
+      "step_index": 8,
+      "step_label": null,
+      "step_name": "HHsearch",
+      "step_type": "tool",
+      "step_version": "0.1.0",
+      "tool_errors": null,
+      "tool_shed_repository": {
+        "changeset_revision": "cec2aa4d6c0d",
+        "name": "hhsuite",
+        "owner": "guerler",
+        "tool_shed": "toolshed.g2.bx.psu.edu"
+      },
+      "version": "0.1.0",
+      "versions": [
+        "0.1.0"
+      ],
+      "warnings": null,
+      "when": null,
+      "xrefs": [
+        {
+          "type": "bio.tools",
+          "value": "hhsuite"
+        }
+      ]
+    },
+    {
+      "action": "/tool_runner/index",
+      "citations": true,
+      "config_file": "/cvmfs/test.galaxyproject.org/shed_tools/toolshed.g2.bx.psu.edu/repos/guerler/springsuite/860bd6f8f480/springsuite/spring_minz.xml",
+      "creator": null,
+      "credentials": [],
+      "description": "filter operation",
+      "display": true,
+      "edam_operations": [],
+      "edam_topics": [],
+      "enctype": "application/x-www-form-urlencoded",
+      "errors": {},
+      "form_style": "regular",
+      "has_parameters": true,
+      "help": "<p>This tool filters HH-search/HH-blits homology results through the protein interaction cross reference generated by SPRING. Putative interactions are identified by\nevaluating the min-Z score. The min-Z is the smaller of the two Z-scores for a pair of sequences matching an existing protein-protein complex structure.</p>\n",
+      "help_format": "restructuredtext",
+      "hidden": "",
+      "hidden_versions": [],
+      "history_id": "1affb3d848eeea7c",
+      "icon": null,
+      "id": "toolshed.g2.bx.psu.edu/repos/guerler/springsuite/spring_minz/0.1.0",
+      "inputs": [
+        {
+          "argument": null,
+          "collection_types": null,
+          "column_definitions": null,
+          "default_value": null,
+          "extensions": [
+            "txt"
+          ],
+          "fields": null,
+          "help": "Homology search result of target/query profiles `hhr`.",
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "Target Profiles",
+          "model_class": "DataCollectionToolParameter",
+          "multiple": false,
+          "name": "targets",
+          "optional": false,
+          "options": {
+            "dce": [],
+            "hda": [],
+            "hdca": []
+          },
+          "options_meta": {
+            "hdca": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            }
+          },
+          "pinned": {
+            "dce": [],
+            "hda": [],
+            "hdca": []
+          },
+          "refresh_on_change": true,
+          "tag": null,
+          "text_value": "Not available.",
+          "type": "data_collection",
+          "value": {
+            "__class__": "RuntimeValue"
+          }
+        },
+        {
+          "argument": null,
+          "collection_types": [
+            "list"
+          ],
+          "column_definitions": null,
+          "default_value": null,
+          "extensions": [
+            "txt"
+          ],
+          "fields": null,
+          "help": "Homology search results of input profiles `hhr`.",
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "Input Profiles",
+          "model_class": "DataCollectionToolParameter",
+          "multiple": false,
+          "name": "inputs",
+          "optional": false,
+          "options": {
+            "dce": [],
+            "hda": [],
+            "hdca": []
+          },
+          "options_meta": {
+            "hdca": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            }
+          },
+          "pinned": {
+            "dce": [],
+            "hda": [],
+            "hdca": []
+          },
+          "refresh_on_change": true,
+          "tag": null,
+          "text_value": "Not available.",
+          "type": "data_collection",
+          "value": {
+            "__class__": "ConnectedValue"
+          }
+        },
+        {
+          "argument": null,
+          "default_value": null,
+          "edam": {
+            "edam_data": [
+              "data_0006"
+            ],
+            "edam_formats": [
+              "format_2330"
+            ]
+          },
+          "extensions": [
+            "txt"
+          ],
+          "help": "Cross reference of interacting proteins `first_id metadata_id second_id`.",
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "Cross Reference",
+          "model_class": "DataToolParameter",
+          "multiple": false,
+          "name": "crossreference",
+          "optional": false,
+          "options": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "options_meta": {
+            "hda": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            },
+            "hdca": {
+              "has_more": false,
+              "limit": 50,
+              "offset": 0,
+              "total_estimate": 0
+            }
+          },
+          "pinned": {
+            "dce": [],
+            "hda": [],
+            "hdca": [],
+            "ldda": []
+          },
+          "refresh_on_change": true,
+          "tag": null,
+          "text_value": "Not available.",
+          "type": "data",
+          "value": {
+            "__class__": "ConnectedValue"
+          }
+        },
+        {
+          "area": false,
+          "argument": null,
+          "datalist": [],
+          "default_value": "10",
+          "help": "Matching interaction pairs with a score lower than this threshold will be excluded.",
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "min-Z score threshold",
+          "max": 100,
+          "min": 1,
+          "model_class": "IntegerToolParameter",
+          "name": "minscore",
+          "optional": false,
+          "refresh_on_change": false,
+          "text_value": "10",
+          "type": "integer",
+          "value": "10"
+        },
+        {
+          "area": false,
+          "argument": null,
+          "datalist": [],
+          "default_value": "6",
+          "help": "Specify the length of the identifier e.g. `1ACB_A` has length 6.",
+          "help_format": "html",
+          "hidden": false,
+          "is_dynamic": false,
+          "label": "Identifier length",
+          "max": 20,
+          "min": 1,
+          "model_class": "IntegerToolParameter",
+          "name": "idx",
+          "optional": false,
+          "refresh_on_change": false,
+          "text_value": "6",
+          "type": "integer",
+          "value": "6"
+        }
+      ],
+      "is_workflow_compatible": true,
+      "job_credentials_context": null,
+      "job_id": null,
+      "job_remap": null,
+      "labels": [],
+      "license": null,
+      "message": "",
+      "messages": {
+        "targets": "No value found for 'Target Profiles'. Using default: '<galaxy.tools.parameters.workflow_utils.RuntimeValue object at 0x7fdf4cb79270>'."
+      },
+      "method": "post",
+      "model_class": "Tool",
+      "name": "SPRING min-Z",
+      "output_connections": [],
+      "panel_section_id": "tool_toolshed.g2.bx.psu.edu/repos/guerler/springsuite/spring_minz/0.1.0",
+      "panel_section_name": "SPRING min-Z",
+      "post_job_actions": [],
+      "replacement_parameters": [],
+      "requirements": [],
+      "sharable_url": "https://toolshed.g2.bx.psu.edu/view/guerler/springsuite",
+      "state_inputs": {
+        "crossreference": {
+          "__class__": "ConnectedValue"
+        },
+        "idx": "6",
+        "inputs": {
+          "__class__": "ConnectedValue"
+        },
+        "minscore": "10",
+        "targets": {
+          "__class__": "RuntimeValue"
+        }
+      },
+      "step_index": 9,
+      "step_label": null,
+      "step_name": "SPRING min-Z",
+      "step_type": "tool",
+      "step_version": "0.1.0",
+      "tool_errors": null,
+      "tool_shed_repository": {
+        "changeset_revision": "0ea00dce62ab",
+        "name": "springsuite",
+        "owner": "guerler",
+        "tool_shed": "toolshed.g2.bx.psu.edu"
+      },
+      "version": "0.1.0",
+      "versions": [
+        "0.1.0",
+        "0.1.1",
+        "0.1.2"
+      ],
+      "warnings": null,
+      "when": null,
+      "xrefs": [
+        {
+          "type": "bio.tools",
+          "value": "spring"
+        }
+      ]
+    }
+  ],
+  "version": 4,
+  "workflow_id": "509728dd2e69bcd0",
+  "workflow_resource_parameters": null,
+  "_fixture_note": "Captured from test.galaxyproject.org 26.1.rc1 via style=run&instance=true (history required). owner/history_id scrubbed; acceptable_extensions arrays subset to the first real entries for fixture size."
+}

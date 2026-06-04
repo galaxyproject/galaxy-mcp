@@ -2,6 +2,7 @@
 import concurrent.futures
 import contextlib
 import importlib.metadata
+import json
 import logging
 import os
 import threading
@@ -35,6 +36,13 @@ from galaxy_mcp.tool_inputs import (
     format_input_mismatch_error,
     is_input_related_error,
     summarize_tool_inputs,
+)
+from galaxy_mcp.workflow_inputs import (
+    build_workflow_input_template,
+    find_legacy_warnings,
+    normalize_ga_steps,
+    normalize_run_model,
+    validate_inputs,
 )
 
 _galaxy_mcp_version = importlib.metadata.version("galaxy-mcp")
@@ -123,6 +131,14 @@ def _set_session_connection(
 def _clear_session_connection(session_id: str) -> None:
     with _session_state_lock:
         _session_connections.pop(session_id, None)
+
+
+class WorkflowInputValidationError(ValueError):
+    """Raised when invoke_workflow's preflight finds a provable input mismatch.
+
+    Carries a complete, model-facing message (reasons + slot template); the
+    outer handler re-raises it unchanged so the message isn't wrapped or duplicated.
+    """
 
 
 class PaginationInfo(BaseModel):
@@ -228,6 +244,32 @@ def format_error(action: str, error: Exception, context: dict | None = None) -> 
 # Cache tool io_details schemas. Keyed by (server base URL, tool_id);
 # version is not part of the key because bioblend's show_tool fetches the default version only.
 _TOOL_SCHEMA_CACHE: dict[tuple[str | None, str], dict[str, Any]] = {}
+
+# Cache Galaxy's datatype class mapping per base URL -- it's static for a given server version,
+# so one fetch per server is fine even across many requests.
+_DATATYPES_MAPPING_CACHE: dict[str | None, dict[str, Any]] = {}
+
+
+def _get_datatypes_mapping(gi: GalaxyInstance) -> dict[str, Any]:
+    """Fetch and cache the datatypes class mapping (per Galaxy base URL).
+
+    User-independent, so a base-URL-keyed cache is safe. Returns the inner
+    ``datatypes_mapping`` object: {ext_to_class_name, class_to_classes}.
+    """
+    key = getattr(gi, "base_url", None)
+    if key in _DATATYPES_MAPPING_CACHE:
+        return _DATATYPES_MAPPING_CACHE[key]
+    resp = gi.make_get_request(f"{gi.url}/api/datatypes/types_and_mapping?upload_only=false")
+    _empty: dict[str, Any] = {"ext_to_class_name": {}, "class_to_classes": {}}
+    if resp.status_code != 200:
+        mapping: dict[str, Any] = _empty
+    else:
+        try:
+            mapping = resp.json().get("datatypes_mapping", _empty)
+        except Exception:  # noqa: BLE001 -- truncated or non-JSON 200 body; degrade gracefully
+            mapping = _empty
+    _DATATYPES_MAPPING_CACHE[key] = mapping
+    return mapping
 
 
 def _get_tool_schema(gi: GalaxyInstance, tool_id: str) -> dict[str, Any]:
@@ -2911,6 +2953,89 @@ def get_workflow_details(workflow_id: str, version: int | None = None) -> Galaxy
         ) from e
 
 
+def _resolve_workflow_slots(
+    gi: GalaxyInstance, workflow_id: str, history_id: str | None = None
+) -> tuple[list[dict[str, Any]], str]:
+    """Resolve a workflow's input slots. Primary: style=run (webapp's source),
+    behind our normalizer. Fallback: the .ga export. Returns (slots, provenance).
+    """
+    params = "style=run&instance=true"
+    if history_id:
+        params += f"&history_id={history_id}"
+    try:
+        resp = gi.make_get_request(f"{gi.url}/api/workflows/{workflow_id}/download?{params}")
+        if resp.status_code == 200:
+            slots = normalize_run_model(resp.json())
+            if slots:
+                return slots, "style=run"
+    except Exception as e:  # noqa: BLE001 -- fall back on any style=run failure
+        logger.info("style=run unavailable for %s (%s); falling back to .ga", workflow_id, e)
+    definition = gi.workflows.export_workflow_dict(workflow_id)
+    return normalize_ga_steps(definition), "ga-fallback"
+
+
+@mcp.tool(tags={"workflows", "read", "extended"})
+def get_workflow_input_template(workflow_id: str, history_id: str | None = None) -> GalaxyResult:
+    """Return a ready-to-fill template of a workflow's input slots.
+
+    Call this before invoke_workflow. Each slot lists its label, expected source
+    (hda/hdca), accepted datatypes, and collection type so you map datasets to
+    the right inputs. Fill `inputs_template` (keyed by step_index) and invoke
+    with `inputs_by="step_index|step_uuid"`. `warnings` flags legacy patterns.
+    """
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+    try:
+        slots, provenance = _resolve_workflow_slots(gi, workflow_id, history_id)
+        try:
+            definition = gi.workflows.export_workflow_dict(workflow_id)
+            warnings = find_legacy_warnings(definition)
+        except Exception:  # noqa: BLE001 -- warnings are best-effort
+            warnings = []
+        template = build_workflow_input_template(slots, warnings=warnings)
+        return GalaxyResult(
+            data=template,
+            success=True,
+            message=(
+                f"Built an input template for workflow '{workflow_id}' "
+                f"({len(slots)} slot(s), source: {provenance}). Fill inputs_template "
+                f"and invoke with inputs_by='step_index|step_uuid'."
+            ),
+            count=len(slots),
+        )
+    except Exception as e:
+        raise ValueError(
+            format_error("Get workflow input template", e, {"workflow_id": workflow_id})
+        ) from e
+
+
+def _enrich_supplied_inputs(gi: GalaxyInstance, inputs: dict[str, Any]) -> dict[str, Any]:
+    """Resolve each supplied {id,src} to the metadata validate_inputs needs."""
+    enriched: dict[str, Any] = {}
+    for key, value in (inputs or {}).items():
+        if not (isinstance(value, dict) and "src" in value):
+            enriched[key] = value
+            continue
+        entry = dict(value)
+        try:
+            if value["src"] == "hda":
+                entry["ext"] = gi.datasets.show_dataset(value["id"]).get("extension")
+            elif value["src"] == "hdca":
+                coll = gi.dataset_collections.show_dataset_collection(value["id"])
+                entry["collection_type"] = coll.get("collection_type")
+                entry["element_extensions"] = sorted(
+                    {
+                        e.get("object", {}).get("extension")
+                        for e in coll.get("elements", [])
+                        if e.get("object", {}).get("extension")
+                    }
+                )
+        except Exception:  # noqa: BLE001 -- unknown metadata -> validator stays permissive
+            pass
+        enriched[key] = entry
+    return enriched
+
+
 @mcp.tool(tags={"workflows", "write", "extended"})
 def invoke_workflow(
     workflow_id: str,
@@ -2935,7 +3060,8 @@ def invoke_workflow(
         params: Tool parameter overrides as a nested dictionary
         history_id: ID of history to store workflow outputs (optional)
         history_name: Name for new history to create (ignored if history_id provided)
-        inputs_by: How to identify workflow inputs - 'step_index', 'step_uuid', or 'name'
+        inputs_by: How to identify workflow inputs - 'step_index', 'step_uuid', 'name', or
+                  'step_index|step_uuid' (recommended; matches get_workflow_input_template)
         parameters_normalized: Whether parameters are already in normalized format
 
     Returns:
@@ -2945,6 +3071,33 @@ def invoke_workflow(
 
     try:
         gi: GalaxyInstance = state["gi"]
+
+        # Preflight: validate supplied inputs against the workflow's slots.
+        if inputs:
+            try:
+                slots, _prov = _resolve_workflow_slots(gi, workflow_id, history_id)
+                mapping = _get_datatypes_mapping(gi)
+                supplied = _enrich_supplied_inputs(gi, inputs)
+                verdict = validate_inputs(slots, supplied, mapping)
+            except Exception:  # noqa: BLE001 -- never let preflight failure block a valid run
+                verdict = {"rejects": [], "warnings": []}
+            if verdict["rejects"]:
+                template = build_workflow_input_template(slots, warnings=verdict["warnings"])
+                lines = [
+                    f"  - step {r['step_index']} ({r.get('label', '?')}): {r['reason']}"
+                    for r in verdict["rejects"]
+                ]
+                retry_hint = (
+                    "\n\nExpected input slots"
+                    " (fill and retry with inputs_by='step_index|step_uuid'):\n"
+                )
+                raise WorkflowInputValidationError(
+                    "Workflow inputs failed validation; not submitting:\n"
+                    + "\n".join(lines)
+                    + retry_hint
+                    + json.dumps(template["slots"], indent=2, default=str)
+                )
+
         resolved_inputs_by = cast(
             Literal["step_index|step_uuid", "step_index", "step_id", "step_uuid", "name"],
             inputs_by,
@@ -2963,7 +3116,15 @@ def invoke_workflow(
             success=True,
             message=f"Invoked workflow '{workflow_id}'",
         )
+    except WorkflowInputValidationError:
+        raise
     except Exception as e:
+        hint = ""
+        with contextlib.suppress(Exception):
+            slots, _ = _resolve_workflow_slots(gi, workflow_id, history_id)
+            hint = "\n\nWorkflow input slots:\n" + json.dumps(
+                build_workflow_input_template(slots)["slots"], indent=2, default=str
+            )
         raise ValueError(
             format_error(
                 "Invoke workflow",
@@ -2975,6 +3136,7 @@ def invoke_workflow(
                     "inputs_by": inputs_by,
                 },
             )
+            + hint
         ) from e
 
 

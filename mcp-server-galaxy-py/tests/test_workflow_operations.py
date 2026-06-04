@@ -2,16 +2,23 @@
 Test workflow-related operations
 """
 
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
+from galaxy_mcp.server import (
+    _DATATYPES_MAPPING_CACHE,
+    _get_datatypes_mapping,
+    _resolve_workflow_slots,
+    galaxy_state,
+)
+
 from .test_helpers import (
     cancel_workflow_invocation_fn,
-    galaxy_state,
     get_invocations_fn,
     get_iwc_workflows_fn,
     get_workflow_details_fn,
+    get_workflow_input_template_fn,
     import_workflow_from_iwc_fn,
     invoke_workflow_fn,
     list_workflows_fn,
@@ -362,3 +369,229 @@ class TestWorkflowOperations:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             with pytest.raises(ValueError, match="Cancel workflow invocation failed"):
                 cancel_workflow_invocation_fn("invalid_invocation")
+
+
+# ---------------------------------------------------------------------------
+# Task 8: cached datatypes-mapping fetch
+# ---------------------------------------------------------------------------
+
+
+def test_get_datatypes_mapping_caches_per_base_url():
+    _DATATYPES_MAPPING_CACHE.clear()
+    gi = Mock()
+    gi.base_url = "https://g.example/api"
+    gi.url = "https://g.example/api"
+    resp = Mock()
+    resp.status_code = 200
+    resp.json.return_value = {
+        "datatypes_mapping": {"ext_to_class_name": {"bam": "B"}, "class_to_classes": {}}
+    }
+    gi.make_get_request.return_value = resp
+    m1 = _get_datatypes_mapping(gi)
+    _ = _get_datatypes_mapping(gi)
+    assert m1["ext_to_class_name"]["bam"] == "B"
+    assert gi.make_get_request.call_count == 1  # second call served from cache
+
+
+# ---------------------------------------------------------------------------
+# Task 9: slot resolver
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_slots_uses_style_run_when_ok():
+    gi = Mock()
+    gi.url = "https://g/api"
+    resp = Mock()
+    resp.status_code = 200
+    resp.json.return_value = {
+        "steps": [
+            {
+                "step_type": "data_input",
+                "step_index": 0,
+                "step_label": "barcodes",
+                "inputs": [{"extensions": ["tabular"], "optional": False}],
+            }
+        ]
+    }
+    gi.make_get_request.return_value = resp
+    slots, provenance = _resolve_workflow_slots(gi, "wfid")
+    assert provenance == "style=run"
+    assert slots[0]["accepted_formats"] == ["tabular"]
+    assert slots[0]["label"] == "barcodes"
+
+
+def test_resolve_slots_falls_back_to_ga_on_missing_tools_500():
+    gi = Mock()
+    gi.url = "https://g/api"
+    run_resp = Mock()
+    run_resp.status_code = 500
+    run_resp.text = "missing tools"
+    gi.make_get_request.return_value = run_resp
+    gi.workflows.export_workflow_dict.return_value = {
+        "steps": {
+            "0": {
+                "type": "data_input",
+                "label": "barcodes",
+                "uuid": "u0",
+                "tool_state": '{"format": ["tabular"]}',
+            }
+        }
+    }
+    slots, provenance = _resolve_workflow_slots(gi, "wfid")
+    assert provenance == "ga-fallback"
+    assert slots[0]["accepted_formats"] == ["tabular"]
+
+
+# ---------------------------------------------------------------------------
+# Task 10: get_workflow_input_template MCP tool
+# ---------------------------------------------------------------------------
+
+
+def test_get_workflow_input_template_tool(mock_galaxy_instance):
+    mock_galaxy_instance.url = "https://g/api"
+    run_resp = Mock()
+    run_resp.status_code = 200
+    run_resp.json.return_value = {
+        "steps": [
+            {
+                "step_type": "data_input",
+                "step_index": 0,
+                "step_label": "barcodes",
+                "inputs": [{"extensions": ["tabular"], "optional": False}],
+            }
+        ]
+    }
+    mock_galaxy_instance.make_get_request.return_value = run_resp
+    mock_galaxy_instance.workflows.export_workflow_dict.return_value = {"steps": {}}
+    with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        result = get_workflow_input_template_fn("wfid")
+    assert result.success is True
+    assert result.data["inputs_by"] == "step_index|step_uuid"
+    assert result.data["inputs_template"]["0"] == {"src": "hda", "id": "<dataset_id>"}
+    assert result.data["slots"][0]["label"] == "barcodes"
+
+
+# ---------------------------------------------------------------------------
+# Task 11: invoke_workflow preflight + enrich-on-failure
+# ---------------------------------------------------------------------------
+
+_TINY_DT = {
+    "datatypes_mapping": {
+        "ext_to_class_name": {
+            "bam": "galaxy.datatypes.binary.Bam",
+            "tabular": "galaxy.datatypes.tabular.Tabular",
+        },
+        "class_to_classes": {
+            "galaxy.datatypes.binary.Bam": {"galaxy.datatypes.binary.Bam": True},
+            "galaxy.datatypes.tabular.Tabular": {"galaxy.datatypes.tabular.Tabular": True},
+        },
+    }
+}
+
+
+def _run_resp_barcodes_tabular():
+    r = Mock()
+    r.status_code = 200
+    r.json.return_value = {
+        "steps": [
+            {
+                "step_type": "data_input",
+                "step_index": 0,
+                "step_label": "barcodes",
+                "inputs": [{"extensions": ["tabular"], "optional": False}],
+            }
+        ]
+    }
+    return r
+
+
+def _make_get_dispatch(run_resp):
+    dt = Mock()
+    dt.status_code = 200
+    dt.json.return_value = _TINY_DT
+
+    def _dispatch(url, *args, **kwargs):
+        return dt if "types_and_mapping" in url else run_resp
+
+    return _dispatch
+
+
+def test_invoke_rejects_wrong_datatype_before_submitting(mock_galaxy_instance):
+    mock_galaxy_instance.url = "https://g/api"
+    mock_galaxy_instance.base_url = "https://g"
+    mock_galaxy_instance.make_get_request.side_effect = _make_get_dispatch(
+        _run_resp_barcodes_tabular()
+    )
+    mock_galaxy_instance.workflows.export_workflow_dict.return_value = {"steps": {}}
+    mock_galaxy_instance.datasets.show_dataset.return_value = {"id": "d1", "extension": "bam"}
+    with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        with pytest.raises(ValueError) as exc:
+            invoke_workflow_fn("wfid", inputs={"0": {"src": "hda", "id": "d1"}}, history_id="h1")
+    assert "bam" in str(exc.value).lower()
+    mock_galaxy_instance.workflows.invoke_workflow.assert_not_called()
+
+
+def test_invoke_proceeds_for_valid_datatype(mock_galaxy_instance):
+    mock_galaxy_instance.url = "https://g/api"
+    mock_galaxy_instance.base_url = "https://g"
+    mock_galaxy_instance.make_get_request.side_effect = _make_get_dispatch(
+        _run_resp_barcodes_tabular()
+    )
+    mock_galaxy_instance.workflows.export_workflow_dict.return_value = {"steps": {}}
+    mock_galaxy_instance.datasets.show_dataset.return_value = {"id": "d1", "extension": "tabular"}
+    mock_galaxy_instance.workflows.invoke_workflow.return_value = {"id": "inv1", "state": "new"}
+    with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        result = invoke_workflow_fn(
+            "wfid", inputs={"0": {"src": "hda", "id": "d1"}}, history_id="h1"
+        )
+    assert result.success is True
+    mock_galaxy_instance.workflows.invoke_workflow.assert_called_once()
+
+
+def test_invoke_reject_message_is_clean_single_slot_dump(mock_galaxy_instance):
+    """Rejected invoke should produce a clean, single slot dump -- not double-wrapped."""
+    _DATATYPES_MAPPING_CACHE.clear()
+    mock_galaxy_instance.url = "https://g/api"
+    mock_galaxy_instance.base_url = "https://g"
+    mock_galaxy_instance.make_get_request.side_effect = _make_get_dispatch(
+        _run_resp_barcodes_tabular()
+    )
+    mock_galaxy_instance.workflows.export_workflow_dict.return_value = {"steps": {}}
+    mock_galaxy_instance.datasets.show_dataset.return_value = {"id": "d1", "extension": "bam"}
+    with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        with pytest.raises(ValueError) as exc:
+            invoke_workflow_fn("wfid", inputs={"0": {"src": "hda", "id": "d1"}}, history_id="h1")
+
+    msg = str(exc.value)
+    # Must mention the offending type
+    assert "bam" in msg.lower()
+    # The preflight's own slot header appears exactly once
+    assert msg.count("Expected input slots") == 1, (
+        f"'Expected input slots' should appear exactly once, got:\n{msg}"
+    )
+    # The generic outer-handler hint must NOT appear -- that means no double-wrap
+    assert "Workflow input slots:" not in msg, (
+        f"'Workflow input slots:' (outer hint) must not appear in reject message, got:\n{msg}"
+    )
+
+
+def test_invoke_reject_resolves_slots_only_once(mock_galaxy_instance):
+    """The 'download' endpoint (slot resolution) must be called only once on a reject."""
+    _DATATYPES_MAPPING_CACHE.clear()
+    mock_galaxy_instance.url = "https://g/api"
+    mock_galaxy_instance.base_url = "https://g"
+    mock_galaxy_instance.make_get_request.side_effect = _make_get_dispatch(
+        _run_resp_barcodes_tabular()
+    )
+    mock_galaxy_instance.workflows.export_workflow_dict.return_value = {"steps": {}}
+    mock_galaxy_instance.datasets.show_dataset.return_value = {"id": "d1", "extension": "bam"}
+    with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        with pytest.raises(ValueError):
+            invoke_workflow_fn("wfid", inputs={"0": {"src": "hda", "id": "d1"}}, history_id="h1")
+
+    download_calls = [
+        c for c in mock_galaxy_instance.make_get_request.call_args_list if "download" in c.args[0]
+    ]
+    assert len(download_calls) == 1, (
+        f"Expected 1 'download' call (slot resolution), got {len(download_calls)}"
+    )
