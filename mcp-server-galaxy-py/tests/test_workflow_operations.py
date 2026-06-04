@@ -546,3 +546,52 @@ def test_invoke_proceeds_for_valid_datatype(mock_galaxy_instance):
         )
     assert result.success is True
     mock_galaxy_instance.workflows.invoke_workflow.assert_called_once()
+
+
+def test_invoke_reject_message_is_clean_single_slot_dump(mock_galaxy_instance):
+    """Rejected invoke should produce a clean, single slot dump -- not double-wrapped."""
+    _DATATYPES_MAPPING_CACHE.clear()
+    mock_galaxy_instance.url = "https://g/api"
+    mock_galaxy_instance.base_url = "https://g"
+    mock_galaxy_instance.make_get_request.side_effect = _make_get_dispatch(
+        _run_resp_barcodes_tabular()
+    )
+    mock_galaxy_instance.workflows.export_workflow_dict.return_value = {"steps": {}}
+    mock_galaxy_instance.datasets.show_dataset.return_value = {"id": "d1", "extension": "bam"}
+    with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        with pytest.raises(ValueError) as exc:
+            invoke_workflow_fn("wfid", inputs={"0": {"src": "hda", "id": "d1"}}, history_id="h1")
+
+    msg = str(exc.value)
+    # Must mention the offending type
+    assert "bam" in msg.lower()
+    # The preflight's own slot header appears exactly once
+    assert msg.count("Expected input slots") == 1, (
+        f"'Expected input slots' should appear exactly once, got:\n{msg}"
+    )
+    # The generic outer-handler hint must NOT appear -- that means no double-wrap
+    assert "Workflow input slots:" not in msg, (
+        f"'Workflow input slots:' (outer hint) must not appear in reject message, got:\n{msg}"
+    )
+
+
+def test_invoke_reject_resolves_slots_only_once(mock_galaxy_instance):
+    """The 'download' endpoint (slot resolution) must be called only once on a reject."""
+    _DATATYPES_MAPPING_CACHE.clear()
+    mock_galaxy_instance.url = "https://g/api"
+    mock_galaxy_instance.base_url = "https://g"
+    mock_galaxy_instance.make_get_request.side_effect = _make_get_dispatch(
+        _run_resp_barcodes_tabular()
+    )
+    mock_galaxy_instance.workflows.export_workflow_dict.return_value = {"steps": {}}
+    mock_galaxy_instance.datasets.show_dataset.return_value = {"id": "d1", "extension": "bam"}
+    with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        with pytest.raises(ValueError):
+            invoke_workflow_fn("wfid", inputs={"0": {"src": "hda", "id": "d1"}}, history_id="h1")
+
+    download_calls = [
+        c for c in mock_galaxy_instance.make_get_request.call_args_list if "download" in c.args[0]
+    ]
+    assert len(download_calls) == 1, (
+        f"Expected 1 'download' call (slot resolution), got {len(download_calls)}"
+    )

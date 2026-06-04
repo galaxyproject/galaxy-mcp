@@ -133,6 +133,14 @@ def _clear_session_connection(session_id: str) -> None:
         _session_connections.pop(session_id, None)
 
 
+class WorkflowInputValidationError(ValueError):
+    """Raised when invoke_workflow's preflight finds a provable input mismatch.
+
+    Carries a complete, model-facing message (reasons + slot template); the
+    outer handler re-raises it unchanged so the message isn't wrapped or duplicated.
+    """
+
+
 class PaginationInfo(BaseModel):
     """Pagination metadata for list operations."""
 
@@ -252,12 +260,14 @@ def _get_datatypes_mapping(gi: GalaxyInstance) -> dict[str, Any]:
     if key in _DATATYPES_MAPPING_CACHE:
         return _DATATYPES_MAPPING_CACHE[key]
     resp = gi.make_get_request(f"{gi.url}/api/datatypes/types_and_mapping?upload_only=false")
+    _empty: dict[str, Any] = {"ext_to_class_name": {}, "class_to_classes": {}}
     if resp.status_code != 200:
-        mapping: dict[str, Any] = {"ext_to_class_name": {}, "class_to_classes": {}}
+        mapping: dict[str, Any] = _empty
     else:
-        mapping = resp.json().get(
-            "datatypes_mapping", {"ext_to_class_name": {}, "class_to_classes": {}}
-        )
+        try:
+            mapping = resp.json().get("datatypes_mapping", _empty)
+        except Exception:  # noqa: BLE001 -- truncated or non-JSON 200 body; degrade gracefully
+            mapping = _empty
     _DATATYPES_MAPPING_CACHE[key] = mapping
     return mapping
 
@@ -3080,7 +3090,7 @@ def invoke_workflow(
                     "\n\nExpected input slots"
                     " (fill and retry with inputs_by='step_index|step_uuid'):\n"
                 )
-                raise ValueError(
+                raise WorkflowInputValidationError(
                     "Workflow inputs failed validation; not submitting:\n"
                     + "\n".join(lines)
                     + retry_hint
@@ -3105,6 +3115,8 @@ def invoke_workflow(
             success=True,
             message=f"Invoked workflow '{workflow_id}'",
         )
+    except WorkflowInputValidationError:
+        raise
     except Exception as e:
         hint = ""
         with contextlib.suppress(Exception):
