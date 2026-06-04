@@ -18,6 +18,12 @@ permissions:
 
 jobs:
   update_release_draft:
+    # Skip on PRs from forks: those runs get a read-only GITHUB_TOKEN, so the
+    # release-creation step always 403s. Still runs on push to main, same-repo
+    # PRs, and manual dispatch.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: write
       pull-requests: write
