@@ -36,6 +36,10 @@ from galaxy_mcp.tool_inputs import (
     is_input_related_error,
     summarize_tool_inputs,
 )
+from galaxy_mcp.workflow_inputs import (
+    normalize_ga_steps,
+    normalize_run_model,
+)
 
 _galaxy_mcp_version = importlib.metadata.version("galaxy-mcp")
 USER_AGENT = f"galaxy-mcp/{_galaxy_mcp_version} bioblend/{bioblend.__version__}"
@@ -2933,6 +2937,27 @@ def get_workflow_details(workflow_id: str, version: int | None = None) -> Galaxy
                 "Get workflow details", e, {"workflow_id": workflow_id, "version": version}
             )
         ) from e
+
+
+def _resolve_workflow_slots(
+    gi: GalaxyInstance, workflow_id: str, history_id: str | None = None
+) -> tuple[list[dict[str, Any]], str]:
+    """Resolve a workflow's input slots. Primary: style=run (webapp's source),
+    behind our normalizer. Fallback: the .ga export. Returns (slots, provenance).
+    """
+    params = "style=run&instance=true"
+    if history_id:
+        params += f"&history_id={history_id}"
+    try:
+        resp = gi.make_get_request(f"{gi.url}/api/workflows/{workflow_id}/download?{params}")
+        if resp.status_code == 200:
+            slots = normalize_run_model(resp.json())
+            if slots:
+                return slots, "style=run"
+    except Exception as e:  # noqa: BLE001 -- fall back on any style=run failure
+        logger.info("style=run unavailable for %s (%s); falling back to .ga", workflow_id, e)
+    definition = gi.workflows.export_workflow_dict(workflow_id)
+    return normalize_ga_steps(definition), "ga-fallback"
 
 
 @mcp.tool(tags={"workflows", "write", "extended"})

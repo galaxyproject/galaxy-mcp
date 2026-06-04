@@ -9,6 +9,7 @@ import pytest
 from galaxy_mcp.server import (
     _DATATYPES_MAPPING_CACHE,
     _get_datatypes_mapping,
+    _resolve_workflow_slots,
 )
 
 from .test_helpers import (
@@ -389,3 +390,52 @@ def test_get_datatypes_mapping_caches_per_base_url():
     _ = _get_datatypes_mapping(gi)
     assert m1["ext_to_class_name"]["bam"] == "B"
     assert gi.make_get_request.call_count == 1  # second call served from cache
+
+
+# ---------------------------------------------------------------------------
+# Task 9: slot resolver
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_slots_uses_style_run_when_ok():
+    gi = Mock()
+    gi.url = "https://g/api"
+    resp = Mock()
+    resp.status_code = 200
+    resp.json.return_value = {
+        "steps": [
+            {
+                "step_type": "data_input",
+                "step_index": 0,
+                "step_label": "barcodes",
+                "inputs": [{"extensions": ["tabular"], "optional": False}],
+            }
+        ]
+    }
+    gi.make_get_request.return_value = resp
+    slots, provenance = _resolve_workflow_slots(gi, "wfid")
+    assert provenance == "style=run"
+    assert slots[0]["accepted_formats"] == ["tabular"]
+    assert slots[0]["label"] == "barcodes"
+
+
+def test_resolve_slots_falls_back_to_ga_on_missing_tools_500():
+    gi = Mock()
+    gi.url = "https://g/api"
+    run_resp = Mock()
+    run_resp.status_code = 500
+    run_resp.text = "missing tools"
+    gi.make_get_request.return_value = run_resp
+    gi.workflows.export_workflow_dict.return_value = {
+        "steps": {
+            "0": {
+                "type": "data_input",
+                "label": "barcodes",
+                "uuid": "u0",
+                "tool_state": '{"format": ["tabular"]}',
+            }
+        }
+    }
+    slots, provenance = _resolve_workflow_slots(gi, "wfid")
+    assert provenance == "ga-fallback"
+    assert slots[0]["accepted_formats"] == ["tabular"]
