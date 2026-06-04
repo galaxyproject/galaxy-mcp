@@ -162,9 +162,15 @@ gxy iwc recommend "differential expression from RNA-seq" --limit 3
 gxy tools search fastqc
 gxy --pretty tools details toolshed.g2.bx.psu.edu/repos/.../fastqc/0.74
 
+# List configured profiles (gxy config + planemo), then use one
+gxy profile list
+gxy --profile eu history list | jq '.data[] | {id, name}'
+
 # Script with jq
 HIST_ID=$(gxy history create "RNA-seq run" | jq -r '.data.id')
-gxy --profile eu history list | jq '.data[] | {id, name}'
+
+# Verify / debug credentials (surfaces the real auth error)
+gxy connect
 
 # Shell completion
 gxy --install-completion

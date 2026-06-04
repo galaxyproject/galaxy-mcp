@@ -7,7 +7,7 @@ import typer
 
 from galaxy_mcp.server import connect_global
 
-from .commands import collection, dataset, history, iwc, server, tools, user, workflow
+from .commands import collection, dataset, history, iwc, profile, server, tools, user, workflow
 from .config import load_profile
 from .output import output_error, output_result, set_pretty_output
 
@@ -26,6 +26,7 @@ app.add_typer(workflow.app, name="workflow", help="Manage and run workflows")
 app.add_typer(iwc.app, name="iwc", help="Browse and import IWC workflows")
 app.add_typer(server.app, name="server", help="Galaxy server information")
 app.add_typer(user.app, name="user", help="User information")
+app.add_typer(profile.app, name="profile", help="Inspect configured connection profiles")
 
 
 @app.callback()

@@ -26,11 +26,6 @@ PLANEMO_PROFILES_DIR = Path.home() / ".planemo" / "profiles"
 PLANEMO_PROFILE_OPTIONS = "planemo_profile_options.json"
 
 
-def get_config_path() -> Path:
-    """Get the path to the config file."""
-    return CONFIG_FILE
-
-
 def _load_planemo_profile(profile_name: str) -> GalaxyConfig | None:
     """
     Try to load a profile from planemo's profile directory.
@@ -165,9 +160,3 @@ def list_profiles() -> list[str]:
             profiles.append(name)
 
     return profiles
-
-
-def ensure_config_dir() -> Path:
-    """Ensure the config directory exists."""
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    return CONFIG_DIR
