@@ -6,6 +6,7 @@ from galaxy_mcp.workflow_inputs import (
     normalize_ga_steps,
     normalize_run_model,
     subtype_satisfies,
+    validate_inputs,
 )
 
 # Minimal slice of /api/datatypes/types_and_mapping
@@ -195,3 +196,89 @@ def test_find_legacy_warnings_flags_runtimevalue_not_parameter_input():
 
 def test_find_legacy_warnings_clean_workflow_is_empty():
     assert find_legacy_warnings({"steps": {"0": {"type": "tool", "tool_state": '{"a":1}'}}}) == []
+
+
+# ---------------------------------------------------------------------------
+# Task 6: three-tier validator
+# ---------------------------------------------------------------------------
+
+SLOTS = [
+    {
+        "step_index": 0,
+        "step_uuid": "u0",
+        "label": "barcodes",
+        "input_type": "data",
+        "src": "hda",
+        "accepted_formats": ["tabular"],
+        "collection_type": None,
+        "parameter_type": None,
+        "optional": False,
+    },
+    {
+        "step_index": 1,
+        "step_uuid": "u1",
+        "label": "reads",
+        "input_type": "data_collection",
+        "src": "hdca",
+        "accepted_formats": ["fastqsanger"],
+        "collection_type": "list:paired",
+        "parameter_type": None,
+        "optional": False,
+    },
+    {
+        "step_index": 2,
+        "step_uuid": "u2",
+        "label": "anyfile",
+        "input_type": "data",
+        "src": "hda",
+        "accepted_formats": [],
+        "collection_type": None,
+        "parameter_type": None,
+        "optional": True,
+    },
+]
+MAP = MAPPING  # from Task 1
+
+
+def test_validate_hard_rejects_wrong_datatype():
+    supplied = {"0": {"src": "hda", "id": "d1", "ext": "bam"}}  # bam into a tabular slot
+    res = validate_inputs(SLOTS, supplied, MAP)
+    assert any(r["step_index"] == 0 for r in res["rejects"])
+
+
+def test_validate_accepts_subtype():
+    supplied = {"0": {"src": "hda", "id": "d1", "ext": "bed"}}  # bed is-a tabular
+    res = validate_inputs(SLOTS, supplied, MAP)
+    assert res["rejects"] == []
+
+
+def test_validate_hard_rejects_wrong_src_kind():
+    supplied = {"0": {"src": "hdca", "id": "c1", "collection_type": "list"}}
+    res = validate_inputs(SLOTS, supplied, MAP)
+    assert any(r["step_index"] == 0 and "collection" in r["reason"].lower() for r in res["rejects"])
+
+
+def test_validate_hard_rejects_wrong_collection_type():
+    supplied = {
+        "1": {
+            "src": "hdca",
+            "id": "c1",
+            "collection_type": "list",
+            "element_extensions": ["fastqsanger"],
+        }
+    }
+    res = validate_inputs(SLOTS, supplied, MAP)
+    assert any(r["step_index"] == 1 for r in res["rejects"])
+
+
+def test_validate_generic_data_slot_does_not_reject():
+    supplied = {"2": {"src": "hda", "id": "d9", "ext": "bam"}}  # slot accepts any
+    res = validate_inputs(SLOTS, supplied, MAP)
+    assert res["rejects"] == []
+
+
+def test_validate_unknown_step_index_is_warned_not_rejected():
+    supplied = {"99": {"src": "hda", "id": "dx", "ext": "bam"}}
+    res = validate_inputs(SLOTS, supplied, MAP)
+    assert res["rejects"] == []
+    assert any("99" in w["message"] for w in res["warnings"])

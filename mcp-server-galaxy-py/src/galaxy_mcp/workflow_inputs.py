@@ -170,3 +170,155 @@ def find_legacy_warnings(definition: dict[str, Any]) -> list[dict[str, str]]:
                 }
             )
     return warnings
+
+
+def _collection_type_compatible(supplied: str | None, required: str | None) -> bool:
+    """Direct or map-over compatibility. None required == accept any shape."""
+    if not required or not supplied:
+        return True
+    if supplied == required:
+        return True
+    # map-over: a list:paired can feed a 'paired' slot, etc. (suffix match)
+    return supplied.endswith(":" + required) or supplied.endswith(required)
+
+
+def validate_inputs(
+    slots: list[dict[str, Any]],
+    supplied: dict[str, Any],
+    mapping: dict[str, Any],
+) -> dict[str, list[dict[str, Any]]]:
+    """Three-tier preflight. ``supplied`` keyed by str(step_index); data entries
+    carry ``ext``; collection entries carry ``collection_type`` and optional
+    ``element_extensions``; parameter entries are scalars. Rejects are provable
+    structural/datatype mismatches; warnings are inferred/uncertain.
+    """
+    by_index = {str(s["step_index"]): s for s in slots}
+    rejects: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
+
+    for key, value in supplied.items():
+        slot = by_index.get(str(key))
+        if slot is None:
+            warnings.append(
+                {
+                    "step_index": key,
+                    "message": (
+                        f"Supplied input for step {key} has no matching workflow input slot."
+                    ),
+                }
+            )
+            continue
+        itype = slot["input_type"]
+        is_ref = isinstance(value, dict) and "src" in value
+
+        if itype == "parameter":
+            if is_ref:
+                rejects.append(
+                    {
+                        "step_index": slot["step_index"],
+                        "label": slot["label"],
+                        "reason": (
+                            "Parameter input given a dataset/collection reference;"
+                            " expected a scalar value."
+                        ),
+                    }
+                )
+            continue
+
+        if not is_ref:
+            rejects.append(
+                {
+                    "step_index": slot["step_index"],
+                    "label": slot["label"],
+                    "reason": f"{itype} input expects a {{'src','id'}} reference.",
+                }
+            )
+            continue
+
+        if itype == "data":
+            if value["src"] != "hda":
+                rejects.append(
+                    {
+                        "step_index": slot["step_index"],
+                        "label": slot["label"],
+                        "reason": (
+                            f"Slot expects a single dataset (hda);"
+                            f" got a collection ({value['src']})."
+                        ),
+                    }
+                )
+                continue
+            ext = value.get("ext")
+            if ext and not subtype_satisfies(ext, slot["accepted_formats"], mapping):
+                rejects.append(
+                    {
+                        "step_index": slot["step_index"],
+                        "label": slot["label"],
+                        "reason": (
+                            f"Dataset datatype '{ext}' is not accepted here "
+                            f"(expects: {', '.join(slot['accepted_formats'])})."
+                        ),
+                    }
+                )
+            elif not ext and slot["accepted_formats"]:
+                warnings.append(
+                    {
+                        "step_index": slot["step_index"],
+                        "message": (
+                            f"Could not determine datatype of the dataset for '{slot['label']}'; "
+                            f"slot expects {', '.join(slot['accepted_formats'])}."
+                        ),
+                    }
+                )
+
+        elif itype == "data_collection":
+            if value["src"] != "hdca":
+                rejects.append(
+                    {
+                        "step_index": slot["step_index"],
+                        "label": slot["label"],
+                        "reason": f"Slot expects a dataset collection (hdca); got {value['src']}.",
+                    }
+                )
+                continue
+            if not _collection_type_compatible(
+                value.get("collection_type"), slot["collection_type"]
+            ):
+                rejects.append(
+                    {
+                        "step_index": slot["step_index"],
+                        "label": slot["label"],
+                        "reason": (
+                            f"Collection type '{value.get('collection_type')}' is incompatible "
+                            f"with the slot's '{slot['collection_type']}'."
+                        ),
+                    }
+                )
+                continue
+            for el_ext in value.get("element_extensions") or []:
+                if not subtype_satisfies(el_ext, slot["accepted_formats"], mapping):
+                    rejects.append(
+                        {
+                            "step_index": slot["step_index"],
+                            "label": slot["label"],
+                            "reason": (
+                                f"Collection element datatype '{el_ext}' is not accepted here "
+                                f"(expects: {', '.join(slot['accepted_formats'])})."
+                            ),
+                        }
+                    )
+                    break
+
+    # warn on missing required slots (don't block -- the model may add them next call)
+    for slot in slots:
+        if not slot["optional"] and str(slot["step_index"]) not in supplied:
+            warnings.append(
+                {
+                    "step_index": slot["step_index"],
+                    "message": (
+                        f"Required input '{slot['label']}'"
+                        f" (step {slot['step_index']}) not supplied yet."
+                    ),
+                }
+            )
+    return {"rejects": rejects, "warnings": warnings}
