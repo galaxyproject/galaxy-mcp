@@ -15,9 +15,16 @@ runner = CliRunner()
 
 @pytest.fixture(autouse=True)
 def _mock_env(monkeypatch):
-    """Set up mock environment for CLI tests."""
+    """Provide credentials and a no-op connection for command tests."""
     monkeypatch.setenv("GALAXY_URL", "https://test.galaxy.com")
     monkeypatch.setenv("GALAXY_API_KEY", "test_api_key")
+    # The CLI callback seeds a connection from resolved creds; stub it so
+    # command tests stay hermetic. Tests that exercise the bootstrap or the
+    # connect command patch connect_global themselves and override this.
+    monkeypatch.setattr(
+        "galaxy_mcp.cli.main.connect_global",
+        Mock(return_value=None),
+    )
 
 
 class TestCliHelp:
@@ -62,8 +69,7 @@ class TestConnectCommand:
             message="Connected to Galaxy",
         )
 
-        with patch("galaxy_mcp.cli.main.connect_tool") as mock_connect:
-            mock_connect.fn = Mock(return_value=mock_result)
+        with patch("galaxy_mcp.cli.main.connect_global", return_value=mock_result):
             result = runner.invoke(app, ["connect"])
 
         assert result.exit_code == 0
@@ -446,9 +452,8 @@ class TestPlanemoProfiles:
         with (
             patch("galaxy_mcp.cli.config.CONFIG_FILE", fake_config),
             patch("galaxy_mcp.cli.config.PLANEMO_PROFILES_DIR", tmp_path / "planemo_profiles"),
-            patch("galaxy_mcp.cli.main.connect_tool") as mock_connect,
+            patch("galaxy_mcp.cli.main.connect_global", return_value=mock_result),
         ):
-            mock_connect.fn = Mock(return_value=mock_result)
             result = runner.invoke(app, ["--profile", "test-server", "connect"])
 
         assert result.exit_code == 0
@@ -480,3 +485,35 @@ class TestConnectGlobal:
         assert server.galaxy_state["connected"] is True
         assert server.galaxy_state["gi"] is fake_gi
         fake_gi.users.get_current_user.assert_called_once()
+
+
+class TestConnectionBootstrap:
+    def test_data_command_connects_from_flags(self, monkeypatch):
+        """A data command run with --url/--api-key seeds the connection via connect_global."""
+        monkeypatch.delenv("GALAXY_URL", raising=False)
+        monkeypatch.delenv("GALAXY_API_KEY", raising=False)
+
+        called = {}
+
+        def fake_connect_global(url, api_key):
+            called["url"] = url
+            called["api_key"] = api_key
+            from galaxy_mcp.server import GalaxyResult
+
+            return GalaxyResult(data={"connected": True}, success=True, message="ok")
+
+        with (
+            patch("galaxy_mcp.cli.main.connect_global", side_effect=fake_connect_global),
+            patch("galaxy_mcp.cli.commands.history.get_histories") as mock_hist,
+        ):
+            mock_hist.return_value = __import__(
+                "galaxy_mcp.server", fromlist=["GalaxyResult"]
+            ).GalaxyResult(data=[], success=True, message="none", count=0)
+            result = runner.invoke(
+                app,
+                ["--url", "https://flagged.example.org", "--api-key", "flagkey", "history", "list"],
+            )
+
+        assert result.exit_code == 0
+        assert called["url"] == "https://flagged.example.org"
+        assert called["api_key"] == "flagkey"

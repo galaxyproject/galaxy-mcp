@@ -1,10 +1,11 @@
 """Main CLI application for Galaxy MCP."""
 
+import contextlib
 from typing import Annotated
 
 import typer
 
-from galaxy_mcp.server import connect as connect_tool
+from galaxy_mcp.server import connect_global
 
 from .commands import collection, dataset, history, iwc, server, tools, user, workflow
 from .config import load_profile
@@ -25,11 +26,6 @@ app.add_typer(workflow.app, name="workflow", help="Manage and run workflows")
 app.add_typer(iwc.app, name="iwc", help="Browse and import IWC workflows")
 app.add_typer(server.app, name="server", help="Galaxy server information")
 app.add_typer(user.app, name="user", help="User information")
-
-
-def _get_underlying_fn(tool):
-    """Extract the underlying function from a FastMCP tool."""
-    return tool.fn if hasattr(tool, "fn") else tool
 
 
 @app.callback()
@@ -75,6 +71,14 @@ def main(
     ctx.obj["api_key"] = final_api_key
     ctx.obj["profile"] = profile
 
+    # Seed a process-global connection for commands that talk to Galaxy.
+    # Best-effort: IWC discovery commands need no connection, and `connect`
+    # handles its own. Commands that DO need Galaxy will surface a clean
+    # "Not connected" error if creds are missing or invalid.
+    if final_url and final_api_key and ctx.invoked_subcommand not in (None, "connect"):
+        with contextlib.suppress(Exception):
+            connect_global(final_url, final_api_key)
+
 
 @app.command()
 def connect(ctx: typer.Context) -> None:
@@ -90,8 +94,7 @@ def connect(ctx: typer.Context) -> None:
         raise typer.Exit(1)
 
     try:
-        fn = _get_underlying_fn(connect_tool)
-        result = fn(url=url, api_key=api_key)
+        result = connect_global(url=url, api_key=api_key)
         output_result(result)
     except Exception as e:
         output_error(str(e))
