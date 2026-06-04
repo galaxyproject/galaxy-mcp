@@ -3060,7 +3060,8 @@ def invoke_workflow(
         params: Tool parameter overrides as a nested dictionary
         history_id: ID of history to store workflow outputs (optional)
         history_name: Name for new history to create (ignored if history_id provided)
-        inputs_by: How to identify workflow inputs - 'step_index', 'step_uuid', or 'name'
+        inputs_by: How to identify workflow inputs - 'step_index', 'step_uuid', 'name', or
+                  'step_index|step_uuid' (recommended; matches get_workflow_input_template)
         parameters_normalized: Whether parameters are already in normalized format
 
     Returns:
