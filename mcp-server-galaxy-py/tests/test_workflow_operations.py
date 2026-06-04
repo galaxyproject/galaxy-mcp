@@ -469,3 +469,80 @@ def test_get_workflow_input_template_tool(mock_galaxy_instance):
     assert result.data["inputs_by"] == "step_index|step_uuid"
     assert result.data["inputs_template"]["0"] == {"src": "hda", "id": "<dataset_id>"}
     assert result.data["slots"][0]["label"] == "barcodes"
+
+
+# ---------------------------------------------------------------------------
+# Task 11: invoke_workflow preflight + enrich-on-failure
+# ---------------------------------------------------------------------------
+
+_TINY_DT = {
+    "datatypes_mapping": {
+        "ext_to_class_name": {
+            "bam": "galaxy.datatypes.binary.Bam",
+            "tabular": "galaxy.datatypes.tabular.Tabular",
+        },
+        "class_to_classes": {
+            "galaxy.datatypes.binary.Bam": {"galaxy.datatypes.binary.Bam": True},
+            "galaxy.datatypes.tabular.Tabular": {"galaxy.datatypes.tabular.Tabular": True},
+        },
+    }
+}
+
+
+def _run_resp_barcodes_tabular():
+    r = Mock()
+    r.status_code = 200
+    r.json.return_value = {
+        "steps": [
+            {
+                "step_type": "data_input",
+                "step_index": 0,
+                "step_label": "barcodes",
+                "inputs": [{"extensions": ["tabular"], "optional": False}],
+            }
+        ]
+    }
+    return r
+
+
+def _make_get_dispatch(run_resp):
+    dt = Mock()
+    dt.status_code = 200
+    dt.json.return_value = _TINY_DT
+
+    def _dispatch(url, *args, **kwargs):
+        return dt if "types_and_mapping" in url else run_resp
+
+    return _dispatch
+
+
+def test_invoke_rejects_wrong_datatype_before_submitting(mock_galaxy_instance):
+    mock_galaxy_instance.url = "https://g/api"
+    mock_galaxy_instance.base_url = "https://g"
+    mock_galaxy_instance.make_get_request.side_effect = _make_get_dispatch(
+        _run_resp_barcodes_tabular()
+    )
+    mock_galaxy_instance.workflows.export_workflow_dict.return_value = {"steps": {}}
+    mock_galaxy_instance.datasets.show_dataset.return_value = {"id": "d1", "extension": "bam"}
+    with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        with pytest.raises(ValueError) as exc:
+            invoke_workflow_fn("wfid", inputs={"0": {"src": "hda", "id": "d1"}}, history_id="h1")
+    assert "bam" in str(exc.value).lower()
+    mock_galaxy_instance.workflows.invoke_workflow.assert_not_called()
+
+
+def test_invoke_proceeds_for_valid_datatype(mock_galaxy_instance):
+    mock_galaxy_instance.url = "https://g/api"
+    mock_galaxy_instance.base_url = "https://g"
+    mock_galaxy_instance.make_get_request.side_effect = _make_get_dispatch(
+        _run_resp_barcodes_tabular()
+    )
+    mock_galaxy_instance.workflows.export_workflow_dict.return_value = {"steps": {}}
+    mock_galaxy_instance.datasets.show_dataset.return_value = {"id": "d1", "extension": "tabular"}
+    mock_galaxy_instance.workflows.invoke_workflow.return_value = {"id": "inv1", "state": "new"}
+    with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        result = invoke_workflow_fn(
+            "wfid", inputs={"0": {"src": "hda", "id": "d1"}}, history_id="h1"
+        )
+    assert result.success is True
+    mock_galaxy_instance.workflows.invoke_workflow.assert_called_once()

@@ -2,6 +2,7 @@
 import concurrent.futures
 import contextlib
 import importlib.metadata
+import json
 import logging
 import os
 import threading
@@ -41,7 +42,7 @@ from galaxy_mcp.workflow_inputs import (
     find_legacy_warnings,
     normalize_ga_steps,
     normalize_run_model,
-    validate_inputs,  # noqa: F401 -- used in Task 11's invoke_workflow preflight
+    validate_inputs,
 )
 
 _galaxy_mcp_version = importlib.metadata.version("galaxy-mcp")
@@ -2998,6 +2999,33 @@ def get_workflow_input_template(workflow_id: str, history_id: str | None = None)
         ) from e
 
 
+def _enrich_supplied_inputs(gi: GalaxyInstance, inputs: dict[str, Any]) -> dict[str, Any]:
+    """Resolve each supplied {id,src} to the metadata validate_inputs needs."""
+    enriched: dict[str, Any] = {}
+    for key, value in (inputs or {}).items():
+        if not (isinstance(value, dict) and "src" in value):
+            enriched[key] = value
+            continue
+        entry = dict(value)
+        try:
+            if value["src"] == "hda":
+                entry["ext"] = gi.datasets.show_dataset(value["id"]).get("extension")
+            elif value["src"] == "hdca":
+                coll = gi.dataset_collections.show_dataset_collection(value["id"])
+                entry["collection_type"] = coll.get("collection_type")
+                entry["element_extensions"] = sorted(
+                    {
+                        e.get("object", {}).get("extension")
+                        for e in coll.get("elements", [])
+                        if e.get("object", {}).get("extension")
+                    }
+                )
+        except Exception:  # noqa: BLE001 -- unknown metadata -> validator stays permissive
+            pass
+        enriched[key] = entry
+    return enriched
+
+
 @mcp.tool(tags={"workflows", "write", "extended"})
 def invoke_workflow(
     workflow_id: str,
@@ -3032,6 +3060,33 @@ def invoke_workflow(
 
     try:
         gi: GalaxyInstance = state["gi"]
+
+        # Preflight: validate supplied inputs against the workflow's slots.
+        if inputs:
+            try:
+                slots, _prov = _resolve_workflow_slots(gi, workflow_id, history_id)
+                mapping = _get_datatypes_mapping(gi)
+                supplied = _enrich_supplied_inputs(gi, inputs)
+                verdict = validate_inputs(slots, supplied, mapping)
+            except Exception:  # noqa: BLE001 -- never let preflight failure block a valid run
+                verdict = {"rejects": [], "warnings": []}
+            if verdict["rejects"]:
+                template = build_workflow_input_template(slots, warnings=verdict["warnings"])
+                lines = [
+                    f"  - step {r['step_index']} ({r.get('label', '?')}): {r['reason']}"
+                    for r in verdict["rejects"]
+                ]
+                retry_hint = (
+                    "\n\nExpected input slots"
+                    " (fill and retry with inputs_by='step_index|step_uuid'):\n"
+                )
+                raise ValueError(
+                    "Workflow inputs failed validation; not submitting:\n"
+                    + "\n".join(lines)
+                    + retry_hint
+                    + json.dumps(template["slots"], indent=2, default=str)
+                )
+
         resolved_inputs_by = cast(
             Literal["step_index|step_uuid", "step_index", "step_id", "step_uuid", "name"],
             inputs_by,
@@ -3051,6 +3106,12 @@ def invoke_workflow(
             message=f"Invoked workflow '{workflow_id}'",
         )
     except Exception as e:
+        hint = ""
+        with contextlib.suppress(Exception):
+            slots, _ = _resolve_workflow_slots(gi, workflow_id, history_id)
+            hint = "\n\nWorkflow input slots:\n" + json.dumps(
+                build_workflow_input_template(slots)["slots"], indent=2, default=str
+            )
         raise ValueError(
             format_error(
                 "Invoke workflow",
@@ -3062,6 +3123,7 @@ def invoke_workflow(
                     "inputs_by": inputs_by,
                 },
             )
+            + hint
         ) from e
 
 
