@@ -2,9 +2,14 @@
 Test workflow-related operations
 """
 
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
+
+from galaxy_mcp.server import (
+    _DATATYPES_MAPPING_CACHE,
+    _get_datatypes_mapping,
+)
 
 from .test_helpers import (
     cancel_workflow_invocation_fn,
@@ -362,3 +367,25 @@ class TestWorkflowOperations:
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             with pytest.raises(ValueError, match="Cancel workflow invocation failed"):
                 cancel_workflow_invocation_fn("invalid_invocation")
+
+
+# ---------------------------------------------------------------------------
+# Task 8: cached datatypes-mapping fetch
+# ---------------------------------------------------------------------------
+
+
+def test_get_datatypes_mapping_caches_per_base_url():
+    _DATATYPES_MAPPING_CACHE.clear()
+    gi = Mock()
+    gi.base_url = "https://g.example/api"
+    gi.url = "https://g.example/api"
+    resp = Mock()
+    resp.status_code = 200
+    resp.json.return_value = {
+        "datatypes_mapping": {"ext_to_class_name": {"bam": "B"}, "class_to_classes": {}}
+    }
+    gi.make_get_request.return_value = resp
+    m1 = _get_datatypes_mapping(gi)
+    _ = _get_datatypes_mapping(gi)
+    assert m1["ext_to_class_name"]["bam"] == "B"
+    assert gi.make_get_request.call_count == 1  # second call served from cache

@@ -102,6 +102,7 @@ def mock_galaxy_instance():
 def _reset_galaxy_state():
     """Reset galaxy state for each test"""
     from galaxy_mcp.server import (
+        _DATATYPES_MAPPING_CACHE,
         _TOOL_SCHEMA_CACHE,
         _session_connections,
         galaxy_state,
@@ -111,8 +112,9 @@ def _reset_galaxy_state():
     # Clear lru_cache to prevent test pollution
     get_manifest_json.cache_clear()
 
-    # Clear schema cache to prevent cross-test pollution
+    # Clear schema caches to prevent cross-test pollution
     _TOOL_SCHEMA_CACHE.clear()
+    _DATATYPES_MAPPING_CACHE.clear()
 
     # Save original state
     original_state = galaxy_state.copy()

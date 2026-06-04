@@ -229,6 +229,30 @@ def format_error(action: str, error: Exception, context: dict | None = None) -> 
 # version is not part of the key because bioblend's show_tool fetches the default version only.
 _TOOL_SCHEMA_CACHE: dict[tuple[str | None, str], dict[str, Any]] = {}
 
+# Cache Galaxy's datatype class mapping per base URL -- it's static for a given server version,
+# so one fetch per server is fine even across many requests.
+_DATATYPES_MAPPING_CACHE: dict[str | None, dict[str, Any]] = {}
+
+
+def _get_datatypes_mapping(gi: GalaxyInstance) -> dict[str, Any]:
+    """Fetch and cache the datatypes class mapping (per Galaxy base URL).
+
+    User-independent, so a base-URL-keyed cache is safe. Returns the inner
+    ``datatypes_mapping`` object: {ext_to_class_name, class_to_classes}.
+    """
+    key = getattr(gi, "base_url", None)
+    if key in _DATATYPES_MAPPING_CACHE:
+        return _DATATYPES_MAPPING_CACHE[key]
+    resp = gi.make_get_request(f"{gi.url}/api/datatypes/types_and_mapping?upload_only=false")
+    if resp.status_code != 200:
+        mapping: dict[str, Any] = {"ext_to_class_name": {}, "class_to_classes": {}}
+    else:
+        mapping = resp.json().get(
+            "datatypes_mapping", {"ext_to_class_name": {}, "class_to_classes": {}}
+        )
+    _DATATYPES_MAPPING_CACHE[key] = mapping
+    return mapping
+
 
 def _get_tool_schema(gi: GalaxyInstance, tool_id: str) -> dict[str, Any]:
     """Fetch (and cache) a tool's io_details schema using the given request-scoped client."""
