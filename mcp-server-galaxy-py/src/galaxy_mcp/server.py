@@ -739,6 +739,29 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
         raise ValueError(error_msg) from e
 
 
+def connect_global(url: str, api_key: str) -> GalaxyResult:
+    """Establish a process-global Galaxy connection for single-user clients.
+
+    Unlike the connect() MCP tool -- which is OAuth/session-aware for multi-user
+    servers and deliberately does not write global state -- this always seeds the
+    module-global galaxy_state. It is intended ONLY for single-user, single-process
+    contexts such as the gxy CLI, and must never be called inside the multi-tenant
+    HTTP server, where it would leak one user's credentials into the global default.
+    """
+    normalized = url if url.endswith("/") else f"{url}/"
+    gi = _make_thread_safe(GalaxyInstance(url=normalized, key=api_key, user_agent=USER_AGENT))
+    user_info = gi.users.get_current_user()  # validates the credentials
+    galaxy_state["url"] = normalized
+    galaxy_state["api_key"] = api_key
+    galaxy_state["gi"] = gi
+    galaxy_state["connected"] = True
+    return GalaxyResult(
+        data={"connected": True, "user": user_info, "url": normalized, "auth": "global"},
+        success=True,
+        message=f"Connected to Galaxy at {normalized}",
+    )
+
+
 @mcp.tool(tags={"tools", "read", "extended"})
 def search_tools_by_name(query: str) -> GalaxyResult:
     """

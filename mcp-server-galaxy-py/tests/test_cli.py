@@ -454,3 +454,29 @@ class TestPlanemoProfiles:
         assert result.exit_code == 0
         output = json.loads(result.stdout)
         assert output["data"]["connected"] is True
+
+
+class TestConnectGlobal:
+    """server.connect_global seeds the process-global connection for the CLI."""
+
+    def test_connect_global_seeds_state_and_validates(self, monkeypatch):
+        import galaxy_mcp.server as server
+
+        fake_user = {"username": "testuser"}
+        fake_gi = Mock()
+        fake_gi.users.get_current_user.return_value = fake_user
+
+        # Reset global state, then stub the GalaxyInstance constructor + thread-safe wrap.
+        monkeypatch.setitem(server.galaxy_state, "gi", None)
+        monkeypatch.setitem(server.galaxy_state, "connected", False)
+        monkeypatch.setattr(server, "GalaxyInstance", Mock(return_value=fake_gi))
+        monkeypatch.setattr(server, "_make_thread_safe", lambda gi: gi)
+
+        result = server.connect_global("https://example.org", "key123")
+
+        assert result.success is True
+        assert result.data["connected"] is True
+        assert result.data["url"] == "https://example.org/"  # normalized trailing slash
+        assert server.galaxy_state["connected"] is True
+        assert server.galaxy_state["gi"] is fake_gi
+        fake_gi.users.get_current_user.assert_called_once()
