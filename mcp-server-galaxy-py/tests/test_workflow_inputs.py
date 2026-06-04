@@ -1,4 +1,7 @@
-from galaxy_mcp.workflow_inputs import normalize_ga_steps, subtype_satisfies
+import json as _json
+from pathlib import Path
+
+from galaxy_mcp.workflow_inputs import normalize_ga_steps, normalize_run_model, subtype_satisfies
 
 # Minimal slice of /api/datatypes/types_and_mapping
 MAPPING = {
@@ -122,3 +125,33 @@ def test_normalize_ga_steps_parameter_input():
     assert s["src"] is None
     assert s["parameter_type"] == "text"
     assert s["optional"] is True
+
+
+# ---------------------------------------------------------------------------
+# Task 4: style=run normalizer (fixture-driven)
+# ---------------------------------------------------------------------------
+
+_FIXTURE = Path(__file__).parent / "testdata" / "wf_style_run_rnaseq.json"
+
+
+def test_normalize_run_model_returns_slot_contract():
+    run_dict = _json.loads(_FIXTURE.read_text())
+    slots = normalize_run_model(run_dict)
+    assert slots, "expected at least one input slot"
+    for s in slots:
+        assert set(s) == {
+            "step_index",
+            "step_uuid",
+            "label",
+            "input_type",
+            "src",
+            "accepted_formats",
+            "collection_type",
+            "parameter_type",
+            "optional",
+        }
+        assert s["input_type"] in {"data", "data_collection", "parameter"}
+        assert isinstance(s["accepted_formats"], list)
+    # step indices are ints and unique
+    idx = [s["step_index"] for s in slots]
+    assert idx == sorted(set(idx))

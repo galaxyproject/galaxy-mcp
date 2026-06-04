@@ -88,3 +88,51 @@ def normalize_ga_steps(definition: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     return slots
+
+
+# style=run step "step_type" -> our input_type. Galaxy uses the same
+# data_input/data_collection_input/parameter_input discriminators here.
+def normalize_run_model(run_dict: dict[str, Any]) -> list[dict[str, Any]]:
+    """Normalize a style=run workflow model into input slots (the slot contract).
+
+    style=run is the webapp's own run-form serialization; for data inputs its
+    ``extensions`` already reflect Galaxy's downstream-consumer resolution. We
+    consume it rather than reconstruct from connections.
+    """
+    raw_steps = run_dict.get("steps")
+    if isinstance(raw_steps, dict):
+        step_iter = [raw_steps[k] for k in sorted(raw_steps, key=lambda k: int(k))]
+    else:
+        step_iter = list(raw_steps or [])
+    slots: list[dict[str, Any]] = []
+    for step in step_iter:
+        input_type = _INPUT_TYPE_MAP.get(step.get("step_type") or step.get("type", ""))
+        if input_type is None:
+            continue
+        index = int(step.get("step_index", step.get("order_index", step.get("id"))))
+        # The run model nests the actual param under "inputs"[0] for input steps.
+        param = (step.get("inputs") or [{}])[0]
+        ctype = param.get("collection_type")
+        if not ctype:
+            ctypes = param.get("collection_types")
+            ctype = ctypes[0] if isinstance(ctypes, list) and ctypes else None
+        # style=run uses "step_label" for the step name; param["label"] is a fallback.
+        label = (
+            step.get("step_label")
+            or param.get("label")
+            or f"{_FALLBACK_LABEL[input_type]} (step {index})"
+        )
+        slots.append(
+            {
+                "step_index": index,
+                "step_uuid": step.get("uuid"),
+                "label": label,
+                "input_type": input_type,
+                "src": _SRC_MAP[input_type],
+                "accepted_formats": list(param.get("extensions") or []),
+                "collection_type": ctype,
+                "parameter_type": param.get("parameter_type") or step.get("parameter_type"),
+                "optional": bool(param.get("optional", False)),
+            }
+        )
+    return slots
