@@ -300,3 +300,199 @@ def test_build_template_skeleton_and_slots():
     barcodes = next(s for s in tmpl["slots"] if s["step_index"] == 0)
     assert barcodes["accepted_formats"] == ["tabular"]
     assert tmpl["warnings"][0]["message"] == "m"
+
+
+# ---------------------------------------------------------------------------
+# Fix 1: _collection_type_compatible -- segment comparison, not raw suffix
+# ---------------------------------------------------------------------------
+
+from galaxy_mcp.workflow_inputs import _collection_type_compatible  # noqa: E402
+
+
+def test_collection_type_compatible_list_does_not_satisfy_paired():
+    # "list" does not end with ":paired"; the bare-suffix check wrongly passed before the fix
+    assert _collection_type_compatible("list", "paired") is False
+
+
+def test_collection_type_compatible_raw_suffix_regression():
+    # "list" ends with "st" as a raw string -- must be False
+    assert _collection_type_compatible("list", "st") is False
+
+
+def test_collection_type_compatible_map_over_list_paired():
+    # list:paired can feed a 'paired' slot via map-over
+    assert _collection_type_compatible("list:paired", "paired") is True
+
+
+def test_collection_type_compatible_exact():
+    assert _collection_type_compatible("paired", "paired") is True
+
+
+def test_collection_type_compatible_none_required():
+    assert _collection_type_compatible(None, "list") is True
+
+
+def test_collection_type_compatible_none_supplied():
+    assert _collection_type_compatible("list", None) is True
+
+
+# ---------------------------------------------------------------------------
+# Fix 2: normalize_run_model -- missing/non-numeric step index
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_run_model_skips_steps_with_no_index():
+    """Steps missing all index keys AND steps with a hash-string id must not raise."""
+    run_dict = {
+        "steps": [
+            # well-formed input step
+            {
+                "step_type": "data_input",
+                "step_index": 0,
+                "uuid": "u0",
+                "step_label": "mydata",
+                "inputs": [{"extensions": ["bam"], "optional": False}],
+            },
+            # no step_index, no order_index, no id at all
+            {
+                "step_type": "data_input",
+                "uuid": "u-bad",
+                "step_label": "orphan",
+                "inputs": [{}],
+            },
+            # id is a hash string (Galaxy sometimes uses UUIDs as step ids)
+            {
+                "step_type": "data_input",
+                "id": "abc123def",
+                "uuid": "u-hash",
+                "step_label": "hashstep",
+                "inputs": [{}],
+            },
+        ]
+    }
+    slots = normalize_run_model(run_dict)
+    # only the well-formed slot survives; the two bad ones are skipped
+    assert len(slots) == 1
+    assert slots[0]["step_index"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Fix 3: normalize_ga_steps / find_legacy_warnings -- non-numeric step keys
+# ---------------------------------------------------------------------------
+
+GA_DEF_NONNUMERIC = {
+    "steps": {
+        "0": {
+            "type": "data_input",
+            "label": "good_step",
+            "uuid": "u0",
+            "tool_state": '{"optional": false, "format": ["bam"]}',
+        },
+        # non-numeric key -- should be skipped gracefully
+        "x": {
+            "type": "data_input",
+            "label": "bad_key_step",
+            "uuid": "ux",
+            "tool_state": '{"optional": false}',
+        },
+    }
+}
+
+GA_LEGACY_NONNUMERIC = {
+    "steps": {
+        "0": {
+            "type": "tool",
+            "label": "NormalTool",
+            "tool_state": '{"col": {"__class__": "RuntimeValue"}}',
+        },
+        "x": {
+            "type": "tool",
+            "label": "WeirdKeyTool",
+            "tool_state": '{"val": 1}',
+        },
+    }
+}
+
+
+def test_normalize_ga_steps_nonnumeric_key_does_not_raise():
+    slots = normalize_ga_steps(GA_DEF_NONNUMERIC)
+    # the numeric step survives; the 'x' key is skipped
+    assert len(slots) == 1
+    assert slots[0]["step_index"] == 0
+
+
+def test_find_legacy_warnings_nonnumeric_key_does_not_raise():
+    # should not raise; the tool step with key "0" is flagged; "x" key is handled gracefully
+    warns = find_legacy_warnings(GA_LEGACY_NONNUMERIC)
+    assert any("NormalTool" in w["message"] for w in warns)
+
+
+# ---------------------------------------------------------------------------
+# Fix 4: format / extensions as a bare string
+# ---------------------------------------------------------------------------
+
+GA_DEF_FORMAT_STRING = {
+    "steps": {
+        "0": {
+            "type": "data_input",
+            "label": "bamfile",
+            "uuid": "u0",
+            "tool_state": '{"optional": false, "format": "bam"}',
+        },
+    }
+}
+
+
+def test_normalize_ga_steps_bare_string_format_is_single_element_list():
+    slots = normalize_ga_steps(GA_DEF_FORMAT_STRING)
+    assert slots[0]["accepted_formats"] == ["bam"]
+
+
+def test_normalize_run_model_bare_string_extensions_is_single_element_list():
+    run_dict = {
+        "steps": [
+            {
+                "step_type": "data_input",
+                "step_index": 0,
+                "uuid": "u0",
+                "step_label": "bamfile",
+                "inputs": [{"extensions": "bam", "optional": False}],
+            }
+        ]
+    }
+    slots = normalize_run_model(run_dict)
+    assert slots[0]["accepted_formats"] == ["bam"]
+
+
+# ---------------------------------------------------------------------------
+# Fix 5: duplicate step_index produces a warning
+# ---------------------------------------------------------------------------
+
+
+def test_validate_duplicate_step_index_warns():
+    dup_slots = [
+        {
+            "step_index": 0,
+            "step_uuid": "ua",
+            "label": "first",
+            "input_type": "data",
+            "src": "hda",
+            "accepted_formats": [],
+            "collection_type": None,
+            "parameter_type": None,
+            "optional": True,
+        },
+        {
+            "step_index": 0,
+            "step_uuid": "ub",
+            "label": "second",
+            "input_type": "data",
+            "src": "hda",
+            "accepted_formats": [],
+            "collection_type": None,
+            "parameter_type": None,
+            "optional": True,
+        },
+    ]
+    res = validate_inputs(dup_slots, {}, MAPPING)
+    assert any("0" in w["message"] for w in res["warnings"])

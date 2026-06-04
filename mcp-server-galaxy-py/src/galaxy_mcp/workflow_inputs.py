@@ -9,6 +9,26 @@ tools) lives in server.py. Mirrors tool_inputs.py.
 import json
 from typing import Any
 
+
+def _safe_int(value: Any, default: int | None = None) -> int | None:
+    """Best-effort int coercion; returns ``default`` instead of raising."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_list(value: Any) -> list:
+    """Coerce a possibly-scalar field to a list. A bare string becomes a single-element list."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+_SORT_SENTINEL = 10**9  # sorts non-numeric step keys to the end without crashing
+
 _INPUT_TYPE_MAP = {
     "data_input": "data",
     "data_collection_input": "data_collection",
@@ -67,27 +87,57 @@ def normalize_ga_steps(definition: dict[str, Any]) -> list[dict[str, Any]]:
     """
     steps = definition.get("steps", {})
     slots: list[dict[str, Any]] = []
-    for key, step in sorted(steps.items(), key=lambda kv: int(kv[0])):
+    # Sort numeric keys first (ascending), then non-numeric keys at the end.
+    # Non-numeric keys are skipped below; the sentinel just keeps sort() from crashing.
+    for key, step in sorted(
+        steps.items(), key=lambda kv: (_safe_int(kv[0], _SORT_SENTINEL), kv[0])
+    ):
+        index = _safe_int(key)
+        if index is None:
+            continue  # non-numeric key -- skip; .ga files should never have these
         input_type = _INPUT_TYPE_MAP.get(step.get("type", ""))
         if input_type is None:
             continue
-        index = int(key)
         state = _coerce_state(step.get("tool_state"))
         label = step.get("label") or f"{_FALLBACK_LABEL[input_type]} (step {index})"
         slots.append(
-            {
-                "step_index": index,
-                "step_uuid": step.get("uuid"),
-                "label": label,
-                "input_type": input_type,
-                "src": _SRC_MAP[input_type],
-                "accepted_formats": list(state.get("format") or []),
-                "collection_type": state.get("collection_type"),
-                "parameter_type": state.get("parameter_type"),
-                "optional": bool(state.get("optional", False)),
-            }
+            _make_slot(
+                step_index=index,
+                step_uuid=step.get("uuid"),
+                label=label,
+                input_type=input_type,
+                accepted_formats=_as_list(state.get("format")),
+                collection_type=state.get("collection_type"),
+                parameter_type=state.get("parameter_type"),
+                optional=bool(state.get("optional", False)),
+            )
         )
     return slots
+
+
+def _make_slot(
+    *,
+    step_index: int,
+    step_uuid: str | None,
+    label: str,
+    input_type: str,
+    accepted_formats: list,
+    collection_type: str | None,
+    parameter_type: str | None,
+    optional: bool,
+) -> dict[str, Any]:
+    """Build the 9-key slot contract dict shared by both normalizers."""
+    return {
+        "step_index": step_index,
+        "step_uuid": step_uuid,
+        "label": label,
+        "input_type": input_type,
+        "src": _SRC_MAP[input_type],
+        "accepted_formats": accepted_formats,
+        "collection_type": collection_type,
+        "parameter_type": parameter_type,
+        "optional": optional,
+    }
 
 
 # style=run step "step_type" -> our input_type. Galaxy uses the same
@@ -101,7 +151,10 @@ def normalize_run_model(run_dict: dict[str, Any]) -> list[dict[str, Any]]:
     """
     raw_steps = run_dict.get("steps")
     if isinstance(raw_steps, dict):
-        step_iter = [raw_steps[k] for k in sorted(raw_steps, key=lambda k: int(k))]
+        # non-numeric keys get sorted to the end and skipped below
+        step_iter = [
+            raw_steps[k] for k in sorted(raw_steps, key=lambda k: (_safe_int(k, _SORT_SENTINEL), k))
+        ]
     else:
         step_iter = list(raw_steps or [])
     slots: list[dict[str, Any]] = []
@@ -109,7 +162,12 @@ def normalize_run_model(run_dict: dict[str, Any]) -> list[dict[str, Any]]:
         input_type = _INPUT_TYPE_MAP.get(step.get("step_type") or step.get("type", ""))
         if input_type is None:
             continue
-        index = int(step.get("step_index", step.get("order_index", step.get("id"))))
+        # style=run can expose step_index, order_index, or id; all three may be absent
+        # or may be a hash string on unusual exports -- skip rather than crash.
+        raw_idx = step.get("step_index", step.get("order_index", step.get("id")))
+        index = _safe_int(raw_idx)
+        if index is None:
+            continue
         # The run model nests the actual param under "inputs"[0] for input steps.
         param = (step.get("inputs") or [{}])[0]
         ctype = param.get("collection_type")
@@ -122,18 +180,19 @@ def normalize_run_model(run_dict: dict[str, Any]) -> list[dict[str, Any]]:
             or param.get("label")
             or f"{_FALLBACK_LABEL[input_type]} (step {index})"
         )
+        # parameter_type: style=run puts it on param first, then step. The .ga path
+        # reads it only from tool_state -- different source schemas, intentional asymmetry.
         slots.append(
-            {
-                "step_index": index,
-                "step_uuid": step.get("uuid"),
-                "label": label,
-                "input_type": input_type,
-                "src": _SRC_MAP[input_type],
-                "accepted_formats": list(param.get("extensions") or []),
-                "collection_type": ctype,
-                "parameter_type": param.get("parameter_type") or step.get("parameter_type"),
-                "optional": bool(param.get("optional", False)),
-            }
+            _make_slot(
+                step_index=index,
+                step_uuid=step.get("uuid"),
+                label=label,
+                input_type=input_type,
+                accepted_formats=_as_list(param.get("extensions")),
+                collection_type=ctype,
+                parameter_type=param.get("parameter_type") or step.get("parameter_type"),
+                optional=bool(param.get("optional", False)),
+            )
         )
     return slots
 
@@ -155,7 +214,10 @@ def find_legacy_warnings(definition: dict[str, Any]) -> list[dict[str, str]]:
     and are NOT flagged.
     """
     warnings: list[dict[str, str]] = []
-    for key, step in sorted(definition.get("steps", {}).items(), key=lambda kv: int(kv[0])):
+    for key, step in sorted(
+        definition.get("steps", {}).items(),
+        key=lambda kv: (_safe_int(kv[0], _SORT_SENTINEL), kv[0]),
+    ):
         if step.get("type") != "tool":
             continue
         if _has_runtime_value(_coerce_state(step.get("tool_state"))):
@@ -178,8 +240,9 @@ def _collection_type_compatible(supplied: str | None, required: str | None) -> b
         return True
     if supplied == required:
         return True
-    # map-over: a list:paired can feed a 'paired' slot, etc. (suffix match)
-    return supplied.endswith(":" + required) or supplied.endswith(required)
+    # map-over: a list:paired collection can feed a 'paired' (or 'list:paired') slot.
+    # Compare colon-delimited segments, not a raw string suffix.
+    return supplied.split(":")[-1] == required or supplied.endswith(":" + required)
 
 
 def validate_inputs(
@@ -192,9 +255,25 @@ def validate_inputs(
     ``element_extensions``; parameter entries are scalars. Rejects are provable
     structural/datatype mismatches; warnings are inferred/uncertain.
     """
-    by_index = {str(s["step_index"]): s for s in slots}
     rejects: list[dict[str, Any]] = []
     warnings: list[dict[str, Any]] = []
+    # Detect duplicate step_index values before collapsing -- silent collision
+    # would validate only the last slot, hiding the schema problem.
+    seen: set[str] = set()
+    for s in slots:
+        idx = str(s["step_index"])
+        if idx in seen:
+            warnings.append(
+                {
+                    "step_index": idx,
+                    "message": (
+                        f"Workflow has multiple input slots sharing step_index {idx};"
+                        f" only one will be validated."
+                    ),
+                }
+            )
+        seen.add(idx)
+    by_index = {str(s["step_index"]): s for s in slots}
 
     for key, value in supplied.items():
         slot = by_index.get(str(key))
