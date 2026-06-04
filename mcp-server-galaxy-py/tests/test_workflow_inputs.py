@@ -2,6 +2,7 @@ import json as _json
 from pathlib import Path
 
 from galaxy_mcp.workflow_inputs import (
+    build_workflow_input_template,
     find_legacy_warnings,
     normalize_ga_steps,
     normalize_run_model,
@@ -282,3 +283,20 @@ def test_validate_unknown_step_index_is_warned_not_rejected():
     res = validate_inputs(SLOTS, supplied, MAP)
     assert res["rejects"] == []
     assert any("99" in w["message"] for w in res["warnings"])
+
+
+# ---------------------------------------------------------------------------
+# Task 7: template builder
+# ---------------------------------------------------------------------------
+
+
+def test_build_template_skeleton_and_slots():
+    tmpl = build_workflow_input_template(SLOTS, warnings=[{"kind": "x", "message": "m"}])
+    assert tmpl["inputs_by"] == "step_index|step_uuid"
+    # placeholders keyed by step_index
+    assert tmpl["inputs_template"]["0"] == {"src": "hda", "id": "<dataset_id>"}
+    assert tmpl["inputs_template"]["1"] == {"src": "hdca", "id": "<collection_id>"}
+    # slot summary carries the human-facing constraints
+    barcodes = next(s for s in tmpl["slots"] if s["step_index"] == 0)
+    assert barcodes["accepted_formats"] == ["tabular"]
+    assert tmpl["warnings"][0]["message"] == "m"

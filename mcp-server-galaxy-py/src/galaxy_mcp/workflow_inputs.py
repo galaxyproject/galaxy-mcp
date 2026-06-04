@@ -322,3 +322,26 @@ def validate_inputs(
                 }
             )
     return {"rejects": rejects, "warnings": warnings}
+
+
+def _placeholder_for(slot: dict[str, Any]) -> Any:
+    if slot["input_type"] == "data":
+        return {"src": "hda", "id": "<dataset_id>"}
+    if slot["input_type"] == "data_collection":
+        return {"src": "hdca", "id": "<collection_id>"}
+    return "<value>"
+
+
+def build_workflow_input_template(
+    slots: list[dict[str, Any]], warnings: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    """Assemble the model-facing template: a ready-to-fill skeleton keyed by
+    step_index, the per-slot constraint summary, the invoke key hint, and any
+    legacy warnings.
+    """
+    return {
+        "inputs_template": {str(s["step_index"]): _placeholder_for(s) for s in slots},
+        "slots": slots,
+        "inputs_by": "step_index|step_uuid",
+        "warnings": warnings or [],
+    }
