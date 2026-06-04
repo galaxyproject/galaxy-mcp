@@ -517,3 +517,29 @@ class TestConnectionBootstrap:
         assert result.exit_code == 0
         assert called["url"] == "https://flagged.example.org"
         assert called["api_key"] == "flagkey"
+
+
+class TestIwcWithoutCredentials:
+    def test_recommend_works_without_any_credentials(self, monkeypatch):
+        """IWC discovery must not require a Galaxy connection."""
+        monkeypatch.delenv("GALAXY_URL", raising=False)
+        monkeypatch.delenv("GALAXY_API_KEY", raising=False)
+
+        from galaxy_mcp.server import GalaxyResult
+
+        mock_result = GalaxyResult(
+            data=[{"trsID": "wf1", "name": "RNA-seq DE"}],
+            success=True,
+            message="1 recommendation",
+            count=1,
+        )
+        with patch(
+            "galaxy_mcp.cli.commands.iwc.recommend_iwc_workflows",
+            return_value=mock_result,
+        ) as mock:
+            result = runner.invoke(app, ["iwc", "recommend", "differential expression"])
+
+        assert result.exit_code == 0
+        output = json.loads(result.stdout)
+        assert output["count"] == 1
+        mock.assert_called_once()
