@@ -125,6 +125,51 @@ Default is `full`, which keeps the existing catalog unchanged. CodeMode is usefu
 
 The server also ships agent-facing usage guidance via the MCP `instructions` field (returned during the initial handshake). It explains the typical workflow, the difference between MCP tools and Galaxy tools (e.g. FastQC isn't an MCP tool -- find it via `search_tools_by_name`), and -- when code mode is active -- how to use `run_galaxy_tool` and `call_tool`. Agents that respect the `instructions` field will read this without you having to prompt them.
 
+## `gxy` command-line interface
+
+`gxy` is a JSON-first CLI over the same Galaxy operations the MCP server exposes,
+for humans, shell scripts, and CI. It reuses the server's tool functions directly
+-- no separate Galaxy logic -- so behavior matches the MCP server.
+
+> **Agents:** for LLM agents, prefer the MCP server (and `GALAXY_MCP_DISCOVERY_MODE=code`
+> code-mode) rather than this CLI. Agent-grade output guarantees are not part of this
+> tool yet.
+
+### Configuration
+
+Credentials resolve in this order: command-line flags > environment
+(`GALAXY_URL`, `GALAXY_API_KEY`) > `~/.galaxy-mcp/config.toml` > planemo profiles
+(`~/.planemo/profiles/<name>/`).
+
+```toml
+# ~/.galaxy-mcp/config.toml
+[default]
+url = "https://usegalaxy.org/"
+api_key = "your-api-key"
+
+[eu]
+url = "https://usegalaxy.eu/"
+api_key = "eu-api-key"
+```
+
+### Examples
+
+```bash
+# Discover curated IWC workflows -- no Galaxy account needed
+gxy iwc recommend "differential expression from RNA-seq" --limit 3
+
+# Search tools and inspect one (requires connection)
+gxy tools search fastqc
+gxy --pretty tools details toolshed.g2.bx.psu.edu/repos/.../fastqc/0.74
+
+# Script with jq
+HIST_ID=$(gxy history create "RNA-seq run" | jq -r '.data.id')
+gxy --profile eu history list | jq '.data[] | {id, name}'
+
+# Shell completion
+gxy --install-completion
+```
+
 ## Available MCP Tools
 
 The Python implementation provides the following MCP tools:
