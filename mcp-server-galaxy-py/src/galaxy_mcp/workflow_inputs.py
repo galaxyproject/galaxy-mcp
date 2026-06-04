@@ -6,7 +6,29 @@ function of its arguments so it is trivially unit-testable. The I/O wiring
 tools) lives in server.py. Mirrors tool_inputs.py.
 """
 
+import json
 from typing import Any
+
+_INPUT_TYPE_MAP = {
+    "data_input": "data",
+    "data_collection_input": "data_collection",
+    "parameter_input": "parameter",
+}
+_SRC_MAP = {"data": "hda", "data_collection": "hdca", "parameter": None}
+_FALLBACK_LABEL = {
+    "data": "Input dataset",
+    "data_collection": "Input dataset collection",
+    "parameter": "Input parameter",
+}
+
+
+def _coerce_state(tool_state: Any) -> dict[str, Any]:
+    if isinstance(tool_state, str):
+        try:
+            return json.loads(tool_state)
+        except (ValueError, TypeError):
+            return {}
+    return tool_state if isinstance(tool_state, dict) else {}
 
 
 def subtype_satisfies(supplied_ext: str, accepted_exts: list[str], mapping: dict[str, Any]) -> bool:
@@ -33,3 +55,36 @@ def subtype_satisfies(supplied_ext: str, accepted_exts: list[str], mapping: dict
         if accepted_class == supplied_class or accepted_class in ancestry:
             return True
     return False
+
+
+def normalize_ga_steps(definition: dict[str, Any]) -> list[dict[str, Any]]:
+    """Normalize a .ga / IWC-manifest workflow ``definition`` into input slots.
+
+    Reads ``definition["steps"]`` (dict keyed by string order_index), keeps only
+    data_input / data_collection_input / parameter_input steps, and parses each
+    step's ``tool_state`` for the declared constraints. Absent ``format`` means
+    "no restriction" (empty accepted_formats).
+    """
+    steps = definition.get("steps", {})
+    slots: list[dict[str, Any]] = []
+    for key, step in sorted(steps.items(), key=lambda kv: int(kv[0])):
+        input_type = _INPUT_TYPE_MAP.get(step.get("type", ""))
+        if input_type is None:
+            continue
+        index = int(key)
+        state = _coerce_state(step.get("tool_state"))
+        label = step.get("label") or f"{_FALLBACK_LABEL[input_type]} (step {index})"
+        slots.append(
+            {
+                "step_index": index,
+                "step_uuid": step.get("uuid"),
+                "label": label,
+                "input_type": input_type,
+                "src": _SRC_MAP[input_type],
+                "accepted_formats": list(state.get("format") or []),
+                "collection_type": state.get("collection_type"),
+                "parameter_type": state.get("parameter_type"),
+                "optional": bool(state.get("optional", False)),
+            }
+        )
+    return slots
