@@ -136,3 +136,37 @@ def normalize_run_model(run_dict: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     return slots
+
+
+def _has_runtime_value(obj: Any) -> bool:
+    """True if ``obj`` contains a bare RuntimeValue marker (not ConnectedValue)."""
+    if isinstance(obj, dict):
+        if obj.get("__class__") == "RuntimeValue":
+            return True
+        return any(_has_runtime_value(v) for v in obj.values())
+    if isinstance(obj, list):
+        return any(_has_runtime_value(v) for v in obj)
+    return False
+
+
+def find_legacy_warnings(definition: dict[str, Any]) -> list[dict[str, str]]:
+    """Warn on tool steps carrying unconnected RuntimeValue params (the real
+    legacy-run-form trigger). Bare ``parameter_input`` steps are formal inputs
+    and are NOT flagged.
+    """
+    warnings: list[dict[str, str]] = []
+    for key, step in sorted(definition.get("steps", {}).items(), key=lambda kv: int(kv[0])):
+        if step.get("type") != "tool":
+            continue
+        if _has_runtime_value(_coerce_state(step.get("tool_state"))):
+            name = step.get("label") or step.get("tool_id") or f"step {key}"
+            warnings.append(
+                {
+                    "kind": "legacy_runtime_value",
+                    "message": (
+                        f"Tool step '{name}' has a RuntimeValue parameter set at runtime "
+                        f"(legacy run-form pattern); the workflow may not run cleanly via the API."
+                    ),
+                }
+            )
+    return warnings

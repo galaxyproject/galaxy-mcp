@@ -1,7 +1,12 @@
 import json as _json
 from pathlib import Path
 
-from galaxy_mcp.workflow_inputs import normalize_ga_steps, normalize_run_model, subtype_satisfies
+from galaxy_mcp.workflow_inputs import (
+    find_legacy_warnings,
+    normalize_ga_steps,
+    normalize_run_model,
+    subtype_satisfies,
+)
 
 # Minimal slice of /api/datatypes/types_and_mapping
 MAPPING = {
@@ -155,3 +160,38 @@ def test_normalize_run_model_returns_slot_contract():
     # step indices are ints and unique
     idx = [s["step_index"] for s in slots]
     assert idx == sorted(set(idx))
+
+
+# ---------------------------------------------------------------------------
+# Task 5: legacy RuntimeValue scanner
+# ---------------------------------------------------------------------------
+
+GA_LEGACY = {
+    "steps": {
+        "0": {
+            "type": "parameter_input",
+            "label": "p",
+            "tool_state": '{"parameter_type":"text"}',
+        },
+        "1": {  # tool step with an unconnected RuntimeValue -> legacy
+            "type": "tool",
+            "label": "Cut",
+            "tool_state": (
+                '{"col": {"__class__": "RuntimeValue"}, "ref": {"__class__": "ConnectedValue"}}'
+            ),
+        },
+        "2": {"type": "tool", "label": "Clean", "tool_state": '{"opt": "x"}'},
+    }
+}
+
+
+def test_find_legacy_warnings_flags_runtimevalue_not_parameter_input():
+    warns = find_legacy_warnings(GA_LEGACY)
+    joined = " ".join(w["message"] for w in warns)
+    assert "RuntimeValue" in joined
+    assert "Cut" in joined  # the offending tool step is named
+    assert "parameter_input" not in joined  # bare parameter_input is NOT flagged
+
+
+def test_find_legacy_warnings_clean_workflow_is_empty():
+    assert find_legacy_warnings({"steps": {"0": {"type": "tool", "tool_state": '{"a":1}'}}}) == []
