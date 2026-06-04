@@ -17,11 +17,6 @@ from ..output import output_error, output_result
 app = typer.Typer(name="dataset", help="Manage datasets", no_args_is_help=True)
 
 
-def _fn(tool):
-    """Extract the underlying function from a FastMCP tool."""
-    return tool.fn if hasattr(tool, "fn") else tool
-
-
 @app.command("details")
 def details(
     dataset_id: Annotated[str, typer.Argument(help="Dataset ID")],
@@ -34,7 +29,7 @@ def details(
 ) -> None:
     """Get detailed information about a dataset."""
     try:
-        result = _fn(get_dataset_details)(
+        result = get_dataset_details(
             dataset_id=dataset_id,
             include_preview=preview,
             preview_lines=preview_lines,
@@ -55,7 +50,7 @@ def download(
 ) -> None:
     """Download a dataset from Galaxy."""
     try:
-        result = _fn(download_dataset)(
+        result = download_dataset(
             dataset_id=dataset_id,
             file_path=output,
             require_ok_state=not force,
@@ -75,7 +70,7 @@ def upload(
 ) -> None:
     """Upload a local file to Galaxy."""
     try:
-        result = _fn(upload_file)(path=path, history_id=history_id)
+        result = upload_file(path=path, history_id=history_id)
         output_result(result)
     except Exception as e:
         output_error(str(e))
@@ -96,7 +91,7 @@ def upload_url(
 ) -> None:
     """Upload a file from URL to Galaxy."""
     try:
-        result = _fn(upload_file_from_url)(
+        result = upload_file_from_url(
             url=url,
             history_id=history_id,
             file_type=file_type,
@@ -118,7 +113,7 @@ def job(
 ) -> None:
     """Get job details for a dataset."""
     try:
-        result = _fn(get_job_details)(dataset_id=dataset_id, history_id=history_id)
+        result = get_job_details(dataset_id=dataset_id, history_id=history_id)
         output_result(result)
     except Exception as e:
         output_error(str(e))

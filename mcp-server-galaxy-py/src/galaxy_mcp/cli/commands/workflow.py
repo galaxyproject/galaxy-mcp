@@ -18,11 +18,6 @@ from ..output import output_error, output_result
 app = typer.Typer(name="workflow", help="Manage and run workflows", no_args_is_help=True)
 
 
-def _fn(tool):
-    """Extract the underlying function from a FastMCP tool."""
-    return tool.fn if hasattr(tool, "fn") else tool
-
-
 @app.command("list")
 def list_wf(
     workflow_id: Annotated[str | None, typer.Option("--id", help="Specific workflow ID")] = None,
@@ -31,7 +26,7 @@ def list_wf(
 ) -> None:
     """List workflows available in Galaxy."""
     try:
-        result = _fn(list_workflows)(workflow_id=workflow_id, name=name, published=published)
+        result = list_workflows(workflow_id=workflow_id, name=name, published=published)
         output_result(result)
     except Exception as e:
         output_error(str(e))
@@ -45,7 +40,7 @@ def details(
 ) -> None:
     """Get detailed information about a workflow."""
     try:
-        result = _fn(get_workflow_details)(workflow_id=workflow_id, version=version)
+        result = get_workflow_details(workflow_id=workflow_id, version=version)
         output_result(result)
     except Exception as e:
         output_error(str(e))
@@ -98,7 +93,7 @@ def invoke(
             raise typer.Exit(1)
 
     try:
-        result = _fn(invoke_workflow)(
+        result = invoke_workflow(
             workflow_id=workflow_id,
             inputs=inputs_dict,
             params=params_dict,
@@ -129,7 +124,7 @@ def invocations(
     """View workflow invocations."""
     try:
         view = "element" if detailed else "collection"
-        result = _fn(get_invocations)(
+        result = get_invocations(
             invocation_id=invocation_id,
             workflow_id=workflow_id,
             history_id=history_id,
@@ -149,7 +144,7 @@ def cancel(
 ) -> None:
     """Cancel a running workflow invocation."""
     try:
-        result = _fn(cancel_workflow_invocation)(invocation_id=invocation_id)
+        result = cancel_workflow_invocation(invocation_id=invocation_id)
         output_result(result)
     except Exception as e:
         output_error(str(e))

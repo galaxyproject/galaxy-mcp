@@ -17,11 +17,6 @@ from ..output import output_error, output_result
 app = typer.Typer(name="history", help="Manage Galaxy histories", no_args_is_help=True)
 
 
-def _fn(tool):
-    """Extract the underlying function from a FastMCP tool."""
-    return tool.fn if hasattr(tool, "fn") else tool
-
-
 @app.command("list")
 def list_histories(
     limit: Annotated[int | None, typer.Option("-l", "--limit", help="Maximum histories")] = None,
@@ -30,7 +25,7 @@ def list_histories(
 ) -> None:
     """List user's histories with optional pagination."""
     try:
-        result = _fn(get_histories)(limit=limit, offset=offset, name=name)
+        result = get_histories(limit=limit, offset=offset, name=name)
         output_result(result)
     except Exception as e:
         output_error(str(e))
@@ -41,7 +36,7 @@ def list_histories(
 def ids() -> None:
     """Get a simplified list of history IDs and names."""
     try:
-        result = _fn(list_history_ids)()
+        result = list_history_ids()
         output_result(result)
     except Exception as e:
         output_error(str(e))
@@ -54,7 +49,7 @@ def create(
 ) -> None:
     """Create a new history."""
     try:
-        result = _fn(create_history)(history_name=name)
+        result = create_history(history_name=name)
         output_result(result)
     except Exception as e:
         output_error(str(e))
@@ -67,7 +62,7 @@ def details(
 ) -> None:
     """Get metadata and summary for a history."""
     try:
-        result = _fn(get_history_details)(history_id=history_id)
+        result = get_history_details(history_id=history_id)
         output_result(result)
     except Exception as e:
         output_error(str(e))
@@ -88,7 +83,7 @@ def contents(
     """Get paginated contents of a history."""
     try:
         # visible is the inverse of hidden
-        result = _fn(get_history_contents)(
+        result = get_history_contents(
             history_id=history_id,
             limit=limit,
             offset=offset,

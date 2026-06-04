@@ -102,7 +102,7 @@ class TestToolsCommands:
         )
 
         with patch("galaxy_mcp.cli.commands.tools.search_tools_by_name") as mock:
-            mock.fn = Mock(return_value=mock_result)
+            mock.return_value = mock_result
             result = runner.invoke(app, ["tools", "search", "fastqc"])
 
         assert result.exit_code == 0
@@ -120,7 +120,7 @@ class TestToolsCommands:
         )
 
         with patch("galaxy_mcp.cli.commands.tools.search_tools_by_name") as mock:
-            mock.fn = Mock(return_value=mock_result)
+            mock.return_value = mock_result
             result = runner.invoke(app, ["--pretty", "tools", "search", "fastqc"])
 
         assert result.exit_code == 0
@@ -136,7 +136,7 @@ class TestToolsCommands:
         )
 
         with patch("galaxy_mcp.cli.commands.tools.get_tool_details") as mock:
-            mock.fn = Mock(return_value=mock_result)
+            mock.return_value = mock_result
             result = runner.invoke(app, ["tools", "details", "fastqc"])
 
         assert result.exit_code == 0
@@ -157,7 +157,7 @@ class TestHistoryCommands:
         )
 
         with patch("galaxy_mcp.cli.commands.history.get_histories") as mock:
-            mock.fn = Mock(return_value=mock_result)
+            mock.return_value = mock_result
             result = runner.invoke(app, ["history", "list"])
 
         assert result.exit_code == 0
@@ -173,7 +173,7 @@ class TestHistoryCommands:
         )
 
         with patch("galaxy_mcp.cli.commands.history.create_history") as mock:
-            mock.fn = Mock(return_value=mock_result)
+            mock.return_value = mock_result
             result = runner.invoke(app, ["history", "create", "New History"])
 
         assert result.exit_code == 0
@@ -194,7 +194,7 @@ class TestIWCCommands:
         )
 
         with patch("galaxy_mcp.cli.commands.iwc.search_iwc_workflows") as mock:
-            mock.fn = Mock(return_value=mock_result)
+            mock.return_value = mock_result
             result = runner.invoke(app, ["iwc", "search", "rna-seq"])
 
         assert result.exit_code == 0
@@ -211,7 +211,7 @@ class TestIWCCommands:
         )
 
         with patch("galaxy_mcp.cli.commands.iwc.recommend_iwc_workflows") as mock:
-            mock.fn = Mock(return_value=mock_result)
+            mock.return_value = mock_result
             result = runner.invoke(
                 app, ["iwc", "recommend", "differential expression from RNA-seq"]
             )
@@ -233,7 +233,7 @@ class TestDatasetCommands:
         )
 
         with patch("galaxy_mcp.cli.commands.dataset.get_dataset_details") as mock:
-            mock.fn = Mock(return_value=mock_result)
+            mock.return_value = mock_result
             result = runner.invoke(app, ["dataset", "details", "ds1"])
 
         assert result.exit_code == 0
@@ -254,7 +254,7 @@ class TestWorkflowCommands:
         )
 
         with patch("galaxy_mcp.cli.commands.workflow.list_workflows") as mock:
-            mock.fn = Mock(return_value=mock_result)
+            mock.return_value = mock_result
             result = runner.invoke(app, ["workflow", "list"])
 
         assert result.exit_code == 0
@@ -268,7 +268,7 @@ class TestErrorHandling:
     def test_tool_error(self):
         """Test error handling in tool commands."""
         with patch("galaxy_mcp.cli.commands.tools.search_tools_by_name") as mock:
-            mock.fn = Mock(side_effect=ValueError("Connection failed"))
+            mock.side_effect = ValueError("Connection failed")
             result = runner.invoke(app, ["tools", "search", "test"])
 
         assert result.exit_code == 1

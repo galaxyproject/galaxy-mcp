@@ -20,18 +20,13 @@ from ..output import output_error, output_result
 app = typer.Typer(name="tools", help="Search and run Galaxy tools", no_args_is_help=True)
 
 
-def _fn(tool):
-    """Extract the underlying function from a FastMCP tool."""
-    return tool.fn if hasattr(tool, "fn") else tool
-
-
 @app.command("search")
 def search(
     query: Annotated[str, typer.Argument(help="Search query for tool name/ID/description")],
 ) -> None:
     """Search Galaxy tools by name, ID, or description."""
     try:
-        result = _fn(search_tools_by_name)(query=query)
+        result = search_tools_by_name(query=query)
         output_result(result)
     except Exception as e:
         output_error(str(e))
@@ -44,7 +39,7 @@ def keywords(
 ) -> None:
     """Search Galaxy tools by multiple keywords."""
     try:
-        result = _fn(search_tools_by_keywords)(keywords=keywords)
+        result = search_tools_by_keywords(keywords=keywords)
         output_result(result)
     except Exception as e:
         output_error(str(e))
@@ -60,7 +55,7 @@ def details(
 ) -> None:
     """Get detailed information about a specific tool."""
     try:
-        result = _fn(get_tool_details)(tool_id=tool_id, io_details=io_details)
+        result = get_tool_details(tool_id=tool_id, io_details=io_details)
         output_result(result)
     except Exception as e:
         output_error(str(e))
@@ -76,7 +71,7 @@ def examples(
 ) -> None:
     """Get example test definitions for a tool."""
     try:
-        result = _fn(get_tool_run_examples)(tool_id=tool_id, tool_version=version)
+        result = get_tool_run_examples(tool_id=tool_id, tool_version=version)
         output_result(result)
     except Exception as e:
         output_error(str(e))
@@ -89,7 +84,7 @@ def citations(
 ) -> None:
     """Get citation information for a tool."""
     try:
-        result = _fn(get_tool_citations)(tool_id=tool_id)
+        result = get_tool_citations(tool_id=tool_id)
         output_result(result)
     except Exception as e:
         output_error(str(e))
@@ -100,7 +95,7 @@ def citations(
 def panel() -> None:
     """Get the tool panel structure (toolbox)."""
     try:
-        result = _fn(get_tool_panel)()
+        result = get_tool_panel()
         output_result(result)
     except Exception as e:
         output_error(str(e))
@@ -129,7 +124,7 @@ def run(
         raise typer.Exit(1)
 
     try:
-        result = _fn(run_tool)(history_id=history_id, tool_id=tool_id, inputs=inputs_dict)
+        result = run_tool(history_id=history_id, tool_id=tool_id, inputs=inputs_dict)
         output_result(result)
     except Exception as e:
         output_error(str(e))

@@ -17,16 +17,11 @@ from ..output import output_error, output_result
 app = typer.Typer(name="iwc", help="Browse and import IWC workflows", no_args_is_help=True)
 
 
-def _fn(tool):
-    """Extract the underlying function from a FastMCP tool."""
-    return tool.fn if hasattr(tool, "fn") else tool
-
-
 @app.command("list")
 def list_workflows() -> None:
     """List all workflows in the IWC manifest."""
     try:
-        result = _fn(get_iwc_workflows)()
+        result = get_iwc_workflows()
         output_result(result)
     except Exception as e:
         output_error(str(e))
@@ -39,7 +34,7 @@ def search(
 ) -> None:
     """Search IWC workflows by name, description, or tags."""
     try:
-        result = _fn(search_iwc_workflows)(query=query)
+        result = search_iwc_workflows(query=query)
         output_result(result)
     except Exception as e:
         output_error(str(e))
@@ -52,7 +47,7 @@ def details(
 ) -> None:
     """Get comprehensive details about an IWC workflow."""
     try:
-        result = _fn(get_iwc_workflow_details)(trs_id=trs_id)
+        result = get_iwc_workflow_details(trs_id=trs_id)
         output_result(result)
     except Exception as e:
         output_error(str(e))
@@ -74,7 +69,7 @@ def recommend(
         gxy iwc recommend "assemble bacterial genome from nanopore reads" --limit 3
     """
     try:
-        result = _fn(recommend_iwc_workflows)(intent=intent, limit=limit)
+        result = recommend_iwc_workflows(intent=intent, limit=limit)
         output_result(result)
     except Exception as e:
         output_error(str(e))
@@ -87,7 +82,7 @@ def import_wf(
 ) -> None:
     """Import an IWC workflow into your Galaxy instance."""
     try:
-        result = _fn(import_workflow_from_iwc)(trs_id=trs_id)
+        result = import_workflow_from_iwc(trs_id=trs_id)
         output_result(result)
     except Exception as e:
         output_error(str(e))
