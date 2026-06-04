@@ -1,0 +1,142 @@
+{
+  "ext_to_class_name": {
+    "data": "galaxy.datatypes.data.Data",
+    "txt": "galaxy.datatypes.data.Text",
+    "tabular": "galaxy.datatypes.tabular.Tabular",
+    "bam": "galaxy.datatypes.binary.Bam",
+    "bed": "galaxy.datatypes.interval.Bed",
+    "fastqsanger": "galaxy.datatypes.sequence.FastqSanger",
+    "fastqsanger.gz": "galaxy.datatypes.registry.FastqSangerGz",
+    "fastq": "galaxy.datatypes.sequence.Fastq",
+    "vcf": "galaxy.datatypes.tabular.Vcf",
+    "gff": "galaxy.datatypes.interval.Gff",
+    "gff3": "galaxy.datatypes.interval.Gff3",
+    "interval": "galaxy.datatypes.interval.Interval",
+    "csv": "galaxy.datatypes.tabular.CSV",
+    "fasta": "galaxy.datatypes.sequence.Fasta",
+    "fastqillumina": "galaxy.datatypes.sequence.FastqIllumina",
+    "sam": "galaxy.datatypes.tabular.Sam",
+    "cram": "galaxy.datatypes.binary.CRAM"
+  },
+  "class_to_classes": {
+    "galaxy.datatypes.data.Text": {
+      "galaxy.datatypes.data.Data": true,
+      "galaxy.datatypes.data.Text": true
+    },
+    "galaxy.datatypes.binary.CRAM": {
+      "galaxy.datatypes.binary.Binary": true,
+      "galaxy.datatypes.data.Data": true,
+      "galaxy.datatypes.binary.CRAM": true
+    },
+    "galaxy.datatypes.interval.Gff3": {
+      "galaxy.datatypes.tabular.Tabular": true,
+      "galaxy.datatypes.interval.Gff3": true,
+      "galaxy.datatypes.tabular.TabularData": true,
+      "galaxy.datatypes.data.Data": true,
+      "galaxy.datatypes.interval.Gff": true,
+      "galaxy.datatypes.data.Text": true
+    },
+    "galaxy.datatypes.tabular.CSV": {
+      "galaxy.datatypes.tabular.CSV": true,
+      "galaxy.datatypes.tabular.TabularData": true,
+      "galaxy.datatypes.data.Data": true,
+      "galaxy.datatypes.data.Text": true,
+      "galaxy.datatypes.tabular.BaseCSV": true
+    },
+    "galaxy.datatypes.data.Data": {
+      "galaxy.datatypes.data.Data": true
+    },
+    "galaxy.datatypes.tabular.Tabular": {
+      "galaxy.datatypes.tabular.Tabular": true,
+      "galaxy.datatypes.data.Data": true,
+      "galaxy.datatypes.tabular.TabularData": true,
+      "galaxy.datatypes.data.Text": true
+    },
+    "galaxy.datatypes.sequence.FastqIllumina": {
+      "galaxy.datatypes.sequence.Sequence": true,
+      "galaxy.datatypes.data.Data": true,
+      "galaxy.datatypes.sequence.FastqIllumina": true,
+      "galaxy.datatypes.sequence.BaseFastq": true,
+      "galaxy.datatypes.sequence.Fastq": true,
+      "galaxy.datatypes.data.Text": true
+    },
+    "galaxy.datatypes.interval.Bed": {
+      "galaxy.datatypes.tabular.Tabular": true,
+      "galaxy.datatypes.interval.Interval": true,
+      "galaxy.datatypes.interval.Bed": true,
+      "galaxy.datatypes.tabular.TabularData": true,
+      "galaxy.datatypes.data.Data": true,
+      "galaxy.datatypes.data.Text": true
+    },
+    "galaxy.datatypes.binary.Bam": {
+      "galaxy.datatypes.binary.Binary": true,
+      "galaxy.datatypes.data.Data": true,
+      "galaxy.datatypes.binary.Bam": true,
+      "galaxy.datatypes.binary.CompressedArchive": true,
+      "galaxy.datatypes.binary.BamNative": true
+    },
+    "galaxy.datatypes.sequence.Fasta": {
+      "galaxy.datatypes.data.Data": true,
+      "galaxy.datatypes.sequence.Sequence": true,
+      "galaxy.datatypes.sequence.Fasta": true,
+      "galaxy.datatypes.data.Text": true
+    },
+    "galaxy.datatypes.registry.FastqSangerGz": {
+      "galaxy.datatypes.binary.Binary": true,
+      "galaxy.datatypes.sequence.Sequence": true,
+      "galaxy.datatypes.data.Data": true,
+      "galaxy.datatypes.binary.GzDynamicCompressedArchive": true,
+      "galaxy.datatypes.sequence.FastqSanger": true,
+      "galaxy.datatypes.registry.FastqSangerGz": true,
+      "galaxy.datatypes.binary.DynamicCompressedArchive": true,
+      "galaxy.datatypes.sequence.BaseFastq": true,
+      "galaxy.datatypes.sequence.Fastq": true,
+      "galaxy.datatypes.data.Text": true,
+      "galaxy.datatypes.binary.CompressedArchive": true
+    },
+    "galaxy.datatypes.sequence.Fastq": {
+      "galaxy.datatypes.sequence.Sequence": true,
+      "galaxy.datatypes.data.Data": true,
+      "galaxy.datatypes.sequence.BaseFastq": true,
+      "galaxy.datatypes.sequence.Fastq": true,
+      "galaxy.datatypes.data.Text": true
+    },
+    "galaxy.datatypes.interval.Interval": {
+      "galaxy.datatypes.tabular.Tabular": true,
+      "galaxy.datatypes.interval.Interval": true,
+      "galaxy.datatypes.tabular.TabularData": true,
+      "galaxy.datatypes.data.Data": true,
+      "galaxy.datatypes.data.Text": true
+    },
+    "galaxy.datatypes.sequence.FastqSanger": {
+      "galaxy.datatypes.sequence.Sequence": true,
+      "galaxy.datatypes.data.Data": true,
+      "galaxy.datatypes.sequence.FastqSanger": true,
+      "galaxy.datatypes.sequence.BaseFastq": true,
+      "galaxy.datatypes.sequence.Fastq": true,
+      "galaxy.datatypes.data.Text": true
+    },
+    "galaxy.datatypes.tabular.Sam": {
+      "galaxy.datatypes.tabular.Tabular": true,
+      "galaxy.datatypes.tabular.TabularData": true,
+      "galaxy.datatypes.data.Data": true,
+      "galaxy.datatypes.tabular.Sam": true,
+      "galaxy.datatypes.data.Text": true
+    },
+    "galaxy.datatypes.tabular.Vcf": {
+      "galaxy.datatypes.tabular.Tabular": true,
+      "galaxy.datatypes.tabular.BaseVcf": true,
+      "galaxy.datatypes.tabular.TabularData": true,
+      "galaxy.datatypes.data.Data": true,
+      "galaxy.datatypes.data.Text": true,
+      "galaxy.datatypes.tabular.Vcf": true
+    },
+    "galaxy.datatypes.interval.Gff": {
+      "galaxy.datatypes.tabular.Tabular": true,
+      "galaxy.datatypes.tabular.TabularData": true,
+      "galaxy.datatypes.data.Data": true,
+      "galaxy.datatypes.interval.Gff": true,
+      "galaxy.datatypes.data.Text": true
+    }
+  }
+}
