@@ -110,6 +110,7 @@ def test_normalize_ga_steps_data_input_restricted():
         "collection_type": None,
         "parameter_type": None,
         "optional": False,
+        "options": [],
     }
 
 
@@ -158,6 +159,7 @@ def test_normalize_run_model_returns_slot_contract():
             "collection_type",
             "parameter_type",
             "optional",
+            "options",
         }
         assert s["input_type"] in {"data", "data_collection", "parameter"}
         assert isinstance(s["accepted_formats"], list)
@@ -590,3 +592,62 @@ def test_clean_readme_summary_strips_headers_and_truncates():
 
 def test_clean_readme_summary_empty():
     assert _clean_readme_summary("") == ""
+
+
+# ---------------------------------------------------------------------------
+# Task 2 (run-guide): options field on the slot contract
+# ---------------------------------------------------------------------------
+
+from pathlib import Path  # noqa: E402
+
+
+def test_ga_enumerated_restrictions_become_options():
+    ga = {
+        "steps": {
+            "0": {
+                "type": "parameter_input",
+                "label": "Strand",
+                "tool_state": '{"parameter_type": "text", "restrictions": ["fwd", "rev"]}',
+            }
+        }
+    }
+    s = normalize_ga_steps(ga)[0]
+    assert s["options"] == [{"label": "fwd", "value": "fwd"}, {"label": "rev", "value": "rev"}]
+
+
+def test_ga_data_input_has_empty_options():
+    ga = {"steps": {"0": {"type": "data_input", "label": "in", "tool_state": "{}"}}}
+    assert normalize_ga_steps(ga)[0]["options"] == []
+
+
+def test_run_model_options_from_triples():
+    # the real style=run shape: inputs[0].options is a list of [label, value, selected]
+    run = {
+        "steps": [
+            {
+                "step_type": "parameter_input",
+                "step_index": 0,
+                "step_label": "Strand",
+                "inputs": [{"options": [["forward", "fwd", False], ["reverse", "rev", True]]}],
+            }
+        ]
+    }
+    s = normalize_run_model(run)[0]
+    assert s["options"] == [
+        {"label": "forward", "value": "fwd"},
+        {"label": "reverse", "value": "rev"},
+    ]
+
+
+def test_run_model_real_fixture_has_strandedness_options():
+    fixture = Path(__file__).parent / "testdata" / "wf_style_run_rnaseq.json"
+    slots = normalize_run_model(_json.loads(fixture.read_text()))
+    strand = next(s for s in slots if s["label"] == "Strandedness")
+    assert {o["value"] for o in strand["options"]} == {
+        "stranded - forward",
+        "stranded - reverse",
+        "unstranded",
+    }
+    ref = next(s for s in slots if s["label"] == "Reference genome")
+    assert ref["options"]
+    assert all("value" in o for o in ref["options"])

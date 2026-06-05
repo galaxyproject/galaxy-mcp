@@ -46,6 +46,22 @@ def _clean_readme_summary(readme: str, max_length: int = 300) -> str:
     return text
 
 
+def _options_from_triples(raw: Any) -> list[dict]:
+    """style=run param options come as [label, value, selected] triples."""
+    if not isinstance(raw, list):
+        return []
+    out: list[dict] = []
+    for item in raw:
+        if isinstance(item, (list, tuple)) and len(item) >= 2:
+            out.append({"label": item[0], "value": item[1]})
+    return out
+
+
+def _options_from_restrictions(raw: Any) -> list[dict]:
+    """.ga enumerated params carry a flat list of allowed string values."""
+    return [{"label": v, "value": v} for v in raw] if isinstance(raw, list) else []
+
+
 _SORT_SENTINEL = 10**9  # sorts non-numeric step keys to the end without crashing
 
 _INPUT_TYPE_MAP = {
@@ -130,6 +146,7 @@ def normalize_ga_steps(definition: dict[str, Any]) -> list[dict[str, Any]]:
                 collection_type=state.get("collection_type"),
                 parameter_type=state.get("parameter_type"),
                 optional=bool(state.get("optional", False)),
+                options=_options_from_restrictions(state.get("restrictions")),
             )
         )
     return slots
@@ -146,8 +163,9 @@ def _make_slot(
     collection_type: str | None,
     parameter_type: str | None,
     optional: bool,
+    options: list,
 ) -> dict[str, Any]:
-    """Build the 10-key slot contract dict shared by both normalizers."""
+    """Build the slot contract dict shared by both normalizers."""
     return {
         "step_index": step_index,
         "step_uuid": step_uuid,
@@ -159,6 +177,7 @@ def _make_slot(
         "collection_type": collection_type,
         "parameter_type": parameter_type,
         "optional": optional,
+        "options": options,
     }
 
 
@@ -215,6 +234,7 @@ def normalize_run_model(run_dict: dict[str, Any]) -> list[dict[str, Any]]:
                 collection_type=ctype,
                 parameter_type=param.get("parameter_type") or step.get("parameter_type"),
                 optional=bool(param.get("optional", False)),
+                options=_options_from_triples(param.get("options")),
             )
         )
     return slots
