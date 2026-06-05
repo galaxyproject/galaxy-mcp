@@ -481,3 +481,43 @@ def build_workflow_input_template(
         "inputs_by": "step_index|step_uuid",
         "warnings": warnings or [],
     }
+
+
+def build_guide(
+    workflow_show: dict[str, Any], run_model: dict[str, Any] | None, verbose: bool
+) -> dict[str, Any]:
+    """Assemble the model-facing run guide from a show_workflow dict.
+
+    summary: full readme when verbose, else a cleaned summary; falls back
+    readme -> help -> annotation. provenance: version + TRS source (always),
+    plus freshness flags from style=run when available. When run_model is None
+    (the .ga fallback path), parameter options weren't resolved -- note it.
+    """
+    readme = workflow_show.get("readme") or ""
+    help_text = workflow_show.get("help") or ""
+    annotation = workflow_show.get("annotation") or ""
+    if readme:
+        summary = readme if verbose else _clean_readme_summary(readme)
+    elif help_text:
+        summary = help_text if verbose else _clean_readme_summary(help_text)
+    else:
+        summary = annotation
+
+    src_meta = workflow_show.get("source_metadata") or {}
+    provenance: dict[str, Any] = {
+        "version": workflow_show.get("version"),
+        "source": {"trs_id": src_meta.get("trs_tool_id"), "trs_url": src_meta.get("trs_url")},
+    }
+    if run_model is not None:
+        provenance["freshness"] = {
+            "has_upgrade_messages": run_model.get("has_upgrade_messages"),
+            "step_version_changes": run_model.get("step_version_changes") or [],
+        }
+
+    guide: dict[str, Any] = {"summary": summary, "annotation": annotation, "provenance": provenance}
+    if run_model is None:
+        guide["notes"] = [
+            "Parameter options (e.g. reference genome) resolve at run time; "
+            "call again with a history_id for resolved values."
+        ]
+    return guide

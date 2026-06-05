@@ -651,3 +651,54 @@ def test_run_model_real_fixture_has_strandedness_options():
     ref = next(s for s in slots if s["label"] == "Reference genome")
     assert ref["options"]
     assert all("value" in o for o in ref["options"])
+
+
+# ---------------------------------------------------------------------------
+# Task 3 (run-guide): build_guide assembles the model-facing run guide
+# ---------------------------------------------------------------------------
+
+from galaxy_mcp.workflow_inputs import build_guide  # noqa: E402
+
+WF_SHOW = {
+    "version": 12,
+    "annotation": "RNA-seq for paired-end data",
+    "readme": "# RNA-Seq\n\nThis runs adapter trimming then alignment then quantification. " * 10,
+    "help": "",
+    "source_metadata": {
+        "trs_tool_id": "#workflow/.../rnaseq-pe/main",
+        "trs_url": "https://dockstore/x",
+    },
+}
+RUN_MODEL = {"has_upgrade_messages": False, "step_version_changes": []}
+
+
+def test_build_guide_summary_is_short_by_default():
+    g = build_guide(WF_SHOW, RUN_MODEL, verbose=False)
+    assert len(g["summary"]) <= 300
+    assert g["annotation"] == "RNA-seq for paired-end data"
+    assert g["provenance"]["version"] == 12
+    assert g["provenance"]["source"]["trs_id"] == "#workflow/.../rnaseq-pe/main"
+    assert g["provenance"]["freshness"] == {
+        "has_upgrade_messages": False,
+        "step_version_changes": [],
+    }
+
+
+def test_build_guide_verbose_returns_full_readme():
+    g = build_guide(WF_SHOW, RUN_MODEL, verbose=True)
+    assert len(g["summary"]) > 300  # full readme, not truncated
+
+
+def test_build_guide_without_run_model_omits_freshness_and_adds_note():
+    g = build_guide(WF_SHOW, None, verbose=False)
+    assert "freshness" not in g["provenance"]
+    assert any("history_id" in n for n in g.get("notes", []))
+
+
+def test_build_guide_falls_back_to_annotation_when_no_readme():
+    g = build_guide(
+        {"version": 1, "annotation": "Just an annotation", "readme": "", "help": ""},
+        None,
+        verbose=False,
+    )
+    assert g["summary"] == "Just an annotation"
