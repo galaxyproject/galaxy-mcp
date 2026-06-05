@@ -442,6 +442,30 @@ def test_resolve_slots_falls_back_to_ga_on_missing_tools_500():
     assert slots[0]["accepted_formats"] == ["tabular"]
 
 
+def test_resolve_slots_requests_instance_false():
+    # Guard the instance flag: workflow_id is a StoredWorkflow id, so the download
+    # must use instance=false -- instance=true silently resolves a different workflow.
+    gi = Mock()
+    gi.url = "https://g/api"
+    resp = Mock()
+    resp.status_code = 200
+    resp.json.return_value = {
+        "steps": [
+            {
+                "step_type": "data_input",
+                "step_index": 0,
+                "step_label": "in",
+                "inputs": [{"extensions": ["tabular"], "optional": False}],
+            }
+        ]
+    }
+    gi.make_get_request.return_value = resp
+    _resolve_workflow_slots(gi, "wfid", history_id="h1")
+    url = gi.make_get_request.call_args.args[0]
+    assert "instance=false" in url
+    assert "instance=true" not in url
+
+
 # ---------------------------------------------------------------------------
 # Task 10: get_workflow_input_template MCP tool
 # ---------------------------------------------------------------------------
