@@ -571,3 +571,22 @@ def test_build_template_omits_acceptable_extensions_from_display_slots():
     tmpl = build_workflow_input_template(slots)
     assert "acceptable_extensions" not in tmpl["slots"][0]
     assert tmpl["slots"][0]["accepted_formats"] == ["txt"]
+
+
+# ---------------------------------------------------------------------------
+# Task 1 (run-guide): _clean_readme_summary moved to the pure module
+# ---------------------------------------------------------------------------
+
+from galaxy_mcp.workflow_inputs import _clean_readme_summary  # noqa: E402
+
+
+def test_clean_readme_summary_strips_headers_and_truncates():
+    md = "# Title\n\nThis workflow does X.\n## Details\nThen Y."
+    out = _clean_readme_summary(md, max_length=40)
+    assert "#" not in out
+    assert out.startswith("This workflow does X.")
+    assert len(out) <= 40
+
+
+def test_clean_readme_summary_empty():
+    assert _clean_readme_summary("") == ""

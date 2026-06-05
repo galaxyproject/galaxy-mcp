@@ -27,6 +27,25 @@ def _as_list(value: Any) -> list:
     return [value]
 
 
+def _clean_readme_summary(readme: str, max_length: int = 300) -> str:
+    """Extract a clean summary from a readme, stripping markdown headers."""
+    if not readme:
+        return ""
+    lines = readme.split("\n")
+    clean_lines: list[str] = []
+    for line in lines:
+        if line.strip().startswith("#"):
+            continue
+        if not clean_lines and not line.strip():
+            continue
+        clean_lines.append(line)
+    text = " ".join(clean_lines)
+    text = " ".join(text.split())
+    if len(text) > max_length:
+        text = text[: max_length - 3].rsplit(" ", 1)[0] + "..."
+    return text
+
+
 _SORT_SENTINEL = 10**9  # sorts non-numeric step keys to the end without crashing
 
 _INPUT_TYPE_MAP = {

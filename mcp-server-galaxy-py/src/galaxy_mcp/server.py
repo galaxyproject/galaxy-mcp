@@ -38,6 +38,7 @@ from galaxy_mcp.tool_inputs import (
     summarize_tool_inputs,
 )
 from galaxy_mcp.workflow_inputs import (
+    _clean_readme_summary,
     build_workflow_input_template,
     find_legacy_warnings,
     normalize_ga_steps,
@@ -2347,34 +2348,6 @@ def get_iwc_workflows() -> GalaxyResult:
         return _fetch_iwc_workflows()
     except Exception as e:
         raise ValueError(f"Failed to fetch IWC workflows: {str(e)}") from e
-
-
-def _clean_readme_summary(readme: str, max_length: int = 300) -> str:
-    """Extract a clean summary from a readme, stripping markdown headers."""
-    if not readme:
-        return ""
-
-    lines = readme.split("\n")
-    clean_lines: list[str] = []
-
-    for line in lines:
-        # Skip markdown headers
-        if line.strip().startswith("#"):
-            continue
-        # Skip empty lines at the start
-        if not clean_lines and not line.strip():
-            continue
-        clean_lines.append(line)
-
-    text = " ".join(clean_lines)
-    # Normalize whitespace
-    text = " ".join(text.split())
-
-    if len(text) > max_length:
-        # Truncate at word boundary
-        text = text[: max_length - 3].rsplit(" ", 1)[0] + "..."
-
-    return text
 
 
 def _extract_tool_names_from_steps(steps: dict) -> list[str]:
