@@ -53,13 +53,13 @@ def _options_from_triples(raw: Any) -> list[dict]:
     out: list[dict] = []
     for item in raw:
         if isinstance(item, (list, tuple)) and len(item) >= 2:
-            out.append({"label": item[0], "value": item[1]})
+            out.append({"label": str(item[0]), "value": str(item[1])})
     return out
 
 
 def _options_from_restrictions(raw: Any) -> list[dict]:
     """.ga enumerated params carry a flat list of allowed string values."""
-    return [{"label": v, "value": v} for v in raw] if isinstance(raw, list) else []
+    return [{"label": str(v), "value": str(v)} for v in raw] if isinstance(raw, list) else []
 
 
 _SORT_SENTINEL = 10**9  # sorts non-numeric step keys to the end without crashing
@@ -146,7 +146,11 @@ def normalize_ga_steps(definition: dict[str, Any]) -> list[dict[str, Any]]:
                 collection_type=state.get("collection_type"),
                 parameter_type=state.get("parameter_type"),
                 optional=bool(state.get("optional", False)),
-                options=_options_from_restrictions(state.get("restrictions")),
+                options=(
+                    _options_from_restrictions(state.get("restrictions"))
+                    if input_type == "parameter"
+                    else []
+                ),
             )
         )
     return slots
@@ -234,7 +238,9 @@ def normalize_run_model(run_dict: dict[str, Any]) -> list[dict[str, Any]]:
                 collection_type=ctype,
                 parameter_type=param.get("parameter_type") or step.get("parameter_type"),
                 optional=bool(param.get("optional", False)),
-                options=_options_from_triples(param.get("options")),
+                options=(
+                    _options_from_triples(param.get("options")) if input_type == "parameter" else []
+                ),
             )
         )
     return slots
@@ -525,10 +531,15 @@ def build_guide(
     readme = workflow_show.get("readme") or ""
     help_text = workflow_show.get("help") or ""
     annotation = workflow_show.get("annotation") or ""
-    if readme:
-        summary = readme if verbose else _clean_readme_summary(readme)
-    elif help_text:
-        summary = help_text if verbose else _clean_readme_summary(help_text)
+    # Pick the first source whose cleaned form has real prose (a headers-only
+    # readme cleans to ""), then render it per verbose. annotation is the last resort.
+    chosen_raw = ""
+    for text in (readme, help_text):
+        if _clean_readme_summary(text).strip():
+            chosen_raw = text
+            break
+    if chosen_raw:
+        summary = chosen_raw if verbose else _clean_readme_summary(chosen_raw)
     else:
         summary = annotation
 

@@ -759,3 +759,79 @@ def test_template_includes_guide_when_provided():
     g = {"summary": "x", "provenance": {"version": 1}}
     t = build_workflow_input_template([_param_slot([])], guide=g)
     assert t["guide"] == g
+
+
+# ---------------------------------------------------------------------------
+# Fix 1 (new): options must only appear on parameter inputs
+# ---------------------------------------------------------------------------
+
+
+def test_ga_data_input_ignores_stray_restrictions():
+    ga = {
+        "steps": {
+            "0": {"type": "data_input", "label": "in", "tool_state": '{"restrictions": ["x", "y"]}'}
+        }
+    }
+    assert normalize_ga_steps(ga)[0]["options"] == []
+
+
+def test_run_data_input_ignores_list_options():
+    run = {
+        "steps": [
+            {
+                "step_type": "data_input",
+                "step_index": 0,
+                "step_label": "in",
+                "inputs": [{"options": [["a", "a", False]]}],
+            }
+        ]
+    }
+    assert normalize_run_model(run)[0]["options"] == []
+
+
+# ---------------------------------------------------------------------------
+# Fix 2 (new): build_guide summary must fall through a headers-only readme
+# ---------------------------------------------------------------------------
+
+
+def test_build_guide_skips_headers_only_readme_for_help():
+    g = build_guide(
+        {
+            "version": 1,
+            "annotation": "ann",
+            "readme": "# Title\n## Sub",
+            "help": "Real help text here.",
+        },
+        None,
+        verbose=False,
+    )
+    assert "Real help text" in g["summary"]
+
+
+def test_build_guide_headers_only_readme_no_help_uses_annotation():
+    g = build_guide(
+        {"version": 1, "annotation": "Just an annotation", "readme": "# Only headers", "help": ""},
+        None,
+        verbose=False,
+    )
+    assert g["summary"] == "Just an annotation"
+
+
+# ---------------------------------------------------------------------------
+# Fix 3 (new): option label/value must be string-coerced
+# ---------------------------------------------------------------------------
+
+
+def test_options_values_are_stringified():
+    run = {
+        "steps": [
+            {
+                "step_type": "parameter_input",
+                "step_index": 0,
+                "step_label": "p",
+                "inputs": [{"options": [["one", 1, False], ["two", 2, True]]}],
+            }
+        ]
+    }
+    opts = normalize_run_model(run)[0]["options"]
+    assert opts == [{"label": "one", "value": "1"}, {"label": "two", "value": "2"}]
