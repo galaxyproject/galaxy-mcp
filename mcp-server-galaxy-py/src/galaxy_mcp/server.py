@@ -2959,7 +2959,11 @@ def _resolve_workflow_slots(
     """Resolve a workflow's input slots. Primary: style=run (webapp's source),
     behind our normalizer. Fallback: the .ga export. Returns (slots, provenance).
     """
-    params = "style=run&instance=true"
+    # instance=false: workflow_id here is a StoredWorkflow id (what show_workflow /
+    # list_workflows hand back). instance=true reinterprets it as a Workflow-version
+    # id and silently resolves a *different* workflow, so we'd template/validate the
+    # wrong inputs.
+    params = "style=run&instance=false"
     if history_id:
         params += f"&history_id={history_id}"
     try:
