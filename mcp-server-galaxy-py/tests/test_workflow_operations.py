@@ -414,8 +414,9 @@ def test_resolve_slots_uses_style_run_when_ok():
         ]
     }
     gi.make_get_request.return_value = resp
-    slots, provenance = _resolve_workflow_slots(gi, "wfid")
+    slots, provenance, run_model = _resolve_workflow_slots(gi, "wfid")
     assert provenance == "style=run"
+    assert run_model is not None
     assert slots[0]["accepted_formats"] == ["tabular"]
     assert slots[0]["label"] == "barcodes"
 
@@ -437,8 +438,9 @@ def test_resolve_slots_falls_back_to_ga_on_missing_tools_500():
             }
         }
     }
-    slots, provenance = _resolve_workflow_slots(gi, "wfid")
+    slots, provenance, run_model = _resolve_workflow_slots(gi, "wfid")
     assert provenance == "ga-fallback"
+    assert run_model is None
     assert slots[0]["accepted_formats"] == ["tabular"]
 
 
@@ -619,3 +621,46 @@ def test_invoke_reject_resolves_slots_only_once(mock_galaxy_instance):
     assert len(download_calls) == 1, (
         f"Expected 1 'download' call (slot resolution), got {len(download_calls)}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Task 5: _resolve_workflow_slots returns the raw run model
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_slots_returns_run_model_on_style_run():
+    gi = Mock()
+    gi.url = "https://g/api"
+    resp = Mock()
+    resp.status_code = 200
+    resp.json.return_value = {
+        "has_upgrade_messages": False,
+        "steps": [
+            {
+                "step_type": "data_input",
+                "step_index": 0,
+                "step_label": "in",
+                "inputs": [{"extensions": ["tabular"], "optional": False}],
+            }
+        ],
+    }
+    gi.make_get_request.return_value = resp
+    slots, provenance, run_model = _resolve_workflow_slots(gi, "wfid")
+    assert provenance == "style=run"
+    assert run_model is not None
+    assert run_model["has_upgrade_messages"] is False
+
+
+def test_resolve_slots_run_model_none_on_ga_fallback():
+    gi = Mock()
+    gi.url = "https://g/api"
+    bad = Mock()
+    bad.status_code = 500
+    bad.text = "x"
+    gi.make_get_request.return_value = bad
+    gi.workflows.export_workflow_dict.return_value = {
+        "steps": {"0": {"type": "data_input", "label": "in", "tool_state": "{}"}}
+    }
+    slots, provenance, run_model = _resolve_workflow_slots(gi, "wfid")
+    assert provenance == "ga-fallback"
+    assert run_model is None

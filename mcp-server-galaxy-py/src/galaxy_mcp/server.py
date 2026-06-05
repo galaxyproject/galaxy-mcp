@@ -2928,9 +2928,11 @@ def get_workflow_details(workflow_id: str, version: int | None = None) -> Galaxy
 
 def _resolve_workflow_slots(
     gi: GalaxyInstance, workflow_id: str, history_id: str | None = None
-) -> tuple[list[dict[str, Any]], str]:
+) -> tuple[list[dict[str, Any]], str, dict[str, Any] | None]:
     """Resolve a workflow's input slots. Primary: style=run (webapp's source),
-    behind our normalizer. Fallback: the .ga export. Returns (slots, provenance).
+    behind our normalizer. Fallback: the .ga export. Returns
+    (slots, provenance, run_model) -- run_model is the parsed style=run dict when
+    that path was used, else None.
     """
     # instance=false: workflow_id here is a StoredWorkflow id (what show_workflow /
     # list_workflows hand back). instance=true reinterprets it as a Workflow-version
@@ -2942,13 +2944,14 @@ def _resolve_workflow_slots(
     try:
         resp = gi.make_get_request(f"{gi.url}/api/workflows/{workflow_id}/download?{params}")
         if resp.status_code == 200:
-            slots = normalize_run_model(resp.json())
+            run_model = resp.json()
+            slots = normalize_run_model(run_model)
             if slots:
-                return slots, "style=run"
+                return slots, "style=run", run_model
     except Exception as e:  # noqa: BLE001 -- fall back on any style=run failure
         logger.info("style=run unavailable for %s (%s); falling back to .ga", workflow_id, e)
     definition = gi.workflows.export_workflow_dict(workflow_id)
-    return normalize_ga_steps(definition), "ga-fallback"
+    return normalize_ga_steps(definition), "ga-fallback", None
 
 
 @mcp.tool(tags={"workflows", "read", "extended"})
@@ -2963,7 +2966,7 @@ def get_workflow_input_template(workflow_id: str, history_id: str | None = None)
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
     try:
-        slots, provenance = _resolve_workflow_slots(gi, workflow_id, history_id)
+        slots, provenance, run_model = _resolve_workflow_slots(gi, workflow_id, history_id)
         try:
             definition = gi.workflows.export_workflow_dict(workflow_id)
             warnings = find_legacy_warnings(definition)
@@ -3052,7 +3055,7 @@ def invoke_workflow(
         # Preflight: validate supplied inputs against the workflow's slots.
         if inputs:
             try:
-                slots, _prov = _resolve_workflow_slots(gi, workflow_id, history_id)
+                slots, _prov, _run = _resolve_workflow_slots(gi, workflow_id, history_id)
                 mapping = _get_datatypes_mapping(gi)
                 supplied = _enrich_supplied_inputs(gi, inputs)
                 verdict = validate_inputs(slots, supplied, mapping)
@@ -3098,7 +3101,7 @@ def invoke_workflow(
     except Exception as e:
         hint = ""
         with contextlib.suppress(Exception):
-            slots, _ = _resolve_workflow_slots(gi, workflow_id, history_id)
+            slots, _, _ = _resolve_workflow_slots(gi, workflow_id, history_id)
             hint = "\n\nWorkflow input slots:\n" + json.dumps(
                 build_workflow_input_template(slots)["slots"], indent=2, default=str
             )
