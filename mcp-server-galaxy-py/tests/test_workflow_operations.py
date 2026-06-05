@@ -740,3 +740,19 @@ def test_template_verbose_returns_full_readme(mock_galaxy_instance):
     with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
         result = get_workflow_input_template_fn("wfid", history_id="h1", verbose=True)
     assert len(result.data["guide"]["summary"]) > 300
+
+
+def test_template_returns_when_show_workflow_fails(mock_galaxy_instance):
+    # show_workflow is best-effort: if it raises, the tool still returns a template
+    # (with a degraded guide), and options still come from the run model.
+    mock_galaxy_instance.url = "https://g/api"
+    mock_galaxy_instance.make_get_request.return_value = _run_resp_with_param()
+    mock_galaxy_instance.workflows.export_workflow_dict.return_value = {"steps": {}}
+    mock_galaxy_instance.workflows.show_workflow.side_effect = Exception("boom")
+    with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        result = get_workflow_input_template_fn("wfid", history_id="h1")
+    assert result.success is True
+    assert "guide" in result.data
+    assert result.data["guide"]["provenance"]["version"] is None
+    strand = next(s for s in result.data["slots"] if s["label"] == "Strandedness")
+    assert strand["options"]

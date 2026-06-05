@@ -2964,7 +2964,9 @@ def get_workflow_input_template(
     Call this before invoke_workflow. Each slot lists its label, expected source
     (hda/hdca), accepted datatypes, collection type, and -- for parameters --
     selectable `options` (including resolved reference-genome values when a
-    history_id is given). `guide` carries a short description and provenance.
+    history_id is given; on the legacy .ga export path options are static and
+    reference genomes resolve at run time -- see `guide.notes`). `guide` carries
+    a short description and provenance.
     Fill `inputs_template` (keyed by step_index) and invoke with
     `inputs_by="step_index|step_uuid"`. Pass `verbose=True` for the full readme
     and uncapped option lists. `warnings` flags legacy patterns.
@@ -2972,6 +2974,9 @@ def get_workflow_input_template(
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
     try:
+        # Three independent best-effort reads of the same workflow: the run model
+        # (_resolve_workflow_slots), the .ga export (legacy warnings), and
+        # show_workflow (guide docs).
         slots, provenance, run_model = _resolve_workflow_slots(gi, workflow_id, history_id)
         try:
             definition = gi.workflows.export_workflow_dict(workflow_id)
