@@ -489,6 +489,12 @@ def test_get_workflow_input_template_tool(mock_galaxy_instance):
     }
     mock_galaxy_instance.make_get_request.return_value = run_resp
     mock_galaxy_instance.workflows.export_workflow_dict.return_value = {"steps": {}}
+    mock_galaxy_instance.workflows.show_workflow.return_value = {
+        "version": 1,
+        "annotation": "",
+        "readme": "",
+        "help": "",
+    }
     with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
         result = get_workflow_input_template_fn("wfid")
     assert result.success is True
@@ -664,3 +670,73 @@ def test_resolve_slots_run_model_none_on_ga_fallback():
     slots, provenance, run_model = _resolve_workflow_slots(gi, "wfid")
     assert provenance == "ga-fallback"
     assert run_model is None
+
+
+# ---------------------------------------------------------------------------
+# Task 6: get_workflow_input_template gains verbose, the guide, and options
+# ---------------------------------------------------------------------------
+
+
+def _wf_show():
+    return {
+        "version": 7,
+        "annotation": "RNA-seq PE",
+        "readme": "# RNA-Seq\n\nTrim, align, quantify. " * 30,
+        "help": "",
+        "source_metadata": {
+            "trs_tool_id": "#workflow/.../rnaseq-pe/main",
+            "trs_url": "https://dockstore/x",
+        },
+    }
+
+
+def _run_resp_with_param():
+    r = Mock()
+    r.status_code = 200
+    r.json.return_value = {
+        "has_upgrade_messages": False,
+        "step_version_changes": [],
+        "steps": [
+            {
+                "step_type": "parameter_input",
+                "step_index": 0,
+                "step_label": "Strandedness",
+                "inputs": [
+                    {
+                        "options": [
+                            ["stranded - forward", "stranded - forward", False],
+                            ["unstranded", "unstranded", False],
+                        ]
+                    }
+                ],
+            }
+        ],
+    }
+    return r
+
+
+def test_template_includes_guide_and_options(mock_galaxy_instance):
+    mock_galaxy_instance.url = "https://g/api"
+    mock_galaxy_instance.make_get_request.return_value = _run_resp_with_param()
+    mock_galaxy_instance.workflows.export_workflow_dict.return_value = {"steps": {}}
+    mock_galaxy_instance.workflows.show_workflow.return_value = _wf_show()
+    with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        result = get_workflow_input_template_fn("wfid", history_id="h1")
+    assert result.success is True
+    g = result.data["guide"]
+    assert g["summary"]
+    assert len(g["summary"]) <= 300
+    assert g["provenance"]["source"]["trs_id"] == "#workflow/.../rnaseq-pe/main"
+    assert g["provenance"]["freshness"]["has_upgrade_messages"] is False
+    strand = next(s for s in result.data["slots"] if s["label"] == "Strandedness")
+    assert {o["value"] for o in strand["options"]} == {"stranded - forward", "unstranded"}
+
+
+def test_template_verbose_returns_full_readme(mock_galaxy_instance):
+    mock_galaxy_instance.url = "https://g/api"
+    mock_galaxy_instance.make_get_request.return_value = _run_resp_with_param()
+    mock_galaxy_instance.workflows.export_workflow_dict.return_value = {"steps": {}}
+    mock_galaxy_instance.workflows.show_workflow.return_value = _wf_show()
+    with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        result = get_workflow_input_template_fn("wfid", history_id="h1", verbose=True)
+    assert len(result.data["guide"]["summary"]) > 300

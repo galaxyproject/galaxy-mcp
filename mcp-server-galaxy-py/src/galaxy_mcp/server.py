@@ -39,6 +39,7 @@ from galaxy_mcp.tool_inputs import (
 )
 from galaxy_mcp.workflow_inputs import (
     _clean_readme_summary,
+    build_guide,
     build_workflow_input_template,
     find_legacy_warnings,
     normalize_ga_steps,
@@ -2955,13 +2956,18 @@ def _resolve_workflow_slots(
 
 
 @mcp.tool(tags={"workflows", "read", "extended"})
-def get_workflow_input_template(workflow_id: str, history_id: str | None = None) -> GalaxyResult:
-    """Return a ready-to-fill template of a workflow's input slots.
+def get_workflow_input_template(
+    workflow_id: str, history_id: str | None = None, verbose: bool = False
+) -> GalaxyResult:
+    """Return a ready-to-fill template plus a run guide for a workflow.
 
     Call this before invoke_workflow. Each slot lists its label, expected source
-    (hda/hdca), accepted datatypes, and collection type so you map datasets to
-    the right inputs. Fill `inputs_template` (keyed by step_index) and invoke
-    with `inputs_by="step_index|step_uuid"`. `warnings` flags legacy patterns.
+    (hda/hdca), accepted datatypes, collection type, and -- for parameters --
+    selectable `options` (including resolved reference-genome values when a
+    history_id is given). `guide` carries a short description and provenance.
+    Fill `inputs_template` (keyed by step_index) and invoke with
+    `inputs_by="step_index|step_uuid"`. Pass `verbose=True` for the full readme
+    and uncapped option lists. `warnings` flags legacy patterns.
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
@@ -2972,7 +2978,14 @@ def get_workflow_input_template(workflow_id: str, history_id: str | None = None)
             warnings = find_legacy_warnings(definition)
         except Exception:  # noqa: BLE001 -- warnings are best-effort
             warnings = []
-        template = build_workflow_input_template(slots, warnings=warnings)
+        try:
+            workflow_show = gi.workflows.show_workflow(workflow_id=workflow_id)
+        except Exception:  # noqa: BLE001 -- guide docs are best-effort
+            workflow_show = {}
+        guide = build_guide(workflow_show, run_model, verbose)
+        template = build_workflow_input_template(
+            slots, warnings=warnings, guide=guide, verbose=verbose
+        )
         return GalaxyResult(
             data=template,
             success=True,
