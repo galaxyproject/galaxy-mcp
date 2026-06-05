@@ -630,7 +630,7 @@ def test_invoke_reject_resolves_slots_only_once(mock_galaxy_instance):
 
 
 # ---------------------------------------------------------------------------
-# Task 5: _resolve_workflow_slots returns the raw run model
+# Task 5 (run-guide): _resolve_workflow_slots returns the raw run model
 # ---------------------------------------------------------------------------
 
 
@@ -673,7 +673,7 @@ def test_resolve_slots_run_model_none_on_ga_fallback():
 
 
 # ---------------------------------------------------------------------------
-# Task 6: get_workflow_input_template gains verbose, the guide, and options
+# Task 6 (run-guide): get_workflow_input_template gains verbose, the guide, and options
 # ---------------------------------------------------------------------------
 
 
