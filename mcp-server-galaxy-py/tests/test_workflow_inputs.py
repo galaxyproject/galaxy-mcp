@@ -702,3 +702,60 @@ def test_build_guide_falls_back_to_annotation_when_no_readme():
         verbose=False,
     )
     assert g["summary"] == "Just an annotation"
+
+
+# ---------------------------------------------------------------------------
+# Task 4 (run-guide): option-capping + guide in build_workflow_input_template
+# ---------------------------------------------------------------------------
+
+
+def _param_slot(options):
+    return {
+        "step_index": 0,
+        "step_uuid": None,
+        "label": "Genome",
+        "input_type": "parameter",
+        "src": None,
+        "accepted_formats": [],
+        "acceptable_extensions": [],
+        "collection_type": None,
+        "parameter_type": "text",
+        "optional": False,
+        "options": options,
+    }
+
+
+def test_template_inlines_small_option_sets():
+    opts = [{"label": f"g{i}", "value": str(i)} for i in range(5)]
+    t = build_workflow_input_template([_param_slot(opts)])
+    s = t["slots"][0]
+    assert s["options"] == opts
+    assert s["option_count"] == 5
+    assert "options_note" not in s
+
+
+def test_template_caps_large_option_sets_unless_verbose():
+    opts = [{"label": f"g{i}", "value": str(i)} for i in range(100)]
+    s = build_workflow_input_template([_param_slot(opts)])["slots"][0]
+    assert len(s["options"]) == 15
+    assert s["option_count"] == 100
+    assert "options_note" in s
+    # verbose returns the full list
+    sv = build_workflow_input_template([_param_slot(opts)], verbose=True)["slots"][0]
+    assert len(sv["options"]) == 100
+    assert "options_note" not in sv
+
+
+def test_template_drops_empty_options_and_strips_acceptable_extensions():
+    slot = _param_slot([])
+    slot["acceptable_extensions"] = ["a", "b"]
+    s = build_workflow_input_template([slot])["slots"][0]
+    assert "options" not in s  # empty -> dropped from display
+    assert "option_count" not in s
+    assert "acceptable_extensions" not in s  # still stripped (from #55)
+
+
+def test_template_includes_guide_when_provided():
+    g = {"summary": "x", "provenance": {"version": 1}}
+    t = build_workflow_input_template([_param_slot([])], guide=g)
+    assert t["guide"] == g

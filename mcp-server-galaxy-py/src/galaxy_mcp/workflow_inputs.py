@@ -467,20 +467,49 @@ def _placeholder_for(slot: dict[str, Any]) -> Any:
     return "<value>"
 
 
+_OPTIONS_INLINE_CAP = 25  # inline option sets at or below this size in full
+_OPTIONS_SAMPLE = 15  # otherwise show this many + a note (unless verbose)
+
+
+def _display_slot(slot: dict[str, Any], verbose: bool) -> dict[str, Any]:
+    """Per-slot display shaping: drop the giant acceptable_extensions, and cap
+    large option sets (keeping option_count) unless verbose. Empty options are
+    dropped so data/collection slots stay clean.
+    """
+    out = {k: v for k, v in slot.items() if k != "acceptable_extensions"}
+    options = out.get("options") or []
+    if not options:
+        out.pop("options", None)
+        return out
+    out["option_count"] = len(options)
+    if not verbose and len(options) > _OPTIONS_INLINE_CAP:
+        out["options"] = options[:_OPTIONS_SAMPLE]
+        out["options_note"] = (
+            f"showing {_OPTIONS_SAMPLE} of {len(options)}; pass verbose=true for the full list, "
+            f"or supply a value matching an installed option."
+        )
+    return out
+
+
 def build_workflow_input_template(
-    slots: list[dict[str, Any]], warnings: list[dict[str, Any]] | None = None
+    slots: list[dict[str, Any]],
+    warnings: list[dict[str, Any]] | None = None,
+    guide: dict[str, Any] | None = None,
+    verbose: bool = False,
 ) -> dict[str, Any]:
     """Assemble the model-facing template: a ready-to-fill skeleton keyed by
-    step_index, the per-slot constraint summary, the invoke key hint, and any
-    legacy warnings.
+    step_index, the per-slot constraint summary (with capped options), the
+    invoke key hint, any legacy warnings, and -- when provided -- the run guide.
     """
-    display_slots = [{k: v for k, v in s.items() if k != "acceptable_extensions"} for s in slots]
-    return {
+    result: dict[str, Any] = {
         "inputs_template": {str(s["step_index"]): _placeholder_for(s) for s in slots},
-        "slots": display_slots,
+        "slots": [_display_slot(s, verbose) for s in slots],
         "inputs_by": "step_index|step_uuid",
         "warnings": warnings or [],
     }
+    if guide is not None:
+        result["guide"] = guide
+    return result
 
 
 def build_guide(
