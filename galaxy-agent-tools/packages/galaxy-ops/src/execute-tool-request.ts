@@ -26,6 +26,7 @@ export interface ToolRun {
   jobs: JobDetail[];
   implicitCollections: ImplicitCollectionRef[];
   state: "ok";
+  // v1 omits per-dataset `outputs` (derivable from jobs[].outputs); deferred to v2 alongside richer output shaping.
 }
 
 const TR = "/api/tool_requests/{id}" as const;
@@ -51,7 +52,7 @@ export async function executeToolRequest(
     },
   });
   if (submit.error || !submit.data) throw classifyHttp(submit.response.status, submit.error);
-  const toolRequestId = (submit.data as { tool_request_id: string }).tool_request_id;
+  const toolRequestId = submit.data.tool_request_id;
 
   // Step 4: poll /state until != 'new'. ToolRequestState has NO success state.
   const state = await pollRequestState(toolRequestId, ctx);
@@ -94,7 +95,7 @@ async function pollRequestState(id: string, ctx: GalaxyContext): Promise<string>
 async function fetchDetail(id: string, ctx: GalaxyContext): Promise<ToolRequestDetail> {
   const { data, error, response } = await ctx.client.GET(TR, { params: { path: { id } } });
   if (error || !data) throw classifyHttp(response.status, error);
-  return data as ToolRequestDetail;
+  return data;
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {

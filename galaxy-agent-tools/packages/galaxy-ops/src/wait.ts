@@ -39,7 +39,8 @@ export async function waitForJob(jobId: string, ctx: GalaxyContext): Promise<Job
     const state = String((job as { state: string }).state);
     if (isJobTerminal(state)) {
       if (isJobSuccess(state)) return job;
-      throw new JobFailedError(jobId, state, (job as { tool_stderr?: string }).tool_stderr);
+      // v2: fetch GET /api/jobs/{id}?full=true (ShowFullJobResponse) to populate stderr; the default detail has none.
+      throw new JobFailedError(jobId, state);
     }
     if (Date.now() - start > ctx.poll.timeoutMs) {
       throw new Error(`Timed out waiting for job ${jobId} (last state=${state})`);
