@@ -7,7 +7,7 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "depcruise": "dependency-cruiser --config .dependency-cruiser.cjs packages"
+    "depcruise": "dependency-cruiser --config .dependency-cruiser.cjs packages/galaxy-ops/src/index.ts packages/galaxy-mcp/src/index.ts"
   },
   "devDependencies": {
     "typescript": "^6.0.0",
