@@ -1,0 +1,24 @@
+{
+  "name": "@galaxyproject/galaxy-ops",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "engines": { "node": ">=22.19" },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.17.0",
+    "zod": "^4.3.0"
+  },
+  "peerDependencies": { "typescript": ">=6" },
+  "devDependencies": {
+    "tsup": "^8.3.0",
+    "vitest": "^4.0.0",
+    "typescript": "^6.0.0",
+    "openapi-typescript": "^7.10.0"
+  }
+}
