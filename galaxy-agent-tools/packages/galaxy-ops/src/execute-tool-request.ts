@@ -58,7 +58,7 @@ export async function executeToolRequest(
   const state = await pollRequestState(toolRequestId, ctx);
   if (state === "failed") {
     const detail = await fetchDetail(toolRequestId, ctx);
-    const errMsg = detail.state_message?.err_msg ?? "tool request failed to expand";
+    const errMsg = extractErrMsg(detail.state_message);
     throw new ToolRequestRejectedError(args.toolId, errMsg, toolRequestId);
   }
 
@@ -96,6 +96,15 @@ async function fetchDetail(id: string, ctx: GalaxyContext): Promise<ToolRequestD
   const { data, error, response } = await ctx.client.GET(TR, { params: { path: { id } } });
   if (error || !data) throw classifyHttp(response.status, error);
   return data;
+}
+
+/** state_message is a plain string in Galaxy 26.0 and an {err_msg} object in 26.1+. */
+function extractErrMsg(stateMessage: unknown): string {
+  if (typeof stateMessage === "string" && stateMessage) return stateMessage;
+  if (stateMessage && typeof stateMessage === "object" && "err_msg" in stateMessage) {
+    return String((stateMessage as { err_msg: unknown }).err_msg);
+  }
+  return "tool request failed to expand";
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {

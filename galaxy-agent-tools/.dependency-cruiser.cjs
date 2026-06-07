@@ -11,7 +11,8 @@ module.exports = {
       to: {
         path:
           "(^|/)openapi-fetch|" +
-          "packages/galaxy-ops/src/(client|execute-tool-request|wait|generated|context)",
+          "(^|/)@galaxyproject/galaxy-api-client|" +
+          "packages/galaxy-ops/src/(client|execute-tool-request|wait|context)",
       },
     },
   ],

@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@galaxyproject/galaxy-api-client": "^26.0.1",
     "openapi-fetch": "^0.17.0",
     "zod": "^4.3.0"
   },
@@ -19,7 +20,6 @@
     "@types/node": "^22.0.0",
     "tsup": "^8.3.0",
     "vitest": "^4.0.0",
-    "typescript": "^6.0.0",
-    "openapi-typescript": "^7.10.0"
+    "typescript": "^6.0.0"
   }
 }
