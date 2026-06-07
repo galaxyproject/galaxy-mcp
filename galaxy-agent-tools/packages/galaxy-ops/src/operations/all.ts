@@ -13,3 +13,4 @@ import "./get-dataset-details";
 import "./get-collection-details";
 import "./get-history-contents";
 import "./list-workflows";
+import "./get-workflow-details";
