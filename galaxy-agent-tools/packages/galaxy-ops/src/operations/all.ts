@@ -11,3 +11,4 @@ import "./get-history-details";
 import "./create-history";
 import "./get-dataset-details";
 import "./get-collection-details";
+import "./get-history-contents";
