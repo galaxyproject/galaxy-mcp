@@ -1,0 +1,25 @@
+{
+  "name": "@galaxyproject/galaxy-cli",
+  "version": "0.0.0",
+  "type": "module",
+  "bin": { "galaxy-cli": "./dist/index.js" },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@galaxyproject/galaxy-ops": "workspace:*",
+    "commander": "^14.0.0",
+    "yaml": "^2.6.0",
+    "zod": "^4.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "execa": "^9.5.0",
+    "tsup": "^8.3.0",
+    "vitest": "^4.0.0",
+    "typescript": "^6.0.0"
+  }
+}
