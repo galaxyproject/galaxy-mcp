@@ -20,4 +20,8 @@ describe("createGalaxyContext", () => {
     expect(ctx.poll.backoff).toBe(DEFAULT_POLL.backoff); // unspecified -> default
     expect(ctx.signal).toBe(ac.signal);
   });
+  it("stores baseUrl on the context for surfaces that need it", () => {
+    const ctx = createGalaxyContext({ baseUrl: "https://g.example", apiKey: "K" });
+    expect(ctx.baseUrl).toBe("https://g.example");
+  });
 });
