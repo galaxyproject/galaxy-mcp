@@ -12,3 +12,4 @@ export { getServerInfoOp, getServerInfo, type ServerInfo } from "./operations/ge
 export { getHistoriesOp, getHistories, type Histories } from "./operations/get-histories";
 export { listHistoryIdsOp, listHistoryIds, type HistoryRef } from "./operations/list-history-ids";
 export { getHistoryDetailsOp, getHistoryDetails, type HistoryDetail } from "./operations/get-history-details";
+export { createHistoryOp, createHistory, type CreatedHistory } from "./operations/create-history";
