@@ -16,3 +16,4 @@ export { createHistoryOp, createHistory, type CreatedHistory } from "./operation
 export { getDatasetDetailsOp, getDatasetDetails, type DatasetDetail } from "./operations/get-dataset-details";
 export { getCollectionDetailsOp, getCollectionDetails, type CollectionDetail } from "./operations/get-collection-details";
 export { getHistoryContentsOp, getHistoryContents, type HistoryContents } from "./operations/get-history-contents";
+export { listWorkflowsOp, listWorkflows, type Workflows } from "./operations/list-workflows";
