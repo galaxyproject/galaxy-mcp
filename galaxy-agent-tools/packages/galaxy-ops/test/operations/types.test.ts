@@ -21,4 +21,12 @@ describe("Operation contract", () => {
     expect(op.name).toBe("demo");
     expect(Object.keys(op.input)).toEqual(["id", "verbose"]);
   });
+
+  it("Operation accepts an optional readOnly hint", () => {
+    const op: Operation<Record<string, never>, number> = {
+      name: "x", domain: "connection", summary: "s", input: {}, readOnly: false,
+      run: async () => 1,
+    };
+    expect(op.readOnly).toBe(false);
+  });
 });

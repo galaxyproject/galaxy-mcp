@@ -34,6 +34,8 @@ export interface Operation<Shape extends ZodRawShape, O> {
   readonly summary: string; // reused verbatim as the MCP tool description
   readonly input: Shape; // raw shape -> MCP inputSchema directly
   readonly minGalaxyVersion?: string;
+  /** Read-only by default. Write/mutating ops set this false (drives MCP annotations). */
+  readonly readOnly?: boolean;
   run(input: InputOf<Shape>, ctx: GalaxyContext): Promise<O>;
   project?(output: O, input: InputOf<Shape>): { message?: string; pagination?: Pagination };
 }
