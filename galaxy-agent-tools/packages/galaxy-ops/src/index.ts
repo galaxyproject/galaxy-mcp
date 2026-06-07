@@ -14,3 +14,4 @@ export { listHistoryIdsOp, listHistoryIds, type HistoryRef } from "./operations/
 export { getHistoryDetailsOp, getHistoryDetails, type HistoryDetail } from "./operations/get-history-details";
 export { createHistoryOp, createHistory, type CreatedHistory } from "./operations/create-history";
 export { getDatasetDetailsOp, getDatasetDetails, type DatasetDetail } from "./operations/get-dataset-details";
+export { getCollectionDetailsOp, getCollectionDetails, type CollectionDetail } from "./operations/get-collection-details";

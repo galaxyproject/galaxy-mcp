@@ -10,3 +10,4 @@ import "./list-history-ids";
 import "./get-history-details";
 import "./create-history";
 import "./get-dataset-details";
+import "./get-collection-details";
