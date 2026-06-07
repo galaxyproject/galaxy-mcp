@@ -50,4 +50,9 @@ describe("runWithEnvelope", () => {
   it("rethrows a non-Galaxy error instead of swallowing it (bugs must surface)", async () => {
     await expect(runWithEnvelope(bugOp as any, {}, ctx)).rejects.toThrow(TypeError);
   });
+  it("surfaces the typed error's kind on the envelope", async () => {
+    const r = await runWithEnvelope(failOp as any, {}, ctx); // failOp throws GalaxyNotFoundError
+    expect(r.success).toBe(false);
+    expect(r.errorKind).toBe("not_found");
+  });
 });

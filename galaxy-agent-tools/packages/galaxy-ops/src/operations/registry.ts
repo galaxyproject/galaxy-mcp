@@ -15,7 +15,7 @@ export async function runWithEnvelope<Shape extends ZodRawShape, O>(
     return { data, success: true, ...meta };
   } catch (err) {
     if (err instanceof GalaxyError) {
-      return { data: undefined as unknown as O, success: false, message: err.message };
+      return { data: undefined as unknown as O, success: false, message: err.message, errorKind: err.kind };
     }
     throw err; // non-Galaxy errors are bugs -- let them surface
   }

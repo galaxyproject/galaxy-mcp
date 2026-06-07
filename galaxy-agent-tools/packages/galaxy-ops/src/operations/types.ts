@@ -1,5 +1,6 @@
 import type { z, ZodRawShape, ZodObject } from "zod";
 import type { GalaxyContext } from "../context";
+import type { GalaxyErrorKind } from "../errors";
 
 export type OperationDomain =
   | "connection"
@@ -46,4 +47,5 @@ export interface GalaxyResult<T> {
   success: boolean;
   message?: string;
   pagination?: Pagination;
+  errorKind?: GalaxyErrorKind;
 }
