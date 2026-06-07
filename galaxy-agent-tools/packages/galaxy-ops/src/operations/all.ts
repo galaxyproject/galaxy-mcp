@@ -6,3 +6,4 @@ import "./run-tool";
 import "./get-invocations";
 import "./get-server-info";
 import "./get-histories";
+import "./list-history-ids";

@@ -10,3 +10,4 @@ export type { ToolRun, ToolInputs, ImplicitCollectionRef } from "./execute-tool-
 export { getInvocationsOp, getInvocations, type InvocationDetail } from "./operations/get-invocations";
 export { getServerInfoOp, getServerInfo, type ServerInfo } from "./operations/get-server-info";
 export { getHistoriesOp, getHistories, type Histories } from "./operations/get-histories";
+export { listHistoryIdsOp, listHistoryIds, type HistoryRef } from "./operations/list-history-ids";
