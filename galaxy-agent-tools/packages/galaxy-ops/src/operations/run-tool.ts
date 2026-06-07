@@ -30,7 +30,7 @@ async function run(i: RunToolInput, ctx: GalaxyContext): Promise<ToolRun> {
 }
 
 export const runToolOp: Operation<typeof input, ToolRun> = {
-  name: "run_tool", // parity: AgentOperationsManager.run_tool
+  name: "run_tool", // parity: mcp-server-galaxy-py run_tool
   domain: "tools",
   summary:
     "Run a Galaxy tool via the typed tool-request path and wait until it reaches terminal state. " +

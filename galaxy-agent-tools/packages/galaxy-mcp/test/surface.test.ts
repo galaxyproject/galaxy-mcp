@@ -6,7 +6,7 @@ describe("MCP surface is a mechanical projection", () => {
     const names = toolNames();
     expect(names).toContain("get_user");
     expect(names).toContain("run_tool");
-    expect(names).toContain("get_invocation_details");
+    expect(names).toContain("get_invocations");
   });
 
   it("builds a server without throwing", () => {

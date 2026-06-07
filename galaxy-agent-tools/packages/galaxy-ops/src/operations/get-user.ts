@@ -27,7 +27,7 @@ async function run(_in: Record<string, never>, ctx: GalaxyContext): Promise<Curr
 }
 
 export const getUserOp: Operation<typeof input, CurrentUser> = {
-  name: "get_user", // parity: AgentOperationsManager.get_user / /api/mcp get_user
+  name: "get_user", // parity: mcp-server-galaxy-py get_user
   domain: "connection",
   summary: "Return the current authenticated Galaxy user (id, email, username).",
   input,

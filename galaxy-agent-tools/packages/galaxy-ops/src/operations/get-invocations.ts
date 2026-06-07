@@ -7,6 +7,8 @@ import type { AnyOperation, Operation } from "./types";
 
 export type InvocationDetail = components["schemas"]["WorkflowInvocationElementView"];
 
+// v1 supports the detail-by-id read (invocation_id provided). The external
+// get_invocations tool also lists/filters (workflow_id, history_id, view, ...) -- v2.
 const input = { invocationId: z.string().describe("Encoded workflow invocation id") };
 
 type In = { invocationId: string };
@@ -19,10 +21,10 @@ async function run(i: In, ctx: GalaxyContext): Promise<InvocationDetail> {
   return data as InvocationDetail;
 }
 
-export const getInvocationDetailsOp: Operation<typeof input, InvocationDetail> = {
-  name: "get_invocation_details", // parity: /api/mcp get_invocation_details
+export const getInvocationsOp: Operation<typeof input, InvocationDetail> = {
+  name: "get_invocations", // parity: mcp-server-galaxy-py get_invocations (invocation_id -> detail)
   domain: "invocations",
-  summary: "Fetch a workflow invocation's details (id, state, steps).",
+  summary: "View a workflow invocation by id (id, state, steps).",
   input,
   run,
   project: (inv) => ({
@@ -30,6 +32,6 @@ export const getInvocationDetailsOp: Operation<typeof input, InvocationDetail> =
   }),
 };
 
-register(getInvocationDetailsOp as AnyOperation);
+register(getInvocationsOp as AnyOperation);
 
-export const getInvocationDetails = (i: In, ctx: GalaxyContext) => getInvocationDetailsOp.run(i, ctx);
+export const getInvocations = (i: In, ctx: GalaxyContext) => getInvocationsOp.run(i, ctx);
