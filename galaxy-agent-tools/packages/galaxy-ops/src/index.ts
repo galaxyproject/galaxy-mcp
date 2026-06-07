@@ -11,3 +11,4 @@ export { getInvocationsOp, getInvocations, type InvocationDetail } from "./opera
 export { getServerInfoOp, getServerInfo, type ServerInfo } from "./operations/get-server-info";
 export { getHistoriesOp, getHistories, type Histories } from "./operations/get-histories";
 export { listHistoryIdsOp, listHistoryIds, type HistoryRef } from "./operations/list-history-ids";
+export { getHistoryDetailsOp, getHistoryDetails, type HistoryDetail } from "./operations/get-history-details";
