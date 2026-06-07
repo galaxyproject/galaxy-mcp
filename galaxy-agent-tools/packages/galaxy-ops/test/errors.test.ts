@@ -31,3 +31,18 @@ describe("error classification", () => {
     expect(e.stderr).toBe("traceback");
   });
 });
+
+describe("GalaxyError.kind", () => {
+  it("each subclass carries a stable machine-readable kind", () => {
+    expect(new GalaxyAuthError("x").kind).toBe("auth");
+    expect(new GalaxyNotFoundError("x").kind).toBe("not_found");
+    expect(new GalaxyConnectionError("x", 500).kind).toBe("connection");
+    expect(new ToolRequestRejectedError("t", "m").kind).toBe("tool_request_rejected");
+    expect(new JobFailedError("j", "error").kind).toBe("job_failed");
+  });
+  it("classifyHttp returns subclasses whose kind matches the status", () => {
+    expect(classifyHttp(401, null).kind).toBe("auth");
+    expect(classifyHttp(404, null).kind).toBe("not_found");
+    expect(classifyHttp(500, { err_msg: "boom" }).kind).toBe("connection");
+  });
+});

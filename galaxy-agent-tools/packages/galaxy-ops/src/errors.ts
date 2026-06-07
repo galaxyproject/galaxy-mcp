@@ -1,9 +1,24 @@
-export class GalaxyError extends Error {}
+export type GalaxyErrorKind =
+  | "auth"
+  | "not_found"
+  | "connection"
+  | "tool_request_rejected"
+  | "job_failed"
+  | "unknown";
 
-export class GalaxyAuthError extends GalaxyError {}
-export class GalaxyNotFoundError extends GalaxyError {}
+export class GalaxyError extends Error {
+  readonly kind: GalaxyErrorKind = "unknown";
+}
+
+export class GalaxyAuthError extends GalaxyError {
+  readonly kind = "auth" as const;
+}
+export class GalaxyNotFoundError extends GalaxyError {
+  readonly kind = "not_found" as const;
+}
 
 export class GalaxyConnectionError extends GalaxyError {
+  readonly kind = "connection" as const;
   constructor(
     message: string,
     readonly status?: number,
@@ -15,6 +30,7 @@ export class GalaxyConnectionError extends GalaxyError {
 
 /** tool_request.state === 'failed' -- the request couldn't even expand. */
 export class ToolRequestRejectedError extends GalaxyError {
+  readonly kind = "tool_request_rejected" as const;
   constructor(
     readonly toolId: string,
     readonly errMsg: string,
@@ -26,6 +42,7 @@ export class ToolRequestRejectedError extends GalaxyError {
 
 /** A spawned job reached a terminal-failure state -- it ran and failed. */
 export class JobFailedError extends GalaxyError {
+  readonly kind = "job_failed" as const;
   constructor(
     readonly jobId: string,
     readonly state: string,
