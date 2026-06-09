@@ -2963,10 +2963,12 @@ def get_workflow_input_template(
 
     Call this before invoke_workflow. Each slot lists its label, expected source
     (hda/hdca), accepted datatypes, collection type, and -- for parameters --
-    selectable `options` (including resolved reference-genome values when a
-    history_id is given; on the legacy .ga export path options are static and
-    reference genomes resolve at run time -- see `guide.notes`). `guide` carries
-    a short description and provenance.
+    selectable `options` as [{label, value}]. On the `style=run` path these are
+    Galaxy-resolved: reference-genome dbkeys come from the server regardless of
+    history, and passing `history_id` additionally surfaces that history's
+    compatible datasets as candidates. The legacy .ga fallback carries only the
+    static restrictions baked into the workflow -- no server- or history-resolved
+    values -- see `guide.notes`. `guide` carries a short description and provenance.
     Fill `inputs_template` (keyed by step_index) and invoke with
     `inputs_by="step_index|step_uuid"`. Pass `verbose=True` for the full readme
     and uncapped option lists. `warnings` flags legacy patterns.
