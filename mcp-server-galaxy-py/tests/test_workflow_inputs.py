@@ -2,6 +2,9 @@ import json as _json
 from pathlib import Path
 
 from galaxy_mcp.workflow_inputs import (
+    _clean_readme_summary,
+    _collection_type_compatible,
+    build_guide,
     build_workflow_input_template,
     find_legacy_warnings,
     normalize_ga_steps,
@@ -110,6 +113,7 @@ def test_normalize_ga_steps_data_input_restricted():
         "collection_type": None,
         "parameter_type": None,
         "optional": False,
+        "options": [],
     }
 
 
@@ -158,6 +162,7 @@ def test_normalize_run_model_returns_slot_contract():
             "collection_type",
             "parameter_type",
             "optional",
+            "options",
         }
         assert s["input_type"] in {"data", "data_collection", "parameter"}
         assert isinstance(s["accepted_formats"], list)
@@ -307,8 +312,6 @@ def test_build_template_skeleton_and_slots():
 # ---------------------------------------------------------------------------
 # Fix 1: _collection_type_compatible -- segment comparison, not raw suffix
 # ---------------------------------------------------------------------------
-
-from galaxy_mcp.workflow_inputs import _collection_type_compatible  # noqa: E402
 
 
 def test_collection_type_compatible_list_does_not_satisfy_paired():
@@ -571,3 +574,259 @@ def test_build_template_omits_acceptable_extensions_from_display_slots():
     tmpl = build_workflow_input_template(slots)
     assert "acceptable_extensions" not in tmpl["slots"][0]
     assert tmpl["slots"][0]["accepted_formats"] == ["txt"]
+
+
+# ---------------------------------------------------------------------------
+# Task 1 (run-guide): _clean_readme_summary moved to the pure module
+# ---------------------------------------------------------------------------
+
+
+def test_clean_readme_summary_strips_headers_and_truncates():
+    md = "# Title\n\nThis workflow does X.\n## Details\nThen Y."
+    out = _clean_readme_summary(md, max_length=40)
+    assert "#" not in out
+    assert out.startswith("This workflow does X.")
+    assert len(out) <= 40
+
+
+def test_clean_readme_summary_empty():
+    assert _clean_readme_summary("") == ""
+
+
+# ---------------------------------------------------------------------------
+# Task 2 (run-guide): options field on the slot contract
+# ---------------------------------------------------------------------------
+
+
+def test_ga_enumerated_restrictions_become_options():
+    ga = {
+        "steps": {
+            "0": {
+                "type": "parameter_input",
+                "label": "Strand",
+                "tool_state": '{"parameter_type": "text", "restrictions": ["fwd", "rev"]}',
+            }
+        }
+    }
+    s = normalize_ga_steps(ga)[0]
+    assert s["options"] == [{"label": "fwd", "value": "fwd"}, {"label": "rev", "value": "rev"}]
+
+
+def test_ga_data_input_has_empty_options():
+    ga = {"steps": {"0": {"type": "data_input", "label": "in", "tool_state": "{}"}}}
+    assert normalize_ga_steps(ga)[0]["options"] == []
+
+
+def test_run_model_options_from_triples():
+    # the real style=run shape: inputs[0].options is a list of [label, value, selected]
+    run = {
+        "steps": [
+            {
+                "step_type": "parameter_input",
+                "step_index": 0,
+                "step_label": "Strand",
+                "inputs": [{"options": [["forward", "fwd", False], ["reverse", "rev", True]]}],
+            }
+        ]
+    }
+    s = normalize_run_model(run)[0]
+    assert s["options"] == [
+        {"label": "forward", "value": "fwd"},
+        {"label": "reverse", "value": "rev"},
+    ]
+
+
+def test_run_model_real_fixture_has_strandedness_options():
+    fixture = Path(__file__).parent / "testdata" / "wf_style_run_rnaseq.json"
+    slots = normalize_run_model(_json.loads(fixture.read_text()))
+    strand = next(s for s in slots if s["label"] == "Strandedness")
+    assert {o["value"] for o in strand["options"]} == {
+        "stranded - forward",
+        "stranded - reverse",
+        "unstranded",
+    }
+    ref = next(s for s in slots if s["label"] == "Reference genome")
+    assert ref["options"]
+    assert all("value" in o for o in ref["options"])
+
+
+# ---------------------------------------------------------------------------
+# Task 3 (run-guide): build_guide assembles the model-facing run guide
+# ---------------------------------------------------------------------------
+
+WF_SHOW = {
+    "version": 12,
+    "annotation": "RNA-seq for paired-end data",
+    "readme": "# RNA-Seq\n\nThis runs adapter trimming then alignment then quantification. " * 10,
+    "help": "",
+    "source_metadata": {
+        "trs_tool_id": "#workflow/.../rnaseq-pe/main",
+        "trs_url": "https://dockstore/x",
+    },
+}
+RUN_MODEL = {"has_upgrade_messages": False, "step_version_changes": []}
+
+
+def test_build_guide_summary_is_short_by_default():
+    g = build_guide(WF_SHOW, RUN_MODEL, verbose=False)
+    assert len(g["summary"]) <= 300
+    assert g["annotation"] == "RNA-seq for paired-end data"
+    assert g["provenance"]["version"] == 12
+    assert g["provenance"]["source"]["trs_id"] == "#workflow/.../rnaseq-pe/main"
+    assert g["provenance"]["freshness"] == {
+        "has_upgrade_messages": False,
+        "step_version_changes": [],
+    }
+
+
+def test_build_guide_verbose_returns_full_readme():
+    g = build_guide(WF_SHOW, RUN_MODEL, verbose=True)
+    assert len(g["summary"]) > 300  # full readme, not truncated
+
+
+def test_build_guide_without_run_model_omits_freshness_and_adds_note():
+    g = build_guide(WF_SHOW, None, verbose=False)
+    assert "freshness" not in g["provenance"]
+    assert any("history_id" in n for n in g.get("notes", []))
+
+
+def test_build_guide_falls_back_to_annotation_when_no_readme():
+    g = build_guide(
+        {"version": 1, "annotation": "Just an annotation", "readme": "", "help": ""},
+        None,
+        verbose=False,
+    )
+    assert g["summary"] == "Just an annotation"
+
+
+# ---------------------------------------------------------------------------
+# Task 4 (run-guide): option-capping + guide in build_workflow_input_template
+# ---------------------------------------------------------------------------
+
+
+def _param_slot(options):
+    return {
+        "step_index": 0,
+        "step_uuid": None,
+        "label": "Genome",
+        "input_type": "parameter",
+        "src": None,
+        "accepted_formats": [],
+        "acceptable_extensions": [],
+        "collection_type": None,
+        "parameter_type": "text",
+        "optional": False,
+        "options": options,
+    }
+
+
+def test_template_inlines_small_option_sets():
+    opts = [{"label": f"g{i}", "value": str(i)} for i in range(5)]
+    t = build_workflow_input_template([_param_slot(opts)])
+    s = t["slots"][0]
+    assert s["options"] == opts
+    assert s["option_count"] == 5
+    assert "options_note" not in s
+
+
+def test_template_caps_large_option_sets_unless_verbose():
+    opts = [{"label": f"g{i}", "value": str(i)} for i in range(100)]
+    s = build_workflow_input_template([_param_slot(opts)])["slots"][0]
+    assert len(s["options"]) == 15
+    assert s["option_count"] == 100
+    assert "options_note" in s
+    # verbose returns the full list
+    sv = build_workflow_input_template([_param_slot(opts)], verbose=True)["slots"][0]
+    assert len(sv["options"]) == 100
+    assert "options_note" not in sv
+
+
+def test_template_drops_empty_options_and_strips_acceptable_extensions():
+    slot = _param_slot([])
+    slot["acceptable_extensions"] = ["a", "b"]
+    s = build_workflow_input_template([slot])["slots"][0]
+    assert "options" not in s  # empty -> dropped from display
+    assert "option_count" not in s
+    assert "acceptable_extensions" not in s  # still stripped (from #55)
+
+
+def test_template_includes_guide_when_provided():
+    g = {"summary": "x", "provenance": {"version": 1}}
+    t = build_workflow_input_template([_param_slot([])], guide=g)
+    assert t["guide"] == g
+
+
+# ---------------------------------------------------------------------------
+# Fix 1 (new): options must only appear on parameter inputs
+# ---------------------------------------------------------------------------
+
+
+def test_ga_data_input_ignores_stray_restrictions():
+    ga = {
+        "steps": {
+            "0": {"type": "data_input", "label": "in", "tool_state": '{"restrictions": ["x", "y"]}'}
+        }
+    }
+    assert normalize_ga_steps(ga)[0]["options"] == []
+
+
+def test_run_data_input_ignores_list_options():
+    run = {
+        "steps": [
+            {
+                "step_type": "data_input",
+                "step_index": 0,
+                "step_label": "in",
+                "inputs": [{"options": [["a", "a", False]]}],
+            }
+        ]
+    }
+    assert normalize_run_model(run)[0]["options"] == []
+
+
+# ---------------------------------------------------------------------------
+# Fix 2 (new): build_guide summary must fall through a headers-only readme
+# ---------------------------------------------------------------------------
+
+
+def test_build_guide_skips_headers_only_readme_for_help():
+    g = build_guide(
+        {
+            "version": 1,
+            "annotation": "ann",
+            "readme": "# Title\n## Sub",
+            "help": "Real help text here.",
+        },
+        None,
+        verbose=False,
+    )
+    assert "Real help text" in g["summary"]
+
+
+def test_build_guide_headers_only_readme_no_help_uses_annotation():
+    g = build_guide(
+        {"version": 1, "annotation": "Just an annotation", "readme": "# Only headers", "help": ""},
+        None,
+        verbose=False,
+    )
+    assert g["summary"] == "Just an annotation"
+
+
+# ---------------------------------------------------------------------------
+# Fix 3 (new): option label/value must be string-coerced
+# ---------------------------------------------------------------------------
+
+
+def test_options_values_are_stringified():
+    run = {
+        "steps": [
+            {
+                "step_type": "parameter_input",
+                "step_index": 0,
+                "step_label": "p",
+                "inputs": [{"options": [["one", 1, False], ["two", 2, True]]}],
+            }
+        ]
+    }
+    opts = normalize_run_model(run)[0]["options"]
+    assert opts == [{"label": "one", "value": "1"}, {"label": "two", "value": "2"}]

@@ -38,6 +38,8 @@ from galaxy_mcp.tool_inputs import (
     summarize_tool_inputs,
 )
 from galaxy_mcp.workflow_inputs import (
+    _clean_readme_summary,
+    build_guide,
     build_workflow_input_template,
     find_legacy_warnings,
     normalize_ga_steps,
@@ -2349,34 +2351,6 @@ def get_iwc_workflows() -> GalaxyResult:
         raise ValueError(f"Failed to fetch IWC workflows: {str(e)}") from e
 
 
-def _clean_readme_summary(readme: str, max_length: int = 300) -> str:
-    """Extract a clean summary from a readme, stripping markdown headers."""
-    if not readme:
-        return ""
-
-    lines = readme.split("\n")
-    clean_lines: list[str] = []
-
-    for line in lines:
-        # Skip markdown headers
-        if line.strip().startswith("#"):
-            continue
-        # Skip empty lines at the start
-        if not clean_lines and not line.strip():
-            continue
-        clean_lines.append(line)
-
-    text = " ".join(clean_lines)
-    # Normalize whitespace
-    text = " ".join(text.split())
-
-    if len(text) > max_length:
-        # Truncate at word boundary
-        text = text[: max_length - 3].rsplit(" ", 1)[0] + "..."
-
-    return text
-
-
 def _extract_tool_names_from_steps(steps: dict) -> list[str]:
     """Extract unique tool names from workflow steps."""
     tool_names = []
@@ -2955,9 +2929,11 @@ def get_workflow_details(workflow_id: str, version: int | None = None) -> Galaxy
 
 def _resolve_workflow_slots(
     gi: GalaxyInstance, workflow_id: str, history_id: str | None = None
-) -> tuple[list[dict[str, Any]], str]:
+) -> tuple[list[dict[str, Any]], str, dict[str, Any] | None]:
     """Resolve a workflow's input slots. Primary: style=run (webapp's source),
-    behind our normalizer. Fallback: the .ga export. Returns (slots, provenance).
+    behind our normalizer. Fallback: the .ga export. Returns
+    (slots, provenance, run_model) -- run_model is the parsed style=run dict when
+    that path was used, else None.
     """
     # instance=false: workflow_id here is a StoredWorkflow id (what show_workflow /
     # list_workflows hand back). instance=true reinterprets it as a Workflow-version
@@ -2969,34 +2945,54 @@ def _resolve_workflow_slots(
     try:
         resp = gi.make_get_request(f"{gi.url}/api/workflows/{workflow_id}/download?{params}")
         if resp.status_code == 200:
-            slots = normalize_run_model(resp.json())
+            run_model = resp.json()
+            slots = normalize_run_model(run_model)
             if slots:
-                return slots, "style=run"
+                return slots, "style=run", run_model
     except Exception as e:  # noqa: BLE001 -- fall back on any style=run failure
         logger.info("style=run unavailable for %s (%s); falling back to .ga", workflow_id, e)
     definition = gi.workflows.export_workflow_dict(workflow_id)
-    return normalize_ga_steps(definition), "ga-fallback"
+    return normalize_ga_steps(definition), "ga-fallback", None
 
 
 @mcp.tool(tags={"workflows", "read", "extended"})
-def get_workflow_input_template(workflow_id: str, history_id: str | None = None) -> GalaxyResult:
-    """Return a ready-to-fill template of a workflow's input slots.
+def get_workflow_input_template(
+    workflow_id: str, history_id: str | None = None, verbose: bool = False
+) -> GalaxyResult:
+    """Return a ready-to-fill template plus a run guide for a workflow.
 
     Call this before invoke_workflow. Each slot lists its label, expected source
-    (hda/hdca), accepted datatypes, and collection type so you map datasets to
-    the right inputs. Fill `inputs_template` (keyed by step_index) and invoke
-    with `inputs_by="step_index|step_uuid"`. `warnings` flags legacy patterns.
+    (hda/hdca), accepted datatypes, collection type, and -- for parameters --
+    selectable `options` as [{label, value}]. On the `style=run` path these are
+    Galaxy-resolved: reference-genome dbkeys come from the server regardless of
+    history, and passing `history_id` additionally surfaces that history's
+    compatible datasets as candidates. The legacy .ga fallback carries only the
+    static restrictions baked into the workflow -- no server- or history-resolved
+    values -- see `guide.notes`. `guide` carries a short description and provenance.
+    Fill `inputs_template` (keyed by step_index) and invoke with
+    `inputs_by="step_index|step_uuid"`. Pass `verbose=True` for the full readme
+    and uncapped option lists. `warnings` flags legacy patterns.
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
     try:
-        slots, provenance = _resolve_workflow_slots(gi, workflow_id, history_id)
+        # Three independent best-effort reads of the same workflow: the run model
+        # (_resolve_workflow_slots), the .ga export (legacy warnings), and
+        # show_workflow (guide docs).
+        slots, provenance, run_model = _resolve_workflow_slots(gi, workflow_id, history_id)
         try:
             definition = gi.workflows.export_workflow_dict(workflow_id)
             warnings = find_legacy_warnings(definition)
         except Exception:  # noqa: BLE001 -- warnings are best-effort
             warnings = []
-        template = build_workflow_input_template(slots, warnings=warnings)
+        try:
+            workflow_show = gi.workflows.show_workflow(workflow_id=workflow_id)
+        except Exception:  # noqa: BLE001 -- guide docs are best-effort
+            workflow_show = {}
+        guide = build_guide(workflow_show, run_model, verbose)
+        template = build_workflow_input_template(
+            slots, warnings=warnings, guide=guide, verbose=verbose
+        )
         return GalaxyResult(
             data=template,
             success=True,
@@ -3079,7 +3075,7 @@ def invoke_workflow(
         # Preflight: validate supplied inputs against the workflow's slots.
         if inputs:
             try:
-                slots, _prov = _resolve_workflow_slots(gi, workflow_id, history_id)
+                slots, _prov, _run = _resolve_workflow_slots(gi, workflow_id, history_id)
                 mapping = _get_datatypes_mapping(gi)
                 supplied = _enrich_supplied_inputs(gi, inputs)
                 verdict = validate_inputs(slots, supplied, mapping)
@@ -3125,7 +3121,7 @@ def invoke_workflow(
     except Exception as e:
         hint = ""
         with contextlib.suppress(Exception):
-            slots, _ = _resolve_workflow_slots(gi, workflow_id, history_id)
+            slots, _, _ = _resolve_workflow_slots(gi, workflow_id, history_id)
             hint = "\n\nWorkflow input slots:\n" + json.dumps(
                 build_workflow_input_template(slots)["slots"], indent=2, default=str
             )

@@ -27,6 +27,41 @@ def _as_list(value: Any) -> list:
     return [value]
 
 
+def _clean_readme_summary(readme: str, max_length: int = 300) -> str:
+    """Extract a clean summary from a readme, stripping markdown headers."""
+    if not readme:
+        return ""
+    lines = readme.split("\n")
+    clean_lines: list[str] = []
+    for line in lines:
+        if line.strip().startswith("#"):
+            continue
+        if not clean_lines and not line.strip():
+            continue
+        clean_lines.append(line)
+    text = " ".join(clean_lines)
+    text = " ".join(text.split())
+    if len(text) > max_length:
+        text = text[: max_length - 3].rsplit(" ", 1)[0] + "..."
+    return text
+
+
+def _options_from_triples(raw: Any) -> list[dict]:
+    """style=run param options come as [label, value, selected] triples."""
+    if not isinstance(raw, list):
+        return []
+    out: list[dict] = []
+    for item in raw:
+        if isinstance(item, (list, tuple)) and len(item) >= 2:
+            out.append({"label": str(item[0]), "value": str(item[1])})
+    return out
+
+
+def _options_from_restrictions(raw: Any) -> list[dict]:
+    """.ga enumerated params carry a flat list of allowed string values."""
+    return [{"label": str(v), "value": str(v)} for v in raw] if isinstance(raw, list) else []
+
+
 _SORT_SENTINEL = 10**9  # sorts non-numeric step keys to the end without crashing
 
 _INPUT_TYPE_MAP = {
@@ -111,6 +146,11 @@ def normalize_ga_steps(definition: dict[str, Any]) -> list[dict[str, Any]]:
                 collection_type=state.get("collection_type"),
                 parameter_type=state.get("parameter_type"),
                 optional=bool(state.get("optional", False)),
+                options=(
+                    _options_from_restrictions(state.get("restrictions"))
+                    if input_type == "parameter"
+                    else []
+                ),
             )
         )
     return slots
@@ -127,8 +167,9 @@ def _make_slot(
     collection_type: str | None,
     parameter_type: str | None,
     optional: bool,
+    options: list,
 ) -> dict[str, Any]:
-    """Build the 10-key slot contract dict shared by both normalizers."""
+    """Build the slot contract dict shared by both normalizers."""
     return {
         "step_index": step_index,
         "step_uuid": step_uuid,
@@ -140,6 +181,7 @@ def _make_slot(
         "collection_type": collection_type,
         "parameter_type": parameter_type,
         "optional": optional,
+        "options": options,
     }
 
 
@@ -196,6 +238,9 @@ def normalize_run_model(run_dict: dict[str, Any]) -> list[dict[str, Any]]:
                 collection_type=ctype,
                 parameter_type=param.get("parameter_type") or step.get("parameter_type"),
                 optional=bool(param.get("optional", False)),
+                options=(
+                    _options_from_triples(param.get("options")) if input_type == "parameter" else []
+                ),
             )
         )
     return slots
@@ -428,17 +473,91 @@ def _placeholder_for(slot: dict[str, Any]) -> Any:
     return "<value>"
 
 
+_OPTIONS_INLINE_CAP = 25  # inline option sets at or below this size in full
+_OPTIONS_SAMPLE = 15  # otherwise show this many + a note (unless verbose)
+
+
+def _display_slot(slot: dict[str, Any], verbose: bool) -> dict[str, Any]:
+    """Per-slot display shaping: drop the giant acceptable_extensions, and cap
+    large option sets (keeping option_count) unless verbose. Empty options are
+    dropped so data/collection slots stay clean.
+    """
+    out = {k: v for k, v in slot.items() if k != "acceptable_extensions"}
+    options = out.get("options") or []
+    if not options:
+        out.pop("options", None)
+        return out
+    out["option_count"] = len(options)
+    if not verbose and len(options) > _OPTIONS_INLINE_CAP:
+        out["options"] = options[:_OPTIONS_SAMPLE]
+        out["options_note"] = (
+            f"showing {_OPTIONS_SAMPLE} of {len(options)}; pass verbose=true for the full list, "
+            f"or supply a value matching an installed option."
+        )
+    return out
+
+
 def build_workflow_input_template(
-    slots: list[dict[str, Any]], warnings: list[dict[str, Any]] | None = None
+    slots: list[dict[str, Any]],
+    warnings: list[dict[str, Any]] | None = None,
+    guide: dict[str, Any] | None = None,
+    verbose: bool = False,
 ) -> dict[str, Any]:
     """Assemble the model-facing template: a ready-to-fill skeleton keyed by
-    step_index, the per-slot constraint summary, the invoke key hint, and any
-    legacy warnings.
+    step_index, the per-slot constraint summary (with capped options), the
+    invoke key hint, any legacy warnings, and -- when provided -- the run guide.
     """
-    display_slots = [{k: v for k, v in s.items() if k != "acceptable_extensions"} for s in slots]
-    return {
+    result: dict[str, Any] = {
         "inputs_template": {str(s["step_index"]): _placeholder_for(s) for s in slots},
-        "slots": display_slots,
+        "slots": [_display_slot(s, verbose) for s in slots],
         "inputs_by": "step_index|step_uuid",
         "warnings": warnings or [],
     }
+    if guide is not None:
+        result["guide"] = guide
+    return result
+
+
+def build_guide(
+    workflow_show: dict[str, Any], run_model: dict[str, Any] | None, verbose: bool
+) -> dict[str, Any]:
+    """Assemble the model-facing run guide from a show_workflow dict.
+
+    summary: full readme when verbose, else a cleaned summary; falls back
+    readme -> help -> annotation. provenance: version + TRS source (always),
+    plus freshness flags from style=run when available. When run_model is None
+    (the .ga fallback path), parameter options weren't resolved -- note it.
+    """
+    readme = workflow_show.get("readme") or ""
+    help_text = workflow_show.get("help") or ""
+    annotation = workflow_show.get("annotation") or ""
+    # Pick the first source whose cleaned form has real prose (a headers-only
+    # readme cleans to ""), then render it per verbose. annotation is the last resort.
+    chosen_raw = ""
+    for text in (readme, help_text):
+        if _clean_readme_summary(text).strip():
+            chosen_raw = text
+            break
+    if chosen_raw:
+        summary = chosen_raw if verbose else _clean_readme_summary(chosen_raw)
+    else:
+        summary = annotation
+
+    src_meta = workflow_show.get("source_metadata") or {}
+    provenance: dict[str, Any] = {
+        "version": workflow_show.get("version"),
+        "source": {"trs_id": src_meta.get("trs_tool_id"), "trs_url": src_meta.get("trs_url")},
+    }
+    if run_model is not None:
+        provenance["freshness"] = {
+            "has_upgrade_messages": run_model.get("has_upgrade_messages"),
+            "step_version_changes": run_model.get("step_version_changes") or [],
+        }
+
+    guide: dict[str, Any] = {"summary": summary, "annotation": annotation, "provenance": provenance}
+    if run_model is None:
+        guide["notes"] = [
+            "Parameter options (e.g. reference genome) resolve at run time; "
+            "call again with a history_id for resolved values."
+        ]
+    return guide
