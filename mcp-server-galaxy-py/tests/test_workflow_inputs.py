@@ -2,6 +2,9 @@ import json as _json
 from pathlib import Path
 
 from galaxy_mcp.workflow_inputs import (
+    _clean_readme_summary,
+    _collection_type_compatible,
+    build_guide,
     build_workflow_input_template,
     find_legacy_warnings,
     normalize_ga_steps,
@@ -310,8 +313,6 @@ def test_build_template_skeleton_and_slots():
 # Fix 1: _collection_type_compatible -- segment comparison, not raw suffix
 # ---------------------------------------------------------------------------
 
-from galaxy_mcp.workflow_inputs import _collection_type_compatible  # noqa: E402
-
 
 def test_collection_type_compatible_list_does_not_satisfy_paired():
     # "list" does not end with ":paired"; the bare-suffix check wrongly passed before the fix
@@ -579,8 +580,6 @@ def test_build_template_omits_acceptable_extensions_from_display_slots():
 # Task 1 (run-guide): _clean_readme_summary moved to the pure module
 # ---------------------------------------------------------------------------
 
-from galaxy_mcp.workflow_inputs import _clean_readme_summary  # noqa: E402
-
 
 def test_clean_readme_summary_strips_headers_and_truncates():
     md = "# Title\n\nThis workflow does X.\n## Details\nThen Y."
@@ -597,8 +596,6 @@ def test_clean_readme_summary_empty():
 # ---------------------------------------------------------------------------
 # Task 2 (run-guide): options field on the slot contract
 # ---------------------------------------------------------------------------
-
-from pathlib import Path  # noqa: E402
 
 
 def test_ga_enumerated_restrictions_become_options():
@@ -656,8 +653,6 @@ def test_run_model_real_fixture_has_strandedness_options():
 # ---------------------------------------------------------------------------
 # Task 3 (run-guide): build_guide assembles the model-facing run guide
 # ---------------------------------------------------------------------------
-
-from galaxy_mcp.workflow_inputs import build_guide  # noqa: E402
 
 WF_SHOW = {
     "version": 12,
