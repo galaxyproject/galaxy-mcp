@@ -3302,11 +3302,14 @@ def delete_user_tool(uuid: str) -> GalaxyResult:
 
 @mcp.tool(tags={"tools", "write", "extended"})
 def run_user_tool(history_id: str, tool_uuid: str, inputs: dict[str, Any]) -> GalaxyResult:
-    """Run a user-defined tool via the Galaxy jobs API.
+    """Run a user-defined tool via the standard Galaxy tools API.
 
-    User-defined tools cannot be run via the standard run_tool() endpoint.
-    This function uses POST /api/jobs with the tool UUID, matching how
-    the Galaxy UI submits user-defined tool jobs.
+    Submits the UDT with POST /api/tools carrying the tool UUID. This
+    synchronous endpoint runs user-defined tools on every Galaxy that
+    supports them and needs no Celery -- unlike the newer POST /api/jobs
+    tool-request path, which is Celery-only and 500s for UDTs on 26.0.
+    It returns the job and output dataset handles immediately; the job
+    then runs asynchronously on the cluster (poll it for state).
 
     Args:
         history_id: Galaxy history ID where outputs will be placed.
@@ -3342,16 +3345,17 @@ def run_user_tool(history_id: str, tool_uuid: str, inputs: dict[str, Any]) -> Ga
             raise ValueError(f"No user-defined tool found with UUID '{tool_uuid}'")
         tool_version = tool_info.get("representation", {}).get("version", "0.1.0")
 
+        # POST /api/tools resolves the UDT by uuid and runs it synchronously.
+        # tool_id and tool_uuid are mutually exclusive here -- send only the uuid.
         payload = {
-            "tool_id": tool_id,
+            "history_id": history_id,
             "tool_uuid": tool_uuid,
             "tool_version": tool_version,
-            "history_id": history_id,
             "inputs": inputs,
-            "use_cached_jobs": False,
+            "input_format": "legacy",
         }
-        job_url = f"{gi.url}/jobs"
-        result = gi.make_post_request(job_url, payload=payload)
+        tools_url = f"{gi.url}/tools"
+        result = gi.make_post_request(tools_url, payload=payload)
 
         return GalaxyResult(
             data=result,
