@@ -30,3 +30,7 @@ Thumbs.db
 
 # Test coverage
 coverage/
+
+# Keep local Claude settings out, but track shared skills (e.g. the release skill)
+.claude/*
+!.claude/skills/
