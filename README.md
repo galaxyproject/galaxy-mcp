@@ -64,6 +64,15 @@ uv sync
 uv run galaxy-mcp --transport streamable-http --host 0.0.0.0 --port 8000
 ```
 
+### `gxy` command-line interface
+
+The package also ships `gxy`, a JSON-first CLI over the same Galaxy operations --
+for humans, shell scripts, and CI (think IWC workflow discovery, history/dataset
+management, and workflow runs from the terminal). See the [CLI section in the
+package README](mcp-server-galaxy-py/README.md#gxy-command-line-interface) for
+configuration and examples. For LLM agents, prefer the MCP server / code-mode over
+the CLI.
+
 ## Container Usage
 
 The published image defaults to stdio transport (no HTTP listener):

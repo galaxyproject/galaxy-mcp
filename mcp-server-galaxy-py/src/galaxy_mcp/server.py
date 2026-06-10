@@ -320,7 +320,9 @@ def _format_tool_input_error(
 dotenv_path = find_dotenv(usecwd=True)
 if dotenv_path:
     load_dotenv(dotenv_path)
-    print(f"Loaded environment variables from {dotenv_path}")
+    # Log to stderr, not stdout -- stdout is the data channel for the gxy CLI
+    # (JSON) and the MCP stdio transport (JSON-RPC); a stray print corrupts both.
+    logger.info("Loaded environment variables from %s", dotenv_path)
 
 # Configure Galaxy target and client state
 raw_galaxy_url = os.environ.get("GALAXY_URL")
@@ -739,6 +741,29 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
             error_msg += " Verify the URL format (should end with /) and API key."
 
         raise ValueError(error_msg) from e
+
+
+def connect_global(url: str, api_key: str) -> GalaxyResult:
+    """Establish a process-global Galaxy connection for single-user clients.
+
+    Unlike the connect() MCP tool -- which is OAuth/session-aware for multi-user
+    servers and deliberately does not write global state -- this always seeds the
+    module-global galaxy_state. It is intended ONLY for single-user, single-process
+    contexts such as the gxy CLI, and must never be called inside the multi-tenant
+    HTTP server, where it would leak one user's credentials into the global default.
+    """
+    normalized = url if url.endswith("/") else f"{url}/"
+    gi = _make_thread_safe(GalaxyInstance(url=normalized, key=api_key, user_agent=USER_AGENT))
+    user_info = gi.users.get_current_user()  # validates the credentials
+    galaxy_state["url"] = normalized
+    galaxy_state["api_key"] = api_key
+    galaxy_state["gi"] = gi
+    galaxy_state["connected"] = True
+    return GalaxyResult(
+        data={"connected": True, "user": user_info, "url": normalized, "auth": "global"},
+        success=True,
+        message=f"Connected to Galaxy at {normalized}",
+    )
 
 
 @mcp.tool(tags={"tools", "read", "extended"})
