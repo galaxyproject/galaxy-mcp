@@ -227,7 +227,7 @@ class GalaxyOAuthProvider(OAuthProvider):
         except InvalidToken:
             return None
 
-        if payload["client_id"] != client.client_id:
+        if client.client_id is None or payload["client_id"] != client.client_id:
             return None
 
         if payload["exp"] < time.time():
@@ -253,7 +253,7 @@ class GalaxyOAuthProvider(OAuthProvider):
         if payload["exp"] < time.time():
             raise GalaxyAuthenticationError("Authorization code expired.")
 
-        if payload["client_id"] != client.client_id:
+        if client.client_id is None or payload["client_id"] != client.client_id:
             raise GalaxyAuthenticationError("Authorization code issued for a different client.")
 
         galaxy_payload = payload["galaxy"]
@@ -295,7 +295,7 @@ class GalaxyOAuthProvider(OAuthProvider):
         if payload["exp"] < time.time():
             raise GalaxyAuthenticationError("Refresh token expired.")
 
-        if payload["client_id"] != client.client_id:
+        if client.client_id is None or payload["client_id"] != client.client_id:
             raise GalaxyAuthenticationError("Refresh token issued for a different client.")
 
         resolved_scopes = scopes or payload["scopes"]
