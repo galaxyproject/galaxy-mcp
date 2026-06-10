@@ -26,12 +26,14 @@ from galaxy_mcp.auth import (
 )
 
 REDIRECT_URI = "https://example.test/callback"
+# Mirrors the galaxy payload _authenticate_and_complete actually stores in a token
+# (keys: url / api_key / username / user_email). The provider treats it as opaque,
+# but keeping the real shape here keeps the round-trip assertions honest.
 GALAXY_SESSION = {
-    "galaxy_url": "https://galaxy.test/",
+    "url": "https://galaxy.test/",
     "api_key": "galaxy-api-key",
     "username": "alice",
     "user_email": "alice@example.test",
-    "scopes": ["galaxy:full"],
 }
 
 
@@ -198,8 +200,11 @@ class TestAuthorizationCode:
         assert _run(provider.load_authorization_code(_client(), "garbage")) is None
 
     def test_exchange_valid_issues_tokens(self, provider):
+        # Drive the real load -> exchange chain (not a stand-in carrier) on the happy path.
         code = _auth_code(provider)
-        tokens = _run(provider.exchange_authorization_code(_client(), SimpleNamespace(code=code)))
+        loaded = _run(provider.load_authorization_code(_client(), code))
+        assert loaded is not None
+        tokens = _run(provider.exchange_authorization_code(_client(), loaded))
         access = provider.decode_access_token(tokens.access_token)
         assert access is not None
         assert access["client_id"] == "client-1"
@@ -242,13 +247,23 @@ class TestRefreshToken:
         token = _refresh(provider, client_id="client-1")
         assert _run(provider.load_refresh_token(_client("client-2"), token)) is None
 
+    def test_load_anonymous_client_returns_none(self, provider):
+        # load_refresh_token lacks the explicit `client_id is None` guard the other
+        # three methods got, but a client-bound token still can't be loaded by an
+        # anonymous client because None != the token's client_id. Lock that in.
+        token = _refresh(provider, client_id="client-1")
+        assert _run(provider.load_refresh_token(_anonymous_client(), token)) is None
+
     def test_load_expired_returns_none(self, provider):
         token = _refresh(provider, exp_offset=-10)
         assert _run(provider.load_refresh_token(_client(), token)) is None
 
     def test_exchange_valid_reissues_tokens(self, provider):
+        # Drive the real load -> exchange chain on the happy path.
         token = _refresh(provider)
-        tokens = _run(provider.exchange_refresh_token(_client(), SimpleNamespace(token=token), []))
+        loaded = _run(provider.load_refresh_token(_client(), token))
+        assert loaded is not None
+        tokens = _run(provider.exchange_refresh_token(_client(), loaded, []))
         access = provider.decode_access_token(tokens.access_token)
         assert access is not None
         assert access["client_id"] == "client-1"
@@ -300,6 +315,15 @@ class TestClientRegistryAndRevocation:
         with pytest.raises(ValueError, match="client_id"):
             _run(provider.register_client(_anonymous_client()))
 
-    def test_revoke_token_is_noop(self, provider):
-        # Stateless tokens can't be individually revoked; the call must not raise.
-        assert _run(provider.revoke_token(SimpleNamespace(token="whatever"))) is None
+    def test_revoke_token_is_noop_token_stays_valid(self, provider):
+        # Stateless tokens can't be individually revoked. revoke_token is a no-op,
+        # so the token still validates afterward -- assert that explicitly rather
+        # than only that the call doesn't raise. This documents current behavior,
+        # it is NOT an endorsement (see the revocation note in the PR/review).
+        tokens = provider._issue_tokens(
+            client_id="client-1", scopes=["galaxy:full"], galaxy_payload=dict(GALAXY_SESSION)
+        )
+        access = _run(provider.load_access_token(tokens.access_token))
+        assert access is not None
+        assert _run(provider.revoke_token(access)) is None
+        assert _run(provider.load_access_token(tokens.access_token)) is not None
