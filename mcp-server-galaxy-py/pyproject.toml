@@ -50,8 +50,7 @@ code-mode = [
 ]
 dev = [
     "ruff>=0.11.2",
-    # held <1.20 for now: mypy 1.20 newly flags client_id nullability in auth.py
-    "mypy>=1.8.0,<1.20",
+    "mypy>=1.8.0,<2",
     "types-requests>=2.31.0",
     "pytest>=8.0.0",
     "pytest-cov>=4.1.0",
