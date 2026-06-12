@@ -122,18 +122,17 @@ git push "$CANON" HEAD:main
 
 ## Phase 4 -- Curated release body
 
-Write the approved notes to a file and look up the draft tag **fresh**. Don't delete the
-draft and don't hard-code its tag: release-drafter recomputes the *same* draft object on
-every push to main, so its tag drifts between when you start the cut and when you publish
-(seen live: a `v1.7.1` draft was renamed to `v1.8.1` mid-cut). At Gate 2 we retag and
-publish that existing draft in place -- no delete, which also sidesteps a permission
-classifier that (rightly) won't auto-approve deleting a release the agent didn't create.
+Write the approved notes to a file. Don't delete the release-drafter draft and don't
+hard-code its tag: release-drafter recomputes the *same* draft object on every push to
+main, so its tag drifts between when you start the cut and when you publish (seen live: a
+`v1.7.1` draft was renamed to `v1.8.1` mid-cut). At Gate 2 -- in the same shell as the
+publish, so it can't go stale across the stop -- we resolve the draft tag fresh, then
+retag and publish that existing draft in place. No delete, which also sidesteps a
+permission classifier that (rightly) won't auto-approve deleting a release the agent
+didn't create.
 
 ```bash
-printf '%s\n' "$APPROVED_NOTES" > /tmp/gmcp-notes.md
-# Resolve the draft tag now, by lookup -- never a literal like v1.7.1 (it moves):
-DRAFT_TAG=$(gh release list --repo galaxyproject/galaxy-mcp \
-  --json tagName,isDraft -q '[.[]|select(.isDraft)][0].tagName')   # may be empty if no draft exists
+printf '%s\n' "$APPROVED_NOTES" > /tmp/gmcp-notes.md   # the notes FILE persists across the Gate 2 stop; the draft tag is resolved fresh at the gate (below)
 ```
 
 ## Phase 5 -- GATE 2: publish release -> PyPI  (STOP)
@@ -144,9 +143,13 @@ DRAFT_TAG=$(gh release list --repo galaxyproject/galaxy-mcp \
 command, no bundled delete (a bundled `delete && create` gets the whole line denied). On go:
 
 ```bash
+# Resolve the draft tag fresh HERE -- same shell as the publish, so drift across the gate
+# can't bite and the var is guaranteed set. Never a literal like v1.7.1. Empty if no draft.
+DRAFT_TAG=$(gh release list --repo galaxyproject/galaxy-mcp \
+  --json tagName,isDraft -q '[.[]|select(.isDraft)][0].tagName')
 if [ -n "$DRAFT_TAG" ]; then
   # Retag the existing draft to v$NEW and publish it in place -- applies our curated notes,
-  # creates tag v$NEW at main, fires the deploy. No delete needed; the draft tag's drift is moot.
+  # creates tag v$NEW at main, fires the deploy. No delete needed.
   gh release edit "$DRAFT_TAG" --repo galaxyproject/galaxy-mcp \
     --tag "v$NEW" --target main --title "v$NEW" --notes-file /tmp/gmcp-notes.md --draft=false
 else
@@ -157,12 +160,15 @@ fi
 ```
 
 Watch the deploy; STOP and report if it fails. The run may not exist the instant publish
-returns, so poll briefly for it rather than a single racy lookup:
+returns, so poll for it -- **filtered to this release's tag** (`--branch "v$NEW"`). Without
+that filter a bare `-L 1` returns the *previous* release's already-green run instantly, the
+loop breaks on iteration 1, and you'd watch the wrong (passing) run while the real deploy is
+still building:
 
 ```bash
 for i in $(seq 1 10); do
   RUN=$(gh run list --repo galaxyproject/galaxy-mcp --workflow "Release Python Package" \
-    --event release -L 1 --json databaseId -q '.[0].databaseId')
+    --event release --branch "v$NEW" -L 1 --json databaseId -q '.[0].databaseId')
   [ -n "$RUN" ] && break
   sleep 3
 done
