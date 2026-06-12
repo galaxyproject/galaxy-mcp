@@ -12,6 +12,8 @@ from galaxy_mcp.server import (
     cancel_workflow_invocation,
     connect,
     create_history,
+    create_user_tool,
+    delete_user_tool,
     download_dataset,
     ensure_connected,
     galaxy_state,
@@ -36,6 +38,7 @@ from galaxy_mcp.server import (
     import_workflow_from_iwc,
     invoke_workflow,
     list_history_ids,
+    list_user_tools,
     list_workflows,
     recommend_iwc_workflows,
     run_tool,
@@ -86,6 +89,9 @@ list_history_ids_fn = get_function(list_history_ids)
 list_workflows_fn = get_function(list_workflows)
 recommend_iwc_workflows_fn = get_function(recommend_iwc_workflows)
 run_tool_fn = get_function(run_tool)
+create_user_tool_fn = get_function(create_user_tool)
+delete_user_tool_fn = get_function(delete_user_tool)
+list_user_tools_fn = get_function(list_user_tools)
 run_user_tool_fn = get_function(run_user_tool)
 search_iwc_workflows_fn = get_function(search_iwc_workflows)
 search_tools_fn = get_function(search_tools_by_name)
@@ -126,6 +132,9 @@ __all__ = [
     "list_workflows_fn",
     "recommend_iwc_workflows_fn",
     "run_tool_fn",
+    "create_user_tool_fn",
+    "delete_user_tool_fn",
+    "list_user_tools_fn",
     "run_user_tool_fn",
     "search_iwc_workflows_fn",
     "search_tools_fn",
