@@ -166,6 +166,9 @@ class GalaxyOAuthProvider(OAuthProvider):
         self._galaxy_url = galaxy_url if galaxy_url.endswith("/") else f"{galaxy_url}/"
         self._transactions: dict[str, AuthorizationTransaction] = {}
         self._clients: dict[str, OAuthClientInformationFull] = {}
+        # Spent authorization codes (sha256 -> expiry) so a code can't be
+        # replayed within its TTL. Pruned on use; never grows past one lifetime.
+        self._spent_auth_codes: dict[str, float] = {}
         self._fernet = Fernet(self._derive_key(session_secret))
         self._client_registry_path = (
             Path(client_registry_path).expanduser() if client_registry_path else None
@@ -256,10 +259,32 @@ class GalaxyOAuthProvider(OAuthProvider):
         if client.client_id is None or payload["client_id"] != client.client_id:
             raise GalaxyAuthenticationError("Authorization code issued for a different client.")
 
+        self._consume_authorization_code(authorization_code.code, payload["exp"])
+
         galaxy_payload = payload["galaxy"]
         return self._issue_tokens(
             client_id=client.client_id, scopes=payload["scopes"], galaxy_payload=galaxy_payload
         )
+
+    def _consume_authorization_code(self, code: str, expires_at: float) -> None:
+        """Enforce single-use for authorization codes (RFC 6749 4.1.2 / 10.5).
+
+        Codes are stateless encrypted blobs, so single-use needs a little state:
+        a bounded set of spent code hashes kept only until each code would have
+        expired anyway. Pruning on every call keeps it from growing past the
+        codes seen within one auth-code lifetime. The check-then-insert is
+        synchronous, so it is atomic on the event loop -- two concurrent replays
+        of the same code can't both succeed.
+        """
+        now = time.time()
+        for spent, exp in list(self._spent_auth_codes.items()):
+            if exp <= now:
+                del self._spent_auth_codes[spent]
+
+        code_id = hashlib.sha256(code.encode("utf-8")).hexdigest()
+        if code_id in self._spent_auth_codes:
+            raise GalaxyAuthenticationError("Authorization code has already been used.")
+        self._spent_auth_codes[code_id] = expires_at
 
     @override
     async def load_refresh_token(
