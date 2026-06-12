@@ -47,9 +47,11 @@ Abort cleanly on any failure, with a specific message.
 
 ```bash
 gh auth status
-# Canonical remote = whichever remote pushes to galaxyproject/galaxy-mcp (don't assume "upstream"):
-CANON=$(git remote -v | awk '$3=="(push)" && $2 ~ /[:/]galaxyproject\/galaxy-mcp(\.git)?$/ {print $1; exit}')
-test -n "$CANON"
+# Canonical remote = whichever remote pushes to galaxyproject/galaxy-mcp (don't assume "upstream").
+# Use grep, NOT awk: a `[:/]` bracket in awk is read as a POSIX class on macOS/BSD awk and aborts
+# with "nonterminated character class", leaving CANON empty and cascading into `/main` errors later.
+CANON=$(git remote -v | grep '(push)' | grep -E 'galaxyproject/galaxy-mcp(\.git)? ' | head -1 | awk '{print $1}')
+test -n "$CANON" || { echo "ERROR: no remote points at galaxyproject/galaxy-mcp -- add one and retry"; exit 1; }
 git fetch "$CANON" --tags
 # main must be green before releasing:
 gh run list --repo galaxyproject/galaxy-mcp --branch main --workflow "Python Tests" -L 1 \
@@ -120,30 +122,51 @@ git push "$CANON" HEAD:main
 
 ## Phase 4 -- Curated release body
 
-Write the approved notes to a file. The stale release-drafter draft is tagged wrong
-(e.g. `v1.6.1`); the simplest reliable path is to delete it and create the real release
-fresh in Gate 2.
+Write the approved notes to a file and look up the draft tag **fresh**. Don't delete the
+draft and don't hard-code its tag: release-drafter recomputes the *same* draft object on
+every push to main, so its tag drifts between when you start the cut and when you publish
+(seen live: a `v1.7.1` draft was renamed to `v1.8.1` mid-cut). At Gate 2 we retag and
+publish that existing draft in place -- no delete, which also sidesteps a permission
+classifier that (rightly) won't auto-approve deleting a release the agent didn't create.
 
 ```bash
 printf '%s\n' "$APPROVED_NOTES" > /tmp/gmcp-notes.md
-gh release delete <draft-tag> --repo galaxyproject/galaxy-mcp --yes   # remove the mislabeled draft (no real tag exists yet)
+# Resolve the draft tag now, by lookup -- never a literal like v1.7.1 (it moves):
+DRAFT_TAG=$(gh release list --repo galaxyproject/galaxy-mcp \
+  --json tagName,isDraft -q '[.[]|select(.isDraft)][0].tagName')   # may be empty if no draft exists
 ```
 
 ## Phase 5 -- GATE 2: publish release -> PyPI  (STOP)
 
 ⛔ **Hard stop.** Publishing fires `python-release.yml`, which **uploads
 `galaxy-mcp $NEW` to PyPI -- this cannot be undone.** Main must already carry `$NEW`
-(Gate 1). Wait for an explicit "go". On go:
+(Gate 1). Wait for an explicit "go". The "go" authorizes a single publish action -- one
+command, no bundled delete (a bundled `delete && create` gets the whole line denied). On go:
 
 ```bash
-gh release create "v$NEW" --repo galaxyproject/galaxy-mcp \
-  --target main --title "v$NEW" --notes-file /tmp/gmcp-notes.md   # creates tag v$NEW at main HEAD, fires deploy
+if [ -n "$DRAFT_TAG" ]; then
+  # Retag the existing draft to v$NEW and publish it in place -- applies our curated notes,
+  # creates tag v$NEW at main, fires the deploy. No delete needed; the draft tag's drift is moot.
+  gh release edit "$DRAFT_TAG" --repo galaxyproject/galaxy-mcp \
+    --tag "v$NEW" --target main --title "v$NEW" --notes-file /tmp/gmcp-notes.md --draft=false
+else
+  # No draft existed -- create the release fresh.
+  gh release create "v$NEW" --repo galaxyproject/galaxy-mcp \
+    --target main --title "v$NEW" --notes-file /tmp/gmcp-notes.md
+fi
 ```
 
-Watch the deploy; STOP and report if it fails:
+Watch the deploy; STOP and report if it fails. The run may not exist the instant publish
+returns, so poll briefly for it rather than a single racy lookup:
 
 ```bash
-RUN=$(gh run list --repo galaxyproject/galaxy-mcp --workflow "Release Python Package" -L 1 --json databaseId -q '.[0].databaseId')
+for i in $(seq 1 10); do
+  RUN=$(gh run list --repo galaxyproject/galaxy-mcp --workflow "Release Python Package" \
+    --event release -L 1 --json databaseId -q '.[0].databaseId')
+  [ -n "$RUN" ] && break
+  sleep 3
+done
+test -n "$RUN" || { echo "deploy run not found yet -- check the Actions tab"; exit 1; }
 gh run watch --repo galaxyproject/galaxy-mcp "$RUN" --exit-status
 # Confirm it actually landed on PyPI:
 curl -s https://pypi.org/pypi/galaxy-mcp/json | python3 -c "import sys,json;print(json.load(sys.stdin)['info']['version'])"   # expect $NEW
@@ -178,6 +201,7 @@ Clean up (from the primary checkout): `git worktree remove ../gmcp-release && gi
 - About to push the bump or publish the release without an explicit "go" this turn -> STOP, show, wait.
 - About to push to your fork (`origin`) instead of `$CANON` (galaxyproject) -> wrong remote.
 - Took release-drafter's patch version (e.g. `v1.6.1`) when `main` says `1.7.0.dev0` -> use the `.dev0` marker; the draft mislabeled it.
+- Hard-coded the draft tag (e.g. `v1.7.1`) or bundled `delete && create` for the publish -> the tag drifts and a bundled delete gets the whole line denied. Look the draft tag up fresh and retag-publish in place.
 - `sed`-ed the version in `uv.lock` -> it also rewrote other deps pinned at that version. Use `uv lock`.
 - Cutting in the primary checkout (maybe a feature branch) instead of a worktree off `$CANON/main`.
 - Deploy failed but moving on -> never assume PyPI got it; verify via the PyPI JSON.
@@ -188,6 +212,7 @@ Clean up (from the primary checkout): `git worktree remove ../gmcp-release && gi
 | Mistake | Fix |
 |---|---|
 | Wrong version (drafter's patch) | Drop `.dev0` from `main`'s version; that's the intent |
+| Hard-coded / deleted the drafter draft | Look up the draft tag fresh; retag-publish it in place (`gh release edit --draft=false`) |
 | `sed` on `uv.lock` | `uv lock` regenerates only the self-version line |
 | Forgot `__init__.py` / `uv.lock` | Bump all three version files together |
 | Pushed to the fork | Push to `$CANON` (galaxyproject/galaxy-mcp) |
