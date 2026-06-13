@@ -1,0 +1,23 @@
+{
+  "name": "@galaxyproject/galaxy-mcp",
+  "version": "0.0.0",
+  "type": "module",
+  "bin": { "galaxy-mcp": "./dist/index.js" },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@galaxyproject/galaxy-ops": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.3.0",
+    "vitest": "^4.0.0",
+    "typescript": "^6.0.0"
+  }
+}

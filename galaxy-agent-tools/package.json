@@ -1,0 +1,17 @@
+{
+  "name": "galaxy-agent-tools",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.19" },
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "depcruise": "dependency-cruiser --config .dependency-cruiser.cjs packages/galaxy-ops/src/index.ts packages/galaxy-mcp/src/index.ts packages/galaxy-cli/src/index.ts"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.0",
+    "dependency-cruiser": "^16.0.0"
+  },
+  "packageManager": "pnpm@9.12.0"
+}

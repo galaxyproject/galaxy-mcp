@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "../..",
+    "declaration": false,
+    "paths": { "@galaxyproject/galaxy-ops": ["../galaxy-ops/src/index.ts"] }
+  },
+  "include": ["src"]
+}
