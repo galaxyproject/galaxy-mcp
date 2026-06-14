@@ -3039,8 +3039,8 @@ def _enrich_supplied_inputs(gi: GalaxyInstance, inputs: dict[str, Any]) -> dict[
 @mcp.tool(tags={"workflows", "write", "extended"})
 def invoke_workflow(
     workflow_id: str,
-    inputs: dict[str, Any] | None = None,
-    params: dict[str, Any] | None = None,
+    inputs: dict[str, Any] | str | None = None,
+    params: dict[str, Any] | str | None = None,
     history_id: str | None = None,
     history_name: str | None = None,
     inputs_by: str = "step_index",
@@ -3072,6 +3072,8 @@ def invoke_workflow(
     try:
         gi: GalaxyInstance = state["gi"]
 
+        inputs = json.loads(inputs) if isinstance(inputs, str) else inputs
+        params = json.loads(params) if isinstance(params, str) else params
         # Preflight: validate supplied inputs against the workflow's slots.
         if inputs:
             try:
