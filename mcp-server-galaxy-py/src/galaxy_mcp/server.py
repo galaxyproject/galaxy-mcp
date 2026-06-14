@@ -3072,6 +3072,8 @@ def invoke_workflow(
     try:
         gi: GalaxyInstance = state["gi"]
 
+        inputs = json.loads(inputs) if isinstance(inputs, str) else inputs
+        params = json.loads(params) if isinstance(params, str) else params
         # Preflight: validate supplied inputs against the workflow's slots.
         if inputs:
             try:
