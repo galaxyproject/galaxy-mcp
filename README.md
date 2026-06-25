@@ -6,7 +6,12 @@ This project provides a Model Context Protocol (MCP) server for interacting with
 
 This repository contains a Python-based MCP server implementation that provides comprehensive integration with Galaxy's API through BioBlend.
 
-Note: There is also a work-in-progress TypeScript implementation available in a separate branch of this repository.
+In addition to the Python server, this repository now includes a **TypeScript
+workspace** in [`galaxy-agent-tools/`](galaxy-agent-tools/) that offers the same
+Galaxy operations two ways: a `galaxy-cli` command-line tool and a `galaxy-mcp`
+(Node) MCP server, built on a shared core and kept in lockstep with this server's
+toolset. See the [galaxy-agent-tools README](galaxy-agent-tools/README.md) to build
+and use it.
 
 ## Key Features
 
