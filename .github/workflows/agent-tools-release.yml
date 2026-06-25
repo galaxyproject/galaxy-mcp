@@ -1,0 +1,60 @@
+name: Agent Tools (TS) Release
+
+# Publishes the @galaxyproject/galaxy-{ops,cli,mcp} packages to npm.
+# Trigger by pushing a tag like `ts-v0.1.0` (or run manually). Requires an
+# `NPM_TOKEN` repo secret with publish rights to the @galaxyproject org.
+
+on:
+  push:
+    tags:
+      - "ts-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # required for npm provenance
+
+defaults:
+  run:
+    working-directory: galaxy-agent-tools
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: galaxy-agent-tools/package.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: galaxy-agent-tools/pnpm-lock.yaml
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm -r typecheck
+
+      - name: Test
+        run: pnpm -r test
+
+      - name: Build
+        run: pnpm -r build
+
+      # Publishes galaxy-ops first, then the surfaces (pnpm resolves the order and
+      # rewrites `workspace:*` deps to the concrete version). Re-running on an
+      # already-published version is a no-op error, which is the desired guard.
+      - name: Publish to npm
+        run: pnpm -r publish --access public --provenance --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"

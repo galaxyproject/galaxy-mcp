@@ -1,7 +1,22 @@
 {
   "name": "@galaxyproject/galaxy-cli",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Command-line interface for Galaxy agent operations -- histories, datasets, tools, workflows, and the IWC catalog.",
+  "license": "MIT",
+  "author": "Galaxy Project",
+  "homepage": "https://github.com/galaxyproject/galaxy-mcp/tree/main/galaxy-agent-tools/packages/galaxy-cli#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/galaxyproject/galaxy-mcp.git",
+    "directory": "galaxy-agent-tools/packages/galaxy-cli"
+  },
+  "bugs": "https://github.com/galaxyproject/galaxy-mcp/issues",
+  "keywords": ["galaxy", "bioinformatics", "cli", "galaxy-project"],
   "type": "module",
+  "engines": { "node": ">=22.19" },
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": { "galaxy-cli": "./dist/index.js" },
   "files": ["dist"],
   "scripts": {
