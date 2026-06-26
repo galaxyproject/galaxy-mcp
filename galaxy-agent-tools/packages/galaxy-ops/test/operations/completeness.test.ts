@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import "../../src/operations/all";
 import { allOperations } from "../../src/operations/registry";
-import { INTENTIONAL_GAPS } from "../../../galaxy-mcp/test/parity.test";
+
+const INTENTIONAL_GAPS: Set<string> = new Set(JSON.parse(
+  readFileSync(fileURLToPath(new URL("../../../galaxy-mcp/test/fixtures/intentional-gaps.json", import.meta.url)), "utf8"),
+));
 
 describe("registry completeness", () => {
   it("registered op names exactly match the external parity fixture (no missing, no extra)", () => {

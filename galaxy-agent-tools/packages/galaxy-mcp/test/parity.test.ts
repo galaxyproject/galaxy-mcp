@@ -13,7 +13,9 @@ const galaxyTools: string[] = JSON.parse(
 // Intentional parity gaps: fixture names we deliberately do NOT implement as ops.
 // `connect` is stateful per-session credential-setting -- a transport/surface concern,
 // not an operation over the stateless GalaxyContext.
-export const INTENTIONAL_GAPS = new Set(["connect"]);
+const INTENTIONAL_GAPS: Set<string> = new Set(JSON.parse(
+  readFileSync(fileURLToPath(new URL("./fixtures/intentional-gaps.json", import.meta.url)), "utf8"),
+));
 
 describe("op-name parity with the external Python MCP server (mcp-server-galaxy-py)", () => {
   it("every TS op name exists in the Python server's toolset (no silo drift)", () => {
