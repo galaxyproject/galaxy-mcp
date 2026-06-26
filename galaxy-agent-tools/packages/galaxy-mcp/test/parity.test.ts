@@ -22,6 +22,12 @@ describe("op-name parity with the external Python MCP server (mcp-server-galaxy-
     expect(drift, `TS ops not present in the Python MCP server: ${drift.join(", ")}`).toEqual([]);
   });
 
+  it("fixture name parity with the registry", () => {
+    const implemented = new Set(toolNames());
+    const drift = galaxyTools.filter((n) => !implemented.has(n) && !INTENTIONAL_GAPS.has(n));
+    expect(drift, `fixture names not present in the registry: ${drift.join(", ")}`).toEqual([]);
+  });
+
   it("documents intentional gaps that are present in the fixture but unimplemented", () => {
     const implemented = new Set(toolNames());
     for (const gap of INTENTIONAL_GAPS) {
