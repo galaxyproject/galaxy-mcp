@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { buildProgram } from "../src/program";
-import { createGalaxyContext } from "@galaxyproject/galaxy-ops";
+import { allOperations, createGalaxyContext } from "@galaxyproject/galaxy-ops";
 
 function ctxFactory() {
   // a context whose client returns canned data for any GET
@@ -20,7 +20,7 @@ describe("buildProgram", () => {
     const names = program.commands.map((c) => c.name());
     expect(names).toContain("get_histories");
     expect(names).toContain("create_history");
-    expect(names.length).toBe(37);
+    expect(names.length).toBe(allOperations.length);
   });
 
   it("runs an op and renders json to stdout", async () => {
