@@ -17,8 +17,9 @@ This is the TypeScript sibling of the Python MCP server in
 lockstep with it, so a tool called `get_histories` here behaves like
 `get_histories` there.
 
-> Status: the packages are unreleased (`0.0.0`); for now you build and run from
-> source as described below.
+> The packages are published on npm under the
+> [`@galaxyproject`](https://www.npmjs.com/org/galaxyproject) scope -- install
+> them (below), or build from source to develop.
 
 ## Layout
 
@@ -40,7 +41,24 @@ code.
 - [pnpm](https://pnpm.io) `9.12` (`corepack enable` will provide it)
 - A Galaxy server URL and an API key (Galaxy: **User -> Preferences -> Manage API Key**)
 
-## Install / build
+## Install
+
+```bash
+# the CLI -- install globally for a `galaxy-cli` command, or run via npx:
+npm install -g @galaxyproject/galaxy-cli
+npx @galaxyproject/galaxy-cli --help
+
+# the MCP server:
+npx @galaxyproject/galaxy-mcp
+```
+
+The core is a library you can depend on directly:
+
+```bash
+npm install @galaxyproject/galaxy-ops
+```
+
+### From source (for development)
 
 ```bash
 cd galaxy-agent-tools
@@ -48,17 +66,8 @@ pnpm install
 pnpm -r build        # compiles each package to dist/
 ```
 
-After building, the two entry points are:
-
-- CLI: `packages/galaxy-cli/dist/index.js`
-- MCP server: `packages/galaxy-mcp/dist/index.js`
-
-The examples below invoke them with `node <path>`. If you use the CLI often, alias
-it:
-
-```bash
-alias galaxy-cli="node $(pwd)/packages/galaxy-cli/dist/index.js"
-```
+The built entry points are `packages/galaxy-cli/dist/index.js` and
+`packages/galaxy-mcp/dist/index.js`; run them with `node <path>`.
 
 ## Connecting to Galaxy
 
@@ -90,8 +99,8 @@ galaxy-cli [global options] <command> [arguments]
 List commands and get help at any level:
 
 ```bash
-node packages/galaxy-cli/dist/index.js --help
-node packages/galaxy-cli/dist/index.js run_tool --help
+galaxy-cli --help
+galaxy-cli run_tool --help
 ```
 
 ### Global options
@@ -139,7 +148,7 @@ The process exit code reflects the outcome, following `sysexits.h` conventions:
 ### Examples
 
 ```bash
-CLI="node packages/galaxy-cli/dist/index.js"
+CLI="galaxy-cli"   # or: CLI="npx @galaxyproject/galaxy-cli"
 
 # Who am I?
 $CLI get_user
@@ -180,7 +189,7 @@ Run it directly to sanity-check:
 
 ```bash
 GALAXY_URL=https://usegalaxy.org/ GALAXY_API_KEY=your-api-key \
-  node packages/galaxy-mcp/dist/index.js
+  npx @galaxyproject/galaxy-mcp
 # -> "galaxy-mcp: connected on stdio"
 ```
 
@@ -191,8 +200,8 @@ More usefully, register it with an MCP client. For example, in Claude Desktop's
 {
   "mcpServers": {
     "galaxy": {
-      "command": "node",
-      "args": ["/absolute/path/to/galaxy-agent-tools/packages/galaxy-mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "@galaxyproject/galaxy-mcp"],
       "env": {
         "GALAXY_URL": "https://usegalaxy.org/",
         "GALAXY_API_KEY": "your-api-key"
