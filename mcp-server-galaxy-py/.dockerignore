@@ -1,0 +1,27 @@
+# Virtualenvs and tool caches -- never belong in the image
+.venv/
+.tox/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
+
+# Coverage / test artifacts
+.coverage
+htmlcov/
+
+# Local secrets and editor/agent state
+.env
+.env.*
+.claude/
+.aider*
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# VCS and CI (not needed at build time)
+.git/
+.github/
