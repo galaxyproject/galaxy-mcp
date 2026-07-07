@@ -1,0 +1,71 @@
+name: Publish Docker image
+
+on:
+  release:
+    types: [published]
+  push:
+    branches: [main]
+    paths:
+      - "mcp-server-galaxy-py/**"
+      - ".github/workflows/docker-publish.yml"
+  pull_request:
+    paths:
+      - "mcp-server-galaxy-py/**"
+      - ".github/workflows/docker-publish.yml"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: galaxyproject/galaxy-mcp
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # No login on PRs from forks: the token is read-only there and we only
+      # build to validate the Dockerfile, never push.
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # latest=auto: a semver release tag also moves :latest (skipped for pre-releases).
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=edge,branch=main
+            type=ref,event=pr
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: mcp-server-galaxy-py
+          file: mcp-server-galaxy-py/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # arm64 covers Apple Silicon users running the server locally; build it
+          # only when we actually publish, since emulated builds are slow.
+          platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
