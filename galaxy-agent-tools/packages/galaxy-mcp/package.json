@@ -1,7 +1,22 @@
 {
   "name": "@galaxyproject/galaxy-mcp",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Model Context Protocol (MCP) server exposing Galaxy agent operations as tools over stdio.",
+  "license": "MIT",
+  "author": "Galaxy Project",
+  "homepage": "https://github.com/galaxyproject/galaxy-mcp/tree/main/galaxy-agent-tools/packages/galaxy-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/galaxyproject/galaxy-mcp.git",
+    "directory": "galaxy-agent-tools/packages/galaxy-mcp"
+  },
+  "bugs": "https://github.com/galaxyproject/galaxy-mcp/issues",
+  "keywords": ["galaxy", "bioinformatics", "mcp", "model-context-protocol", "galaxy-project"],
   "type": "module",
+  "engines": { "node": ">=22.19" },
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": { "galaxy-mcp": "./dist/index.js" },
   "files": ["dist"],
   "scripts": {

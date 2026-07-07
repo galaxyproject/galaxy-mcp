@@ -1,7 +1,21 @@
 {
   "name": "@galaxyproject/galaxy-ops",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Framework-free TypeScript core for Galaxy agent operations: a typed Galaxy API client, an operation registry, and run/poll orchestration.",
+  "license": "MIT",
+  "author": "Galaxy Project",
+  "homepage": "https://github.com/galaxyproject/galaxy-mcp/tree/main/galaxy-agent-tools/packages/galaxy-ops#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/galaxyproject/galaxy-mcp.git",
+    "directory": "galaxy-agent-tools/packages/galaxy-ops"
+  },
+  "bugs": "https://github.com/galaxyproject/galaxy-mcp/issues",
+  "keywords": ["galaxy", "bioinformatics", "galaxy-project"],
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

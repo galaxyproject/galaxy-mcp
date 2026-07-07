@@ -1,0 +1,68 @@
+name: Agent Tools (TS) Release
+
+# Publishes the @galaxyproject/galaxy-{ops,cli,mcp} packages to npm.
+# Trigger by pushing a tag like `ts-v0.1.0` (or run manually). Auth is via npm
+# trusted publishing (OIDC) -- no NPM_TOKEN. Each package needs a trusted publisher
+# configured on npmjs.com (org: galaxyproject, repo: galaxy-mcp, workflow filename:
+# agent-tools-release.yml).
+
+on:
+  push:
+    tags:
+      - "ts-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # required for OIDC trusted publishing (and provenance)
+
+defaults:
+  run:
+    working-directory: galaxy-agent-tools
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: galaxy-agent-tools/package.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: galaxy-agent-tools/pnpm-lock.yaml
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm -r typecheck
+
+      - name: Test
+        run: pnpm -r test
+
+      - name: Build
+        run: pnpm -r build
+
+      # Trusted publishing (OIDC), no NPM_TOKEN: pnpm packs each package -- which
+      # rewrites `workspace:*` to the concrete version inside the tarball -- then npm
+      # (>= 11.5.1) does the OIDC-authenticated upload and auto-generates provenance.
+      # We publish with npm, not `pnpm publish`, because pnpm's OIDC support is not
+      # yet reliable. galaxy-ops goes first so the surfaces' dependency already exists.
+      - name: Publish to npm (trusted publishing)
+        run: |
+          set -euo pipefail
+          npm install -g npm@latest   # trusted publishing needs npm >= 11.5.1
+          for pkg in galaxy-ops galaxy-cli galaxy-mcp; do
+            tgz="$(cd "packages/$pkg" && pnpm pack --pack-destination "$RUNNER_TEMP" | tail -1)"
+            echo "Publishing $tgz"
+            npm publish "$tgz" --access public
+          done
