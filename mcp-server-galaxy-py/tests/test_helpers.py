@@ -45,6 +45,7 @@ from galaxy_mcp.server import (
     list_pages,
     list_user_tools,
     list_workflows,
+    recommend_biocontainer,
     recommend_iwc_workflows,
     revert_page_revision,
     run_tool,
@@ -103,6 +104,7 @@ recommend_iwc_workflows_fn = get_function(recommend_iwc_workflows)
 revert_page_revision_fn = get_function(revert_page_revision)
 run_tool_fn = get_function(run_tool)
 create_user_tool_fn = get_function(create_user_tool)
+recommend_biocontainer_fn = get_function(recommend_biocontainer)
 delete_user_tool_fn = get_function(delete_user_tool)
 list_user_tools_fn = get_function(list_user_tools)
 run_user_tool_fn = get_function(run_user_tool)
@@ -153,6 +155,7 @@ __all__ = [
     "revert_page_revision_fn",
     "run_tool_fn",
     "create_user_tool_fn",
+    "recommend_biocontainer_fn",
     "delete_user_tool_fn",
     "list_user_tools_fn",
     "run_user_tool_fn",
