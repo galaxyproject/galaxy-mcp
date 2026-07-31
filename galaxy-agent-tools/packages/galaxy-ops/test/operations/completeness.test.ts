@@ -4,43 +4,21 @@ import { fileURLToPath } from "node:url";
 import "../../src/operations/all";
 import { allOperations } from "../../src/operations/registry";
 
-const EXPECTED = [
-  "get_user", "run_tool", "get_invocations",
-  "get_server_info", "get_histories", "list_history_ids", "get_history_details",
-  "create_history", "get_dataset_details", "get_collection_details", "get_history_contents",
-  "list_workflows", "get_workflow_details", "get_tool_details",
-  "search_tools_by_name", "get_tool_panel", "get_tool_citations", "get_tool_run_examples",
-  "search_tools_by_keywords",
-  "get_job_details",
-  "update_history",
-  "cancel_workflow_invocation",
-  "download_dataset",
-  "get_iwc_workflows",
-  "get_iwc_workflow_details",
-  "search_iwc_workflows",
-  "recommend_iwc_workflows",
-  "import_workflow_from_iwc",
-  "list_user_tools",
-  "create_user_tool",
-  "delete_user_tool",
-  "run_user_tool",
-  "get_tool_input_template",
-  "get_workflow_input_template",
-  "invoke_workflow",
-  "upload_file",
-  "upload_file_from_url",
-];
+const INTENTIONAL_GAPS: Set<string> = new Set(JSON.parse(
+  readFileSync(fileURLToPath(new URL("../../../galaxy-mcp/test/fixtures/intentional-gaps.json", import.meta.url)), "utf8"),
+));
 
 describe("registry completeness", () => {
-  it("registers exactly the phase-1 op set (no missing, no extra)", () => {
-    expect(allOperations.map((o) => o.name).sort()).toEqual([...EXPECTED].sort());
-  });
-  it("every registered op name exists in the external parity fixture", () => {
+  it("registered op names exactly match the external parity fixture (no missing, no extra)", () => {
     const fixture: string[] = JSON.parse(
       readFileSync(fileURLToPath(new URL("../../../galaxy-mcp/test/fixtures/external-mcp-tools.json", import.meta.url)), "utf8"),
     );
-    const set = new Set(fixture);
-    const drift = allOperations.map((o) => o.name).filter((n) => !set.has(n));
-    expect(drift, `ops not in fixture: ${drift.join(", ")}`).toEqual([]);
+    const fixtureSet = new Set(fixture);
+    const operations = allOperations.map((o) => o.name);
+    const operationSet = new Set(operations);
+    const opsDrift = operations.filter((n) => !fixtureSet.has(n));
+    expect(opsDrift, `ops not in fixture: ${opsDrift.join(", ")}`).toEqual([]);
+    const fixtureDrift = fixture.filter((n) => !operationSet.has(n) && !INTENTIONAL_GAPS.has(n));
+    expect(fixtureDrift, `fixture names not in operations list: ${fixtureDrift.join(", ")}`).toEqual([]);
   });
 });

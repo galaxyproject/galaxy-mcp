@@ -13,13 +13,21 @@ const galaxyTools: string[] = JSON.parse(
 // Intentional parity gaps: fixture names we deliberately do NOT implement as ops.
 // `connect` is stateful per-session credential-setting -- a transport/surface concern,
 // not an operation over the stateless GalaxyContext.
-const INTENTIONAL_GAPS = new Set(["connect"]);
+const INTENTIONAL_GAPS: Set<string> = new Set(JSON.parse(
+  readFileSync(fileURLToPath(new URL("./fixtures/intentional-gaps.json", import.meta.url)), "utf8"),
+));
 
 describe("op-name parity with the external Python MCP server (mcp-server-galaxy-py)", () => {
   it("every TS op name exists in the Python server's toolset (no silo drift)", () => {
     const galaxy = new Set(galaxyTools);
     const drift = toolNames().filter((n) => !galaxy.has(n));
     expect(drift, `TS ops not present in the Python MCP server: ${drift.join(", ")}`).toEqual([]);
+  });
+
+  it("fixture name parity with the registry", () => {
+    const implemented = new Set(toolNames());
+    const drift = galaxyTools.filter((n) => !implemented.has(n) && !INTENTIONAL_GAPS.has(n));
+    expect(drift, `fixture names not present in the registry: ${drift.join(", ")}`).toEqual([]);
   });
 
   it("documents intentional gaps that are present in the fixture but unimplemented", () => {
