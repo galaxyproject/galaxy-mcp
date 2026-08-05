@@ -23,6 +23,7 @@ from galaxy_mcp.auth import (
     ACCESS_TOKEN_TTL_SECONDS,
     GalaxyAuthenticationError,
     GalaxyOAuthProvider,
+    SessionSecretRequiredError,
 )
 
 REDIRECT_URI = "https://example.test/callback"
@@ -114,6 +115,19 @@ class TestTokenCrypto:
         token = provider._encrypt_payload({"typ": "access", "client_id": "client-1"})
         with pytest.raises(InvalidToken):
             other._decrypt_payload(token, expected_type="access")
+
+    @pytest.mark.parametrize("secret", [None, ""])
+    def test_missing_session_secret_is_fatal(self, secret):
+        # Without a stable secret each process derives its own key, so the failure
+        # above (token minted here, undecryptable there) becomes the behaviour of a
+        # multi-replica deploy. Refuse to construct rather than warn.
+        with pytest.raises(SessionSecretRequiredError, match="GALAXY_MCP_SESSION_SECRET"):
+            GalaxyOAuthProvider(
+                base_url="https://mcp.test",
+                galaxy_url="https://galaxy.test/",
+                session_secret=secret,
+                client_registry_path=None,
+            )
 
 
 class TestIssueAndDecode:

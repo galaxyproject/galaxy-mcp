@@ -34,9 +34,12 @@ matches your client:
 uvx galaxy-mcp
 
 # HTTP transport with OAuth (for remote/browser clients)
+# Generate the session secret ONCE (`openssl rand -hex 32`) and store it. Every
+# restart and every replica must use the same value, or tokens issued earlier --
+# or by another replica -- stop decrypting.
 export GALAXY_URL="https://usegalaxy.org.au/"          # Target Galaxy instance
 export GALAXY_MCP_PUBLIC_URL="https://mcp.example.com" # Public base URL for OAuth redirects
-export GALAXY_MCP_SESSION_SECRET="$(openssl rand -hex 32)"
+export GALAXY_MCP_SESSION_SECRET="<your stored secret>"
 uvx galaxy-mcp --transport streamable-http --host 0.0.0.0 --port 8000
 ```
 
@@ -83,11 +86,15 @@ docker run --rm -it \
 For OAuth + HTTP:
 
 ```bash
+# Generate once and keep it -- do NOT inline `openssl rand` here, or each
+# container start mints a key that invalidates every token issued before it.
+export GALAXY_MCP_SESSION_SECRET="<your stored secret>"
+
 docker run --rm -it -p 8000:8000 \
   -e GALAXY_URL="https://usegalaxy.org.au/" \
   -e GALAXY_MCP_TRANSPORT="streamable-http" \
   -e GALAXY_MCP_PUBLIC_URL="https://mcp.example.com" \
-  -e GALAXY_MCP_SESSION_SECRET="$(openssl rand -hex 32)" \
+  -e GALAXY_MCP_SESSION_SECRET \
   galaxyproject/galaxy-mcp
 ```
 
