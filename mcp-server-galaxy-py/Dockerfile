@@ -48,7 +48,6 @@ ENV GALAXY_URL="https://usegalaxy.org" \
     GALAXY_MCP_HOST="0.0.0.0" \
     GALAXY_MCP_PORT="8000"
 
-COPY --from=uv /root/.local /root/.local
 COPY --from=uv --chown=app:app /app/.venv /app/.venv
 
 # Place executables in the environment at the front of the path
