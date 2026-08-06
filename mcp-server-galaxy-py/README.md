@@ -59,9 +59,14 @@ How you authenticate depends on your transport:
 - **HTTP / OAuth** – configure the public URL that users reach and a signing secret for session
   tokens. The server mints short-lived Galaxy API keys on behalf of each user.
 
+  `GALAXY_MCP_SESSION_SECRET` is required whenever `GALAXY_MCP_PUBLIC_URL` is set; the server
+  refuses to start without it. Generate it once with `openssl rand -hex 32` and store it — the
+  same value must be used on every restart and every replica, since it is the key that encrypts
+  session tokens. A fresh secret invalidates every token issued under the old one.
+
   ```bash
   export GALAXY_MCP_PUBLIC_URL="https://mcp.example.com"
-  export GALAXY_MCP_SESSION_SECRET="$(openssl rand -hex 32)"
+  export GALAXY_MCP_SESSION_SECRET="<your stored secret>"
   ```
 
   Optionally set `GALAXY_MCP_CLIENT_REGISTRY` to control where OAuth client registrations are stored.

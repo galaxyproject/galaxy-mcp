@@ -98,6 +98,16 @@ class GalaxyAuthenticationError(Exception):
     """Raised when Galaxy authentication fails."""
 
 
+class SessionSecretRequiredError(RuntimeError):
+    """Raised when OAuth is enabled without a stable session secret.
+
+    Deliberately fatal rather than a warning: a per-process key fails
+    *nondeterministically* across replicas -- whichever one minted a token is the
+    only one that can decrypt it -- so a warning gets lost in a log the operator
+    only reads after users start seeing intermittent auth failures.
+    """
+
+
 @dataclass
 class AuthorizationTransaction:
     """Stored data for an in-flight authorization request."""
@@ -504,15 +514,16 @@ class GalaxyOAuthProvider(OAuthProvider):
     # ------------------------------------------------------------------
 
     def _derive_key(self, secret: str | None) -> bytes:
-        if secret:
-            digest = hashlib.sha256(secret.encode("utf-8")).digest()
-            return base64.urlsafe_b64encode(digest)
-        key = Fernet.generate_key()
-        logger.warning(
-            "GALAXY_MCP_SESSION_SECRET is not set; generated a volatile secret. "
-            "All tokens will become invalid on restart."
-        )
-        return key
+        if not secret:
+            raise SessionSecretRequiredError(
+                "GALAXY_MCP_SESSION_SECRET must be set when OAuth login is enabled "
+                "via GALAXY_MCP_PUBLIC_URL. Without it each process derives its own "
+                "key, so tokens are invalidated by a restart and replicas cannot "
+                "decrypt each other's. Generate one with `openssl rand -hex 32` and "
+                "set the same value on every replica."
+            )
+        digest = hashlib.sha256(secret.encode("utf-8")).digest()
+        return base64.urlsafe_b64encode(digest)
 
     def _encrypt_payload(self, payload: dict[str, Any]) -> str:
         serialized = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")

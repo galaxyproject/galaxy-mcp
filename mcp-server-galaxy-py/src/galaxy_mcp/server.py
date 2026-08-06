@@ -27,6 +27,7 @@ from starlette.responses import Response
 
 from galaxy_mcp.auth import (
     GalaxyOAuthProvider,
+    SessionSecretRequiredError,
     configure_auth_provider,
     get_active_session,
 )
@@ -355,6 +356,10 @@ if public_base_url and normalized_galaxy_url:
         )
         configure_auth_provider(auth_provider)
         logger.info("OAuth login enabled for Galaxy at %s", normalized_galaxy_url)
+    except SessionSecretRequiredError:
+        # Misconfiguration, not a runtime fault -- starting up with OAuth silently
+        # disabled would leave the server unauthenticated, so fail loudly instead.
+        raise
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.error("Failed to initialize OAuth provider: %s", exc, exc_info=True)
 elif public_base_url and not normalized_galaxy_url:
