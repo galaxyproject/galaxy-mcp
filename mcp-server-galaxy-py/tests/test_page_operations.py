@@ -10,6 +10,7 @@ requests.Response; make_post_request / make_put_request return decoded JSON.
 from unittest.mock import Mock
 
 import pytest
+from bioblend.galaxy import GalaxyInstance
 
 from galaxy_mcp.server import galaxy_state
 from tests.test_helpers import (
@@ -27,6 +28,17 @@ from tests.test_helpers import (
 # can never produce.
 GALAXY_BASE_URL = "http://localhost:8080"
 GALAXY_API_URL = f"{GALAXY_BASE_URL}/api"
+
+
+def test_bioblend_url_is_the_api_root():
+    """Pin the contract the mocked fixture below imitates.
+
+    Every URL assertion in this module sets `gi.url` by hand, so it can only be
+    as honest as this assumption. GalaxyInstance only touches the network when
+    the URL has no scheme, so constructing one here stays offline.
+    """
+    gi = GalaxyInstance(url=GALAXY_BASE_URL, key="notakey")
+    assert gi.url == GALAXY_API_URL
 
 
 def _get_response(json_data, headers=None):
