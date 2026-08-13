@@ -380,7 +380,7 @@ class TestWorkflowOperations:
 def test_get_datatypes_mapping_caches_per_base_url():
     _DATATYPES_MAPPING_CACHE.clear()
     gi = Mock()
-    gi.base_url = "https://g.example/api"
+    gi.base_url = "https://g.example"
     gi.url = "https://g.example/api"
     resp = Mock()
     resp.status_code = 200
@@ -392,6 +392,12 @@ def test_get_datatypes_mapping_caches_per_base_url():
     _ = _get_datatypes_mapping(gi)
     assert m1["ext_to_class_name"]["bam"] == "B"
     assert gi.make_get_request.call_count == 1  # second call served from cache
+    # gi.url is already the API root; a doubled /api/api here 404s and the mapping
+    # silently degrades to empty, so pin the exact URL.
+    assert (
+        gi.make_get_request.call_args.args[0]
+        == "https://g.example/api/datatypes/types_and_mapping?upload_only=false"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -467,6 +473,9 @@ def test_resolve_slots_requests_instance_false():
     url = gi.make_get_request.call_args.args[0]
     assert "instance=false" in url
     assert "instance=true" not in url
+    # gi.url is already the API root -- a doubled /api/api 404s and this path
+    # quietly falls back to the .ga export instead of erroring.
+    assert url.startswith("https://g/api/workflows/wfid/download?")
 
 
 # ---------------------------------------------------------------------------

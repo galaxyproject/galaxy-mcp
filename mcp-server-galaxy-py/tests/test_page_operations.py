@@ -22,7 +22,11 @@ from tests.test_helpers import (
     update_page_fn,
 )
 
-GALAXY_URL = "http://localhost:8080"
+# bioblend's GalaxyInstance.url is the API root (`<base>/api`), not the server
+# base URL -- mirror that here or these URL assertions guard a shape production
+# can never produce.
+GALAXY_BASE_URL = "http://localhost:8080"
+GALAXY_API_URL = f"{GALAXY_BASE_URL}/api"
 
 
 def _get_response(json_data, headers=None):
@@ -37,7 +41,7 @@ def _get_response(json_data, headers=None):
 class TestPageOperations:
     def setup_method(self):
         self.gi = Mock()
-        self.gi.url = GALAXY_URL
+        self.gi.url = GALAXY_API_URL
         galaxy_state["connected"] = True
         galaxy_state["gi"] = self.gi
 
@@ -65,7 +69,7 @@ class TestPageOperations:
         assert result.pagination.has_next is True
 
         args, kwargs = self.gi.make_get_request.call_args
-        assert args[0] == f"{GALAXY_URL}/api/pages"
+        assert args[0] == f"{GALAXY_API_URL}/pages"
         # REST index defaults (show_own/show_published) are wrong for an agent;
         # confirm we override them explicitly.
         params = kwargs["params"]
@@ -114,7 +118,7 @@ class TestPageOperations:
         assert result.data["content_editor"] == "raw markdown"
         # The large rendered form is dropped unless explicitly requested.
         assert "content" not in result.data
-        assert self.gi.make_get_request.call_args.args[0] == f"{GALAXY_URL}/api/pages/page1"
+        assert self.gi.make_get_request.call_args.args[0] == f"{GALAXY_API_URL}/pages/page1"
 
     def test_get_page_include_rendered(self):
         self.gi.make_get_request.return_value = _get_response(
@@ -147,7 +151,7 @@ class TestPageOperations:
         assert "content" not in result.data
 
         args, kwargs = self.gi.make_post_request.call_args
-        assert args[0] == f"{GALAXY_URL}/api/pages"
+        assert args[0] == f"{GALAXY_API_URL}/pages"
         payload = kwargs["payload"]
         assert payload["content_format"] == "markdown"
         assert payload["history_id"] == "hist1"
@@ -189,7 +193,7 @@ class TestPageOperations:
         assert result.success is True
         assert "content" not in result.data
         args, kwargs = self.gi.make_put_request.call_args
-        assert args[0] == f"{GALAXY_URL}/api/pages/page1"
+        assert args[0] == f"{GALAXY_API_URL}/pages/page1"
         payload = kwargs["payload"]
         assert payload["edit_source"] == "agent"
         assert payload["content"] == "# updated"
@@ -208,7 +212,7 @@ class TestPageOperations:
         assert result.count == 2
         assert result.data[1]["edit_source"] == "agent"
         args, kwargs = self.gi.make_get_request.call_args
-        assert args[0] == f"{GALAXY_URL}/api/pages/page1/revisions"
+        assert args[0] == f"{GALAXY_API_URL}/pages/page1/revisions"
         assert kwargs["params"]["sort_desc"] == "true"
 
     def test_get_page_revision_returns_content(self):
@@ -230,7 +234,7 @@ class TestPageOperations:
         assert result.data["edit_source"] == "user"
         assert (
             self.gi.make_get_request.call_args.args[0]
-            == f"{GALAXY_URL}/api/pages/page1/revisions/rev1"
+            == f"{GALAXY_API_URL}/pages/page1/revisions/rev1"
         )
 
     def test_revert_page_revision(self):
@@ -250,7 +254,7 @@ class TestPageOperations:
         assert result.data["content"] == "restored md"
         assert (
             self.gi.make_post_request.call_args.args[0]
-            == f"{GALAXY_URL}/api/pages/page1/revisions/rev1/revert"
+            == f"{GALAXY_API_URL}/pages/page1/revisions/rev1/revert"
         )
 
     def test_list_pages_not_connected(self):
