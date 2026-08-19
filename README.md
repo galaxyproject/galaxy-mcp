@@ -22,7 +22,34 @@ and use it.
 - **Workflow Integration**: Access and import workflows from the Interactive Workflow Composer (IWC)
 - **History Operations**: Manage Galaxy histories and datasets
 - **File Management**: Upload files to Galaxy from local storage
+- **Verified Container Recommendation (optional)**: Resolve a real `quay.io/biocontainers` image for a set of conda packages instead of guessing one -- see [Optional extras](#optional-extras)
 - **Comprehensive Testing**: Full test suite with mock-based testing for reliability
+
+## Optional extras
+
+### `container-recommend`
+
+Enables the `recommend_biocontainer` tool, which resolves a verified
+`quay.io/biocontainers` image for a set of conda packages. Authoring a user-defined
+tool means naming a container, and a hallucinated image tag is the most common way a
+UDT passes validation and then dies at run time with `manifest unknown`. This wraps
+`galaxy.tool_util.deps.mulled.recommend` -- the same resolver Galaxy's own custom-tool
+agent uses (added in Galaxy 26.1, galaxyproject/galaxy#22981) -- so the image is
+checked against quay.io rather than invented.
+
+It is an extra rather than a hard dependency because `galaxy-tool-util` pulls in lxml
+and conda-package-streaming, and every other tool on this server works without it. The
+tool is **only registered when the extra is installed**, so a stock install simply
+doesn't advertise it.
+
+```bash
+uvx --from 'galaxy-mcp[container-recommend]' galaxy-mcp
+# or, for a local checkout:
+uv sync --extra container-recommend
+```
+
+The same resolver is also available as a standalone CLI once installed:
+`mulled-recommend samtools=1.17`.
 
 ## Quick Start
 
