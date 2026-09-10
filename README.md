@@ -98,13 +98,17 @@ uv run galaxy-mcp --transport streamable-http --host 0.0.0.0 --port 8000
 
 ## Container Usage
 
+Images are published to the GitHub Container Registry as
+[`ghcr.io/galaxyproject/galaxy-mcp`](https://github.com/galaxyproject/galaxy-mcp/pkgs/container/galaxy-mcp).
+Use `:latest` (default) or pin a release, e.g. `:1.9.0`.
+
 The published image defaults to stdio transport (no HTTP listener):
 
 ```bash
 docker run --rm -it \
   -e GALAXY_URL="https://usegalaxy.org/" \
   -e GALAXY_API_KEY="your-api-key" \
-  galaxyproject/galaxy-mcp
+  ghcr.io/galaxyproject/galaxy-mcp
 ```
 
 For OAuth + HTTP:
@@ -115,7 +119,7 @@ docker run --rm -it -p 8000:8000 \
   -e GALAXY_MCP_TRANSPORT="streamable-http" \
   -e GALAXY_MCP_PUBLIC_URL="https://mcp.example.com" \
   -e GALAXY_MCP_SESSION_SECRET="$(openssl rand -hex 32)" \
-  galaxyproject/galaxy-mcp
+  ghcr.io/galaxyproject/galaxy-mcp
 ```
 
 ## Connect to Claude Desktop
