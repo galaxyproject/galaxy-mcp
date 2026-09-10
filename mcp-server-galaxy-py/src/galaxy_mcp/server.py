@@ -262,7 +262,7 @@ def _get_datatypes_mapping(gi: GalaxyInstance) -> dict[str, Any]:
     key = getattr(gi, "base_url", None)
     if key in _DATATYPES_MAPPING_CACHE:
         return _DATATYPES_MAPPING_CACHE[key]
-    resp = gi.make_get_request(f"{gi.url}/api/datatypes/types_and_mapping?upload_only=false")
+    resp = gi.make_get_request(f"{gi.url}/datatypes/types_and_mapping?upload_only=false")
     _empty: dict[str, Any] = {"ext_to_class_name": {}, "class_to_classes": {}}
     if resp.status_code != 200:
         mapping: dict[str, Any] = _empty
@@ -2952,7 +2952,7 @@ def _resolve_workflow_slots(
     if history_id:
         params += f"&history_id={history_id}"
     try:
-        resp = gi.make_get_request(f"{gi.url}/api/workflows/{workflow_id}/download?{params}")
+        resp = gi.make_get_request(f"{gi.url}/workflows/{workflow_id}/download?{params}")
         if resp.status_code == 200:
             run_model = resp.json()
             slots = normalize_run_model(run_model)
@@ -3635,7 +3635,7 @@ def list_pages(
         if search is not None:
             params["search"] = search
 
-        response = gi.make_get_request(f"{gi.url}/api/pages", params=params)
+        response = gi.make_get_request(f"{gi.url}/pages", params=params)
         response.raise_for_status()
         pages = response.json()
         # total_matches is a response header, not part of the JSON body.
@@ -3691,7 +3691,7 @@ def get_page(page_id: str, include_rendered: bool = False) -> GalaxyResult:
     gi: GalaxyInstance = state["gi"]
 
     try:
-        response = gi.make_get_request(f"{gi.url}/api/pages/{page_id}")
+        response = gi.make_get_request(f"{gi.url}/pages/{page_id}")
         response.raise_for_status()
         page = _strip_rendered(response.json(), include_rendered)
         return GalaxyResult(
@@ -3756,7 +3756,7 @@ def create_page(
             payload["slug"] = slug
 
         page = _strip_rendered(
-            gi.make_post_request(f"{gi.url}/api/pages", payload=payload),
+            gi.make_post_request(f"{gi.url}/pages", payload=payload),
             include_rendered=False,
         )
         return GalaxyResult(
@@ -3807,7 +3807,7 @@ def update_page(
             payload["title"] = title
 
         page = _strip_rendered(
-            gi.make_put_request(f"{gi.url}/api/pages/{page_id}", payload=payload),
+            gi.make_put_request(f"{gi.url}/pages/{page_id}", payload=payload),
             include_rendered=False,
         )
         return GalaxyResult(
@@ -3843,7 +3843,7 @@ def list_page_revisions(page_id: str, sort_desc: bool = False) -> GalaxyResult:
 
     try:
         response = gi.make_get_request(
-            f"{gi.url}/api/pages/{page_id}/revisions",
+            f"{gi.url}/pages/{page_id}/revisions",
             params={"sort_desc": str(sort_desc).lower()},
         )
         response.raise_for_status()
@@ -3879,7 +3879,7 @@ def get_page_revision(page_id: str, revision_id: str) -> GalaxyResult:
     gi: GalaxyInstance = state["gi"]
 
     try:
-        response = gi.make_get_request(f"{gi.url}/api/pages/{page_id}/revisions/{revision_id}")
+        response = gi.make_get_request(f"{gi.url}/pages/{page_id}/revisions/{revision_id}")
         response.raise_for_status()
         return GalaxyResult(
             data=response.json(),
@@ -3910,9 +3910,7 @@ def revert_page_revision(page_id: str, revision_id: str) -> GalaxyResult:
     gi: GalaxyInstance = state["gi"]
 
     try:
-        revision = gi.make_post_request(
-            f"{gi.url}/api/pages/{page_id}/revisions/{revision_id}/revert"
-        )
+        revision = gi.make_post_request(f"{gi.url}/pages/{page_id}/revisions/{revision_id}/revert")
         return GalaxyResult(
             data=revision,
             success=True,
