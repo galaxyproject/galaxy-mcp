@@ -2,6 +2,7 @@
 import concurrent.futures
 import contextlib
 import importlib.metadata
+import importlib.util
 import json
 import logging
 import os
@@ -262,7 +263,7 @@ def _get_datatypes_mapping(gi: GalaxyInstance) -> dict[str, Any]:
     key = getattr(gi, "base_url", None)
     if key in _DATATYPES_MAPPING_CACHE:
         return _DATATYPES_MAPPING_CACHE[key]
-    resp = gi.make_get_request(f"{gi.url}/api/datatypes/types_and_mapping?upload_only=false")
+    resp = gi.make_get_request(f"{gi.url}/datatypes/types_and_mapping?upload_only=false")
     _empty: dict[str, Any] = {"ext_to_class_name": {}, "class_to_classes": {}}
     if resp.status_code != 200:
         mapping: dict[str, Any] = _empty
@@ -2956,7 +2957,7 @@ def _resolve_workflow_slots(
     if history_id:
         params += f"&history_id={history_id}"
     try:
-        resp = gi.make_get_request(f"{gi.url}/api/workflows/{workflow_id}/download?{params}")
+        resp = gi.make_get_request(f"{gi.url}/workflows/{workflow_id}/download?{params}")
         if resp.status_code == 200:
             run_model = resp.json()
             slots = normalize_run_model(run_model)
@@ -3228,8 +3229,12 @@ def create_user_tool(representation: dict[str, Any]) -> GalaxyResult:
             - id: tool identifier (lowercase, no spaces, 3-255 chars)
             - version: version string (e.g. "0.1.0")
             - name: display name shown in Galaxy tool menu
-            - container: container image as a STRING (e.g. "python:3.12-slim"),
-              NOT a dict -- this is a common mistake
+            - container: container image as a STRING, NOT a dict (a common
+              mistake). Prefer a real biocontainer over a bare image -- a bare
+              image like "python:3.12-slim" ships no third-party libraries (it
+              cannot `import pandas`). If the recommend_biocontainer tool is
+              available it resolves a verified image for you; otherwise use a
+              known-good biocontainer tag.
             - shell_command: the command to execute, with $(inputs.name.path)
               for data inputs and $(inputs.name) for parameter inputs
             - inputs: list of input dicts, each with "name" and "type"
@@ -3257,7 +3262,7 @@ def create_user_tool(representation: dict[str, Any]) -> GalaxyResult:
         ... })
 
     NEXT STEPS:
-    - Run the tool: run_tool(history_id, tool_id, inputs)
+    - Run the tool: run_user_tool(history_id, tool_uuid, inputs)
     - List your tools: list_user_tools()
     - Delete a tool: delete_user_tool(uuid)
     """
@@ -3291,6 +3296,145 @@ def create_user_tool(representation: dict[str, Any]) -> GalaxyResult:
         raise ValueError(
             format_error("Create user tool", e, {"tool_id": representation.get("id")})
         ) from e
+
+
+def _shape_biocontainer_recommendation(
+    recommendation: Any, verified: "bool | None"
+) -> dict[str, Any]:
+    """Shape a mulled ``ContainerRecommendation`` into the MCP response dict.
+
+    Kept separate from the network resolution so it can be unit-tested offline
+    with a duck-typed recommendation, without needing galaxy-tool-util installed.
+    """
+    return {
+        "image": recommendation.image,
+        "found": recommendation.found,
+        "match_quality": recommendation.match_quality.value,
+        "source": recommendation.source.value,
+        "notes": list(recommendation.notes),
+        "verified": verified,
+    }
+
+
+def _container_recommender_available() -> bool:
+    """Whether the optional container-recommend extra is installed.
+
+    Registration is conditional on this: a tool the server advertises but can
+    never run is worse than one that simply isn't there, because an agent will
+    plan around it and only discover the gap mid-task.
+    """
+    try:
+        return importlib.util.find_spec("galaxy.tool_util.deps.mulled.recommend") is not None
+    except (ImportError, AttributeError, ValueError):
+        # find_spec imports the parent packages, so a missing (or broken) `galaxy`
+        # raises rather than returning None.
+        return False
+
+
+def recommend_biocontainer(packages: list[str]) -> GalaxyResult:
+    """Resolve a verified quay.io/biocontainers image for a set of conda packages.
+
+    Use this to pick the ``container`` for create_user_tool instead of guessing an
+    image. The result is verified against quay.io rather than hallucinated, which
+    avoids the most common user-defined-tool failure: inventing a tag, or using a
+    bare image (e.g. "python:3.12-slim") that doesn't ship the libraries the tool
+    imports.
+
+    Args:
+        packages: The conda packages the tool wraps, each as "name" or
+            "name=version" (e.g. ["samtools=1.17", "bwa"]). Use canonical conda
+            names you would `conda install` (e.g. "pandas", "r-ggplot2",
+            "samtools"). A single package yields a single-package image; several
+            yield a mulled-v2 image.
+
+    Returns:
+        GalaxyResult whose data contains:
+        - image: the resolved quay.io/biocontainers/... reference, or null if none.
+        - found: whether an image was resolved.
+        - match_quality: "exact_version" | "name_only" | "not_found" (name_only means
+          the package names matched but no exact-version combination was established
+          -- either the pinned version has no built tag, or no version was pinned --
+          so the newest built tag was used).
+        - source, notes: provenance and any explanatory notes.
+        - verified: true if the exact tag is built on quay.io, false if positively
+          absent, null if it could not be checked (non-biocontainer ref or a
+          transient network error).
+
+    NEXT STEPS:
+    - If match_quality is "exact_version" and verified is not false, pass data["image"]
+      as the "container" when calling create_user_tool.
+    - If match_quality is "name_only", the version you asked for wasn't among the built
+      tags (or you didn't pin one) and the newest tag was substituted -- show the user
+      which image you got before using it.
+    - If image is null, or verified is false, don't guess a tag: tell the user no
+      built image was found for those packages and ask how to proceed.
+
+    Requires the optional `container-recommend` extra (galaxy-tool-util>=26.1, which is
+    where the mulled-recommend module lives) -- e.g.
+    `uvx --from 'galaxy-mcp[container-recommend]' galaxy-mcp`.
+    """
+    # Validate/parse the request BEFORE touching the optional dependency, so an
+    # empty or malformed package list is reported as such on a stock install --
+    # not masked by the missing-dependency error.
+    parsed: list[tuple[str, str | None]] = []
+    for pkg in packages:
+        name, _, version = pkg.partition("=")
+        name = name.strip()
+        if not name:
+            raise ValueError(f"invalid package entry {pkg!r}: expected 'name' or 'name=version'")
+        parsed.append((name, version.strip() or None))
+    if not parsed:
+        raise ValueError("packages must contain at least one conda package name")
+
+    try:
+        from galaxy.tool_util.deps.mulled.recommend import (
+            PackageSpec,
+            biocontainer_tag_built,
+            recommend_container,
+        )
+    except ImportError as e:
+        # A broken transitive import inside an installed galaxy-tool-util is a
+        # different problem from the extra being absent -- don't tell the user to
+        # reinstall something they already have.
+        if not _container_recommender_available():
+            raise ValueError(
+                "recommend_biocontainer needs the optional container-recommend extra "
+                "(galaxy-tool-util>=26.1, which ships the mulled-recommend module). Reinstall "
+                "with the extra -- e.g. uvx --from 'galaxy-mcp[container-recommend]' galaxy-mcp -- "
+                "or pick the container by hand from "
+                "https://quay.io/repository/biocontainers/<package>?tab=tags"
+            ) from e
+        raise ValueError(format_error("Recommend biocontainer", e, {"packages": packages})) from e
+
+    specs = [PackageSpec(name, version) for name, version in parsed]
+
+    try:
+        recommendation = recommend_container(specs)
+        verified = biocontainer_tag_built(recommendation.image) if recommendation.image else None
+        data = _shape_biocontainer_recommendation(recommendation, verified)
+        message = (
+            f"Resolved {data['image']} ({data['match_quality']})"
+            if data["image"]
+            else "No biocontainer found for the requested packages"
+        )
+        return GalaxyResult(data=data, success=True, message=message)
+    except Exception as e:
+        raise ValueError(format_error("Recommend biocontainer", e, {"packages": packages})) from e
+
+
+# Advertise recommend_biocontainer only when it can actually run. A tool the server
+# lists but always fails is worse than an absent one: an agent plans around it and
+# only finds the gap mid-task. Without the extra, the skill's fallbacks (the
+# mulled-recommend CLI, or reading quay.io tags by hand) still apply. Registering
+# here rather than decorating the def keeps the module-level name the plain
+# function either way, which is what the tests bind to.
+if _container_recommender_available():
+    mcp.tool(tags={"tools", "read", "extended"})(recommend_biocontainer)
+else:
+    logger.debug(
+        "recommend_biocontainer not registered: install the 'container-recommend' extra "
+        "(galaxy-tool-util>=26.1) to enable verified container resolution."
+    )
 
 
 @mcp.tool(tags={"tools", "read", "extended"})
@@ -3496,7 +3640,7 @@ def list_pages(
         if search is not None:
             params["search"] = search
 
-        response = gi.make_get_request(f"{gi.url}/api/pages", params=params)
+        response = gi.make_get_request(f"{gi.url}/pages", params=params)
         response.raise_for_status()
         pages = response.json()
         # total_matches is a response header, not part of the JSON body.
@@ -3552,7 +3696,7 @@ def get_page(page_id: str, include_rendered: bool = False) -> GalaxyResult:
     gi: GalaxyInstance = state["gi"]
 
     try:
-        response = gi.make_get_request(f"{gi.url}/api/pages/{page_id}")
+        response = gi.make_get_request(f"{gi.url}/pages/{page_id}")
         response.raise_for_status()
         page = _strip_rendered(response.json(), include_rendered)
         return GalaxyResult(
@@ -3617,7 +3761,7 @@ def create_page(
             payload["slug"] = slug
 
         page = _strip_rendered(
-            gi.make_post_request(f"{gi.url}/api/pages", payload=payload),
+            gi.make_post_request(f"{gi.url}/pages", payload=payload),
             include_rendered=False,
         )
         return GalaxyResult(
@@ -3668,7 +3812,7 @@ def update_page(
             payload["title"] = title
 
         page = _strip_rendered(
-            gi.make_put_request(f"{gi.url}/api/pages/{page_id}", payload=payload),
+            gi.make_put_request(f"{gi.url}/pages/{page_id}", payload=payload),
             include_rendered=False,
         )
         return GalaxyResult(
@@ -3704,7 +3848,7 @@ def list_page_revisions(page_id: str, sort_desc: bool = False) -> GalaxyResult:
 
     try:
         response = gi.make_get_request(
-            f"{gi.url}/api/pages/{page_id}/revisions",
+            f"{gi.url}/pages/{page_id}/revisions",
             params={"sort_desc": str(sort_desc).lower()},
         )
         response.raise_for_status()
@@ -3740,7 +3884,7 @@ def get_page_revision(page_id: str, revision_id: str) -> GalaxyResult:
     gi: GalaxyInstance = state["gi"]
 
     try:
-        response = gi.make_get_request(f"{gi.url}/api/pages/{page_id}/revisions/{revision_id}")
+        response = gi.make_get_request(f"{gi.url}/pages/{page_id}/revisions/{revision_id}")
         response.raise_for_status()
         return GalaxyResult(
             data=response.json(),
@@ -3771,9 +3915,7 @@ def revert_page_revision(page_id: str, revision_id: str) -> GalaxyResult:
     gi: GalaxyInstance = state["gi"]
 
     try:
-        revision = gi.make_post_request(
-            f"{gi.url}/api/pages/{page_id}/revisions/{revision_id}/revert"
-        )
+        revision = gi.make_post_request(f"{gi.url}/pages/{page_id}/revisions/{revision_id}/revert")
         return GalaxyResult(
             data=revision,
             success=True,

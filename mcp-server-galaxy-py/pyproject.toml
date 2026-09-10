@@ -48,6 +48,14 @@ galaxy-mcp = "galaxy_mcp.__main__:run"
 code-mode = [
     "fastmcp[code-mode]>=3.1.0,<4",
 ]
+# The `recommend_biocontainer` tool needs galaxy.tool_util.deps.mulled.recommend, added
+# in Galaxy 26.1 (galaxyproject/galaxy#22981). Kept optional rather than a hard dependency
+# because galaxy-tool-util pulls in lxml/conda-package-streaming and every other tool on
+# this server works without it; the tool lazily imports the module and reports what to
+# install if it's absent. Install with `uvx --from 'galaxy-mcp[container-recommend]' galaxy-mcp`.
+container-recommend = [
+    "galaxy-tool-util>=26.1,<27",
+]
 dev = [
     "ruff>=0.11.2",
     "mypy>=1.8.0,<3",
@@ -84,4 +92,10 @@ python_functions = ["test_*"]
 [tool.mypy]
 [[tool.mypy.overrides]]
 module = "rank_bm25"
+ignore_missing_imports = true
+
+# Optional, lazily imported by the recommend_biocontainer tool; provided by
+# galaxy-tool-util>=26.1 (not a hard dependency).
+[[tool.mypy.overrides]]
+module = "galaxy.tool_util.deps.mulled.recommend"
 ignore_missing_imports = true

@@ -219,6 +219,12 @@ The project uses GitHub Actions for CI/CD:
     - Builds and publishes to PyPI
     - Optionally publishes to Test PyPI first
 
+3. **Publish Docker image** (`docker-publish.yml`)
+    - On release: pushes `ghcr.io/galaxyproject/galaxy-mcp` tagged with the version (e.g. `1.9.0`, `1.9`) and moves `latest`
+    - On push to `main` (when the server or Dockerfile changes): updates the `edge` tag
+    - On PRs touching those paths: builds the image to validate the Dockerfile, without pushing
+    - Authenticates with the built-in `GITHUB_TOKEN` -- no registry secret required
+
 ### Local CI Simulation
 
 Run the full CI suite locally:
@@ -297,6 +303,8 @@ The draft is available at https://github.com/galaxyproject/galaxy-mcp/releases
 For automatic PyPI deployment:
 - `PYPI_API_TOKEN`: PyPI API token scoped to the galaxy-mcp project
 - Set at: https://github.com/galaxyproject/galaxy-mcp/settings/secrets/actions
+
+Docker publishing to GHCR needs no secret -- it uses the built-in `GITHUB_TOKEN`.
 
 ### Manual Publishing (Fallback)
 
