@@ -1,6 +1,6 @@
 """Galaxy MCP - Model Context Protocol server for Galaxy bioinformatics platform."""
 
-__version__ = "1.10.0"
+__version__ = "1.11.0.dev0"
 __author__ = "Dannon Baker"
 __email__ = "dannon.baker@gmail.com"
 
