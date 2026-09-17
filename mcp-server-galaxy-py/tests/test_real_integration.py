@@ -17,30 +17,10 @@ import time
 
 import pytest
 import requests
+from bioblend.galaxy import GalaxyInstance
 
-from tests.test_helpers import (
-    GalaxyResult,
-    connect_fn,
-    create_history_fn,
-    download_dataset_fn,
-    galaxy_state,
-    get_histories_fn,
-    get_history_contents_fn,
-    get_history_details_fn,
-    get_iwc_workflow_details_fn,
-    get_iwc_workflows_fn,
-    get_server_info_fn,
-    get_tool_details_fn,
-    get_tool_panel_fn,
-    get_user_fn,
-    import_workflow_from_iwc_fn,
-    list_workflows_fn,
-    recommend_iwc_workflows_fn,
-    run_tool_fn,
-    search_iwc_workflows_fn,
-    search_tools_fn,
-    upload_file_fn,
-)
+from galaxy_mcp.server import GalaxyResult
+from tests.mcp_session import LiveMCPSession, ToolCallError
 
 # Test configuration
 GALAXY_URL = os.environ.get("GALAXY_TEST_URL", "http://localhost:8080")
@@ -65,31 +45,53 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+@pytest.fixture(scope="module")
+def mcp_session():
+    """One client, one session id, held open for the module.
+
+    Per-test isolation still comes from conftest's _reset_galaxy_state, which clears the
+    session connection store -- so every test re-connects through its class fixture.
+    """
+    with LiveMCPSession() as session:
+        yield session
+
+
+@pytest.fixture(scope="module")
+def galaxy_client():
+    """A plain bioblend client for test bookkeeping (cleanup, polling job state).
+
+    Deliberately not the server's client: bookkeeping should not depend on, or disturb,
+    the connection state under test.
+    """
+    return GalaxyInstance(url=GALAXY_URL, key=GALAXY_API_KEY)
+
+
 class TestRealConnection:
     """Test real connection to Galaxy."""
 
-    def teardown_method(self):
-        """Reset connection state after each test."""
-        galaxy_state["connected"] = False
-        galaxy_state["gi"] = None
-        galaxy_state["url"] = None
-        galaxy_state["api_key"] = None
+    @pytest.fixture(autouse=True)
+    def _session(self, mcp_session):
+        # No pre-connect here: these tests are what exercises connect().
+        self.mcp = mcp_session
 
     def test_connect_to_galaxy(self):
         """Test connecting to a real Galaxy instance."""
-        result = connect_fn(GALAXY_URL, GALAXY_API_KEY)
+        result = self.mcp.call("connect", GALAXY_URL, GALAXY_API_KEY)
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
-        assert "connected" in result.message.lower() or "Connected" in result.message
+        # Sessionless connect reports "Validated global Galaxy connection at <url>"; a
+        # session reports "... for the current MCP session". Assert the substance rather
+        # than one spelling -- pinning "connected" broke silently when the wording moved.
+        assert GALAXY_URL.rstrip("/") in result.message
         assert result.data["connected"] is True
         assert "user" in result.data
         assert result.data["user"]["email"] is not None
 
     def test_get_server_info(self):
         """Test getting real server information."""
-        connect_fn(GALAXY_URL, GALAXY_API_KEY)
-        result = get_server_info_fn()
+        self.mcp.call("connect", GALAXY_URL, GALAXY_API_KEY)
+        result = self.mcp.call("get_server_info")
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -100,8 +102,8 @@ class TestRealConnection:
 
     def test_get_current_user(self):
         """Test getting current user info."""
-        connect_fn(GALAXY_URL, GALAXY_API_KEY)
-        result = get_user_fn()
+        self.mcp.call("connect", GALAXY_URL, GALAXY_API_KEY)
+        result = self.mcp.call("get_user")
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -112,18 +114,14 @@ class TestRealConnection:
 class TestRealToolOperations:
     """Test real tool operations."""
 
-    def setup_method(self):
-        """Connect to Galaxy before each test."""
-        connect_fn(GALAXY_URL, GALAXY_API_KEY)
-
-    def teardown_method(self):
-        """Reset connection state after each test."""
-        galaxy_state["connected"] = False
-        galaxy_state["gi"] = None
+    @pytest.fixture(autouse=True)
+    def _session(self, mcp_session):
+        self.mcp = mcp_session
+        mcp_session.call("connect", GALAXY_URL, GALAXY_API_KEY)
 
     def test_get_tool_panel(self):
         """Test getting the real tool panel."""
-        result = get_tool_panel_fn()
+        result = self.mcp.call("get_tool_panel")
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -134,7 +132,7 @@ class TestRealToolOperations:
     def test_search_tools_by_name(self):
         """Test searching for tools by name."""
         # Search for a common tool that should exist
-        result = search_tools_fn("upload")
+        result = self.mcp.call("search_tools_by_name", "upload")
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -145,7 +143,7 @@ class TestRealToolOperations:
     def test_get_tool_details(self):
         """Test getting details for a specific tool."""
         # Get details for the upload tool (should always exist)
-        result = get_tool_details_fn("upload1")
+        result = self.mcp.call("get_tool_details", "upload1")
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -158,24 +156,20 @@ class TestRealHistoryOperations:
 
     created_histories: list[str] = []
 
-    def setup_method(self):
-        """Connect to Galaxy before each test."""
-        connect_fn(GALAXY_URL, GALAXY_API_KEY)
+    @pytest.fixture(autouse=True)
+    def _session(self, mcp_session, galaxy_client):
+        self.mcp = mcp_session
+        self.gi = galaxy_client
         self.created_histories = []
-
-    def teardown_method(self):
-        """Clean up created histories and reset state."""
-        if galaxy_state.get("gi"):
-            gi = galaxy_state["gi"]
-            for history_id in self.created_histories:
-                with contextlib.suppress(Exception):
-                    gi.histories.delete_history(history_id, purge=True)
-        galaxy_state["connected"] = False
-        galaxy_state["gi"] = None
+        mcp_session.call("connect", GALAXY_URL, GALAXY_API_KEY)
+        yield
+        for history_id in self.created_histories:
+            with contextlib.suppress(Exception):
+                galaxy_client.histories.delete_history(history_id, purge=True)
 
     def test_get_histories(self):
         """Test getting list of histories."""
-        result = get_histories_fn()
+        result = self.mcp.call("get_histories")
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -187,7 +181,7 @@ class TestRealHistoryOperations:
     def test_create_history(self):
         """Test creating a new history."""
         test_name = f"MCP Integration Test {int(time.time())}"
-        result = create_history_fn(test_name)
+        result = self.mcp.call("create_history", test_name)
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -201,12 +195,12 @@ class TestRealHistoryOperations:
         """Test getting history details."""
         # First create a history
         test_name = f"MCP Detail Test {int(time.time())}"
-        create_result = create_history_fn(test_name)
+        create_result = self.mcp.call("create_history", test_name)
         history_id = create_result.data["id"]
         self.created_histories.append(history_id)
 
         # Get details
-        result = get_history_details_fn(history_id)
+        result = self.mcp.call("get_history_details", history_id)
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -219,12 +213,12 @@ class TestRealHistoryOperations:
         """Test getting history contents."""
         # First create a history
         test_name = f"MCP Contents Test {int(time.time())}"
-        create_result = create_history_fn(test_name)
+        create_result = self.mcp.call("create_history", test_name)
         history_id = create_result.data["id"]
         self.created_histories.append(history_id)
 
         # Get contents (should be empty for new history)
-        result = get_history_contents_fn(history_id)
+        result = self.mcp.call("get_history_contents", history_id)
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -240,26 +234,22 @@ class TestRealDatasetOperations:
 
     created_histories: list[str] = []
 
-    def setup_method(self):
-        """Connect to Galaxy and create a test history."""
-        connect_fn(GALAXY_URL, GALAXY_API_KEY)
+    @pytest.fixture(autouse=True)
+    def _session(self, mcp_session, galaxy_client):
+        self.mcp = mcp_session
+        self.gi = galaxy_client
         self.created_histories = []
-
-    def teardown_method(self):
-        """Clean up created histories and reset state."""
-        if galaxy_state.get("gi"):
-            gi = galaxy_state["gi"]
-            for history_id in self.created_histories:
-                with contextlib.suppress(Exception):
-                    gi.histories.delete_history(history_id, purge=True)
-        galaxy_state["connected"] = False
-        galaxy_state["gi"] = None
+        mcp_session.call("connect", GALAXY_URL, GALAXY_API_KEY)
+        yield
+        for history_id in self.created_histories:
+            with contextlib.suppress(Exception):
+                galaxy_client.histories.delete_history(history_id, purge=True)
 
     def test_upload_and_download_file(self):
         """Test uploading a file and downloading it back."""
         # Create a test history
         test_name = f"MCP Upload Test {int(time.time())}"
-        history_result = create_history_fn(test_name)
+        history_result = self.mcp.call("create_history", test_name)
         history_id = history_result.data["id"]
         self.created_histories.append(history_id)
 
@@ -271,7 +261,7 @@ class TestRealDatasetOperations:
 
         try:
             # Upload the file
-            upload_result = upload_file_fn(tmp_path, history_id)
+            upload_result = self.mcp.call("upload_file", tmp_path, history_id)
 
             assert isinstance(upload_result, GalaxyResult)
             assert upload_result.success is True
@@ -280,20 +270,32 @@ class TestRealDatasetOperations:
 
             dataset_id = upload_result.data["outputs"][0]["id"]
 
-            # Wait for upload to complete (poll state)
-            gi = galaxy_state["gi"]
-            for _ in range(30):  # Max 30 seconds
+            # Wait for upload to complete (poll state). A shared Galaxy can leave an
+            # upload queued well past the old 30s budget; falling through to the download
+            # then failed on "state 'queued', not 'ok'", which reads like a download bug.
+            # Wait longer, and if it still has not landed say so in those terms.
+            gi = self.gi
+            upload_timeout = 120
+            state = None
+            for _ in range(upload_timeout):
                 dataset_info = gi.datasets.show_dataset(dataset_id)
-                if dataset_info["state"] == "ok":
+                state = dataset_info["state"]
+                if state == "ok":
                     break
-                if dataset_info["state"] == "error":
+                if state == "error":
                     pytest.fail(f"Dataset upload failed: {dataset_info}")
                 time.sleep(1)
+            else:
+                pytest.fail(
+                    f"Dataset {dataset_id} stuck in state {state!r} after {upload_timeout}s "
+                    f"on {GALAXY_URL} -- the server is backed up or the upload is wedged, "
+                    "not a download defect."
+                )
 
             # Download the file
             with tempfile.TemporaryDirectory() as tmp_dir:
                 download_path = os.path.join(tmp_dir, "downloaded.txt")
-                download_result = download_dataset_fn(dataset_id, download_path)
+                download_result = self.mcp.call("download_dataset", dataset_id, download_path)
 
                 assert isinstance(download_result, GalaxyResult)
                 assert download_result.success is True
@@ -314,26 +316,22 @@ class TestRealToolExecution:
 
     created_histories: list[str] = []
 
-    def setup_method(self):
-        """Connect to Galaxy before each test."""
-        connect_fn(GALAXY_URL, GALAXY_API_KEY)
+    @pytest.fixture(autouse=True)
+    def _session(self, mcp_session, galaxy_client):
+        self.mcp = mcp_session
+        self.gi = galaxy_client
         self.created_histories = []
-
-    def teardown_method(self):
-        """Clean up created histories and reset state."""
-        if galaxy_state.get("gi"):
-            gi = galaxy_state["gi"]
-            for history_id in self.created_histories:
-                with contextlib.suppress(Exception):
-                    gi.histories.delete_history(history_id, purge=True)
-        galaxy_state["connected"] = False
-        galaxy_state["gi"] = None
+        mcp_session.call("connect", GALAXY_URL, GALAXY_API_KEY)
+        yield
+        for history_id in self.created_histories:
+            with contextlib.suppress(Exception):
+                galaxy_client.histories.delete_history(history_id, purge=True)
 
     def test_run_simple_tool(self):
         """Test running a simple tool (cat1 - concatenate datasets)."""
         # Create a test history
         test_name = f"MCP Tool Test {int(time.time())}"
-        history_result = create_history_fn(test_name)
+        history_result = self.mcp.call("create_history", test_name)
         history_id = history_result.data["id"]
         self.created_histories.append(history_id)
 
@@ -344,11 +342,11 @@ class TestRealToolExecution:
             tmp_path = tmp_file.name
 
         try:
-            upload_result = upload_file_fn(tmp_path, history_id)
+            upload_result = self.mcp.call("upload_file", tmp_path, history_id)
             dataset_id = upload_result.data["outputs"][0]["id"]
 
             # Wait for upload
-            gi = galaxy_state["gi"]
+            gi = self.gi
             for _ in range(30):
                 dataset_info = gi.datasets.show_dataset(dataset_id)
                 if dataset_info["state"] == "ok":
@@ -359,7 +357,8 @@ class TestRealToolExecution:
 
             # Run the cat1 tool (concatenate datasets) - a simple built-in tool
             # This tool just outputs the input, so it's a good simple test
-            tool_result = run_tool_fn(
+            tool_result = self.mcp.call(
+                "run_tool",
                 history_id,
                 "cat1",
                 {"input1": {"src": "hda", "id": dataset_id}},
@@ -383,24 +382,20 @@ class TestRealIWCOperations:
 
     imported_workflows: list[str] = []
 
-    def setup_method(self):
-        """Connect to Galaxy before each test."""
-        connect_fn(GALAXY_URL, GALAXY_API_KEY)
+    @pytest.fixture(autouse=True)
+    def _session(self, mcp_session, galaxy_client):
+        self.mcp = mcp_session
+        self.gi = galaxy_client
         self.imported_workflows = []
-
-    def teardown_method(self):
-        """Clean up imported workflows and reset state."""
-        if galaxy_state.get("gi"):
-            gi = galaxy_state["gi"]
-            for workflow_id in self.imported_workflows:
-                with contextlib.suppress(Exception):
-                    gi.workflows.delete_workflow(workflow_id)
-        galaxy_state["connected"] = False
-        galaxy_state["gi"] = None
+        mcp_session.call("connect", GALAXY_URL, GALAXY_API_KEY)
+        yield
+        for workflow_id in self.imported_workflows:
+            with contextlib.suppress(Exception):
+                galaxy_client.workflows.delete_workflow(workflow_id)
 
     def test_get_iwc_workflows(self):
         """Test fetching all workflows from IWC."""
-        result = get_iwc_workflows_fn()
+        result = self.mcp.call("get_iwc_workflows")
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -417,7 +412,7 @@ class TestRealIWCOperations:
 
     def test_search_iwc_workflows_rna(self):
         """Test searching IWC for RNA-related workflows."""
-        result = search_iwc_workflows_fn("rna")
+        result = self.mcp.call("search_iwc_workflows", "rna")
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -443,7 +438,7 @@ class TestRealIWCOperations:
 
     def test_search_iwc_workflows_assembly(self):
         """Test searching IWC for assembly workflows."""
-        result = search_iwc_workflows_fn("assembly")
+        result = self.mcp.call("search_iwc_workflows", "assembly")
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -453,7 +448,7 @@ class TestRealIWCOperations:
 
     def test_search_iwc_workflows_no_results(self):
         """Test searching IWC with a query that returns no results."""
-        result = search_iwc_workflows_fn("xyznonexistent123")
+        result = self.mcp.call("search_iwc_workflows", "xyznonexistent123")
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -463,7 +458,7 @@ class TestRealIWCOperations:
     def test_import_workflow_from_iwc(self):
         """Test importing a workflow from IWC into Galaxy."""
         # First, search for a simple workflow to import
-        search_result = search_iwc_workflows_fn("quality")
+        search_result = self.mcp.call("search_iwc_workflows", "quality")
 
         assert search_result.success is True
         assert search_result.count >= 1
@@ -472,7 +467,7 @@ class TestRealIWCOperations:
         trs_id = search_result.data[0]["trsID"]
 
         # Import the workflow
-        import_result = import_workflow_from_iwc_fn(trs_id)
+        import_result = self.mcp.call("import_workflow_from_iwc", trs_id)
 
         assert isinstance(import_result, GalaxyResult)
         assert import_result.success is True
@@ -483,26 +478,26 @@ class TestRealIWCOperations:
         self.imported_workflows.append(import_result.data["id"])
 
         # Verify the workflow appears in user's workflow list
-        workflows_result = list_workflows_fn()
+        workflows_result = self.mcp.call("list_workflows")
         workflow_ids = [w["id"] for w in workflows_result.data]
         assert import_result.data["id"] in workflow_ids
 
     def test_import_workflow_invalid_trs_id(self):
         """Test importing with an invalid trsID."""
-        with pytest.raises(ValueError, match="not found in IWC manifest"):
-            import_workflow_from_iwc_fn("nonexistent/workflow/id")
+        with pytest.raises(ToolCallError, match="not found in IWC manifest"):
+            self.mcp.call("import_workflow_from_iwc", "nonexistent/workflow/id")
 
     def test_get_iwc_workflow_details(self):
         """Test getting detailed information about a specific IWC workflow."""
         # First, search to get a valid trsID
-        search_result = search_iwc_workflows_fn("quality")
+        search_result = self.mcp.call("search_iwc_workflows", "quality")
         assert search_result.success is True
         assert search_result.count >= 1
 
         trs_id = search_result.data[0]["trsID"]
 
         # Get full details
-        result = get_iwc_workflow_details_fn(trs_id)
+        result = self.mcp.call("get_iwc_workflow_details", trs_id)
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -532,13 +527,14 @@ class TestRealIWCOperations:
 
     def test_get_iwc_workflow_details_invalid_id(self):
         """Test getting details with an invalid trsID."""
-        with pytest.raises(ValueError, match="not found in IWC manifest"):
-            get_iwc_workflow_details_fn("nonexistent/workflow/id")
+        with pytest.raises(ToolCallError, match="not found in IWC manifest"):
+            self.mcp.call("get_iwc_workflow_details", "nonexistent/workflow/id")
 
     def test_recommend_iwc_workflows_rnaseq(self):
         """Test recommending workflows for RNA-seq analysis."""
-        result = recommend_iwc_workflows_fn(
-            "I have paired-end RNA-seq data and want to do differential expression analysis"
+        result = self.mcp.call(
+            "recommend_iwc_workflows",
+            "I have paired-end RNA-seq data and want to do differential expression analysis",
         )
 
         assert isinstance(result, GalaxyResult)
@@ -561,7 +557,9 @@ class TestRealIWCOperations:
 
     def test_recommend_iwc_workflows_assembly(self):
         """Test recommending workflows for genome assembly."""
-        result = recommend_iwc_workflows_fn("assemble bacterial genome nanopore", limit=3)
+        result = self.mcp.call(
+            "recommend_iwc_workflows", "assemble bacterial genome nanopore", limit=3
+        )
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -574,7 +572,7 @@ class TestRealIWCOperations:
 
     def test_recommend_iwc_workflows_no_matches(self):
         """Test recommending with a query that matches nothing."""
-        result = recommend_iwc_workflows_fn("xyznonexistent123 abcfake456")
+        result = self.mcp.call("recommend_iwc_workflows", "xyznonexistent123 abcfake456")
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
@@ -583,7 +581,7 @@ class TestRealIWCOperations:
 
     def test_recommend_iwc_workflows_with_limit(self):
         """Test that limit parameter is respected."""
-        result = recommend_iwc_workflows_fn("sequencing", limit=2)
+        result = self.mcp.call("recommend_iwc_workflows", "sequencing", limit=2)
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
