@@ -74,8 +74,9 @@ How you authenticate depends on your transport:
   Optionally set `GALAXY_MCP_CLIENT_REGISTRY` to control where OAuth client registrations are stored.
 
   For non-OAuth HTTP clients, `connect(url=..., api_key=...)` stores Galaxy credentials per MCP
-  session rather than globally. Clients normally preserve MCP sessions by default, which allows
-  multiple users to share the same MCP server while keeping their Galaxy credentials isolated.
+  session rather than globally, so sessions don't see each other's credentials. That is not
+  authentication, though -- without OAuth, anything that can reach the listener can call every
+  tool. See [Serving over HTTP](#serving-over-http) before exposing the server to anyone else.
 
 You can also steer the transport with `GALAXY_MCP_TRANSPORT` (`stdio`, `streamable-http`, or `sse`).
 All variables can be placed in a `.env` file for convenience.
@@ -99,7 +100,7 @@ uvx galaxy-mcp --transport streamable-http --host 0.0.0.0 --port 8000
 
 ```bash
 pip install galaxy-mcp
-galaxy-mcp --transport streamable-http --host 0.0.0.0 --port 8000
+galaxy-mcp --transport streamable-http --port 8000   # listens on 127.0.0.1
 ```
 
 If `--transport` is omitted the server defaults to stdio and reads/writes MCP messages via stdin/stdout.
@@ -108,7 +109,53 @@ If `--transport` is omitted the server defaults to stdio and reads/writes MCP me
 
 ```bash
 uv sync
-uv run galaxy-mcp --transport streamable-http --host 0.0.0.0 --port 8000
+uv run galaxy-mcp --transport streamable-http --port 8000
+```
+
+### Serving over HTTP
+
+Galaxy MCP is first of all a local server for the person running it. Over stdio the caller is
+whoever launched the process; over HTTP the caller is anything that can reach the socket, so the
+HTTP transports come with a few guards:
+
+- **Loopback by default.** The listener binds to `127.0.0.1` unless you pass `--host` or set
+  `GALAXY_MCP_HOST`.
+- **No accidental open servers.** Binding to a non-loopback address without OAuth is refused.
+  If something else controls access to the listener (a container's published port, an
+  authenticating reverse proxy), say so with `--allow-unauthenticated` or
+  `GALAXY_MCP_ALLOW_UNAUTHENTICATED=1`. Remember that any `GALAXY_API_KEY` in the environment
+  is then usable by every caller.
+- **Host and Origin checks.** Without OAuth, requests must carry a loopback `Host` header, and
+  browser requests are only answered for pages served from the same machine. This keeps web
+  pages you happen to have open from driving a local server. Add names with
+  `GALAXY_MCP_ALLOWED_HOSTS` and `GALAXY_MCP_ALLOWED_ORIGINS` (comma-separated; `*` disables
+  the check). With OAuth the bearer token is the gate and any origin is answered unless
+  `GALAXY_MCP_ALLOWED_ORIGINS` is set.
+- **No server-filesystem access.** `upload_file` and `download_dataset(file_path=...)` take paths
+  on the machine running the server, which is only what you want when that machine is yours.
+  They are disabled over HTTP; use `upload_file_from_url` and in-memory downloads instead. A
+  trusted single-user deployment can turn them back on with `GALAXY_MCP_ALLOW_LOCAL_FILES=1`.
+  Never set that on a server other people can reach -- it lets every caller read and write
+  whatever the server process can.
+- **Environment credentials stay put.** `connect(url=...)` only uses the environment's
+  `GALAXY_API_KEY` when the URL is the configured `GALAXY_URL`; any other server needs an explicit
+  `api_key`. With OAuth enabled the environment's credentials are never lent to a request.
+
+None of this can see a reverse proxy: a loopback listener behind nginx looks local from here, so
+a proxied deployment needs OAuth (or authentication at the proxy) just as a directly exposed one
+does.
+
+In a container the listener has to bind `0.0.0.0` for the published port to work, so running the
+image over HTTP without OAuth needs the explicit opt-out, and should only be published to
+loopback:
+
+```bash
+docker run --rm -it -p 127.0.0.1:8000:8000 \
+  -e GALAXY_URL="https://usegalaxy.org/" \
+  -e GALAXY_API_KEY="your-api-key" \
+  -e GALAXY_MCP_TRANSPORT="streamable-http" \
+  -e GALAXY_MCP_ALLOW_UNAUTHENTICATED=1 \
+  galaxyproject/galaxy-mcp
 ```
 
 See [USAGE_EXAMPLES.md](USAGE_EXAMPLES.md) for detailed tool usage patterns.
