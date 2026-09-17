@@ -14,7 +14,7 @@ from galaxy_mcp.http_security import (
     is_loopback_host,
 )
 
-from .test_helpers import download_dataset_fn, upload_file_fn
+from .test_helpers import connect_fn, download_dataset_fn, upload_file_fn
 
 
 @pytest.mark.parametrize(
@@ -266,6 +266,56 @@ def test_public_url_host_is_not_trusted_when_oauth_is_off():
         with TestClient(app, base_url="http://localhost:8000") as client:
             response = client.post("/mcp", headers={"host": "mcp.example.com"}, json={})
     assert response.status_code == 421
+
+
+class TestConnectCredentials:
+    """The environment's API key must never be sent to a caller-chosen URL."""
+
+    @pytest.fixture(autouse=True)
+    def _env(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_URL", "https://usegalaxy.org/")
+        monkeypatch.setenv("GALAXY_API_KEY", "operator-key")
+
+    def test_env_key_is_used_for_the_env_url(self):
+        resolved = server._resolve_connect_credentials(None, None)
+        assert resolved == ("https://usegalaxy.org/", "operator-key")
+
+    def test_env_key_survives_cosmetic_url_differences(self):
+        _, key = server._resolve_connect_credentials("HTTPS://UseGalaxy.org", None)
+        assert key == "operator-key"
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://evil.example/",
+            "http://usegalaxy.org/",
+            "https://usegalaxy.org.evil.example/",
+            "https://usegalaxy.org@evil.example/",
+            "https://usegalaxy.org/other",
+        ],
+    )
+    def test_env_key_is_withheld_from_other_urls(self, url):
+        assert server._resolve_connect_credentials(url, None) == (url, None)
+
+    def test_explicit_key_is_used_anywhere(self):
+        resolved = server._resolve_connect_credentials("https://other.example/", "mine")
+        assert resolved == ("https://other.example/", "mine")
+
+    def test_oauth_http_requests_never_get_env_credentials(self):
+        with (
+            patch.object(server, "auth_provider", MagicMock()),
+            patch.object(server, "in_http_request", return_value=True),
+        ):
+            assert server._resolve_connect_credentials(None, None) == (None, None)
+
+    def test_connect_does_not_contact_a_foreign_url_with_the_env_key(self):
+        with (
+            patch.object(server, "find_dotenv", return_value=""),
+            patch.object(server, "GalaxyInstance") as galaxy_instance,
+            pytest.raises(ValueError, match="only used with the configured GALAXY_URL"),
+        ):
+            connect_fn(url="https://evil.example/")
+        galaxy_instance.assert_not_called()
 
 
 def test_oauth_request_without_a_session_gets_no_global_fallback(mock_galaxy_instance):

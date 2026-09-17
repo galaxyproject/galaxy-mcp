@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from functools import lru_cache, wraps
 from pathlib import Path
 from typing import Any, Literal, TypeVar, cast
+from urllib.parse import urlsplit
 
 import bioblend
 import pydantic_core
@@ -1290,6 +1291,36 @@ mcp.add_middleware(
 )
 
 
+def _same_galaxy_url(first: str, second: str) -> bool:
+    def normalize(value: str) -> tuple[str, str, str]:
+        parts = urlsplit(value.strip())
+        return (parts.scheme.lower(), parts.netloc.lower(), parts.path.rstrip("/"))
+
+    return normalize(first) == normalize(second)
+
+
+def _resolve_connect_credentials(
+    url: str | None, api_key: str | None
+) -> tuple[str | None, str | None]:
+    """Fill in connect() arguments from the environment, where that is safe.
+
+    The URL is caller-controlled, and callers include agents acting on text they read
+    somewhere. The environment's API key therefore only ever goes to the environment's
+    URL -- otherwise connect(url=...) would mail the operator's key to any server named.
+    OAuth deployments never lend out the operator's credentials at all.
+    """
+    if auth_provider and in_http_request():
+        return url, api_key
+
+    env_url = os.environ.get("GALAXY_URL")
+    env_key = os.environ.get("GALAXY_API_KEY")
+    use_url = url or env_url
+    use_api_key = api_key
+    if not use_api_key and use_url and env_url and _same_galaxy_url(use_url, env_url):
+        use_api_key = env_key
+    return use_url, use_api_key
+
+
 @mcp.tool(tags={"connection", "write", "core"})
 def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
     """
@@ -1339,8 +1370,7 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
             )
 
         # Use provided parameters or fall back to environment variables
-        use_url = url or os.environ.get("GALAXY_URL")
-        use_api_key = api_key or os.environ.get("GALAXY_API_KEY")
+        use_url, use_api_key = _resolve_connect_credentials(url, api_key)
 
         # Check if we have the necessary credentials
         if not use_url or not use_api_key:
@@ -1349,11 +1379,15 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
             if dotenv_path:
                 load_dotenv(dotenv_path, override=True)
                 # Check again after loading .env
-                use_url = url or os.environ.get("GALAXY_URL")
-                use_api_key = api_key or os.environ.get("GALAXY_API_KEY")
+                use_url, use_api_key = _resolve_connect_credentials(url, api_key)
 
             # If still missing credentials, report error
             if not use_url or not use_api_key:
+                if url and not api_key and os.environ.get("GALAXY_API_KEY"):
+                    raise ValueError(
+                        "The configured GALAXY_API_KEY is only used with the configured "
+                        "GALAXY_URL. Pass api_key explicitly to connect to a different server."
+                    )
                 missing = []
                 if not use_url:
                     missing.append("URL")
