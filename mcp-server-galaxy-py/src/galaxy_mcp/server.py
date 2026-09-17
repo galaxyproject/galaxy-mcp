@@ -26,15 +26,19 @@ from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_context
 from mcp.server.auth.middleware.auth_context import get_access_token
 from pydantic import BaseModel, Field
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
 
 from galaxy_mcp.auth import (
     GalaxyOAuthProvider,
     SessionSecretRequiredError,
     configure_auth_provider,
     get_active_session,
+)
+from galaxy_mcp.http_security import (
+    ALLOWED_HOSTS_ENV,
+    ALLOWED_ORIGINS_ENV,
+    HTTPSecurityMiddleware,
+    env_list,
 )
 from galaxy_mcp.middleware import ToolVisibilityMiddleware
 from galaxy_mcp.tool_inputs import (
@@ -994,35 +998,6 @@ if auth_provider:
 else:
     mcp = FastMCP("Galaxy", **_mcp_kwargs)
 
-# Allow browser preflight CORS requests to bypass FastMCP auth
-
-
-class _PreflightMiddleware(BaseHTTPMiddleware):
-    """Ensure CORS preflight requests succeed for browser-based clients."""
-
-    async def dispatch(self, request, call_next):
-        origin = request.headers.get("origin", "*")
-        allow_methods = request.headers.get("access-control-request-method", "POST,GET,OPTIONS")
-        allow_headers = request.headers.get(
-            "access-control-request-headers", "authorization,content-type"
-        )
-
-        cors_headers = {
-            "access-control-allow-origin": origin,
-            "access-control-allow-methods": allow_methods,
-            "access-control-allow-headers": allow_headers,
-            "access-control-max-age": "600",
-        }
-
-        if request.method.upper() == "OPTIONS":
-            return Response(status_code=204, headers=cors_headers)
-
-        response = await call_next(request)
-        for header, value in cors_headers.items():
-            response.headers.setdefault(header, value)
-        return response
-
-
 _original_http_app = FastMCP.http_app
 
 
@@ -1065,16 +1040,21 @@ class _OAuthPublicRoutes:
         await self._app(scope, receive, send)
 
 
-def _http_app_with_preflight(self, *args, **kwargs):
+def _http_app_with_security(self, *args, **kwargs):
     app = _original_http_app(self, *args, **kwargs)
-    app.add_middleware(_PreflightMiddleware)
+    app.add_middleware(
+        HTTPSecurityMiddleware,
+        auth_enabled=auth_provider is not None,
+        allowed_hosts=env_list(ALLOWED_HOSTS_ENV),
+        allowed_origins=env_list(ALLOWED_ORIGINS_ENV),
+    )
     if auth_provider:
         base_path = kwargs.get("path")
         app = _OAuthPublicRoutes(app, auth_provider, base_path)
     return app
 
 
-mcp.http_app = types.MethodType(_http_app_with_preflight, mcp)  # type: ignore[method-assign]
+mcp.http_app = types.MethodType(_http_app_with_security, mcp)  # type: ignore[method-assign]
 
 
 # Initialize Galaxy client if environment variables are set
