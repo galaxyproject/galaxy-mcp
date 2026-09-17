@@ -39,6 +39,7 @@ from galaxy_mcp.http_security import (
     ALLOWED_ORIGINS_ENV,
     HTTPSecurityMiddleware,
     env_list,
+    require_local_files,
 )
 from galaxy_mcp.middleware import ToolVisibilityMiddleware
 from galaxy_mcp.tool_inputs import (
@@ -3016,6 +3017,11 @@ def download_dataset(
     environments), omit the file_path parameter to download content to memory. Only
     specify file_path if you can actually write files to the local filesystem.
     """
+    if file_path:
+        require_local_files(
+            "download_dataset(file_path=...)",
+            "Omit file_path to receive the content in the response instead.",
+        )
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
@@ -3145,6 +3151,10 @@ def upload_file(path: str, history_id: str | None = None) -> GalaxyResult:
     - "Permission denied": Ensure file has read permissions
     - "Quota exceeded": User's Galaxy storage quota may be full
     """
+    require_local_files(
+        "upload_file",
+        "Use upload_file_from_url to load data the Galaxy server can fetch itself.",
+    )
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 

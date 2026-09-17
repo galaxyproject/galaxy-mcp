@@ -1,17 +1,19 @@
 """Tests for the HTTP transport guards."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from starlette.applications import Starlette
 from starlette.responses import PlainTextResponse
 from starlette.testclient import TestClient
 
-from galaxy_mcp import server
+from galaxy_mcp import http_security, server
 from galaxy_mcp.http_security import (
     HTTPSecurityMiddleware,
     is_loopback_host,
 )
+
+from .test_helpers import download_dataset_fn, upload_file_fn
 
 
 @pytest.mark.parametrize(
@@ -111,6 +113,89 @@ class TestOriginCheck:
         client = _client(auth_enabled=True, allowed_origins={"https://app.example.org"})
         response = client.post("/ping", headers={"origin": "https://client.example"})
         assert response.status_code == 403
+
+
+class TestLocalFileTools:
+    def test_upload_blocked_over_http(self, mock_galaxy_instance, monkeypatch):
+        monkeypatch.delenv("GALAXY_MCP_ALLOW_LOCAL_FILES", raising=False)
+        with (
+            patch.object(http_security, "in_http_request", return_value=True),
+            patch("os.path.exists", return_value=True),
+            patch.dict(server.galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+            pytest.raises(ValueError, match="disabled over HTTP"),
+        ):
+            upload_file_fn("/etc/passwd", "history_1")
+        mock_galaxy_instance.tools.upload_file.assert_not_called()
+
+    def test_upload_opt_in_over_http(self, mock_galaxy_instance, monkeypatch):
+        monkeypatch.setenv("GALAXY_MCP_ALLOW_LOCAL_FILES", "1")
+        with (
+            patch.object(http_security, "in_http_request", return_value=True),
+            patch("os.path.exists", return_value=True),
+            patch.dict(server.galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+        ):
+            upload_file_fn("/data/reads.fastq", "history_1")
+        mock_galaxy_instance.tools.upload_file.assert_called_once()
+
+    def test_download_to_path_blocked_over_http(self, mock_galaxy_instance, monkeypatch):
+        monkeypatch.delenv("GALAXY_MCP_ALLOW_LOCAL_FILES", raising=False)
+        with (
+            patch.object(http_security, "in_http_request", return_value=True),
+            patch.dict(server.galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+            pytest.raises(ValueError, match="disabled over HTTP"),
+        ):
+            download_dataset_fn("dataset_1", file_path="/tmp/out.txt")
+        mock_galaxy_instance.datasets.download_dataset.assert_not_called()
+
+    def test_download_to_memory_still_works_over_http(self, mock_galaxy_instance, monkeypatch):
+        monkeypatch.delenv("GALAXY_MCP_ALLOW_LOCAL_FILES", raising=False)
+        mock_galaxy_instance.datasets.show_dataset.return_value = {
+            "id": "dataset_1",
+            "name": "out",
+            "extension": "txt",
+            "state": "ok",
+        }
+        mock_galaxy_instance.datasets.download_dataset.return_value = b"hello"
+        with (
+            patch.object(http_security, "in_http_request", return_value=True),
+            patch.dict(server.galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+        ):
+            result = download_dataset_fn("dataset_1")
+        assert result.success
+
+
+def test_upload_blocked_over_a_real_http_request(monkeypatch):
+    """End to end: the guard has to recognise a genuine streamable-http tool call."""
+    monkeypatch.delenv("GALAXY_MCP_ALLOW_LOCAL_FILES", raising=False)
+    gi = MagicMock()
+    headers = {"accept": "application/json, text/event-stream"}
+
+    with (
+        patch.object(server, "auth_provider", None),
+        patch.dict(server.galaxy_state, {"connected": True, "gi": gi}),
+        patch("os.path.exists", return_value=True),
+    ):
+        app = server.mcp.http_app(path="/mcp", json_response=True, stateless_http=True)
+        with TestClient(app, base_url="http://localhost:8000") as client:
+            response = client.post(
+                "/mcp",
+                headers=headers,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "upload_file",
+                        "arguments": {"path": "/etc/passwd", "history_id": "h1"},
+                    },
+                },
+            )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"]["isError"] is True
+    assert "disabled over HTTP" in body["result"]["content"][0]["text"]
+    gi.tools.upload_file.assert_not_called()
 
 
 class TestHeaderEdgeCases:
