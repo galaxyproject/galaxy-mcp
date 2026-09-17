@@ -35,10 +35,16 @@ from galaxy_mcp.auth import (
     get_active_session,
 )
 from galaxy_mcp.http_security import (
+    ALLOW_UNAUTHENTICATED_ENV,
     ALLOWED_HOSTS_ENV,
     ALLOWED_ORIGINS_ENV,
+    DEFAULT_HTTP_HOST,
     HTTPSecurityMiddleware,
+    check_http_startup,
+    env_flag,
     env_list,
+    in_http_request,
+    is_loopback_host,
     require_local_files,
 )
 from galaxy_mcp.middleware import ToolVisibilityMiddleware
@@ -903,7 +909,9 @@ if public_base_url and normalized_galaxy_url:
         # disabled would leave the server unauthenticated, so fail loudly instead.
         raise
     except Exception as exc:  # pragma: no cover - defensive logging
+        # Same reasoning: the operator asked for OAuth, so don't carry on without it
         logger.error("Failed to initialize OAuth provider: %s", exc, exc_info=True)
+        raise
 elif public_base_url and not normalized_galaxy_url:
     logger.warning(
         "GALAXY_MCP_PUBLIC_URL is set but GALAXY_URL is missing. "
@@ -1111,6 +1119,17 @@ def _get_request_connection_state() -> dict[str, Any]:
                 "source": "session",
                 "session": {"id": session_id},
             }
+
+    # An OAuth request that couldn't resolve its own session must not borrow the operator's
+    if auth_provider and in_http_request():
+        return {
+            "url": normalized_galaxy_url,
+            "api_key": None,
+            "gi": None,
+            "connected": False,
+            "source": None,
+            "session": None,
+        }
 
     return {
         "url": galaxy_state.get("url") or normalized_galaxy_url,
@@ -5118,9 +5137,23 @@ def run_http_server(
     port: int | None = None,
     transport: str | None = None,
     path: str | None = None,
+    allow_unauthenticated: bool = False,
 ) -> None:
     """Run the MCP server over HTTP-based transport."""
-    resolved_host = host or os.environ.get("GALAXY_MCP_HOST", "0.0.0.0")
+    resolved_host = host or os.environ.get("GALAXY_MCP_HOST") or DEFAULT_HTTP_HOST
+    check_http_startup(
+        resolved_host,
+        auth_enabled=auth_provider is not None,
+        allow_unauthenticated=allow_unauthenticated or env_flag(ALLOW_UNAUTHENTICATED_ENV),
+    )
+    if not auth_provider and not is_loopback_host(resolved_host):
+        logger.warning(
+            "Serving HTTP on %s without authentication%s.",
+            resolved_host,
+            "; every caller acts with the GALAXY_API_KEY from this environment"
+            if galaxy_state.get("api_key")
+            else "",
+        )
     resolved_port = port if port is not None else int(os.environ.get("GALAXY_MCP_PORT", "8000"))
     resolved_transport = (
         transport or os.environ.get("GALAXY_MCP_TRANSPORT") or "streamable-http"

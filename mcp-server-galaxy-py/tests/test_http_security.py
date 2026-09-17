@@ -10,6 +10,7 @@ from starlette.testclient import TestClient
 from galaxy_mcp import http_security, server
 from galaxy_mcp.http_security import (
     HTTPSecurityMiddleware,
+    check_http_startup,
     is_loopback_host,
 )
 
@@ -32,6 +33,43 @@ from .test_helpers import download_dataset_fn, upload_file_fn
 )
 def test_is_loopback_host(host, expected):
     assert is_loopback_host(host) is expected
+
+
+class TestStartupCheck:
+    def test_loopback_without_auth_is_fine(self):
+        check_http_startup("127.0.0.1", auth_enabled=False, allow_unauthenticated=False)
+
+    def test_routable_with_auth_is_fine(self):
+        check_http_startup("0.0.0.0", auth_enabled=True, allow_unauthenticated=False)
+
+    def test_routable_without_auth_is_refused(self):
+        with pytest.raises(ValueError, match="without authentication"):
+            check_http_startup("0.0.0.0", auth_enabled=False, allow_unauthenticated=False)
+
+    def test_routable_without_auth_needs_explicit_opt_out(self):
+        check_http_startup("0.0.0.0", auth_enabled=False, allow_unauthenticated=True)
+
+    def test_run_http_server_defaults_to_loopback(self, monkeypatch):
+        monkeypatch.delenv("GALAXY_MCP_HOST", raising=False)
+        with patch.object(server.mcp, "run") as run:
+            server.run_http_server(transport="streamable-http")
+        assert run.call_args.kwargs["host"] == "127.0.0.1"
+
+    def test_run_http_server_refuses_open_bind(self, monkeypatch):
+        monkeypatch.delenv("GALAXY_MCP_ALLOW_UNAUTHENTICATED", raising=False)
+        with (
+            patch.object(server, "auth_provider", None),
+            patch.object(server.mcp, "run") as run,
+            pytest.raises(ValueError, match="without authentication"),
+        ):
+            server.run_http_server(host="0.0.0.0", transport="streamable-http")
+        run.assert_not_called()
+
+    def test_run_http_server_honours_env_opt_out(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_MCP_ALLOW_UNAUTHENTICATED", "1")
+        with patch.object(server, "auth_provider", None), patch.object(server.mcp, "run") as run:
+            server.run_http_server(host="0.0.0.0", transport="streamable-http")
+        run.assert_called_once()
 
 
 def _client(**middleware_kwargs) -> TestClient:
@@ -228,3 +266,19 @@ def test_public_url_host_is_not_trusted_when_oauth_is_off():
         with TestClient(app, base_url="http://localhost:8000") as client:
             response = client.post("/mcp", headers={"host": "mcp.example.com"}, json={})
     assert response.status_code == 421
+
+
+def test_oauth_request_without_a_session_gets_no_global_fallback(mock_galaxy_instance):
+    with (
+        patch.object(server, "auth_provider", MagicMock()),
+        patch.object(server, "get_active_session", return_value=(None, None)),
+        patch.object(server, "in_http_request", return_value=True),
+        patch.dict(
+            server.galaxy_state,
+            {"connected": True, "gi": mock_galaxy_instance, "api_key": "operator-key"},
+        ),
+    ):
+        state = server._get_request_connection_state()
+    assert state["connected"] is False
+    assert state["gi"] is None
+    assert state["api_key"] is None
