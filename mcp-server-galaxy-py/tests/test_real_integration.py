@@ -81,7 +81,10 @@ class TestRealConnection:
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
-        assert "connected" in result.message.lower() or "Connected" in result.message
+        # Sessionless connect reports "Validated global Galaxy connection at <url>"; a
+        # session reports "... for the current MCP session". Assert the substance rather
+        # than one spelling -- pinning "connected" broke silently when the wording moved.
+        assert GALAXY_URL.rstrip("/") in result.message
         assert result.data["connected"] is True
         assert "user" in result.data
         assert result.data["user"]["email"] is not None
@@ -280,15 +283,27 @@ class TestRealDatasetOperations:
 
             dataset_id = upload_result.data["outputs"][0]["id"]
 
-            # Wait for upload to complete (poll state)
+            # Wait for upload to complete (poll state). A shared Galaxy can leave an
+            # upload queued well past the old 30s budget; falling through to the download
+            # then failed on "state 'queued', not 'ok'", which reads like a download bug.
+            # Wait longer, and if it still has not landed say so in those terms.
             gi = galaxy_state["gi"]
-            for _ in range(30):  # Max 30 seconds
+            upload_timeout = 120
+            state = None
+            for _ in range(upload_timeout):
                 dataset_info = gi.datasets.show_dataset(dataset_id)
-                if dataset_info["state"] == "ok":
+                state = dataset_info["state"]
+                if state == "ok":
                     break
-                if dataset_info["state"] == "error":
+                if state == "error":
                     pytest.fail(f"Dataset upload failed: {dataset_info}")
                 time.sleep(1)
+            else:
+                pytest.fail(
+                    f"Dataset {dataset_id} stuck in state {state!r} after {upload_timeout}s "
+                    f"on {GALAXY_URL} -- the server is backed up or the upload is wedged, "
+                    "not a download defect."
+                )
 
             # Download the file
             with tempfile.TemporaryDirectory() as tmp_dir:
