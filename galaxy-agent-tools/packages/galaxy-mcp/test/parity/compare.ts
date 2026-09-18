@@ -65,7 +65,8 @@ function isNullable(schema: JsonSchema): boolean {
 function withoutNull(schema: JsonSchema): JsonSchema {
   if (!schema.anyOf) return schema;
   const variants = schema.anyOf.filter((v) => v.type !== "null");
-  return variants.length === 1 ? variants[0] : { ...schema, anyOf: variants };
+  const [only] = variants;
+  return only && variants.length === 1 ? only : { ...schema, anyOf: variants };
 }
 
 /** A comparable shorthand for a parameter's type, e.g. `string`, `array<string>`. */
