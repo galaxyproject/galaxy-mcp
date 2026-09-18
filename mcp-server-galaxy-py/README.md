@@ -190,8 +190,9 @@ are documented in each tool's own description, which is what the MCP client sees
 ### User-defined tools
 
 User-defined tools are unprivileged, containerized tools a user creates themselves. They
-run through a different Galaxy endpoint than catalog tools, so they have their own run
-tool.
+are addressed by UUID rather than by tool id, and `run_user_tool` resolves that UUID before
+submitting the run, so they need their own run tool even though the run itself goes through
+the same Galaxy tools API as a catalog tool.
 
 - `list_user_tools`: The current user's user-defined tools
 - `create_user_tool`: Create one from a tool representation
@@ -226,7 +227,7 @@ standalone one is a Report. Embedded datasets are referenced by encoded id.
 - `list_pages`: Pages, optionally filtered by history or search term
 - `get_page`: A page and its latest revision, editable markdown and optionally rendered
 - `create_page`: Create a page
-- `update_page`: Write a new revision
+- `update_page`: Update a page; a content change records a new revision
 - `list_page_revisions`: A page's revision history
 - `get_page_revision`: One revision's content
 - `revert_page_revision`: Restore an earlier revision as a new one
