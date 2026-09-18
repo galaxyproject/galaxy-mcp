@@ -11,7 +11,7 @@ This is the Python implementation of the Galaxy MCP server, providing a Model Co
 - Intergalactic Workflow Commission (IWC) integration
 - FastMCP 3 server with remote deployment support
 - Session-aware tool visibility: every tool is tagged, and a middleware can hide tags a
-  session cannot use (see [Tool discovery mode](#tool-discovery-mode-experimental))
+  session cannot use (see [Filtering the catalog by tag](#filtering-the-catalog-by-tag))
 - Type-annotated Python codebase
 
 ## Requirements
@@ -143,7 +143,9 @@ export GALAXY_MCP_INCLUDE_TAGS="core,histories"   # show only tools carrying one
 export GALAXY_MCP_EXCLUDE_TAGS="write"            # then drop any tool carrying one of these
 ```
 
-The middleware also hides `admin` and `user_tools` tags from sessions that cannot use them, probing the connected Galaxy once per session and caching the answer. No tool currently carries either tag, so that half is inert until tools are labelled for it.
+The middleware also hides the `admin` and `user_tools` tags from callers that cannot use them, probing the connected Galaxy for `is_admin` and for `enable_unprivileged_tools`. Mind the cache scope: the middleware is constructed once when the server module loads, so those answers are cached for the life of the process, not per session -- the admin answer keyed by URL and API key, the `user_tools` answer by URL alone, and so shared across every key on that server. No tool currently carries either tag, so this half is inert until tools are labelled for it.
+
+The code-mode meta-tools are added by FastMCP's transform and carry no tags at all, so tag filtering and `--discovery-mode code` do not combine: with `GALAXY_MCP_INCLUDE_TAGS` set, all three meta-tools are hidden.
 
 ## Available MCP Tools
 
@@ -240,15 +242,24 @@ server, so it runs anywhere in seconds. Test dependencies come from the `dev` ex
 `uv sync --all-extras` already installs.
 
 ```bash
-# Run everything (pyproject already passes -v and coverage over galaxy_mcp)
+# Run everything
 uv run pytest
 
 # One file
 uv run pytest tests/test_history_operations.py
 
+# Coverage has to be asked for -- see the config note below
+uv run pytest --cov=galaxy_mcp --cov-report=term-missing
+
 # Type checking is a separate gate -- neither pytest nor pre-commit runs it
 uv run mypy src/galaxy_mcp
 ```
+
+Two pytest configs exist and `pytest.ini` wins, which pytest says out loud on every run
+(`ignoring pytest config in pyproject.toml`). The `addopts` in `pyproject.toml` therefore
+never apply, and the ones in `pytest.ini` sit under a `[tool:pytest]` header that
+`pytest.ini` does not read. A bare `uv run pytest` gets no `-v` and no coverage; pass the
+flags yourself, as CI does.
 
 ### How the tests are put together
 
