@@ -1,5 +1,5 @@
 {
-  "$comment": "Every way the TypeScript ops and the Python MCP server disagree, reviewed. The parity test fails on a divergence that is not listed here and on a listing that no longer matches what the two surfaces say, so this file is the TS to-do list and cannot quietly rot. Statuses: intentional (settled, will not change), pending-port (a TS op is on its way), pending-decision (waiting on a call nobody has made), unreviewed-gap (found by the comparator, nobody has ruled on it yet).",
+  "$comment": "Every way the TypeScript ops and the Python MCP server disagree, one entry each. The parity test fails on a divergence that is not listed here and on a listing the two surfaces no longer support, so this file is the TypeScript to-do list and cannot quietly rot. An entry records that a difference is KNOWN, not that it is fine -- read the status. Statuses: intentional (settled, will not change), pending-port (a TS op is on its way), pending-decision (waiting on a call nobody has made), unreviewed-gap (found by the comparator, nobody has ruled on it yet).",
   "normalization": {
     "snakeCaseParamNames": {
       "enabled": true,
@@ -10,6 +10,11 @@
       "enabled": true,
       "status": "intentional",
       "reason": "`x: str | None = None` is how Python spells an optional parameter; the null default carries nothing the TS `.optional()` does not already say."
+    },
+    "optionalNullUnions": {
+      "enabled": true,
+      "status": "intentional",
+      "reason": "An OPTIONAL Python parameter typed `T | None` is compared as plain `T`, because that union is how Python spells optional and requiredness is compared separately. A nullable parameter that is required keeps its null, where the union really is part of the contract."
     }
   },
   "divergences": [
@@ -28,6 +33,14 @@
       "observed": "",
       "status": "pending-port",
       "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
+    },
+    {
+      "tool": "download_dataset",
+      "param": null,
+      "kind": "mutability-mismatch",
+      "observed": "python=read typescript=write",
+      "status": "unreviewed-gap",
+      "reason": "Python tags the tool read; the TS op advertises readOnlyHint false because it can write the bytes to a local path. One of the two is wrong about what read-only means for a tool that touches the caller's disk, and MCP clients gate approval on that hint."
     },
     {
       "tool": "download_dataset",
@@ -259,7 +272,7 @@
       "kind": "default-mismatch",
       "observed": "python=false typescript=none",
       "status": "unreviewed-gap",
-      "reason": "TS leaves show_published unset and takes Galaxy's default of false, which is the same value Python sends; only the declaration differs."
+      "reason": "TS sends Galaxy's show_published query parameter only when `published` is given, and Galaxy's own default for it is false, the value Python always sends; only the declaration differs."
     },
     {
       "tool": "list_workflows",

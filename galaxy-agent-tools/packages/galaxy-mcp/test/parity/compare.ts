@@ -4,9 +4,10 @@
  * package advertises.
  *
  * Both sides describe themselves as JSON Schema, so the comparison is over
- * parameter names, types, requiredness and declared defaults. Descriptions are
- * deliberately not compared: the two surfaces word things differently on purpose
- * and diffing prose would bury the contract differences that matter.
+ * parameter names, types, requiredness and declared defaults, plus whether each
+ * tool says it mutates anything. Descriptions are deliberately not compared: the
+ * two surfaces word things differently on purpose and diffing prose would bury
+ * the contract differences that matter.
  */
 
 export type DivergenceKind =
@@ -16,7 +17,15 @@ export type DivergenceKind =
   | "missing-py-param"
   | "type-mismatch"
   | "required-mismatch"
-  | "default-mismatch";
+  | "default-mismatch"
+  | "mutability-mismatch";
+
+/** Kinds that are about a whole tool rather than one of its parameters. */
+export const WHOLE_TOOL_KINDS: readonly DivergenceKind[] = [
+  "missing-ts-tool",
+  "missing-py-tool",
+  "mutability-mismatch",
+];
 
 export interface Divergence {
   tool: string;
@@ -31,21 +40,32 @@ export interface JsonSchema {
   type?: string;
   anyOf?: JsonSchema[];
   items?: JsonSchema;
+  enum?: unknown[];
   properties?: Record<string, JsonSchema>;
   required?: string[];
   default?: unknown;
 }
 
+/** One tool as its own surface advertises it. */
+export interface ToolContract {
+  inputSchema: JsonSchema;
+  /** The tool says it changes something: Python's `write` tag, MCP's `readOnlyHint: false`. */
+  mutating: boolean;
+}
+
 /**
  * Whole-surface differences that would otherwise produce a divergence per
- * parameter. Each is a single switch, flipped from the registry.
+ * parameter. Every rule is a single switch, flipped from the registry, and adding
+ * one here forces it to be declared there.
  */
-export interface Normalization {
-  /** Compare TS `historyId` with Python `history_id` as the same parameter. */
-  snakeCaseParamNames: boolean;
-  /** Read Python's `x: str | None = None` as plain optional rather than "defaults to null". */
-  pythonNullDefaults: boolean;
-}
+export const NORMALIZATION_RULES = [
+  "snakeCaseParamNames",
+  "pythonNullDefaults",
+  "optionalNullUnions",
+] as const;
+
+export type NormalizationRuleName = (typeof NORMALIZATION_RULES)[number];
+export type Normalization = Record<NormalizationRuleName, boolean>;
 
 export interface NormalParam {
   type: string;
@@ -69,26 +89,61 @@ function withoutNull(schema: JsonSchema): JsonSchema {
   return only && variants.length === 1 ? only : { ...schema, anyOf: variants };
 }
 
-/** A comparable shorthand for a parameter's type, e.g. `string`, `array<string>`. */
-export function typeToken(schema: JsonSchema): string {
-  const s = withoutNull(schema);
-  if (s.anyOf) {
-    return `anyOf<${s.anyOf.map(typeToken).sort().join("|")}>`;
+/** JSON with keys in a fixed order and prose dropped, so two shapes compare by structure. */
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  if (value && typeof value === "object") {
+    const fields = Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => key !== "description")
+      .sort(([a], [b]) => (a < b ? -1 : 1))
+      .map(([key, v]) => `${JSON.stringify(key)}:${stableStringify(v)}`);
+    return `{${fields.join(",")}}`;
   }
-  if (s.type === "array") return `array<${typeToken(s.items ?? {})}>`;
-  return s.type ?? "any";
+  return JSON.stringify(value) ?? "null";
 }
 
-export function normalizeParams(schema: JsonSchema, rules: Normalization): Map<string, NormalParam> {
+/**
+ * A comparable shorthand for a parameter's type, e.g. `string`, `array<string>`.
+ *
+ * It models the constructs both surfaces actually use. It does NOT compare
+ * value constraints (format, minimum, pattern), `additionalProperties`, or the
+ * inner shape of an object -- an open record and a closed one both read `object`.
+ * Anything it does not model at all falls through to a structural comparison
+ * rather than to a single catch-all token, so two unlike shapes cannot match by
+ * accident.
+ */
+export function typeToken(schema: JsonSchema): string {
+  if (schema.enum) {
+    return `enum<${schema.enum.map((v) => JSON.stringify(v)).sort().join("|")}>`;
+  }
+  if (schema.anyOf) return `anyOf<${schema.anyOf.map(typeToken).sort().join("|")}>`;
+  if (schema.type === "array") return `array<${typeToken(schema.items ?? {})}>`;
+  if (schema.type) return schema.type;
+  return `schema(${stableStringify(schema)})`;
+}
+
+export function normalizeParams(
+  schema: JsonSchema,
+  rules: Normalization,
+  where: string,
+): Map<string, NormalParam> {
   const required = new Set(schema.required ?? []);
   const out = new Map<string, NormalParam>();
   for (const [rawName, prop] of Object.entries(schema.properties ?? {})) {
     const isRequired = required.has(rawName);
-    const nullDefault = prop.default === null && isNullable(prop);
+    const optionalNull = !isRequired && isNullable(prop);
+    const typeSchema = rules.optionalNullUnions && optionalNull ? withoutNull(prop) : prop;
     const hasDefault =
-      "default" in prop && !(rules.pythonNullDefaults && !isRequired && nullDefault);
-    out.set(rules.snakeCaseParamNames ? toSnakeCase(rawName) : rawName, {
-      type: typeToken(prop),
+      "default" in prop && !(rules.pythonNullDefaults && optionalNull && prop.default === null);
+    const name = rules.snakeCaseParamNames ? toSnakeCase(rawName) : rawName;
+    if (out.has(name)) {
+      throw new Error(
+        `${where}: "${rawName}" normalizes to "${name}", which another parameter already ` +
+          "uses, so the comparison would silently drop one of them",
+      );
+    }
+    out.set(name, {
+      type: typeToken(typeSchema),
       required: isRequired,
       hasDefault,
       ...(hasDefault ? { default: prop.default } : {}),
@@ -101,13 +156,23 @@ const show = (p: NormalParam): string => (p.hasDefault ? JSON.stringify(p.defaul
 
 function compareTool(
   tool: string,
-  python: JsonSchema,
-  typescript: JsonSchema,
+  python: ToolContract,
+  typescript: ToolContract,
   rules: Normalization,
 ): Divergence[] {
-  const py = normalizeParams(python, rules);
-  const ts = normalizeParams(typescript, rules);
   const found: Divergence[] = [];
+  if (python.mutating !== typescript.mutating) {
+    found.push({
+      tool,
+      param: null,
+      kind: "mutability-mismatch",
+      observed: `python=${python.mutating ? "write" : "read"} typescript=${
+        typescript.mutating ? "write" : "read"
+      }`,
+    });
+  }
+  const py = normalizeParams(python.inputSchema, rules, `${tool} (python)`);
+  const ts = normalizeParams(typescript.inputSchema, rules, `${tool} (typescript)`);
   for (const param of py.keys()) {
     if (!ts.has(param)) found.push({ tool, param, kind: "missing-ts-param", observed: "" });
   }
@@ -147,8 +212,8 @@ function compareTool(
 
 /** Every way the two surfaces disagree, in a stable order. */
 export function compareSurfaces(
-  python: Record<string, JsonSchema>,
-  typescript: Record<string, JsonSchema>,
+  python: Record<string, ToolContract>,
+  typescript: Record<string, ToolContract>,
   rules: Normalization,
 ): Divergence[] {
   const found: Divergence[] = [];
@@ -162,11 +227,14 @@ export function compareSurfaces(
       found.push({ tool, param: null, kind: "missing-py-tool", observed: "" });
     }
   }
-  for (const [tool, schema] of Object.entries(python)) {
+  for (const [tool, contract] of Object.entries(python)) {
     const other = typescript[tool];
-    if (other) found.push(...compareTool(tool, schema, other, rules));
+    if (other) found.push(...compareTool(tool, contract, other, rules));
   }
-  return found.sort((a, b) => divergenceKey(a).localeCompare(divergenceKey(b)));
+  return found.sort((a, b) => {
+    const [x, y] = [divergenceKey(a), divergenceKey(b)];
+    return x < y ? -1 : x > y ? 1 : 0;
+  });
 }
 
 /** Identity of a divergence, for matching against the accepted-divergence registry. */
@@ -174,7 +242,7 @@ export function divergenceKey(d: { tool: string; param: string | null; kind: str
   return `${d.tool} :: ${d.param ?? ""} :: ${d.kind}`;
 }
 
-export function describe(d: Divergence): string {
+export function formatDivergence(d: Divergence): string {
   const where = d.param ? `${d.tool}.${d.param}` : d.tool;
   return d.observed ? `${where} [${d.kind}] ${d.observed}` : `${where} [${d.kind}]`;
 }

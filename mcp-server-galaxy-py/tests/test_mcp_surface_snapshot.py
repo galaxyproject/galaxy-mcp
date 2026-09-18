@@ -50,10 +50,18 @@ def test_manifest_describes_each_tool_the_same_way(generated, checked_in):
 
 
 def test_manifest_file_is_byte_identical_to_the_generator(generated):
-    want = render(generated).splitlines()
-    have = MANIFEST_PATH.read_text().splitlines()
-    for lineno, (w, h) in enumerate(zip_longest(want, have), start=1):
+    want = render(generated)
+    # read_bytes, not read_text: read_text normalizes line endings, which would let a
+    # CRLF copy of the manifest pass as identical.
+    have = MANIFEST_PATH.read_bytes().decode()
+    if have == want:
+        return
+    for lineno, (w, h) in enumerate(zip_longest(want.splitlines(), have.splitlines()), start=1):
         assert h == w, f"{MANIFEST_PATH.name} differs from the generator at line {lineno}. {_STALE}"
+    raise AssertionError(
+        f"{MANIFEST_PATH.name} differs from the generator only in its line endings or its "
+        f"final newline. {_STALE}"
+    )
 
 
 def test_manifest_covers_conditionally_registered_tools(checked_in):
