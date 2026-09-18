@@ -1080,9 +1080,12 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
 
 
 @mcp.tool(tags={"tools", "read", "extended"})
-def search_tools_by_name(query: str) -> GalaxyResult:
+def search_tools_by_name(query: str, limit: int = 25, offset: int = 0) -> GalaxyResult:
     """
     Search Galaxy tools whose name, ID, or description contains the given query (substring match).
+
+    Results are paginated. pagination.total_items is how many tools matched in total;
+    pagination.next_offset is where the next page starts (None on the last page).
 
     RECOMMENDED WORKFLOW:
     1. Use this function to find tools by name/keyword
@@ -1093,11 +1096,18 @@ def search_tools_by_name(query: str) -> GalaxyResult:
     Args:
         query: Search query - matches against tool name, ID, or description.
                Examples: "fastq", "alignment", "filter", "bwa"
+        limit: Maximum tools to return per page (default 25, max 100). A page is
+               also cut short when it would not fit the output budget, so ask for
+               what you want and walk pagination.next_offset.
+        offset: Skip this many matches (default 0). Pass pagination.next_offset
+                to walk to the following page.
 
     Returns:
         GalaxyResult with:
-        - data: List of matching tools with id, name, version, description
-        - count: Number of tools found
+        - data: This page of matching tools, as Galaxy's tool index returns them
+          (id, name, version, description, panel section, EDAM terms and more)
+        - count: Number of tools on this page
+        - pagination: Total matches, this window, and the offset for the next page
         - message: Summary of results
 
     Example:
@@ -1108,14 +1118,16 @@ def search_tools_by_name(query: str) -> GalaxyResult:
                 {"id": "fastq_filter", "name": "Filter FASTQ", ...}
             ],
             count=15,
-            message="Found 15 tools matching 'fastq'"
+            message="Found 15 tools matching 'fastq', returning 15"
         )
 
     NEXT STEPS:
     - To see full tool parameters: get_tool_details(tool_id)
     - To see example inputs: get_tool_run_examples(tool_id)
     - To run a tool: run_tool(history_id, tool_id, inputs)
+    - For the next page: search_tools_by_name(query, offset=pagination.next_offset)
     """
+    _validate_pagination(limit, offset, max_limit=MAX_PAGE_SIZE["search_tools_by_name"])
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
@@ -1134,11 +1146,21 @@ def search_tools_by_name(query: str) -> GalaxyResult:
             or query_lower in tool.get("description", "").lower()
         ]
 
-        return GalaxyResult(
-            data=matching_tools,
-            success=True,
-            message=f"Found {len(matching_tools)} tools matching '{query}'",
-            count=len(matching_tools),
+        # Galaxy's tool index has no pagination either, so the window is applied here.
+        return _budgeted_page(
+            matching_tools,
+            limit=limit,
+            offset=offset,
+            noun="tools",
+            build=lambda page, pagination: GalaxyResult(
+                data=page,
+                success=True,
+                message=(
+                    f"Found {len(matching_tools)} tools matching '{query}', returning {len(page)}"
+                ),
+                count=len(page),
+                pagination=pagination,
+            ),
         )
     except Exception as e:
         raise ValueError(format_error("Search tools", e, {"query": query})) from e
@@ -1410,27 +1432,146 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyRes
         ) from e
 
 
-@mcp.tool(tags={"tools", "read", "extended"})
-def get_tool_panel() -> GalaxyResult:
+def _slim_tool(tool: dict[str, Any]) -> dict[str, Any]:
+    """The four fields an agent needs to pick a tool and then call get_tool_details."""
+    return {
+        "id": tool.get("id", ""),
+        "name": tool.get("name", ""),
+        "description": tool.get("description", ""),
+        "versions": tool.get("versions", []),
+    }
+
+
+def _is_panel_tool(entry: Any) -> bool:
+    """Tool panel entries are sections, labels or tools; only the tools are runnable."""
+    if not isinstance(entry, dict) or "elems" in entry:
+        return False
+    return entry.get("model_class") != "ToolSectionLabel"
+
+
+def _summarize_panel_entry(entry: dict[str, Any]) -> dict[str, Any] | None:
+    """Describe one top-level panel entry without listing the tools inside it.
+
+    Returns None for a divider label, which is neither a section to open nor a
+    tool to run.
     """
-    Get the tool panel structure (toolbox)
+    if "elems" in entry:
+        elems = entry["elems"] if isinstance(entry["elems"], list) else []
+        return {
+            "id": entry.get("id", ""),
+            "name": entry.get("name", ""),
+            "type": "section",
+            "tool_count": sum(1 for elem in elems if _is_panel_tool(elem)),
+        }
+    if not _is_panel_tool(entry):
+        return None
+    return {
+        "id": entry.get("id", ""),
+        "name": entry.get("name", ""),
+        "type": "tool",
+        "description": entry.get("description", ""),
+    }
+
+
+@mcp.tool(tags={"tools", "read", "extended"})
+def get_tool_panel(
+    section_id: str | None = None, limit: int = 100, offset: int = 0
+) -> GalaxyResult:
+    """
+    Browse the Galaxy tool panel (toolbox) one level at a time.
+
+    The whole panel is megabytes on a production server, so it is never returned
+    whole. Called with no arguments this lists the top-level entries - each section
+    with the number of tools in it, plus any tools that sit outside a section.
+    Pass section_id to list the tools in one section.
+
+    Args:
+        section_id: Panel section to open, from a previous summary call. Omit to
+                    list the sections themselves.
+        limit: Maximum entries to return per page (default 100, max 500). A page is
+               also cut short when it would not fit the output budget.
+        offset: Skip this many entries (default 0). Pass pagination.next_offset
+                to walk to the following page.
 
     Returns:
-        GalaxyResult with tool panel hierarchy in data field
+        GalaxyResult whose data is
+        - without section_id: {"entries": [{id, name, type, tool_count|description}]}
+        - with section_id: {"section_id", "section_name", "tools": [{id, name,
+          description, versions}]}
+        plus count for this page and pagination carrying the total.
+
+    NEXT STEPS:
+    - Open a section: get_tool_panel(section_id="fastq_manipulation")
+    - Full parameters for one tool: get_tool_details(tool_id)
+    - Search across every section instead of browsing: search_tools_by_name(query)
     """
+    _validate_pagination(limit, offset, max_limit=MAX_PAGE_SIZE["get_tool_panel"])
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
+    # Only the call is wrapped: a "section not found" ValueError raised below should
+    # reach the agent as itself, not re-labelled as a Galaxy failure.
     try:
-        # Get the tool panel structure
         tool_panel = gi.tools.get_tool_panel()
-        return GalaxyResult(
-            data=tool_panel,
-            success=True,
-            message="Retrieved tool panel structure",
-        )
     except Exception as e:
-        raise ValueError(format_error("Get tool panel", e)) from e
+        raise ValueError(format_error("Get tool panel", e, {"section_id": section_id})) from e
+
+    if section_id is None:
+        summaries = [
+            summary
+            for entry in tool_panel
+            if isinstance(entry, dict) and (summary := _summarize_panel_entry(entry)) is not None
+        ]
+        return _budgeted_page(
+            summaries,
+            limit=limit,
+            offset=offset,
+            noun="entries",
+            build=lambda page, pagination: GalaxyResult(
+                data={"entries": page},
+                success=True,
+                message=(
+                    f"Retrieved {len(page)} of {len(summaries)} tool panel entries; "
+                    "pass section_id to list a section's tools"
+                ),
+                count=len(page),
+                pagination=pagination,
+            ),
+        )
+
+    section = next(
+        (
+            entry
+            for entry in tool_panel
+            if isinstance(entry, dict) and entry.get("id") == section_id and "elems" in entry
+        ),
+        None,
+    )
+    if section is None:
+        raise ValueError(
+            f"Tool panel section '{section_id}' not found. "
+            "Call get_tool_panel() with no arguments to list the available section ids."
+        )
+
+    elems = section["elems"] if isinstance(section["elems"], list) else []
+    tools = [_slim_tool(elem) for elem in elems if _is_panel_tool(elem)]
+    return _budgeted_page(
+        tools,
+        limit=limit,
+        offset=offset,
+        noun="tools",
+        build=lambda page, pagination: GalaxyResult(
+            data={
+                "section_id": section_id,
+                "section_name": section.get("name", ""),
+                "tools": page,
+            },
+            success=True,
+            message=f"Retrieved {len(page)} of {len(tools)} tools in section '{section_id}'",
+            count=len(page),
+            pagination=pagination,
+        ),
+    )
 
 
 @mcp.tool(tags={"histories", "write", "core"})
@@ -1557,23 +1698,35 @@ def update_history(
 
 
 @mcp.tool(tags={"tools", "read", "extended"})
-def search_tools_by_keywords(keywords: list[str]) -> GalaxyResult:
+def search_tools_by_keywords(keywords: list[str], limit: int = 50, offset: int = 0) -> GalaxyResult:
     """
     Recommend Galaxy tools based on a list of keywords.
+
+    Matches on name and description first, then on accepted input formats, and keeps
+    that order so paging is stable. Results are paginated: pagination.total_items is
+    the full match count, pagination.next_offset is where the next page starts.
+
+    Expensive: finding the format matches costs one detail lookup per tool that did
+    not match by name, and every page repeats the whole scan. Prefer
+    search_tools_by_name when a name or description substring will do.
 
     Args:
         keywords (list[str]): A list of keywords or phrases describing what you're looking for,
             e.g., ["csv", "rna", "alignment", "visualization"]. The search will match tools
             whose name, description, or accepted input formats contain any of these keywords.
+        limit: Maximum tools to return per page (default 50, max 200). A page is
+               also cut short when it would not fit the output budget.
+        offset: Skip this many matches (default 0). Pass pagination.next_offset for
+            the following page.
 
     Returns:
-        GalaxyResult with recommended tools in data field
+        GalaxyResult with this page of recommended tools in data, the page size in
+        count, and the total match count in pagination.total_items
     """
+    _validate_pagination(limit, offset, max_limit=MAX_PAGE_SIZE["search_tools_by_keywords"])
 
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
-
-    lock = threading.Lock()
 
     keywords_lower = [k.lower() for k in keywords]
 
@@ -1639,30 +1792,30 @@ def search_tools_by_keywords(keywords: list[str]) -> GalaxyResult:
                 return None
 
         # Use a thread pool to concurrently check tools that require detail retrieval.
+        # executor.map keeps panel order instead of completion order, without which
+        # a given offset would land on different tools from one call to the next.
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-            future_to_tool = {executor.submit(check_tool, tool): tool for tool in tools_to_fetch}
-            for future in concurrent.futures.as_completed(future_to_tool):
-                result = future.result()
+            for result in executor.map(check_tool, tools_to_fetch):
                 if result is not None:
-                    # Use the lock to ensure thread-safe appending.
-                    with lock:
-                        recommended_tools.append(result)
+                    recommended_tools.append(result)
 
-        slim_tools = []
-        for tool in recommended_tools:
-            slim_tools.append(
-                {
-                    "id": tool.get("id", ""),
-                    "name": tool.get("name", ""),
-                    "description": tool.get("description", ""),
-                    "versions": tool.get("versions", []),
-                }
-            )
-        return GalaxyResult(
-            data=slim_tools,
-            success=True,
-            message=f"Found {len(slim_tools)} tools matching keywords: {', '.join(keywords)}",
-            count=len(slim_tools),
+        slim_tools = [_slim_tool(tool) for tool in recommended_tools]
+
+        return _budgeted_page(
+            slim_tools,
+            limit=limit,
+            offset=offset,
+            noun="tools",
+            build=lambda page, pagination: GalaxyResult(
+                data=page,
+                success=True,
+                message=(
+                    f"Found {len(slim_tools)} tools matching keywords: "
+                    f"{', '.join(keywords)}, returning {len(page)}"
+                ),
+                count=len(page),
+                pagination=pagination,
+            ),
         )
     except Exception as e:
         raise ValueError(f"Failed to search tools by keywords: {str(e)}") from e

@@ -719,7 +719,30 @@
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {},
+        "properties": {
+          "section_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Panel section to open, from a previous summary call. Omit to\n        list the sections themselves."
+          },
+          "limit": {
+            "default": 100,
+            "type": "integer",
+            "description": "Maximum entries to return per page (default 100, max 500). A page is\n   also cut short when it would not fit the output budget."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Skip this many entries (default 0). Pass pagination.next_offset\n    to walk to the following page."
+          }
+        },
         "type": "object"
       }
     },
@@ -1309,6 +1332,16 @@
             },
             "type": "array",
             "description": "A list of keywords or phrases describing what you're looking for,\ne.g., [\"csv\", \"rna\", \"alignment\", \"visualization\"]. The search will match tools\nwhose name, description, or accepted input formats contain any of these keywords."
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "description": "Maximum tools to return per page (default 50, max 200). A page is\n   also cut short when it would not fit the output budget."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Skip this many matches (default 0). Pass pagination.next_offset for\nthe following page."
           }
         },
         "required": [
@@ -1331,6 +1364,16 @@
           "query": {
             "type": "string",
             "description": "Search query - matches against tool name, ID, or description.\n   Examples: \"fastq\", \"alignment\", \"filter\", \"bwa\""
+          },
+          "limit": {
+            "default": 25,
+            "type": "integer",
+            "description": "Maximum tools to return per page (default 25, max 100). A page is\n   also cut short when it would not fit the output budget, so ask for\n   what you want and walk pagination.next_offset."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Skip this many matches (default 0). Pass pagination.next_offset\n    to walk to the following page."
           }
         },
         "required": [

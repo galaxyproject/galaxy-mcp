@@ -120,14 +120,27 @@ class TestRealToolOperations:
         mcp_session.call("connect", GALAXY_URL, GALAXY_API_KEY)
 
     def test_get_tool_panel(self):
-        """Test getting the real tool panel."""
+        """Test getting the real tool panel summary and opening one section."""
         result = self.mcp.call("get_tool_panel")
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
-        assert isinstance(result.data, list)
-        # Tool panel should have sections
-        assert len(result.data) > 0
+        entries = result.data["entries"]
+        assert len(entries) > 0
+        assert result.pagination.total_items >= len(entries)
+
+        sections = [e for e in entries if e["type"] == "section" and e["tool_count"] > 0]
+        assert sections, "expected at least one populated tool panel section"
+
+        section = self.mcp.call("get_tool_panel", sections[0]["id"])
+        assert section.success is True
+        assert section.data["section_id"] == sections[0]["id"]
+        tools = section.data["tools"]
+        assert len(tools) > 0
+        # The count the summary advertised has to match what opening it returns.
+        assert section.pagination.total_items == sections[0]["tool_count"]
+        assert all(t["id"] and t["name"] for t in tools)
+        assert set(tools[0]) == {"id", "name", "description", "versions"}
 
     def test_search_tools_by_name(self):
         """Test searching for tools by name."""
