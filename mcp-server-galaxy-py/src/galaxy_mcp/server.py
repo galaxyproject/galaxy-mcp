@@ -10,7 +10,7 @@ import os
 import threading
 import time
 import types
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import lru_cache, wraps
@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Literal, TypeVar, cast
 
 import bioblend
+import pydantic_core
 import requests
 from bioblend.galaxy import GalaxyInstance
 from dotenv import find_dotenv, load_dotenv
@@ -65,6 +66,8 @@ from galaxy_mcp.workflow_inputs import (
 
 _galaxy_mcp_version = importlib.metadata.version("galaxy-mcp")
 USER_AGENT = f"galaxy-mcp/{_galaxy_mcp_version} bioblend/{bioblend.__version__}"
+
+T = TypeVar("T")
 
 _gi_lock = threading.Lock()
 _session_state_lock = threading.Lock()
@@ -159,6 +162,36 @@ class WorkflowInputValidationError(ValueError):
     """
 
 
+# What one tool response may reach, in UTF-8 bytes. MCP clients cap tool output -- 50 KB
+# is a common limit -- and a response past the cap arrives as truncated, unparseable JSON
+# rather than as a short answer, which is worse than a short page.
+#
+# Measured on the TEXT content block, which is the JSON an adapter shows the model and so
+# the thing a truncating one truncates. It is NOT the whole CallToolResult: FastMCP also
+# attaches structuredContent carrying the same data, so what goes over the wire is about
+# twice this. A client that counts the envelope rather than the text block therefore has
+# half the room this assumes, which is an argument for lowering the number and not for
+# measuring something the model never sees.
+OUTPUT_BUDGET_BYTES = 50_000
+
+# The most a caller may ask one list tool for in a single page. A ceiling on the
+# request, not a promise about the response -- the response is bounded by
+# OUTPUT_BUDGET_BYTES, which is the only thing that can be. These say what a sensible
+# page looks like for the kind of item the tool returns, so an agent asking for a
+# thousand tool records gets told no rather than getting a page cut to a fifth of it.
+MAX_PAGE_SIZE = {
+    "get_iwc_workflows": 100,
+    "get_tool_panel": 500,
+    "list_history_ids": 500,
+    "list_user_tools": 100,
+    "list_workflows": 200,
+    "recommend_iwc_workflows": 25,
+    "search_iwc_workflows": 100,
+    "search_tools_by_keywords": 200,
+    "search_tools_by_name": 100,
+}
+
+
 class PaginationInfo(BaseModel):
     """Pagination metadata for list operations."""
 
@@ -188,6 +221,163 @@ class GalaxyResult(BaseModel):
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+# Bounded list tools share these. MCP clients cap tool output (one common adapter
+# truncates at 50 KB), and a truncated response reaches the model as broken JSON it
+# cannot page past, so every list tool returns a window plus enough metadata to walk it.
+def _validate_pagination(limit: int, offset: int, *, max_limit: int, pageable: bool = True) -> None:
+    """Reject page windows nobody should be asking for.
+
+    ``max_limit`` is a ceiling on the request, not a promise about the response. What
+    comes back is bounded by OUTPUT_BUDGET_BYTES, measured on the way out, because an
+    item count cannot bound a response whose items have no maximum size.
+
+    ``pageable`` is False for a tool with no ``offset`` parameter, which cannot act
+    on advice to page through the rest.
+    """
+    if limit < 1:
+        raise ValueError(f"limit must be at least 1 (got {limit})")
+    if limit > max_limit:
+        rest = " and use offset to page through the rest" if pageable else ""
+        raise ValueError(
+            f"limit must be at most {max_limit} (got {limit}); request {max_limit} or fewer{rest}"
+        )
+    if offset < 0:
+        raise ValueError(f"offset must be 0 or greater (got {offset})")
+
+
+def _pagination_info(
+    *,
+    total_items: int,
+    returned_items: int,
+    limit: int,
+    offset: int,
+    noun: str,
+    trimmed_for_size: bool = False,
+) -> PaginationInfo:
+    """Describe one page of ``total_items`` results.
+
+    ``has_next`` comes from what was actually returned rather than from ``limit``
+    so a short final page reports itself as the last one.
+
+    ``trimmed_for_size`` says the page was cut to fit the output budget rather than
+    because the caller asked for that many, so an agent reading a short page does not
+    conclude the server had nothing more.
+    """
+    # A caller that pages server-side reads the total separately, so the two can
+    # disagree. Items in hand prove a floor; an empty page proves nothing, so an
+    # offset past the end must not inflate the total.
+    if returned_items:
+        total_items = max(total_items, offset + returned_items)
+    has_next = (offset + returned_items) < total_items
+    has_previous = offset > 0
+    if returned_items == 0 and offset >= total_items and total_items > 0:
+        helper_text = (
+            f"offset {offset} is past the end of {total_items} {noun}; use a smaller offset"
+        )
+    else:
+        cut = (
+            " This page was cut short to fit the output budget, not because there is nothing more."
+            if trimmed_for_size
+            else ""
+        )
+        helper_text = (
+            f"Showing {returned_items} of {total_items} {noun} (offset {offset}).{cut} "
+            + (
+                f"Use offset={offset + (returned_items or limit)} for the next page."
+                if has_next
+                else "This is the last page."
+            )
+        )
+
+    return PaginationInfo(
+        total_items=total_items,
+        returned_items=returned_items,
+        limit=limit,
+        offset=offset,
+        has_next=has_next,
+        has_previous=has_previous,
+        # Advance by what we got, falling back to limit so an empty page never stalls.
+        next_offset=offset + (returned_items or limit) if has_next else None,
+        previous_offset=max(0, offset - limit) if has_previous else None,
+        helper_text=helper_text,
+    )
+
+
+def _paginate(
+    items: Sequence[T], *, limit: int, offset: int, noun: str
+) -> tuple[list[T], PaginationInfo]:
+    """Slice ``items`` client-side and describe the window."""
+    page = list(items[offset : offset + limit])
+    return page, _pagination_info(
+        total_items=len(items),
+        returned_items=len(page),
+        limit=limit,
+        offset=offset,
+        noun=noun,
+    )
+
+
+def _serialized_size(result: GalaxyResult) -> int:
+    """How many bytes a client is handed for this result.
+
+    The call FastMCP makes to turn a tool's return value into the text block it sends
+    (``default_serializer`` in ``fastmcp.tools.base``), so this measures the payload
+    itself rather than something standing in for it. Bytes, not characters: a name in
+    a non-Latin script is several bytes per character and a length in characters can
+    be half the truth.
+    """
+    return len(pydantic_core.to_json(result, fallback=str))
+
+
+def _budgeted_page(
+    items: Sequence[Any],
+    *,
+    limit: int,
+    offset: int,
+    noun: str,
+    build: Callable[[list[Any], PaginationInfo], GalaxyResult],
+    project: Callable[[Any], Any] | None = None,
+) -> GalaxyResult:
+    """One page, cut short if the text block a client reads would not fit its budget.
+
+    A count cannot bound a response. Galaxy names, tool commands, descriptions and
+    readmes have no useful maximum, so whatever item count we pick, items exist that
+    beat it -- which is why ``limit`` is a ceiling on what a caller may ask for and
+    not a promise about size. The promise is made here instead, on the thing that can
+    actually be checked: the serialised result, measured and cut until it fits.
+
+    A page cut this way still reports what it returned, so ``has_next`` and
+    ``next_offset`` follow from it and a walk sees every item exactly once.
+
+    One item that is over budget by itself is returned anyway. A list tool has nothing
+    better to offer -- trimming fields inside the item would hand back something that
+    is not the item.
+    """
+    window = list(items[offset : offset + limit])
+    if project is not None:
+        window = [project(item) for item in window]
+
+    page = window
+    while True:
+        result = build(
+            page,
+            _pagination_info(
+                total_items=len(items),
+                returned_items=len(page),
+                limit=limit,
+                offset=offset,
+                noun=noun,
+                trimmed_for_size=len(page) < len(window),
+            ),
+        )
+        size = _serialized_size(result)
+        if size <= OUTPUT_BUDGET_BYTES or len(page) <= 1:
+            return result
+        # Scale by how far over budget we are, and always drop at least one item so
+        # this cannot stall on a page whose overshoot is all envelope.
+        page = page[: min(len(page) - 1, max(1, len(page) * OUTPUT_BUDGET_BYTES // size))]
 
 
 def _get_tool_credentials_context(gi: GalaxyInstance, tool_id: str) -> list[dict[str, Any]] | None:
