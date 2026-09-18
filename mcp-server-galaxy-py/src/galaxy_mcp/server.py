@@ -2839,15 +2839,50 @@ def _fetch_iwc_workflows() -> GalaxyResult:
 
 
 @mcp.tool(tags={"iwc", "read", "niche"})
-def get_iwc_workflows() -> GalaxyResult:
+def get_iwc_workflows(limit: int = 20, offset: int = 0) -> GalaxyResult:
     """
-    Fetch all workflows from the IWC (Interactive Workflow Composer)
+    List workflows published by the IWC (Intergalactic Workflow Commission).
+
+    Returns one page of workflow summaries - the same shape search_iwc_workflows
+    returns - not the raw manifest entries. A single raw entry carries the whole
+    workflow definition: median ~50 KB, largest ~500 KB, so even one of them can
+    overflow an MCP client's output limit. Use get_iwc_workflow_details(trs_id) for
+    the full record.
+
+    Args:
+        limit: Maximum workflows to return per page (default 20, max 100). A page
+               is also cut short when it would not fit the output budget.
+        offset: Skip this many workflows (default 0). Pass pagination.next_offset
+                to walk to the following page.
 
     Returns:
-        GalaxyResult with workflow manifest in data field
+        GalaxyResult with this page of workflow summaries in data (trsID, name,
+        description, tags, readme_summary, step_count, authors, categories,
+        license, tools_used), the page size in count, and the IWC total in
+        pagination.total_items
+
+    NEXT STEPS:
+    - Narrow the list: search_iwc_workflows(query) or recommend_iwc_workflows(intent)
+    - Full record for one: get_iwc_workflow_details(trs_id)
     """
+    _validate_pagination(limit, offset, max_limit=MAX_PAGE_SIZE["get_iwc_workflows"])
+
     try:
-        return _fetch_iwc_workflows()
+        all_workflows = _fetch_iwc_workflows().data
+        return _budgeted_page(
+            all_workflows,
+            limit=limit,
+            offset=offset,
+            noun="workflows",
+            project=_enrich_workflow_result,
+            build=lambda summaries, pagination: GalaxyResult(
+                data=summaries,
+                success=True,
+                message=(f"Retrieved {len(summaries)} of {len(all_workflows)} workflows from IWC"),
+                count=len(summaries),
+                pagination=pagination,
+            ),
+        )
     except Exception as e:
         raise ValueError(f"Failed to fetch IWC workflows: {str(e)}") from e
 
@@ -2926,12 +2961,14 @@ def _enrich_workflow_result(workflow: dict[str, Any], include_full_readme: bool 
 
 
 @mcp.tool(tags={"iwc", "read", "niche"})
-def search_iwc_workflows(query: str) -> GalaxyResult:
+def search_iwc_workflows(query: str, limit: int = 20, offset: int = 0) -> GalaxyResult:
     """
     Search for workflows in the IWC (Intergalactic Workflow Commission) manifest.
 
     IWC hosts curated, best-practice workflows for common bioinformatics analyses.
     This function searches across workflow names, descriptions, tags, and readmes.
+    Results are paginated: pagination.total_items is how many workflows matched,
+    pagination.next_offset is where the next page starts.
 
     RECOMMENDED WORKFLOW:
     1. Search for workflows matching your analysis need
@@ -2945,9 +2982,15 @@ def search_iwc_workflows(query: str) -> GalaxyResult:
                - Workflow name (e.g., "RNA-seq")
                - Description/annotation
                - Tags (e.g., "assembly", "transcriptomics")
+        limit: Maximum workflows to return per page (default 20, max 100). A broad
+               query matches most of the 123-workflow corpus, which is ~184 KB
+               unpaged and more than an MCP client will pass through intact.
+        offset: Skip this many matches (default 0). Pass pagination.next_offset
+                to walk to the following page.
 
     Returns:
-        GalaxyResult with matching workflows in data field. Each workflow includes:
+        GalaxyResult with this page of matching workflows in data field.
+        Each workflow includes:
         - trsID: Unique identifier for importing
         - name: Human-readable workflow name
         - description: Brief annotation
@@ -2973,21 +3016,24 @@ def search_iwc_workflows(query: str) -> GalaxyResult:
                 "tools_used": ["fastqc", "hisat2", "featurecounts"]
             }],
             count=5,
-            message="Found 5 IWC workflows matching 'rna-seq'"
+            message="Found 5 IWC workflows matching 'rna-seq', returning 5"
         )
 
     NEXT STEPS:
     - Get full details: get_iwc_workflow_details(trs_id)
     - Import to Galaxy: import_workflow_from_iwc(trs_id)
     - For semantic search: recommend_iwc_workflows("I have RNA-seq data...")
+    - For the next page: search_iwc_workflows(query, offset=pagination.next_offset)
     """
+    _validate_pagination(limit, offset, max_limit=MAX_PAGE_SIZE["search_iwc_workflows"])
+
     try:
         # Get the full manifest
         iwc_result = _fetch_iwc_workflows()
         manifest = iwc_result.data
 
         # Filter workflows based on the search query
-        results = []
+        matches = []
         query_lower = query.lower()
 
         for workflow in manifest:
@@ -3010,13 +3056,26 @@ def search_iwc_workflows(query: str) -> GalaxyResult:
                 or (tags_lower and any(query_lower in tag for tag in tags_lower))
                 or query_lower in readme_lower
             ):
-                results.append(_enrich_workflow_result(workflow))
+                matches.append(workflow)
 
-        return GalaxyResult(
-            data=results,
-            success=True,
-            message=f"Found {len(results)} IWC workflows matching '{query}'",
-            count=len(results),
+        # The manifest is a single static JSON document, so the window is applied
+        # here; enriching only the page keeps the per-match work off the other pages.
+        return _budgeted_page(
+            matches,
+            limit=limit,
+            offset=offset,
+            noun="workflows",
+            project=_enrich_workflow_result,
+            build=lambda results, pagination: GalaxyResult(
+                data=results,
+                success=True,
+                message=(
+                    f"Found {len(matches)} IWC workflows matching '{query}', "
+                    f"returning {len(results)}"
+                ),
+                count=len(results),
+                pagination=pagination,
+            ),
         )
     except Exception as e:
         raise ValueError(f"Failed to search IWC workflows: {str(e)}") from e
@@ -3201,7 +3260,7 @@ def recommend_iwc_workflows(intent: str, limit: int = 5) -> GalaxyResult:
                 - "Assemble a bacterial genome from nanopore reads"
                 - "Variant calling from whole exome sequencing data"
                 - "Quality control for Illumina sequencing data"
-        limit: Maximum number of recommendations to return (default: 5)
+        limit: Maximum number of recommendations to return (default 5, max 25)
 
     Returns:
         GalaxyResult with ranked workflow recommendations. Each includes:
@@ -3231,6 +3290,11 @@ def recommend_iwc_workflows(intent: str, limit: int = 5) -> GalaxyResult:
     TIP: Be specific in your intent. "RNA-seq" will match many workflows,
     but "differential expression RNA-seq human samples" will rank better.
     """
+    # Without this a negative limit silently drops results via Python's slice rules.
+    _validate_pagination(
+        limit, 0, max_limit=MAX_PAGE_SIZE["recommend_iwc_workflows"], pageable=False
+    )
+
     try:
         from rank_bm25 import BM25Okapi
 
@@ -3288,20 +3352,36 @@ def recommend_iwc_workflows(intent: str, limit: int = 5) -> GalaxyResult:
 
         # Sort by score descending and take top N
         scored_workflows.sort(key=lambda x: x[1], reverse=True)
-        top_results = scored_workflows[:limit]
 
-        # Enrich results
-        results = []
-        for workflow, score in top_results:
+        def with_score(scored: tuple[dict[str, Any], float]) -> dict[str, Any]:
+            workflow, score = scored
             enriched = _enrich_workflow_result(workflow)
             enriched["match_score"] = round(score, 2)
-            results.append(enriched)
+            return enriched
 
-        return GalaxyResult(
-            data=results,
-            success=True,
-            message=f"Found {len(results)} workflows matching your intent",
-            count=len(results),
+        wanted = min(limit, len(scored_workflows))
+        # No pagination block, because there is no offset to page with: a ranking that
+        # will not fit is cut from the bottom, and the message says so without claiming
+        # the dropped entries scored lower -- ties are common with short queries.
+        return _budgeted_page(
+            scored_workflows,
+            limit=limit,
+            offset=0,
+            noun="workflows",
+            project=with_score,
+            build=lambda results, _pagination: GalaxyResult(
+                data=results,
+                success=True,
+                message=(
+                    f"Found {len(results)} workflows matching your intent"
+                    + (
+                        "; additional matches were dropped to fit the output budget"
+                        if len(results) < wanted
+                        else ""
+                    )
+                ),
+                count=len(results),
+            ),
         )
     except Exception as e:
         raise ValueError(f"Failed to recommend IWC workflows: {str(e)}") from e

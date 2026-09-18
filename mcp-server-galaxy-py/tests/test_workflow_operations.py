@@ -35,8 +35,8 @@ class TestWorkflowOperations:
         mock_manifest = [
             {
                 "workflows": [
-                    {"trs_id": "workflow1", "definition": {"name": "Test Workflow 1"}},
-                    {"trs_id": "workflow2", "definition": {"name": "Test Workflow 2"}},
+                    {"trsID": "workflow1", "definition": {"name": "Test Workflow 1"}},
+                    {"trsID": "workflow2", "definition": {"name": "Test Workflow 2"}},
                 ]
             }
         ]
@@ -47,7 +47,10 @@ class TestWorkflowOperations:
             assert result.success is True
             assert result.count == 2
             assert len(result.data) == 2
-            assert result.data[0]["trs_id"] == "workflow1"
+            # Summaries, not raw manifest entries -- a raw entry is ~50 KB of definition.
+            assert result.data[0]["trsID"] == "workflow1"
+            assert result.data[0]["name"] == "Test Workflow 1"
+            assert "definition" not in result.data[0]
 
     def test_search_iwc_workflows_fn(self):
         """Test searching IWC workflows"""

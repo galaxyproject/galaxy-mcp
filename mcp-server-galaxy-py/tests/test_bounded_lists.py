@@ -16,7 +16,10 @@ from galaxy_mcp import server as server_module
 from galaxy_mcp.server import MAX_PAGE_SIZE, OUTPUT_BUDGET_BYTES, galaxy_state
 
 from .test_helpers import (
+    get_iwc_workflows_fn,
     get_tool_panel_fn,
+    recommend_iwc_workflows_fn,
+    search_iwc_workflows_fn,
     search_tools_by_keywords_fn,
     search_tools_fn,
 )
@@ -362,6 +365,133 @@ class TestGetToolPanel:
         assert "past the end" in result.pagination.helper_text
 
 
+def fake_manifest(count, name="Workflow"):
+    return [
+        {
+            "workflows": [
+                {
+                    "trsID": f"#workflow/example/{i}",
+                    "readme": "readme text",
+                    "definition": {
+                        "name": f"{name} {i}",
+                        "annotation": "matchable annotation",
+                        "tags": ["demo"],
+                        "steps": {},
+                    },
+                }
+                for i in range(count)
+            ]
+        }
+    ]
+
+
+def manifest(count, name="Workflow"):
+    return patch("galaxy_mcp.server.get_manifest_json", return_value=fake_manifest(count, name))
+
+
+class TestGetIwcWorkflows:
+    def test_default_page_caps_the_manifest(self):
+        with manifest(60):
+            result = get_iwc_workflows_fn()
+
+        assert len(result.data) == 20
+        assert result.data[0]["trsID"] == "#workflow/example/0"
+        assert_page_is_truthful(result, total=60, returned=20, limit=20, offset=0)
+
+    def test_explicit_limit_and_offset(self):
+        with manifest(60):
+            result = get_iwc_workflows_fn(limit=5, offset=25)
+
+        assert [w["trsID"] for w in result.data] == [
+            f"#workflow/example/{i}" for i in range(25, 30)
+        ]
+        assert_page_is_truthful(result, total=60, returned=5, limit=5, offset=25)
+
+    def test_last_page_is_short_and_final(self):
+        with manifest(23):
+            result = get_iwc_workflows_fn(limit=20, offset=20)
+
+        assert len(result.data) == 3
+        assert_page_is_truthful(result, total=23, returned=3, limit=20, offset=20)
+
+    def test_empty_manifest(self):
+        with manifest(0):
+            result = get_iwc_workflows_fn()
+
+        assert result.data == []
+        assert_page_is_truthful(result, total=0, returned=0, limit=20, offset=0)
+
+    @pytest.mark.parametrize(
+        ("kwargs", "message"),
+        [
+            ({"limit": 0}, "limit must be at least 1"),
+            ({"limit": 10_000}, f"limit must be at most {MAX_PAGE_SIZE['get_iwc_workflows']}"),
+            ({"offset": -1}, "offset must be 0 or greater"),
+        ],
+    )
+    def test_rejects_bad_parameters(self, kwargs, message):
+        with manifest(5), pytest.raises(ValueError, match=message):
+            get_iwc_workflows_fn(**kwargs)
+
+
+class TestSearchIwcWorkflows:
+    def test_default_page_caps_a_broad_query(self):
+        with manifest(60):
+            result = search_iwc_workflows_fn("matchable")
+
+        assert len(result.data) == 20
+        assert_page_is_truthful(result, total=60, returned=20, limit=20, offset=0)
+        assert "60" in result.message
+
+    def test_explicit_limit_and_offset(self):
+        with manifest(60):
+            result = search_iwc_workflows_fn("matchable", limit=7, offset=14)
+
+        assert [w["trsID"] for w in result.data] == [
+            f"#workflow/example/{i}" for i in range(14, 21)
+        ]
+        assert_page_is_truthful(result, total=60, returned=7, limit=7, offset=14)
+
+    def test_last_page_is_short_and_final(self):
+        with manifest(25):
+            result = search_iwc_workflows_fn("matchable", limit=20, offset=20)
+
+        assert len(result.data) == 5
+        assert_page_is_truthful(result, total=25, returned=5, limit=20, offset=20)
+
+    def test_empty_result(self):
+        with manifest(10):
+            result = search_iwc_workflows_fn("nothing matches this")
+
+        assert result.data == []
+        assert_page_is_truthful(result, total=0, returned=0, limit=20, offset=0)
+
+    @pytest.mark.parametrize(
+        ("kwargs", "message"),
+        [
+            ({"limit": 0}, "limit must be at least 1"),
+            ({"limit": 10_000}, f"limit must be at most {MAX_PAGE_SIZE['search_iwc_workflows']}"),
+            ({"offset": -1}, "offset must be 0 or greater"),
+        ],
+    )
+    def test_rejects_bad_parameters(self, kwargs, message):
+        with manifest(5), pytest.raises(ValueError, match=message):
+            search_iwc_workflows_fn("matchable", **kwargs)
+
+    def test_walking_the_pages_covers_every_match_once(self):
+        seen = []
+        offset = 0
+        with manifest(47):
+            while True:
+                result = search_iwc_workflows_fn("matchable", limit=20, offset=offset)
+                seen.extend(w["trsID"] for w in result.data)
+                if not result.pagination.has_next:
+                    break
+                offset = result.pagination.next_offset
+
+        assert seen == [f"#workflow/example/{i}" for i in range(47)]
+
+
 def walk_pages(call, *, limit, key):
     """Walk every page the way an agent would, following pagination.next_offset."""
     seen = []
@@ -685,6 +815,55 @@ class TestEveryPageFitsTheBudget:
                 MAX_PAGE_SIZE["get_tool_panel"],
             )
         assert len(seen) == len(corpus)
+
+    def test_get_iwc_workflows(self):
+        with patch("galaxy_mcp.server.get_manifest_json", return_value=huge_iwc_manifest(60)):
+            seen = walk_every_page(
+                "get_iwc_workflows",
+                lambda limit, offset: get_iwc_workflows_fn(limit=limit, offset=offset),
+                lambda r: r.data,
+                lambda workflow: workflow["trsID"],
+                "get_iwc_workflows",
+                MAX_PAGE_SIZE["get_iwc_workflows"],
+            )
+        assert len(seen) == 60
+
+    def test_search_iwc_workflows(self):
+        with patch("galaxy_mcp.server.get_manifest_json", return_value=huge_iwc_manifest(60)):
+            seen = walk_every_page(
+                "search_iwc_workflows",
+                lambda limit, offset: search_iwc_workflows_fn(CJK_NAME, limit=limit, offset=offset),
+                lambda r: r.data,
+                lambda workflow: workflow["trsID"],
+                "search_iwc_workflows",
+                MAX_PAGE_SIZE["search_iwc_workflows"],
+            )
+        assert len(seen) == 60
+
+    def test_recommend_iwc_workflows(self):
+        """No offset to walk, so the one page it returns has to fit on its own."""
+        manifest = huge_iwc_manifest(120)
+        # The ranking only reaches the budget if the query matches, and a query that
+        # matches nothing returns an empty result that fits any budget at all. A third
+        # of the corpus, not all of it and not half: BM25 gives a term no weight once it
+        # is in most documents, which scores everything zero and is another way to get
+        # nothing back.
+        for workflow in manifest[0]["workflows"][:40]:
+            workflow["definition"]["name"] = f"rna sequencing {workflow['definition']['name']}"
+
+        def call(limit, _offset):
+            with patch("galaxy_mcp.server.get_manifest_json", return_value=manifest):
+                return recommend_iwc_workflows_fn("rna sequencing", limit=limit)
+
+        limit = MAX_PAGE_SIZE["recommend_iwc_workflows"]
+        assert_the_fixture_is_over_budget(
+            "recommend_iwc_workflows", call, limit, "recommend_iwc_workflows"
+        )
+        result = call(limit, 0)
+
+        assert result.count > 0
+        assert_fits_budget("recommend_iwc_workflows", result, "recommend_iwc_workflows at its cap")
+        assert "additional matches were dropped to fit the output budget" in result.message
 
 
 class TestWalkingEveryPage:

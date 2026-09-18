@@ -530,7 +530,18 @@
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {},
+        "properties": {
+          "limit": {
+            "default": 20,
+            "type": "integer",
+            "description": "Maximum workflows to return per page (default 20, max 100). A page\n   is also cut short when it would not fit the output budget."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Skip this many workflows (default 0). Pass pagination.next_offset\n    to walk to the following page."
+          }
+        },
         "type": "object"
       }
     },
@@ -1188,7 +1199,7 @@
           "limit": {
             "default": 5,
             "type": "integer",
-            "description": "Maximum number of recommendations to return (default: 5)"
+            "description": "Maximum number of recommendations to return (default 5, max 25)"
           }
         },
         "required": [
@@ -1307,6 +1318,16 @@
           "query": {
             "type": "string",
             "description": "Search query (case-insensitive). Matches against:\n   - Workflow name (e.g., \"RNA-seq\")\n   - Description/annotation\n   - Tags (e.g., \"assembly\", \"transcriptomics\")"
+          },
+          "limit": {
+            "default": 20,
+            "type": "integer",
+            "description": "Maximum workflows to return per page (default 20, max 100). A broad\n   query matches most of the 123-workflow corpus, which is ~184 KB\n   unpaged and more than an MCP client will pass through intact."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Skip this many matches (default 0). Pass pagination.next_offset\n    to walk to the following page."
           }
         },
         "required": [

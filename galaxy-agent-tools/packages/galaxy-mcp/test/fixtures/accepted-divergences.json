@@ -171,6 +171,22 @@
       "reason": "The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version."
     },
     {
+      "tool": "get_iwc_workflows",
+      "param": "limit",
+      "kind": "missing-ts-param",
+      "observed": "python=type=integer required=false default=20",
+      "status": "pending-port",
+      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
+    },
+    {
+      "tool": "get_iwc_workflows",
+      "param": "offset",
+      "kind": "missing-ts-param",
+      "observed": "python=type=integer required=false default=0",
+      "status": "pending-port",
+      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
+    },
+    {
       "tool": "get_page",
       "param": "include_rendered",
       "kind": "default-mismatch",
@@ -337,6 +353,22 @@
       "observed": "typescript=type=string required=false default=none",
       "status": "unreviewed-gap",
       "reason": "TS accepts toolVersion; Python's run_tool takes only history_id, tool_id and inputs, so pinning a tool version is not expressible there."
+    },
+    {
+      "tool": "search_iwc_workflows",
+      "param": "limit",
+      "kind": "missing-ts-param",
+      "observed": "python=type=integer required=false default=20",
+      "status": "pending-port",
+      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
+    },
+    {
+      "tool": "search_iwc_workflows",
+      "param": "offset",
+      "kind": "missing-ts-param",
+      "observed": "python=type=integer required=false default=0",
+      "status": "pending-port",
+      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
     },
     {
       "tool": "search_tools_by_keywords",

@@ -407,21 +407,21 @@ class TestRealIWCOperations:
                 galaxy_client.workflows.delete_workflow(workflow_id)
 
     def test_get_iwc_workflows(self):
-        """Test fetching all workflows from IWC."""
+        """Test fetching the first page of IWC workflows."""
         result = self.mcp.call("get_iwc_workflows")
 
         assert isinstance(result, GalaxyResult)
         assert result.success is True
         assert isinstance(result.data, list)
-        # IWC should have many workflows
-        assert result.count is not None
-        assert result.count > 10  # IWC has dozens of workflows
+        # The default page is bounded; the IWC total shows up in pagination.
+        assert result.count == 20
+        assert result.pagination.total_items > 10  # IWC has dozens of workflows
+        assert result.pagination.has_next is True
 
-        # Check structure of first workflow
-        if result.data:
-            workflow = result.data[0]
-            assert "trsID" in workflow
-            assert "definition" in workflow
+        workflow = result.data[0]
+        assert "trsID" in workflow
+        assert "step_count" in workflow
+        assert "definition" not in workflow
 
     def test_search_iwc_workflows_rna(self):
         """Test searching IWC for RNA-related workflows."""
