@@ -115,7 +115,7 @@ See [USAGE_EXAMPLES.md](USAGE_EXAMPLES.md) for detailed tool usage patterns.
 
 ### Tool discovery mode (experimental)
 
-Galaxy MCP registers one `@mcp.tool` per operation, and the whole catalog is sent to the client on every turn -- expensive for agents that only ever use a handful. `--discovery-mode code` (also honored via `GALAXY_MCP_DISCOVERY_MODE=code`) collapses the catalog into three meta-tools:
+Galaxy MCP registers one `@mcp.tool` per operation. The client fetches that catalog once per session, but it carries every one of those definitions into the model's context on each turn -- expensive for agents that only ever use a handful. `--discovery-mode code` (also honored via `GALAXY_MCP_DISCOVERY_MODE=code`) collapses the catalog into three meta-tools:
 
 - `search` -- BM25 search over tool names and descriptions
 - `get_schema` -- fetch the full schema for specific tools
