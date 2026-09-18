@@ -147,9 +147,10 @@ The middleware also hides `admin` and `user_tools` tags from sessions that canno
 
 ## Available MCP Tools
 
-Every tool returns a `GalaxyResult` (`data`, `success`, `message`, and, for list
-operations, `count` and `pagination`). Names and behavior are the contract; arguments
-are documented in each tool's own description, which is what the MCP client sees.
+Every tool returns a `GalaxyResult`: `data`, `success` and `message` always, `count` on
+most list operations, and `pagination` on the ones that actually page. Names and behavior
+are the contract; arguments live in each tool's own description, which is what the MCP
+client sees.
 
 ### Connection and account
 
