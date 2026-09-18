@@ -803,6 +803,20 @@ def test_a_tool_that_declares_dbkey_itself_is_checked_normally():
     assert rejects(schema, {"dbkey": {"src": "hdca", "id": "c1"}})
 
 
+def test_the_unrecognised_wording_does_not_call_them_typos():
+    msg = format_input_mismatch_error(
+        original_error="400",
+        tool_id="cat1",
+        schema_summary=None,
+        example=None,
+        unmodelled=["wat"],
+    )
+
+    assert "not in this tool's parameter list" in msg
+    assert "outside the tool schema" in msg
+    assert "typo" not in msg
+
+
 # ---------------------------------------------------------------------------
 # A dataset src on a collection parameter: three srcs, three different fates
 # ---------------------------------------------------------------------------

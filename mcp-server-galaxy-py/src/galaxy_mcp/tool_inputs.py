@@ -838,12 +838,21 @@ def format_input_mismatch_error(
     tool_id: str,
     schema_summary: list[dict[str, Any]] | None,
     example: Any | None,
+    detected: list[str] | None = None,
+    unmodelled: list[str] | None = None,
+    stale_schema: bool = False,
+    shape_hint: str | None = None,
 ) -> str:
     """Assemble a truthful, actionable error for a likely input-shape mismatch.
 
     Preserves the original error verbatim and offers the schema as help; it does
     NOT assert a specific cause (we cannot reliably tell a wrong name from a
     missing value from a bad dataset id).
+
+    ``stale_schema`` says the parameter list could not be confirmed against the
+    server, which is the caller's business to establish: nothing read off it is
+    stated as fact here. ``shape_hint`` overrides where a caller left with nothing
+    is sent, for a tool the default calls cannot look up.
     """
     lines = [
         original_error,
@@ -854,11 +863,34 @@ def format_input_mismatch_error(
         f'misleading "Required parameter(s) kwd not provided in request" error -- '
         f"ignore that wording.)",
     ]
-    if schema_summary is not None:
+    if detected:
         lines += [
             "",
-            f"Expected input parameters for '{tool_id}' (build flattened keys like "
-            f"`section|param`, `cond|selector`, `repeat_0|param`):",
+            "Checking the inputs against the schema after the fact, these are wrong:",
+            *detected,
+        ]
+    if unmodelled:
+        # A lead, not a verdict: the schema is the tool's own parameter list, and a key
+        # missing from it may still be one Galaxy itself reads. The ones we know about
+        # never reach this list (see GALAXY_MANAGED_INPUT_KEYS).
+        where = (
+            "the copy of this tool's parameter list held here, which could not be "
+            "refreshed and may be out of date"
+            if stale_schema
+            else "this tool's parameter list"
+        )
+        lines += [
+            "",
+            f"These keys are not in {where}; some keys are handled by "
+            f"Galaxy outside the tool schema, so check before removing any: "
+            f"{', '.join(unmodelled)}",
+        ]
+    if schema_summary is not None:
+        caveat = " -- read from a copy that could not be refreshed" if stale_schema else ""
+        lines += [
+            "",
+            f"Expected input parameters for '{tool_id}'{caveat} (build flattened keys "
+            f"like `section|param`, `cond|selector`, `repeat_0|param`):",
             json.dumps(schema_summary, indent=2, default=str),
         ]
     if example is not None:
@@ -869,12 +901,11 @@ def format_input_mismatch_error(
             json.dumps(example, indent=2, default=str),
         ]
     if schema_summary is None and example is None:
-        lines += [
-            "",
+        where = shape_hint or (
             "Call get_tool_details(tool_id, io_details=True) (or "
-            "get_tool_input_template(tool_id)) to see the parameter schema, then rebuild "
-            "`inputs` and retry.",
-        ]
+            "get_tool_input_template(tool_id)) to see the parameter schema"
+        )
+        lines += ["", f"{where}, then rebuild `inputs` and retry."]
     else:
         lines += ["", "Rebuild `inputs` to match the schema above and call the tool again."]
     return "\n".join(lines)
