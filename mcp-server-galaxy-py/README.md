@@ -269,9 +269,10 @@ flags yourself, as CI does.
   call a tool directly and assert on the `GalaxyResult` it returns.
 - `test_job_operations.py` mocks at the HTTP layer with `responses` instead, where the
   code under test goes around BioBlend.
-- `tests/mcp_session.py` drives the tools through an in-memory FastMCP client. That path
-  matters because a tool called without an MCP request context has no session id, and the
-  session-scoped connection store has nowhere to put the client.
+- `tests/mcp_session.py` drives the tools through an in-memory FastMCP client. Only the
+  live suite uses it today. That path matters because a tool called without an MCP request
+  context has no session id, and the session-scoped connection store then has nowhere to
+  put the client -- which is what made the live suite look broken for months.
 
 ### The live suite
 
