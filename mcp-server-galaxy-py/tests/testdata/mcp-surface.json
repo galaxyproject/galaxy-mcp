@@ -995,7 +995,18 @@
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {},
+        "properties": {
+          "limit": {
+            "default": 100,
+            "type": "integer",
+            "description": "Maximum histories to return per page (default 100, max 500). A page\n   is also cut short when it would not fit the output budget."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Skip this many histories (default 0). Pass pagination.next_offset\n    to walk to the following page."
+          }
+        },
         "type": "object"
       }
     },
@@ -1106,6 +1117,16 @@
             "default": true,
             "type": "boolean",
             "description": "If True (default), only show active tools. Set False to include deactivated tools."
+          },
+          "limit": {
+            "default": 25,
+            "type": "integer",
+            "description": "Maximum tools to return per page (default 25, max 100). Each entry\ncarries the tool's full representation, so a page is often cut short to\nfit the output budget; walk pagination.next_offset for the rest."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Skip this many tools (default 0). Pass pagination.next_offset to\nwalk to the following page."
           }
         },
         "type": "object"
@@ -1150,6 +1171,16 @@
             "default": false,
             "type": "boolean",
             "description": "Include published workflows (default: False, shows only user workflows)"
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "description": "Maximum workflows to return per page (default 50, max 200). A page\n   is also cut short when it would not fit the output budget."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Skip this many workflows (default 0). Pass pagination.next_offset\n    to walk to the following page."
           }
         },
         "type": "object"

@@ -2018,32 +2018,48 @@ def get_histories(
 
 
 @mcp.tool(tags={"histories", "read", "core"})
-def list_history_ids() -> GalaxyResult:
+def list_history_ids(limit: int = 100, offset: int = 0) -> GalaxyResult:
     """
-    Get a simplified list of history IDs and names for easy reference
+    Get a simplified, paginated list of history IDs and names for easy reference
+
+    Args:
+        limit: Maximum histories to return per page (default 100, max 500). A page
+               is also cut short when it would not fit the output budget.
+        offset: Skip this many histories (default 0). Pass pagination.next_offset
+                to walk to the following page.
 
     Returns:
-        GalaxyResult with list of {id, name} dictionaries in data field
+        GalaxyResult with a list of {id, name} dictionaries in data, the page size
+        in count, and the account's history total in pagination.total_items
     """
+    _validate_pagination(limit, offset, max_limit=MAX_PAGE_SIZE["list_history_ids"])
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
     try:
+        # Galaxy pages this index server-side, but it returns no total, and this tool
+        # has to report one. Asking for the window and then asking again unpaged just
+        # to count costs more than the single unpaged fetch it already did, so slice
+        # here instead: one call, an exact total, and no window that can disagree
+        # with the count taken beside it.
         histories = gi.histories.get_histories()
-        if not histories:
-            return GalaxyResult(
-                data=[],
+        simplified = [{"id": h["id"], "name": h.get("name", "Unnamed")} for h in histories or []]
+        return _budgeted_page(
+            simplified,
+            limit=limit,
+            offset=offset,
+            noun="histories",
+            build=lambda page, pagination: GalaxyResult(
+                data=page,
                 success=True,
-                message="No histories found",
-                count=0,
-            )
-        # Extract just the id and name for convenience
-        simplified = [{"id": h["id"], "name": h.get("name", "Unnamed")} for h in histories]
-        return GalaxyResult(
-            data=simplified,
-            success=True,
-            message=f"Found {len(simplified)} histories",
-            count=len(simplified),
+                message=(
+                    "No histories found"
+                    if not simplified
+                    else f"Found {len(page)} of {len(simplified)} histories"
+                ),
+                count=len(page),
+                pagination=pagination,
+            ),
         )
     except Exception as e:
         raise ValueError(f"Failed to list history IDs: {str(e)}") from e
@@ -3442,19 +3458,33 @@ def import_workflow_from_iwc(trs_id: str) -> GalaxyResult:
 
 @mcp.tool(tags={"workflows", "read", "extended"})
 def list_workflows(
-    workflow_id: str | None = None, name: str | None = None, published: bool = False
+    workflow_id: str | None = None,
+    name: str | None = None,
+    published: bool = False,
+    limit: int = 50,
+    offset: int = 0,
 ) -> GalaxyResult:
     """
-    List workflows available in the Galaxy instance
+    List workflows available in the Galaxy instance, one page at a time
 
     Args:
         workflow_id: Specific workflow ID to get (optional) - a hexadecimal hash string
         name: Filter workflows by name (optional)
         published: Include published workflows (default: False, shows only user workflows)
+        limit: Maximum workflows to return per page (default 50, max 200). A page
+               is also cut short when it would not fit the output budget.
+        offset: Skip this many workflows (default 0). Pass pagination.next_offset
+                to walk to the following page.
 
     Returns:
-        GalaxyResult with list of workflows in data field
+        GalaxyResult with this page of workflows in data, the page size in count,
+        and the total matching the filters in pagination.total_items
+
+    NEXT STEPS:
+    - Details for one: get_workflow_details(workflow_id)
+    - Inputs it needs: get_workflow_input_template(workflow_id)
     """
+    _validate_pagination(limit, offset, max_limit=MAX_PAGE_SIZE["list_workflows"])
     state = ensure_connected()
 
     try:
@@ -3462,11 +3492,20 @@ def list_workflows(
         workflows = gi.workflows.get_workflows(
             workflow_id=workflow_id, name=name, published=published
         )
-        return GalaxyResult(
-            data=workflows,
-            success=True,
-            message=f"Found {len(workflows)} workflows",
-            count=len(workflows),
+        # bioblend's get_workflows takes no limit/offset and filters name client-side,
+        # so the window is applied here too.
+        return _budgeted_page(
+            workflows,
+            limit=limit,
+            offset=offset,
+            noun="workflows",
+            build=lambda page, pagination: GalaxyResult(
+                data=page,
+                success=True,
+                message=f"Found {len(workflows)} workflows, returning {len(page)}",
+                count=len(page),
+                pagination=pagination,
+            ),
         )
     except Exception as e:
         raise ValueError(
@@ -4005,15 +4044,23 @@ else:
 
 
 @mcp.tool(tags={"tools", "read", "extended"})
-def list_user_tools(active: bool = True) -> GalaxyResult:
-    """List user-defined tools belonging to the current user.
+def list_user_tools(active: bool = True, limit: int = 25, offset: int = 0) -> GalaxyResult:
+    """List user-defined tools belonging to the current user, one page at a time.
 
     Args:
         active: If True (default), only show active tools. Set False to include deactivated tools.
+        limit: Maximum tools to return per page (default 25, max 100). Each entry
+            carries the tool's full representation, so a page is often cut short to
+            fit the output budget; walk pagination.next_offset for the rest.
+        offset: Skip this many tools (default 0). Pass pagination.next_offset to
+            walk to the following page.
 
     Returns:
-        GalaxyResult with list of user tools including id, uuid, tool_id, name, and active status.
+        GalaxyResult with this page of user tools (id, uuid, tool_id, name, active
+        status, representation) in data, the page size in count, and the total in
+        pagination.total_items.
     """
+    _validate_pagination(limit, offset, max_limit=MAX_PAGE_SIZE["list_user_tools"])
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
@@ -4021,11 +4068,19 @@ def list_user_tools(active: bool = True) -> GalaxyResult:
         url = f"{gi.url}/unprivileged_tools?active={str(active).lower()}"
         response = gi.make_get_request(url)
         tools = response.json()
-        return GalaxyResult(
-            data=tools,
-            success=True,
-            message=f"Found {len(tools)} user-defined tool(s)",
-            count=len(tools),
+        # The unprivileged_tools index takes no limit/offset, so slice here.
+        return _budgeted_page(
+            tools,
+            limit=limit,
+            offset=offset,
+            noun="user tools",
+            build=lambda page, pagination: GalaxyResult(
+                data=page,
+                success=True,
+                message=f"Found {len(tools)} user-defined tool(s), returning {len(page)}",
+                count=len(page),
+                pagination=pagination,
+            ),
         )
     except Exception as e:
         raise ValueError(format_error("List user tools", e)) from e

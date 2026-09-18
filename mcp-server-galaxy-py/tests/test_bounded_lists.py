@@ -18,6 +18,9 @@ from galaxy_mcp.server import MAX_PAGE_SIZE, OUTPUT_BUDGET_BYTES, galaxy_state
 from .test_helpers import (
     get_iwc_workflows_fn,
     get_tool_panel_fn,
+    list_history_ids_fn,
+    list_user_tools_fn,
+    list_workflows_fn,
     recommend_iwc_workflows_fn,
     search_iwc_workflows_fn,
     search_tools_by_keywords_fn,
@@ -506,6 +509,193 @@ def walk_pages(call, *, limit, key):
         offset = result.pagination.next_offset
 
 
+def fake_workflows(count):
+    return [{"id": f"wf{i}", "name": f"Workflow {i}", "owner": "someone"} for i in range(count)]
+
+
+class TestListWorkflows:
+    def test_default_page_caps_a_big_result(self, mock_galaxy_instance):
+        mock_galaxy_instance.workflows.get_workflows.return_value = fake_workflows(130)
+
+        with connected(mock_galaxy_instance):
+            result = list_workflows_fn()
+
+        assert len(result.data) == 50
+        assert result.data[0]["id"] == "wf0"
+        assert_page_is_truthful(result, total=130, returned=50, limit=50, offset=0)
+
+    def test_explicit_limit_and_offset(self, mock_galaxy_instance):
+        mock_galaxy_instance.workflows.get_workflows.return_value = fake_workflows(130)
+
+        with connected(mock_galaxy_instance):
+            result = list_workflows_fn(limit=10, offset=100)
+
+        assert [w["id"] for w in result.data] == [f"wf{i}" for i in range(100, 110)]
+        assert_page_is_truthful(result, total=130, returned=10, limit=10, offset=100)
+
+    def test_last_page_is_short_and_final(self, mock_galaxy_instance):
+        mock_galaxy_instance.workflows.get_workflows.return_value = fake_workflows(55)
+
+        with connected(mock_galaxy_instance):
+            result = list_workflows_fn(offset=50)
+
+        assert len(result.data) == 5
+        assert_page_is_truthful(result, total=55, returned=5, limit=50, offset=50)
+
+    def test_empty_result(self, mock_galaxy_instance):
+        mock_galaxy_instance.workflows.get_workflows.return_value = []
+
+        with connected(mock_galaxy_instance):
+            result = list_workflows_fn()
+
+        assert result.data == []
+        assert_page_is_truthful(result, total=0, returned=0, limit=50, offset=0)
+
+    @pytest.mark.parametrize(
+        ("kwargs", "message"),
+        [
+            ({"limit": 0}, "limit must be at least 1"),
+            ({"limit": 10_000}, f"limit must be at most {MAX_PAGE_SIZE['list_workflows']}"),
+            ({"offset": -1}, "offset must be 0 or greater"),
+        ],
+    )
+    def test_rejects_bad_parameters(self, mock_galaxy_instance, kwargs, message):
+        mock_galaxy_instance.workflows.get_workflows.return_value = fake_workflows(5)
+
+        with connected(mock_galaxy_instance), pytest.raises(ValueError, match=message):
+            list_workflows_fn(**kwargs)
+
+
+class TestListUserTools:
+    def _respond(self, mock_galaxy_instance, count):
+        response = Mock()
+        response.json.return_value = [
+            {
+                "id": f"ut{i}",
+                "uuid": f"uuid{i}",
+                "name": f"My tool {i}",
+                "active": True,
+                # The index embeds the whole tool definition, which is why the
+                # default page is small.
+                "representation": {"class": "GalaxyUserTool", "container": "busybox"},
+            }
+            for i in range(count)
+        ]
+        mock_galaxy_instance.make_get_request.return_value = response
+        mock_galaxy_instance.url = "http://localhost:8080/api"
+
+    def test_default_page_caps_a_big_result(self, mock_galaxy_instance):
+        self._respond(mock_galaxy_instance, 80)
+
+        with connected(mock_galaxy_instance):
+            result = list_user_tools_fn()
+
+        assert len(result.data) == 25
+        assert_page_is_truthful(result, total=80, returned=25, limit=25, offset=0)
+
+    def test_explicit_limit_and_offset(self, mock_galaxy_instance):
+        self._respond(mock_galaxy_instance, 80)
+
+        with connected(mock_galaxy_instance):
+            result = list_user_tools_fn(limit=5, offset=60)
+
+        assert [t["id"] for t in result.data] == [f"ut{i}" for i in range(60, 65)]
+        assert_page_is_truthful(result, total=80, returned=5, limit=5, offset=60)
+
+    def test_last_page_is_short_and_final(self, mock_galaxy_instance):
+        self._respond(mock_galaxy_instance, 28)
+
+        with connected(mock_galaxy_instance):
+            result = list_user_tools_fn(offset=25)
+
+        assert len(result.data) == 3
+        assert_page_is_truthful(result, total=28, returned=3, limit=25, offset=25)
+
+    def test_empty_result(self, mock_galaxy_instance):
+        self._respond(mock_galaxy_instance, 0)
+
+        with connected(mock_galaxy_instance):
+            result = list_user_tools_fn()
+
+        assert result.data == []
+        assert_page_is_truthful(result, total=0, returned=0, limit=25, offset=0)
+
+    @pytest.mark.parametrize(
+        ("kwargs", "message"),
+        [
+            ({"limit": 0}, "limit must be at least 1"),
+            ({"limit": 10_000}, f"limit must be at most {MAX_PAGE_SIZE['list_user_tools']}"),
+            ({"offset": -1}, "offset must be 0 or greater"),
+        ],
+    )
+    def test_rejects_bad_parameters(self, mock_galaxy_instance, kwargs, message):
+        self._respond(mock_galaxy_instance, 5)
+
+        with connected(mock_galaxy_instance), pytest.raises(ValueError, match=message):
+            list_user_tools_fn(**kwargs)
+
+
+class TestListHistoryIds:
+    def _paging_mock(self, mock_galaxy_instance, count):
+        everything = [{"id": f"h{i}", "name": f"History {i}"} for i in range(count)]
+        mock_galaxy_instance.histories.get_histories.side_effect = None
+        mock_galaxy_instance.histories.get_histories.return_value = everything
+
+    def test_default_page_caps_a_big_result(self, mock_galaxy_instance):
+        self._paging_mock(mock_galaxy_instance, 250)
+
+        with connected(mock_galaxy_instance):
+            result = list_history_ids_fn()
+
+        assert len(result.data) == 100
+        assert result.data[0] == {"id": "h0", "name": "History 0"}
+        assert_page_is_truthful(result, total=250, returned=100, limit=100, offset=0)
+
+    def test_explicit_limit_and_offset_costs_one_call(self, mock_galaxy_instance):
+        """One fetch, not a window plus a second unpaged fetch just to count."""
+        self._paging_mock(mock_galaxy_instance, 250)
+
+        with connected(mock_galaxy_instance):
+            result = list_history_ids_fn(limit=10, offset=30)
+
+        assert [h["id"] for h in result.data] == [f"h{i}" for i in range(30, 40)]
+        assert_page_is_truthful(result, total=250, returned=10, limit=10, offset=30)
+        assert mock_galaxy_instance.histories.get_histories.call_count == 1
+
+    def test_last_page_is_short_and_final(self, mock_galaxy_instance):
+        self._paging_mock(mock_galaxy_instance, 104)
+
+        with connected(mock_galaxy_instance):
+            result = list_history_ids_fn(offset=100)
+
+        assert len(result.data) == 4
+        assert_page_is_truthful(result, total=104, returned=4, limit=100, offset=100)
+
+    def test_empty_result(self, mock_galaxy_instance):
+        self._paging_mock(mock_galaxy_instance, 0)
+
+        with connected(mock_galaxy_instance):
+            result = list_history_ids_fn()
+
+        assert result.data == []
+        assert result.message == "No histories found"
+        assert_page_is_truthful(result, total=0, returned=0, limit=100, offset=0)
+
+    @pytest.mark.parametrize(
+        ("kwargs", "message"),
+        [
+            ({"limit": 0}, "limit must be at least 1"),
+            ({"limit": 10_000}, f"limit must be at most {MAX_PAGE_SIZE['list_history_ids']}"),
+            ({"offset": -1}, "offset must be 0 or greater"),
+        ],
+    )
+    def test_rejects_bad_parameters(self, mock_galaxy_instance, kwargs, message):
+        self._paging_mock(mock_galaxy_instance, 5)
+
+        with connected(mock_galaxy_instance), pytest.raises(ValueError, match=message):
+            list_history_ids_fn(**kwargs)
+
+
 # The premise of every change in this file is a byte budget: MCP clients truncate
 # tool output (one common adapter at 50 KB) and hand the model unparseable JSON.
 # The budget and the measurement both come from the server, so a test cannot check a
@@ -865,6 +1055,95 @@ class TestEveryPageFitsTheBudget:
         assert_fits_budget("recommend_iwc_workflows", result, "recommend_iwc_workflows at its cap")
         assert "additional matches were dropped to fit the output budget" in result.message
 
+    def test_list_workflows(self, mock_galaxy_instance):
+        corpus = [huge_workflow_entry(i) for i in range(250)]
+        mock_galaxy_instance.workflows.get_workflows.return_value = corpus
+
+        with connected(mock_galaxy_instance):
+            seen = walk_every_page(
+                "list_workflows",
+                lambda limit, offset: list_workflows_fn(limit=limit, offset=offset),
+                lambda r: r.data,
+                lambda workflow: workflow["id"],
+                "list_workflows",
+                MAX_PAGE_SIZE["list_workflows"],
+            )
+        assert len(seen) == len(corpus)
+
+    def test_list_user_tools(self, mock_galaxy_instance):
+        corpus = [huge_user_tool(i) for i in range(120)]
+        response_json(mock_galaxy_instance, corpus)
+
+        with connected(mock_galaxy_instance):
+            seen = walk_every_page(
+                "list_user_tools",
+                lambda limit, offset: list_user_tools_fn(limit=limit, offset=offset),
+                lambda r: r.data,
+                lambda tool: tool["id"],
+                "list_user_tools",
+                MAX_PAGE_SIZE["list_user_tools"],
+            )
+        assert len(seen) == len(corpus)
+
+    def test_list_history_ids(self, mock_galaxy_instance):
+        corpus = [huge_history(i) for i in range(900)]
+        mock_galaxy_instance.histories.get_histories.side_effect = None
+        mock_galaxy_instance.histories.get_histories.return_value = corpus
+
+        with connected(mock_galaxy_instance):
+            seen = walk_every_page(
+                "list_history_ids",
+                lambda limit, offset: list_history_ids_fn(limit=limit, offset=offset),
+                lambda r: r.data,
+                lambda history: history["id"],
+                "list_history_ids",
+                MAX_PAGE_SIZE["list_history_ids"],
+            )
+        assert len(seen) == len(corpus)
+
+
+class TestWhatTheBudgetIsMeasuredOn:
+    """The three ways a count-based budget lied about the size of a response."""
+
+    def test_a_default_page_of_fat_items_is_cut_to_fit(self, mock_galaxy_instance):
+        """The default page is not a safe size either; only measuring makes it one."""
+        response_json(mock_galaxy_instance, [huge_user_tool(i) for i in range(120)])
+
+        with connected(mock_galaxy_instance):
+            result = list_user_tools_fn()
+
+        assert result.count < 25, "a default page of 2 KB commands cannot be 25 items"
+        assert_fits_budget("list_user_tools", result, "list_user_tools default page")
+        assert "cut short to fit the output budget" in result.pagination.helper_text
+        assert result.pagination.next_offset == result.count
+
+    def test_raising_a_cap_cannot_raise_the_payload(self, mock_galaxy_instance):
+        """A cap is a request ceiling now, so moving one cannot move what comes back.
+
+        This is the test a cap-shaped budget could not have: with the size promise in
+        the cap, raising it raised the response with it and nothing noticed.
+        """
+        response_json(mock_galaxy_instance, [huge_user_tool(i) for i in range(500)])
+
+        with connected(mock_galaxy_instance), patch.dict(MAX_PAGE_SIZE, {"list_user_tools": 400}):
+            result = list_user_tools_fn(limit=400)
+
+        assert_fits_budget("list_user_tools", result, "list_user_tools with its cap raised to 400")
+        assert result.count < 400
+
+    def test_multi_byte_names_are_counted_in_bytes(self, mock_galaxy_instance):
+        """A name in a three-bytes-a-character script is not a name of its length."""
+        corpus = [huge_history(i) for i in range(900)]
+        mock_galaxy_instance.histories.get_histories.side_effect = None
+        mock_galaxy_instance.histories.get_histories.return_value = corpus
+
+        with connected(mock_galaxy_instance):
+            result = list_history_ids_fn(limit=500)
+
+        rendered = result.model_dump_json()
+        assert len(rendered) < len(rendered.encode("utf-8")), "fixture is not multi-byte"
+        assert_fits_budget("list_history_ids", result, "list_history_ids with multi-byte names")
+
 
 class TestWalkingEveryPage:
     """Following next_offset to the end must see each item once, then stop."""
@@ -876,6 +1155,25 @@ class TestWalkingEveryPage:
             seen = walk_pages(lambda **kw: search_tools_fn("matchable", **kw), limit=7, key="id")
 
         assert seen == [f"tool{i}" for i in range(53)]
+
+    def test_list_workflows(self, mock_galaxy_instance):
+        mock_galaxy_instance.workflows.get_workflows.return_value = fake_workflows(53)
+
+        with connected(mock_galaxy_instance):
+            seen = walk_pages(list_workflows_fn, limit=7, key="id")
+
+        assert seen == [f"wf{i}" for i in range(53)]
+
+    def test_list_history_ids(self, mock_galaxy_instance):
+        mock_galaxy_instance.histories.get_histories.side_effect = None
+        mock_galaxy_instance.histories.get_histories.return_value = [
+            {"id": f"h{i}", "name": f"History {i}"} for i in range(53)
+        ]
+
+        with connected(mock_galaxy_instance):
+            seen = walk_pages(list_history_ids_fn, limit=7, key="id")
+
+        assert seen == [f"h{i}" for i in range(53)]
 
     def test_get_tool_panel_section(self, mock_galaxy_instance):
         mock_galaxy_instance.tools.get_tool_panel.return_value = [

@@ -267,6 +267,22 @@
       "reason": "Python also accepts a JSON string, which is what agents often send; TS accepts an object only and rejects the string form."
     },
     {
+      "tool": "list_history_ids",
+      "param": "limit",
+      "kind": "missing-ts-param",
+      "observed": "python=type=integer required=false default=100",
+      "status": "pending-port",
+      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
+    },
+    {
+      "tool": "list_history_ids",
+      "param": "offset",
+      "kind": "missing-ts-param",
+      "observed": "python=type=integer required=false default=0",
+      "status": "pending-port",
+      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
+    },
+    {
       "tool": "list_page_revisions",
       "param": "sort_desc",
       "kind": "default-mismatch",
@@ -313,6 +329,38 @@
       "observed": "python=true typescript=none",
       "status": "unreviewed-gap",
       "reason": "TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it."
+    },
+    {
+      "tool": "list_user_tools",
+      "param": "limit",
+      "kind": "missing-ts-param",
+      "observed": "python=type=integer required=false default=25",
+      "status": "pending-port",
+      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
+    },
+    {
+      "tool": "list_user_tools",
+      "param": "offset",
+      "kind": "missing-ts-param",
+      "observed": "python=type=integer required=false default=0",
+      "status": "pending-port",
+      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
+    },
+    {
+      "tool": "list_workflows",
+      "param": "limit",
+      "kind": "missing-ts-param",
+      "observed": "python=type=integer required=false default=50",
+      "status": "pending-port",
+      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
+    },
+    {
+      "tool": "list_workflows",
+      "param": "offset",
+      "kind": "missing-ts-param",
+      "observed": "python=type=integer required=false default=0",
+      "status": "pending-port",
+      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
     },
     {
       "tool": "list_workflows",
