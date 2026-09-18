@@ -178,7 +178,7 @@ are documented in each tool's own description, which is what the MCP client sees
 ### Galaxy tools
 
 - `search_tools_by_name`: Substring search over tool name, id, and description
-- `search_tools_by_keywords`: Keyword search, ranked, over the tool catalog
+- `search_tools_by_keywords`: Match keywords against tool names, descriptions, and the file extensions a tool accepts as input
 - `get_tool_details`: A tool's metadata, optionally including its full input schema
 - `get_tool_panel`: The tool panel as Galaxy organizes it, section by section
 - `get_tool_citations`: How to cite a tool
