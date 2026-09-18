@@ -8,7 +8,7 @@ This is the Python implementation of the Galaxy MCP server, providing a Model Co
 
 - Complete Galaxy API integration through BioBlend
 - Optional OAuth login flow for HTTP deployments
-- Interactive Workflow Composer (IWC) integration
+- Intergalactic Workflow Commission (IWC) integration
 - FastMCP 3 server with remote deployment support
 - Session-aware tool visibility: every tool is tagged, and a middleware can hide tags a
   session cannot use (see [Tool discovery mode](#tool-discovery-mode-experimental))

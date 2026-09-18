@@ -14,9 +14,9 @@ The repository holds two independent implementations of the same Galaxy operatio
   server, both built on a shared framework-free core. See the
   [galaxy-agent-tools README](galaxy-agent-tools/README.md).
 
-The two are kept in step deliberately -- an operation named `get_histories` behaves the
-same on either side -- but they are separate codebases with separate release trains, and
-each README lists the operations that surface actually has.
+The two are meant to stay in step: an operation keeps its name and its meaning across
+both. They are still separate codebases with separate release trains, though, so each
+README lists the operations that surface actually has -- read the one you are using.
 
 ## Key Features
 
@@ -25,7 +25,7 @@ each README lists the operations that surface actually has.
 - **Server Information**: Retrieve comprehensive server details including version, configuration, and capabilities
 - **Tools Management**: Search the tool catalog, inspect a tool's inputs, and execute Galaxy tools
 - **User-Defined Tools**: Create, list, run, and deactivate unprivileged user-defined tools
-- **Workflow Integration**: Find and import workflows from the Interactive Workflow Composer (IWC), then invoke them and follow their invocations
+- **Workflow Integration**: Find and import workflows from the Intergalactic Workflow Commission (IWC), then invoke them and follow their invocations
 - **History Operations**: Manage Galaxy histories, datasets, and collections, and inspect the jobs behind them
 - **File Management**: Upload files to Galaxy from local storage or from a URL, and download results back
 - **Pages**: Read and write Galaxy-flavored markdown pages -- history-attached notebooks and standalone reports -- including their revision history
