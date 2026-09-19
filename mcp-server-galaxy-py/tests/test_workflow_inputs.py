@@ -1,6 +1,8 @@
 import json as _json
 from pathlib import Path
 
+import pytest
+
 from galaxy_mcp.workflow_inputs import (
     _clean_readme_summary,
     _collection_type_compatible,
@@ -830,3 +832,121 @@ def test_options_values_are_stringified():
     }
     opts = normalize_run_model(run)[0]["options"]
     assert opts == [{"label": "one", "value": "1"}, {"label": "two", "value": "2"}]
+
+
+# ---------------------------------------------------------------------------
+# Library datasets are a single dataset, not a collection
+# ---------------------------------------------------------------------------
+#
+# invoke_workflow's docstring advertises 'ldda' and 'ld', and Galaxy's
+# run_request converts both to an HDA before the invocation starts, so a data
+# slot has to take them. The rule used to be "anything that is not hda is a
+# collection", which refused them and mislabelled them on the way out.
+
+
+@pytest.mark.parametrize("src", ["hda", "ldda", "ld"])
+def test_validate_accepts_every_single_dataset_source(src):
+    res = validate_inputs(SLOTS, {"2": {"src": src, "id": "d1"}}, MAP)
+
+    assert res["rejects"] == []
+
+
+@pytest.mark.parametrize("src", ["ldda", "ld"])
+def test_validate_does_not_call_a_library_dataset_a_collection(src):
+    """The old message said 'got a collection (ldda)', which was wrong twice over."""
+    res = validate_inputs(SLOTS, {"2": {"src": src, "id": "d1"}}, MAP)
+
+    assert res["rejects"] == []
+    everything = [r["reason"] for r in res["rejects"]] + [w["message"] for w in res["warnings"]]
+    assert not any("collection" in text.lower() for text in everything)
+
+
+def test_validate_still_rejects_a_collection_in_a_data_slot():
+    res = validate_inputs(SLOTS, {"2": {"src": "hdca", "id": "c1"}}, MAP)
+
+    assert len(res["rejects"]) == 1
+    reason = res["rejects"][0]["reason"]
+    assert "expects a single dataset (hda)" in reason
+    assert "a dataset collection (hdca)" in reason
+
+
+def test_validate_reject_names_what_was_actually_passed():
+    """Not just 'wrong src' -- the message has to say what arrived."""
+    res = validate_inputs(SLOTS, {"0": {"src": "hdca", "id": "c1"}}, MAP)
+
+    assert res["rejects"][0]["reason"] == (
+        "Slot expects a single dataset (hda); got a dataset collection (hdca)."
+    )
+
+
+def test_validate_warns_but_does_not_reject_an_unknown_source():
+    res = validate_inputs(SLOTS, {"2": {"src": "future_src", "id": "x"}}, MAP)
+
+    assert res["rejects"] == []
+    assert any("future_src" in w["message"] for w in res["warnings"])
+
+
+def test_a_library_dataset_is_still_datatype_checked():
+    """Accepting the src must not skip the checks that follow it.
+
+    Note this feeds ext directly. _enrich_supplied_inputs resolves ext for hda
+    only, so a real ldda arrives without one and draws the "could not determine
+    datatype" warning instead -- that gap is in the caller, not here.
+    """
+    ok = validate_inputs(SLOTS, {"0": {"src": "ldda", "id": "d1", "ext": "tabular"}}, MAP)
+    bad = validate_inputs(SLOTS, {"0": {"src": "ldda", "id": "d2", "ext": "bam"}}, MAP)
+
+    assert ok["rejects"] == []
+    assert any("bam" in r["reason"] for r in bad["rejects"])
+
+
+@pytest.mark.parametrize("src", ["hda", "ldda", "ld"])
+def test_a_dataset_source_in_a_collection_slot_is_still_rejected(src):
+    """The collection slot's rule is unchanged."""
+    res = validate_inputs(SLOTS, {"1": {"src": src, "id": "d1"}}, MAP)
+
+    assert any("expects a dataset collection" in r["reason"] for r in res["rejects"])
+
+
+@pytest.mark.parametrize("src", [["hda"], {"a": 1}, 7, None])
+def test_validate_does_not_crash_on_a_non_string_src(src):
+    """A set lookup on an arbitrary JSON value raises; the old != comparison did not.
+
+    Worse than a crash: invoke_workflow's preflight catches everything and falls
+    back to an empty verdict, so one bad value would disable every other check in
+    the same call.
+    """
+    res = validate_inputs(SLOTS, {"2": {"src": src, "id": "x"}}, MAP)
+
+    assert len(res["rejects"]) == 1
+    assert "expects a single dataset" in res["rejects"][0]["reason"]
+
+
+def test_one_bad_value_does_not_disable_the_other_checks():
+    supplied = {
+        "2": {"src": ["hda"], "id": "x"},
+        "1": {"src": "hda", "id": "d1"},
+    }
+
+    res = validate_inputs(SLOTS, supplied, MAP)
+
+    steps = {r["step_index"] for r in res["rejects"]}
+    assert steps == {1, 2}  # the collection slot is still judged
+
+
+def test_a_collection_element_is_rejected_from_a_data_slot():
+    """run_request has no dce branch, so Galaxy refuses it; say so without
+    calling it a collection, since a dce may wrap either."""
+    res = validate_inputs(SLOTS, {"2": {"src": "dce", "id": "e1"}}, MAP)
+
+    assert len(res["rejects"]) == 1
+    assert "a collection element (dce)" in res["rejects"][0]["reason"]
+
+
+def test_a_source_galaxy_supports_but_this_does_not_know_is_passed_through():
+    """Galaxy takes url for a data step; refusing it would be a false reject."""
+    res = validate_inputs(SLOTS, {"2": {"src": "url", "id": "https://example/x"}}, MAP)
+
+    assert res["rejects"] == []
+    assert any("url" in w["message"] for w in res["warnings"])
+    assert not any("takes hda, ldda or ld" in w["message"] for w in res["warnings"])

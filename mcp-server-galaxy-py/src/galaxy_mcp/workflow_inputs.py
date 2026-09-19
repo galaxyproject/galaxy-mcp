@@ -70,6 +70,30 @@ _INPUT_TYPE_MAP = {
     "parameter_input": "parameter",
 }
 _SRC_MAP = {"data": "hda", "data_collection": "hdca", "parameter": None}
+
+# What a data input slot will actually take. Galaxy's run_request resolves a
+# library dataset, in either spelling, to an HDA before the invocation starts
+# (lib/galaxy/workflow/run_request.py), so all three are a single dataset as far
+# as a data slot is concerned.
+_DATASET_SRCS = frozenset({"hda", "ldda", "ld"})
+# Sources that are provably not one dataset. run_request has no branch for either,
+# so both reach its "Unknown workflow input source" error; naming them here saves
+# the round trip. A dce is one element of a collection, which may itself be a
+# sub-collection -- hence "element" rather than calling it a collection outright.
+_NOT_A_SINGLE_DATASET = {"hdca": "a dataset collection", "dce": "a collection element"}
+
+
+def _describe_src(src: Any) -> str:
+    """Name a supplied reference the way the reject messages name slots."""
+    if not isinstance(src, str):
+        return f"a {type(src).__name__} where a src string was expected"
+    if src in _DATASET_SRCS:
+        return f"a single dataset ({src})"
+    if src in _NOT_A_SINGLE_DATASET:
+        return f"{_NOT_A_SINGLE_DATASET[src]} ({src})"
+    return f"src '{src}'"
+
+
 _FALLBACK_LABEL = {
     "data": "Input dataset",
     "data_collection": "Input dataset collection",
@@ -377,18 +401,33 @@ def validate_inputs(
             continue
 
         if itype == "data":
-            if value["src"] != "hda":
+            src = value["src"]
+            # src arrives from whatever the caller sent, so it need not be a string
+            # and must not be used as a set key before that is established.
+            if not isinstance(src, str) or src in _NOT_A_SINGLE_DATASET:
                 rejects.append(
                     {
                         "step_index": slot["step_index"],
                         "label": slot["label"],
                         "reason": (
-                            f"Slot expects a single dataset (hda);"
-                            f" got a collection ({value['src']})."
+                            f"Slot expects a single dataset (hda); got {_describe_src(src)}."
                         ),
                     }
                 )
                 continue
+            if src not in _DATASET_SRCS:
+                # Not provably wrong: Galaxy also takes url and class:File here, and
+                # can add more. Note it rather than refusing a run that would work.
+                warnings.append(
+                    {
+                        "step_index": slot["step_index"],
+                        "message": (
+                            f"Unfamiliar {_describe_src(src)} for '{slot['label']}'; "
+                            "this checker knows hda, ldda and ld, so it is passing "
+                            "the value through for Galaxy to judge."
+                        ),
+                    }
+                )
             ext = value.get("ext")
             if ext and not _ext_accepted(ext, slot, mapping):
                 rejects.append(
