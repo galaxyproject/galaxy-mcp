@@ -7,6 +7,7 @@ import {
   NORMALIZATION_RULES,
   WHOLE_TOOL_KINDS,
   type Divergence,
+  type Normalization,
   type ToolContract,
 } from "./parity/compare";
 import {
@@ -123,6 +124,47 @@ describe("the accepted-divergence registry itself", () => {
   it("covers every kind the comparator can report", () => {
     expect([...KINDS].sort()).toEqual([...new Set(KINDS)].sort());
     for (const kind of WHOLE_TOOL_KINDS) expect(KINDS).toContain(kind);
+  });
+});
+
+describe("missing parameter divergences", () => {
+  const rules: Normalization = {
+    snakeCaseParamNames: false,
+    pythonNullDefaults: false,
+    optionalNullUnions: false,
+  };
+
+  it("makes a registered missing parameter stale when its existing contract changes", () => {
+    const typescript: Record<string, ToolContract> = {
+      example: { inputSchema: { type: "object" }, mutating: false },
+    };
+    const accepted = "python=type=integer required=false default=10";
+    const example: ToolContract = {
+      inputSchema: {
+        type: "object",
+        properties: { preview_lines: { default: 10, type: "integer" } },
+      },
+      mutating: false,
+    };
+    const python: Record<string, ToolContract> = { example };
+
+    expect(compareSurfaces(python, typescript, rules)).toContainEqual(
+      expect.objectContaining({ observed: accepted }),
+    );
+
+    example.inputSchema.properties!.preview_lines = {
+      default: "all",
+      type: "string",
+    };
+    example.inputSchema.required = ["preview_lines"];
+
+    const changed = compareSurfaces(python, typescript, rules);
+    expect(changed).toContainEqual(
+      expect.objectContaining({
+        observed: "python=type=string required=true default=\"all\"",
+      }),
+    );
+    expect(changed.map((d) => d.observed)).not.toContain(accepted);
   });
 });
 

@@ -54,7 +54,7 @@
       "tool": "download_dataset",
       "param": "use_default_filename",
       "kind": "missing-ts-param",
-      "observed": "",
+      "observed": "python=type=boolean required=false default=true",
       "status": "unreviewed-gap",
       "reason": "Python can write next to the dataset's own name; TS only writes to the exact filePath it is given."
     },
@@ -70,7 +70,7 @@
       "tool": "get_dataset_details",
       "param": "include_preview",
       "kind": "missing-ts-param",
-      "observed": "",
+      "observed": "python=type=boolean required=false default=true",
       "status": "pending-port",
       "reason": "The TS op's own summary defers content preview to a later phase."
     },
@@ -78,7 +78,7 @@
       "tool": "get_dataset_details",
       "param": "preview_lines",
       "kind": "missing-ts-param",
-      "observed": "",
+      "observed": "python=type=integer required=false default=10",
       "status": "pending-port",
       "reason": "The TS op's own summary defers content preview to a later phase."
     },
@@ -118,7 +118,7 @@
       "tool": "get_history_contents",
       "param": "order",
       "kind": "missing-ts-param",
-      "observed": "",
+      "observed": "python=type=string required=false default=\"hid-asc\"",
       "status": "unreviewed-gap",
       "reason": "Python orders by hid-asc and lets you change it; TS has no ordering control."
     },
@@ -134,7 +134,7 @@
       "tool": "get_invocations",
       "param": "history_id",
       "kind": "missing-ts-param",
-      "observed": "",
+      "observed": "python=type=string required=false default=none",
       "status": "pending-port",
       "reason": "The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version."
     },
@@ -150,7 +150,7 @@
       "tool": "get_invocations",
       "param": "limit",
       "kind": "missing-ts-param",
-      "observed": "",
+      "observed": "python=type=integer required=false default=none",
       "status": "pending-port",
       "reason": "The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version."
     },
@@ -158,7 +158,7 @@
       "tool": "get_invocations",
       "param": "step_details",
       "kind": "missing-ts-param",
-      "observed": "",
+      "observed": "python=type=boolean required=false default=false",
       "status": "pending-port",
       "reason": "The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version."
     },
@@ -166,7 +166,7 @@
       "tool": "get_invocations",
       "param": "view",
       "kind": "missing-ts-param",
-      "observed": "",
+      "observed": "python=type=string required=false default=\"collection\"",
       "status": "pending-port",
       "reason": "The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version."
     },
@@ -174,7 +174,7 @@
       "tool": "get_invocations",
       "param": "workflow_id",
       "kind": "missing-ts-param",
-      "observed": "",
+      "observed": "python=type=string required=false default=none",
       "status": "pending-port",
       "reason": "The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version."
     },
@@ -278,7 +278,7 @@
       "tool": "list_workflows",
       "param": "workflow_id",
       "kind": "missing-ts-param",
-      "observed": "",
+      "observed": "python=type=string required=false default=none",
       "status": "unreviewed-gap",
       "reason": "Python's list_workflows doubles as a fetch-by-id; TS splits that into get_workflow_details. Probably right, but nobody has confirmed it."
     },
@@ -310,7 +310,7 @@
       "tool": "run_tool",
       "param": "tool_version",
       "kind": "missing-py-param",
-      "observed": "",
+      "observed": "typescript=type=string required=false default=none",
       "status": "unreviewed-gap",
       "reason": "TS accepts toolVersion; Python's run_tool takes only history_id, tool_id and inputs, so pinning a tool version is not expressible there."
     },

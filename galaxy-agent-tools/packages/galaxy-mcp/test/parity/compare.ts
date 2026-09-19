@@ -154,6 +154,9 @@ export function normalizeParams(
 
 const show = (p: NormalParam): string => (p.hasDefault ? JSON.stringify(p.default) : "none");
 
+const showContract = (p: NormalParam): string =>
+  `type=${p.type} required=${p.required} default=${show(p)}`;
+
 function compareTool(
   tool: string,
   python: ToolContract,
@@ -173,11 +176,25 @@ function compareTool(
   }
   const py = normalizeParams(python.inputSchema, rules, `${tool} (python)`);
   const ts = normalizeParams(typescript.inputSchema, rules, `${tool} (typescript)`);
-  for (const param of py.keys()) {
-    if (!ts.has(param)) found.push({ tool, param, kind: "missing-ts-param", observed: "" });
+  for (const [param, p] of py) {
+    if (!ts.has(param)) {
+      found.push({
+        tool,
+        param,
+        kind: "missing-ts-param",
+        observed: `python=${showContract(p)}`,
+      });
+    }
   }
-  for (const param of ts.keys()) {
-    if (!py.has(param)) found.push({ tool, param, kind: "missing-py-param", observed: "" });
+  for (const [param, t] of ts) {
+    if (!py.has(param)) {
+      found.push({
+        tool,
+        param,
+        kind: "missing-py-param",
+        observed: `typescript=${showContract(t)}`,
+      });
+    }
   }
   for (const [param, p] of py) {
     const t = ts.get(param);
