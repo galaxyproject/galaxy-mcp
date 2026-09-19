@@ -4,26 +4,33 @@ This project provides a Model Context Protocol (MCP) server for interacting with
 
 ## Project Overview
 
-This repository contains a Python-based MCP server implementation that provides comprehensive integration with Galaxy's API through BioBlend.
+The repository holds two independent implementations of the same Galaxy operation set:
 
-In addition to the Python server, this repository now includes a **TypeScript
-workspace** in [`galaxy-agent-tools/`](galaxy-agent-tools/) that offers the same
-Galaxy operations two ways: a `galaxy-cli` command-line tool and a `galaxy-mcp`
-(Node) MCP server, built on a shared core and kept in lockstep with this server's
-toolset. See the [galaxy-agent-tools README](galaxy-agent-tools/README.md) to build
-and use it.
+- [`mcp-server-galaxy-py/`](mcp-server-galaxy-py/) -- the Python MCP server, published to
+  PyPI as `galaxy-mcp`. It reaches Galaxy through BioBlend and carries the larger tool
+  surface. See the [Python README](mcp-server-galaxy-py/README.md).
+- [`galaxy-agent-tools/`](galaxy-agent-tools/) -- a TypeScript pnpm workspace offering the
+  same operations two ways: a `galaxy-cli` command-line tool and a `galaxy-mcp` (Node) MCP
+  server, both built on a shared framework-free core. See the
+  [galaxy-agent-tools README](galaxy-agent-tools/README.md).
+
+The two are meant to stay in step: an operation keeps its name and its meaning across
+both. They are still separate codebases with separate release trains, though, so each
+README lists the operations that surface actually has -- read the one you are using.
 
 ## Key Features
 
 - **Galaxy Connection**: Connect to any Galaxy instance with a URL and API key
 - **OAuth Login (optional)**: Offer browser-based sign-in that exchanges credentials for temporary Galaxy API keys
 - **Server Information**: Retrieve comprehensive server details including version, configuration, and capabilities
-- **Tools Management**: Search, view details, and execute Galaxy tools
-- **Workflow Integration**: Access and import workflows from the Interactive Workflow Composer (IWC)
-- **History Operations**: Manage Galaxy histories and datasets
-- **File Management**: Upload files to Galaxy from local storage
+- **Tools Management**: Search the tool catalog, inspect a tool's inputs, and execute Galaxy tools
+- **User-Defined Tools**: Create, list, run, and deactivate unprivileged user-defined tools
+- **Workflow Integration**: Find and import workflows from the Intergalactic Workflow Commission (IWC), then invoke them and follow their invocations
+- **History Operations**: Manage Galaxy histories, datasets, and collections, and inspect the jobs behind them
+- **File Management**: Upload files to Galaxy from local storage or from a URL, and download results back
+- **Pages**: Read and write Galaxy-flavored markdown pages -- history-attached notebooks and standalone reports -- including their revision history
 - **Verified Container Recommendation (optional)**: Resolve a real `quay.io/biocontainers` image for a set of conda packages instead of guessing one -- see [Optional extras](#optional-extras)
-- **Comprehensive Testing**: Full test suite with mock-based testing for reliability
+- **Mock-based test suite**: The default suite runs entirely against mocked Galaxy responses, so it needs no server; a separate suite against a live Galaxy is opt-in and skips when no credentials are configured
 
 ## Optional extras
 
@@ -50,6 +57,21 @@ uv sync --extra container-recommend
 
 The same resolver is also available as a standalone CLI once installed:
 `mulled-recommend samtools=1.17`.
+
+### `code-mode`
+
+Collapses the whole tool catalog into three meta-tools -- `search`, `get_schema`, and
+`run_galaxy_tool` -- so an agent pays for a tool's schema only when it decides to use it.
+The extra pulls in `pydantic-monty`, the sandboxed interpreter that runs the submitted
+code. Without the extra the server still starts, but asking for code mode is an error
+rather than a silent downgrade.
+
+```bash
+uvx --from 'galaxy-mcp[code-mode]' galaxy-mcp --discovery-mode code
+```
+
+See [Tool discovery mode](mcp-server-galaxy-py/README.md#tool-discovery-mode-experimental)
+in the Python README for what the trade-off buys you.
 
 ## Quick Start
 
@@ -131,7 +153,7 @@ docker run --rm -it -p 8000:8000 \
 
 ## Connect to Claude Desktop
 - Ensure that GalaxyMCP runs with `uvx galaxy-mcp`
-- Add `export GALAXY_SERVER=https://usegalaxy.org` to your .bashrc (or equiv)
+- Add `export GALAXY_URL=https://usegalaxy.org` to your .bashrc (or equiv)
 - Download and install [claude desktop](https://www.claude.com/download)
 - Go to Settings -> Developer -> Edit Config
 - Add this to `claude_desktop_config.json`
