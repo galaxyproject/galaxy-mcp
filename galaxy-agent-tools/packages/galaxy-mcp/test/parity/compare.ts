@@ -113,12 +113,14 @@ function stableStringify(value: unknown): string {
  * accident.
  */
 export function typeToken(schema: JsonSchema): string {
+  const parts: string[] = [];
   if (schema.enum) {
-    return `enum<${schema.enum.map((v) => JSON.stringify(v)).sort().join("|")}>`;
+    parts.push(`enum<${schema.enum.map((v) => JSON.stringify(v)).sort().join("|")}>`);
   }
-  if (schema.anyOf) return `anyOf<${schema.anyOf.map(typeToken).sort().join("|")}>`;
-  if (schema.type === "array") return `array<${typeToken(schema.items ?? {})}>`;
-  if (schema.type) return schema.type;
+  if (schema.anyOf) parts.push(`anyOf<${schema.anyOf.map(typeToken).sort().join("|")}>`);
+  if (schema.type === "array") parts.push(`array<${typeToken(schema.items ?? {})}>`);
+  else if (schema.type) parts.push(schema.type);
+  if (parts.length) return parts.sort().join("&");
   return `schema(${stableStringify(schema)})`;
 }
 

@@ -168,6 +168,40 @@ describe("missing parameter divergences", () => {
   });
 });
 
+describe("schema type normalization", () => {
+  const rules: Normalization = {
+    snakeCaseParamNames: false,
+    pythonNullDefaults: false,
+    optionalNullUnions: false,
+  };
+
+  it("keeps an anyOf schema's sibling type in the comparison", () => {
+    const schema = {
+      anyOf: [{ type: "string" }, { type: "integer" }],
+      type: "object",
+    };
+    const python: Record<string, ToolContract> = {
+      example: {
+        inputSchema: { properties: { value: { ...schema, type: "string" } } },
+        mutating: false,
+      },
+    };
+    const typescript: Record<string, ToolContract> = {
+      example: {
+        inputSchema: { properties: { value: { ...schema, type: "integer" } } },
+        mutating: false,
+      },
+    };
+
+    expect(compareSurfaces(python, typescript, rules)).toContainEqual(
+      expect.objectContaining({
+        kind: "type-mismatch",
+        observed: "python=anyOf<integer|string>&string typescript=anyOf<integer|string>&integer",
+      }),
+    );
+  });
+});
+
 describe("the generated Python surface manifest", () => {
   it("is internally consistent", () => {
     const names = manifest.tools.map((t) => t.name);
