@@ -77,8 +77,25 @@ def test_conditional_tool_declaration_matches_the_live_registration(name):
     """The generator restates the tags of tools it may have to synthesize; catch drift."""
     spec = CONDITIONAL_TOOLS[name]
     registered = {t.name: t for t in asyncio.run(server.mcp.list_tools(run_middleware=False))}
-    if name not in registered:
-        pytest.skip(f"{name} needs the '{spec['extra']}' extra")
+    if not spec["available"]():
+        assert name not in registered
+        return
+    assert name in registered, f"{name} needs the '{spec['extra']}' registration"
     synthesized = Tool.from_function(getattr(server, name), tags=set(spec["tags"]))
     assert synthesized.tags == registered[name].tags
     assert synthesized.parameters == registered[name].parameters
+
+
+def test_manifest_does_not_invent_a_conditional_tool_when_its_extra_is_available(monkeypatch):
+    """A missing registration with its extra present must make the snapshot stale."""
+    name = "recommend_biocontainer"
+    original_list_tools = server.mcp.list_tools
+
+    async def without_conditional_tool(*args, **kwargs):
+        tools = await original_list_tools(*args, **kwargs)
+        return [tool for tool in tools if tool.name != name]
+
+    monkeypatch.setattr(server.mcp, "list_tools", without_conditional_tool)
+    monkeypatch.setattr(server, "_container_recommender_available", lambda: True)
+
+    assert name not in {tool["name"] for tool in build_manifest()["tools"]}

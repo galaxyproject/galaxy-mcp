@@ -22,14 +22,17 @@ from galaxy_mcp import server
 MANIFEST_PATH = Path(__file__).parent / "testdata" / "mcp-surface.json"
 REGENERATE_COMMAND = "uv run python -m tests.surface_manifest"
 
-# Tools FastMCP registers only when an optional extra is installed. Synthesizing
+# Tools FastMCP registers only when an optional extra is present. Synthesizing
 # them from the plain module-level function keeps the manifest identical on a
 # machine that has the extra and one that does not, so the surface contract does
-# not depend on how the generating environment was provisioned.
+# not depend on how the generating environment was provisioned. When the extra
+# is available, absence from the server is a registration bug, not a reason to
+# invent a tool in the manifest.
 CONDITIONAL_TOOLS: dict[str, dict[str, Any]] = {
     "recommend_biocontainer": {
         "extra": "container-recommend",
         "tags": ["extended", "read", "tools"],
+        "available": lambda: server._container_recommender_available(),
     },
 }
 
@@ -59,6 +62,8 @@ def build_manifest() -> dict[str, Any]:
     ]
     for name, spec in CONDITIONAL_TOOLS.items():
         if name in registered:
+            continue
+        if spec["available"]():
             continue
         synthesized = Tool.from_function(getattr(server, name), tags=set(spec["tags"]))
         entries.append(_entry(synthesized, spec["extra"]))
