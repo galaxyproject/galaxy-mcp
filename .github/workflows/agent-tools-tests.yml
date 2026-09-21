@@ -6,11 +6,17 @@ on:
     paths:
       - "galaxy-agent-tools/**"
       - ".github/workflows/agent-tools-tests.yml"
+      # The TS parity check reads the Python server's generated surface manifest, so a
+      # change to it has to run this workflow or a new gap lands unnoticed.
+      - "mcp-server-galaxy-py/tests/testdata/mcp-surface.json"
   pull_request:
     branches: [main]
     paths:
       - "galaxy-agent-tools/**"
       - ".github/workflows/agent-tools-tests.yml"
+      # The TS parity check reads the Python server's generated surface manifest, so a
+      # change to it has to run this workflow or a new gap lands unnoticed.
+      - "mcp-server-galaxy-py/tests/testdata/mcp-surface.json"
   workflow_dispatch:
 
 defaults:

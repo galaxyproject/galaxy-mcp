@@ -1,0 +1,342 @@
+{
+  "$comment": "Every way the TypeScript ops and the Python MCP server disagree about which tools exist, what parameters they take and whether they change anything -- one entry each. Wording, value constraints, what is inside an object, whether a tool accepts parameters it does not declare (Python closes its schemas with additionalProperties false, the ops say nothing) and every annotation but the read-only hint are outside what the check compares, so they never show up here. What the check will not do is summarize a construct nobody taught it: it follows no references at all, and a $ref, a $defs, a keyword at the top of an input schema it cannot read, or a composition it does not model stops the run instead of quietly comparing what is left. The parity test fails on a divergence that is not listed here and on a listing the two surfaces no longer support, so this file is the TypeScript to-do list and cannot quietly rot. An entry records that a difference is KNOWN, not that it is fine -- read the status. Statuses: intentional (settled, will not change), pending-port (a TS op is on its way), pending-decision (waiting on a call nobody has made), unreviewed-gap (found by the comparator, nobody has ruled on it yet).",
+  "normalization": {
+    "snakeCaseParamNames": {
+      "enabled": true,
+      "status": "pending-decision",
+      "reason": "TS ops take camelCase parameters on the wire, Python snake_case. Which one wins is an open decision, so the comparator folds the two spellings together rather than listing every parameter on the surface as a divergence. Set this to false once the decision lands and the losing side has been renamed."
+    },
+    "pythonNullDefaults": {
+      "enabled": true,
+      "status": "intentional",
+      "reason": "`x: str | None = None` is how Python spells an optional parameter; the null default carries nothing the TS `.optional()` does not already say."
+    },
+    "optionalNullUnions": {
+      "enabled": true,
+      "status": "intentional",
+      "reason": "An OPTIONAL Python parameter typed `T | None` is compared as plain `T`, because that union is how Python spells optional and requiredness is compared separately. A nullable parameter that is required keeps its null, where the union really is part of the contract."
+    }
+  },
+  "divergences": [
+    {
+      "tool": "connect",
+      "param": null,
+      "kind": "missing-ts-tool",
+      "observed": "python=write (tag) params=[api_key type=string required=false default=none; url type=string required=false default=none]",
+      "status": "intentional",
+      "reason": "TS takes the Galaxy URL and key when the server is built, so there is no per-session connect call to expose."
+    },
+    {
+      "tool": "create_page",
+      "param": null,
+      "kind": "missing-ts-tool",
+      "observed": "python=write (tag) params=[annotation type=string required=false default=none; content type=string required=false default=none; history_id type=string required=false default=none; slug type=string required=false default=none; title type=string required=false default=none]",
+      "status": "pending-port",
+      "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
+    },
+    {
+      "tool": "download_dataset",
+      "param": null,
+      "kind": "mutability-mismatch",
+      "observed": "python=read (tag) typescript=write (hint)",
+      "status": "unreviewed-gap",
+      "reason": "Python tags the tool read; the TS op advertises readOnlyHint false because it can write the bytes to a local path. One of the two is wrong about what read-only means for a tool that touches the caller's disk, and MCP clients gate approval on that hint."
+    },
+    {
+      "tool": "download_dataset",
+      "param": "require_ok_state",
+      "kind": "default-mismatch",
+      "observed": "python=true typescript=none",
+      "status": "unreviewed-gap",
+      "reason": "TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it."
+    },
+    {
+      "tool": "download_dataset",
+      "param": "use_default_filename",
+      "kind": "missing-ts-param",
+      "observed": "python=type=boolean required=false default=true",
+      "status": "unreviewed-gap",
+      "reason": "Python can write next to the dataset's own name; TS only writes to the exact filePath it is given."
+    },
+    {
+      "tool": "get_collection_details",
+      "param": "max_elements",
+      "kind": "default-mismatch",
+      "observed": "python=100 typescript=none",
+      "status": "unreviewed-gap",
+      "reason": "Python always truncates the element list to 100; TS truncates only when asked, so the same call can return a much larger payload."
+    },
+    {
+      "tool": "get_dataset_details",
+      "param": "include_preview",
+      "kind": "missing-ts-param",
+      "observed": "python=type=boolean required=false default=true",
+      "status": "pending-port",
+      "reason": "The TS op's own summary defers content preview to a later phase."
+    },
+    {
+      "tool": "get_dataset_details",
+      "param": "preview_lines",
+      "kind": "missing-ts-param",
+      "observed": "python=type=integer required=false default=10",
+      "status": "pending-port",
+      "reason": "The TS op's own summary defers content preview to a later phase."
+    },
+    {
+      "tool": "get_histories",
+      "param": "offset",
+      "kind": "default-mismatch",
+      "observed": "python=0 typescript=none",
+      "status": "unreviewed-gap",
+      "reason": "TS leaves offset unset and takes Galaxy's default of 0, which is the same value Python sends; only the declaration differs."
+    },
+    {
+      "tool": "get_history_contents",
+      "param": "deleted",
+      "kind": "default-mismatch",
+      "observed": "python=false typescript=none",
+      "status": "unreviewed-gap",
+      "reason": "Python pins deleted=False; TS leaves the filter unset, so Galaxy decides and the same call can return a different set of items."
+    },
+    {
+      "tool": "get_history_contents",
+      "param": "limit",
+      "kind": "default-mismatch",
+      "observed": "python=100 typescript=none",
+      "status": "unreviewed-gap",
+      "reason": "Python caps the listing at 100 items; TS leaves limit unset, so a large history comes back unbounded."
+    },
+    {
+      "tool": "get_history_contents",
+      "param": "offset",
+      "kind": "default-mismatch",
+      "observed": "python=0 typescript=none",
+      "status": "unreviewed-gap",
+      "reason": "TS leaves offset unset and takes Galaxy's default of 0, which is the same value Python sends; only the declaration differs."
+    },
+    {
+      "tool": "get_history_contents",
+      "param": "order",
+      "kind": "missing-ts-param",
+      "observed": "python=type=string required=false default=\"hid-asc\"",
+      "status": "unreviewed-gap",
+      "reason": "Python orders by hid-asc and lets you change it; TS has no ordering control."
+    },
+    {
+      "tool": "get_history_contents",
+      "param": "visible",
+      "kind": "default-mismatch",
+      "observed": "python=true typescript=none",
+      "status": "unreviewed-gap",
+      "reason": "Python pins visible=True; TS leaves the filter unset, so Galaxy decides and the same call can return a different set of items."
+    },
+    {
+      "tool": "get_invocations",
+      "param": "history_id",
+      "kind": "missing-ts-param",
+      "observed": "python=type=string required=false default=none",
+      "status": "pending-port",
+      "reason": "The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version."
+    },
+    {
+      "tool": "get_invocations",
+      "param": "invocation_id",
+      "kind": "required-mismatch",
+      "observed": "python=false typescript=true",
+      "status": "pending-port",
+      "reason": "The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version."
+    },
+    {
+      "tool": "get_invocations",
+      "param": "limit",
+      "kind": "missing-ts-param",
+      "observed": "python=type=integer required=false default=none",
+      "status": "pending-port",
+      "reason": "The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version."
+    },
+    {
+      "tool": "get_invocations",
+      "param": "step_details",
+      "kind": "missing-ts-param",
+      "observed": "python=type=boolean required=false default=false",
+      "status": "pending-port",
+      "reason": "The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version."
+    },
+    {
+      "tool": "get_invocations",
+      "param": "view",
+      "kind": "missing-ts-param",
+      "observed": "python=type=string required=false default=\"collection\"",
+      "status": "pending-port",
+      "reason": "The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version."
+    },
+    {
+      "tool": "get_invocations",
+      "param": "workflow_id",
+      "kind": "missing-ts-param",
+      "observed": "python=type=string required=false default=none",
+      "status": "pending-port",
+      "reason": "The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version."
+    },
+    {
+      "tool": "get_page",
+      "param": null,
+      "kind": "missing-ts-tool",
+      "observed": "python=read (tag) params=[include_rendered type=boolean required=false default=false; page_id type=string required=true default=none]",
+      "status": "pending-port",
+      "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
+    },
+    {
+      "tool": "get_page_revision",
+      "param": null,
+      "kind": "missing-ts-tool",
+      "observed": "python=read (tag) params=[page_id type=string required=true default=none; revision_id type=string required=true default=none]",
+      "status": "pending-port",
+      "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
+    },
+    {
+      "tool": "get_tool_details",
+      "param": "io_details",
+      "kind": "default-mismatch",
+      "observed": "python=false typescript=none",
+      "status": "unreviewed-gap",
+      "reason": "TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it."
+    },
+    {
+      "tool": "get_workflow_input_template",
+      "param": "verbose",
+      "kind": "default-mismatch",
+      "observed": "python=false typescript=none",
+      "status": "unreviewed-gap",
+      "reason": "TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it."
+    },
+    {
+      "tool": "invoke_workflow",
+      "param": "inputs",
+      "kind": "type-mismatch",
+      "observed": "python=anyOf<object|string> typescript=object",
+      "status": "unreviewed-gap",
+      "reason": "Python also accepts a JSON string, which is what agents often send; TS accepts an object only and rejects the string form."
+    },
+    {
+      "tool": "invoke_workflow",
+      "param": "inputs_by",
+      "kind": "default-mismatch",
+      "observed": "python=\"step_index\" typescript=none",
+      "status": "unreviewed-gap",
+      "reason": "TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it."
+    },
+    {
+      "tool": "invoke_workflow",
+      "param": "parameters_normalized",
+      "kind": "default-mismatch",
+      "observed": "python=false typescript=none",
+      "status": "unreviewed-gap",
+      "reason": "TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it."
+    },
+    {
+      "tool": "invoke_workflow",
+      "param": "params",
+      "kind": "type-mismatch",
+      "observed": "python=anyOf<object|string> typescript=object",
+      "status": "unreviewed-gap",
+      "reason": "Python also accepts a JSON string, which is what agents often send; TS accepts an object only and rejects the string form."
+    },
+    {
+      "tool": "list_page_revisions",
+      "param": null,
+      "kind": "missing-ts-tool",
+      "observed": "python=read (tag) params=[page_id type=string required=true default=none; sort_desc type=boolean required=false default=false]",
+      "status": "pending-port",
+      "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
+    },
+    {
+      "tool": "list_pages",
+      "param": null,
+      "kind": "missing-ts-tool",
+      "observed": "python=read (tag) params=[history_id type=string required=false default=none; limit type=integer required=false default=100; offset type=integer required=false default=0; search type=string required=false default=none; show_published type=boolean required=false default=false; show_shared type=boolean required=false default=false]",
+      "status": "pending-port",
+      "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
+    },
+    {
+      "tool": "list_user_tools",
+      "param": "active",
+      "kind": "default-mismatch",
+      "observed": "python=true typescript=none",
+      "status": "unreviewed-gap",
+      "reason": "TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it."
+    },
+    {
+      "tool": "list_workflows",
+      "param": "published",
+      "kind": "default-mismatch",
+      "observed": "python=false typescript=none",
+      "status": "unreviewed-gap",
+      "reason": "TS sends Galaxy's show_published query parameter only when `published` is given, and Galaxy's own default for it is false, the value Python always sends; only the declaration differs."
+    },
+    {
+      "tool": "list_workflows",
+      "param": "workflow_id",
+      "kind": "missing-ts-param",
+      "observed": "python=type=string required=false default=none",
+      "status": "unreviewed-gap",
+      "reason": "Python's list_workflows doubles as a fetch-by-id; TS splits that into get_workflow_details. Probably right, but nobody has confirmed it."
+    },
+    {
+      "tool": "recommend_biocontainer",
+      "param": null,
+      "kind": "missing-ts-tool",
+      "observed": "python=read (tag) params=[packages type=array&items<string> required=true default=none]",
+      "status": "unreviewed-gap",
+      "reason": "Needs galaxy.tool_util's mulled recommender, which has no TS equivalent, so a port means reimplementing mulled name resolution rather than translating an op."
+    },
+    {
+      "tool": "recommend_iwc_workflows",
+      "param": "limit",
+      "kind": "default-mismatch",
+      "observed": "python=5 typescript=none",
+      "status": "unreviewed-gap",
+      "reason": "TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it."
+    },
+    {
+      "tool": "revert_page_revision",
+      "param": null,
+      "kind": "missing-ts-tool",
+      "observed": "python=write (tag) params=[page_id type=string required=true default=none; revision_id type=string required=true default=none]",
+      "status": "pending-port",
+      "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
+    },
+    {
+      "tool": "run_tool",
+      "param": "tool_version",
+      "kind": "missing-py-param",
+      "observed": "typescript=type=string required=false default=none",
+      "status": "unreviewed-gap",
+      "reason": "TS accepts toolVersion; Python's run_tool takes only history_id, tool_id and inputs, so pinning a tool version is not expressible there."
+    },
+    {
+      "tool": "update_page",
+      "param": null,
+      "kind": "missing-ts-tool",
+      "observed": "python=write (tag) params=[content type=string required=false default=none; page_id type=string required=true default=none; title type=string required=false default=none]",
+      "status": "pending-port",
+      "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
+    },
+    {
+      "tool": "upload_file_from_url",
+      "param": "dbkey",
+      "kind": "default-mismatch",
+      "observed": "python=\"?\" typescript=none",
+      "status": "unreviewed-gap",
+      "reason": "TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it."
+    },
+    {
+      "tool": "upload_file_from_url",
+      "param": "file_type",
+      "kind": "default-mismatch",
+      "observed": "python=\"auto\" typescript=none",
+      "status": "unreviewed-gap",
+      "reason": "TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it."
+    }
+  ]
+}
