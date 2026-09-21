@@ -37,11 +37,48 @@ CONDITIONAL_TOOLS: dict[str, dict[str, Any]] = {
 }
 
 
+def _annotations(tool: Tool) -> dict[str, Any]:
+    """The MCP annotations the tool advertises, empty when it advertises none.
+
+    Recorded even though no tool sets one today: the read/write split lives in the
+    tags, so a hint added later would change what a client is told about the tool
+    while leaving every other field of this snapshot alone.
+    """
+    if tool.annotations is None:
+        return {}
+    return tool.annotations.model_dump(exclude_none=True)
+
+
+# The largest integer a JSON number survives as itself. Anything past it is read
+# back by the TypeScript side as a different number, so two declared defaults that
+# differ would compare equal there and nobody would ever see it.
+EXACT_INTEGER_LIMIT = 2**53 - 1
+
+
+def _assert_numbers_survive_json(value: Any, where: str) -> None:
+    if isinstance(value, dict):
+        for key, each in value.items():
+            _assert_numbers_survive_json(each, f"{where}.{key}")
+    elif isinstance(value, list):
+        for index, each in enumerate(value):
+            _assert_numbers_survive_json(each, f"{where}[{index}]")
+    elif isinstance(value, bool):
+        return
+    elif isinstance(value, int) and abs(value) > EXACT_INTEGER_LIMIT:
+        raise ValueError(
+            f"{where} is {value}, which no JSON reader can hand back unchanged; "
+            "the manifest is the contract the TypeScript ops are compared against, "
+            "so a number it cannot carry has to stay out of the surface"
+        )
+
+
 def _entry(tool: Tool, conditional_on: str | None) -> dict[str, Any]:
     entry: dict[str, Any] = {"name": tool.name, "tags": sorted(tool.tags)}
     if conditional_on:
         entry["conditionalOn"] = conditional_on
+    entry["annotations"] = _annotations(tool)
     entry["inputSchema"] = tool.parameters
+    _assert_numbers_survive_json(entry, tool.name)
     return entry
 
 
@@ -55,7 +92,21 @@ def build_manifest() -> dict[str, Any]:
             "catalog; generate the manifest with the default 'full' mode."
         )
 
-    registered = {t.name: t for t in asyncio.run(server.mcp.list_tools(run_middleware=False))}
+    # `run_middleware=False` on purpose: the tag filter is read from the environment,
+    # and the snapshot describes the whole catalog rather than whatever one machine
+    # happens to be showing. The filter can only hide tools, never change what one
+    # takes. What it cannot do is decide between two registrations of one name --
+    # over the wire FastMCP shows the highest version of each, and picking a
+    # different one here would snapshot a tool nobody is served.
+    listed = asyncio.run(server.mcp.list_tools(run_middleware=False))
+    twice = sorted({t.name for t in listed if sum(1 for o in listed if o.name == t.name) > 1})
+    if twice:
+        raise ValueError(
+            f"{', '.join(twice)} is registered more than once, and this snapshot has no way to "
+            "say which registration a client is served; give the tools distinct names or teach "
+            "the generator how the server chooses between them"
+        )
+    registered = {t.name: t for t in listed}
     entries = [
         _entry(tool, CONDITIONAL_TOOLS.get(name, {}).get("extra"))
         for name, tool in registered.items()

@@ -10,6 +10,7 @@
         "workflows",
         "write"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -31,6 +32,7 @@
         "core",
         "write"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -69,6 +71,7 @@
         "histories",
         "write"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -90,6 +93,7 @@
         "pages",
         "write"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -164,6 +168,7 @@
         "tools",
         "write"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -186,6 +191,7 @@
         "tools",
         "write"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -207,6 +213,7 @@
         "datasets",
         "read"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -250,6 +257,7 @@
         "extended",
         "read"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -276,6 +284,7 @@
         "datasets",
         "read"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -307,6 +316,7 @@
         "histories",
         "read"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -350,6 +360,7 @@
         "histories",
         "read"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -396,6 +407,7 @@
         "histories",
         "read"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -417,6 +429,7 @@
         "read",
         "workflows"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -489,6 +502,7 @@
         "niche",
         "read"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -510,6 +524,7 @@
         "niche",
         "read"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {},
@@ -523,6 +538,7 @@
         "jobs",
         "read"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -556,6 +572,7 @@
         "pages",
         "read"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -582,6 +599,7 @@
         "pages",
         "read"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -608,6 +626,7 @@
         "core",
         "read"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {},
@@ -621,6 +640,7 @@
         "read",
         "tools"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -642,6 +662,7 @@
         "read",
         "tools"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -668,6 +689,7 @@
         "read",
         "tools"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -688,6 +710,7 @@
         "read",
         "tools"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {},
@@ -701,6 +724,7 @@
         "read",
         "tools"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -734,6 +758,7 @@
         "read",
         "user"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {},
@@ -747,6 +772,7 @@
         "read",
         "workflows"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -780,6 +806,7 @@
         "read",
         "workflows"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -815,6 +842,7 @@
         "niche",
         "write"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -836,6 +864,7 @@
         "workflows",
         "write"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -923,6 +952,7 @@
         "histories",
         "read"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {},
@@ -936,6 +966,7 @@
         "pages",
         "read"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -962,6 +993,7 @@
         "pages",
         "read"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1020,6 +1052,7 @@
         "read",
         "tools"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1039,6 +1072,7 @@
         "read",
         "workflows"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1083,6 +1117,7 @@
         "tools"
       ],
       "conditionalOn": "container-recommend",
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1107,6 +1142,7 @@
         "niche",
         "read"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1133,6 +1169,7 @@
         "pages",
         "write"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1159,6 +1196,7 @@
         "tools",
         "write"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1191,6 +1229,7 @@
         "tools",
         "write"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1223,6 +1262,7 @@
         "niche",
         "read"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1244,6 +1284,7 @@
         "read",
         "tools"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1268,6 +1309,7 @@
         "read",
         "tools"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1289,6 +1331,7 @@
         "histories",
         "write"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1373,6 +1416,7 @@
         "pages",
         "write"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1418,6 +1462,7 @@
         "datasets",
         "write"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1451,6 +1496,7 @@
         "datasets",
         "write"
       ],
+      "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
