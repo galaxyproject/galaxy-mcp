@@ -248,6 +248,8 @@ SLOTS = [
     },
 ]
 MAP = MAPPING  # from Task 1
+# Shaped like something encode_id would produce: 16 hex digits.
+LIB_ID = "f2db41e1fa331b3e"
 
 
 def test_validate_hard_rejects_wrong_datatype():
@@ -846,7 +848,7 @@ def test_options_values_are_stringified():
 
 @pytest.mark.parametrize("src", ["hda", "ldda", "ld"])
 def test_validate_accepts_every_single_dataset_source(src):
-    res = validate_inputs(SLOTS, {"2": {"src": src, "id": "d1"}}, MAP)
+    res = validate_inputs(SLOTS, {"2": {"src": src, "id": LIB_ID}}, MAP)
 
     assert res["rejects"] == []
 
@@ -854,7 +856,7 @@ def test_validate_accepts_every_single_dataset_source(src):
 @pytest.mark.parametrize("src", ["ldda", "ld"])
 def test_validate_does_not_call_a_library_dataset_a_collection(src):
     """The old message said 'got a collection (ldda)', which was wrong twice over."""
-    res = validate_inputs(SLOTS, {"2": {"src": src, "id": "d1"}}, MAP)
+    res = validate_inputs(SLOTS, {"2": {"src": src, "id": LIB_ID}}, MAP)
 
     assert res["rejects"] == []
     everything = [r["reason"] for r in res["rejects"]] + [w["message"] for w in res["warnings"]]
@@ -866,51 +868,239 @@ def test_validate_still_rejects_a_collection_in_a_data_slot():
 
     assert len(res["rejects"]) == 1
     reason = res["rejects"][0]["reason"]
-    assert "expects a single dataset (hda)" in reason
+    assert "expects a single dataset" in reason
     assert "a dataset collection (hdca)" in reason
+
+
+def test_the_collection_reject_does_not_pretend_galaxy_would_refuse_it():
+    """Galaxy maps a workflow over a collection handed to a data input. This
+    refuses it because it cannot tell that from the wrong reference, and the
+    message has to say which of the two it is."""
+    res = validate_inputs(SLOTS, {"2": {"src": "hdca", "id": "c1"}}, MAP)
+
+    reason = res["rejects"][0]["reason"]
+    assert "map the workflow over its elements" in reason
+    assert "Unknown workflow input source" not in reason
 
 
 def test_validate_reject_names_what_was_actually_passed():
     """Not just 'wrong src' -- the message has to say what arrived."""
     res = validate_inputs(SLOTS, {"0": {"src": "hdca", "id": "c1"}}, MAP)
 
-    assert res["rejects"][0]["reason"] == (
-        "Slot expects a single dataset (hda); got a dataset collection (hdca)."
+    assert res["rejects"][0]["reason"].startswith(
+        "Slot expects a single dataset (src: hda, ldda, ld); got a dataset collection (hdca)."
     )
 
 
-def test_validate_warns_but_does_not_reject_an_unknown_source():
+def test_validate_reject_names_the_sources_it_accepts():
+    """A closed list is only usable if the refusal says what the list is."""
     res = validate_inputs(SLOTS, {"2": {"src": "future_src", "id": "x"}}, MAP)
 
+    assert "(src: hda, ldda, ld);" in res["rejects"][0]["reason"]
+
+
+def test_validate_rejects_an_unrecognised_source():
+    """Passing one through is not free: with no history_id Galaxy creates and
+    commits a history before it decides the src means nothing to it."""
+    res = validate_inputs(SLOTS, {"2": {"src": "future_src", "id": "x"}}, MAP)
+
+    assert len(res["rejects"]) == 1
+    assert "future_src" in res["rejects"][0]["reason"]
+    assert not any("future_src" in w["message"] for w in res["warnings"])
+
+
+@pytest.mark.parametrize("src", ["ldda", "ld"])
+def test_a_library_reference_may_not_carry_an_ext(src):
+    """Galaxy's model for one has src and id and nothing else, so an ext fails
+    there whatever its value -- and fails after the history exists, which is the
+    whole reason to catch it here."""
+    res = validate_inputs(SLOTS, {"0": {"src": src, "id": LIB_ID, "ext": "tabular"}}, MAP)
+
+    assert len(res["rejects"]) == 1
+    reason = res["rejects"][0]["reason"]
+    assert f"A library dataset reference ({src}) is just src and id" in reason
+    assert "the extra key 'ext'" in reason
+
+
+def test_the_library_reference_reject_names_every_stray_key():
+    res = validate_inputs(
+        SLOTS,
+        {"0": {"src": "ldda", "id": LIB_ID, "ext": "tabular", "collection_type": "list"}},
+        MAP,
+    )
+
+    assert "the extra keys 'collection_type', 'ext'" in res["rejects"][0]["reason"]
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [("map_over_type", "x"), ("hid", 3), ("workflow_step_id", "s1"), ("label", "in")],
+)
+def test_a_library_reference_may_carry_the_keys_bioblend_sends(key, value):
+    """The model still tolerates those four, so refusing them would be a false
+    reject on anything that went through bioblend."""
+    res = validate_inputs(SLOTS, {"0": {"src": "ldda", "id": LIB_ID, key: value}}, MAP)
+
     assert res["rejects"] == []
-    assert any("future_src" in w["message"] for w in res["warnings"])
 
 
-def test_a_library_dataset_is_still_datatype_checked():
-    """Accepting the src must not skip the checks that follow it.
+@pytest.mark.parametrize("src", ["ldda", "ld"])
+def test_a_library_reference_needs_an_id(src):
+    """Nothing here ever looked at id, so a reference without one sailed through
+    to Galaxy, which has it as a required field."""
+    res = validate_inputs(SLOTS, {"0": {"src": src}}, MAP)
 
-    Note this feeds ext directly. _enrich_supplied_inputs resolves ext for hda
-    only, so a real ldda arrives without one and draws the "could not determine
-    datatype" warning instead -- that gap is in the caller, not here.
-    """
-    ok = validate_inputs(SLOTS, {"0": {"src": "ldda", "id": "d1", "ext": "tabular"}}, MAP)
-    bad = validate_inputs(SLOTS, {"0": {"src": "ldda", "id": "d2", "ext": "bam"}}, MAP)
+    assert len(res["rejects"]) == 1
+    assert res["rejects"][0]["reason"] == (f"A library dataset reference ({src}) needs an id.")
 
-    assert ok["rejects"] == []
-    assert any("bam" in r["reason"] for r in bad["rejects"])
+
+@pytest.mark.parametrize("bad", [123, 1.5, True, None, ["d1"]])
+def test_a_library_reference_id_must_be_a_string(bad):
+    """Galaxy takes the id as a StrictStr, which coerces nothing."""
+    res = validate_inputs(SLOTS, {"0": {"src": "ldda", "id": bad}}, MAP)
+
+    assert len(res["rejects"]) == 1
+    assert "The id on a library dataset reference must be a string" in (res["rejects"][0]["reason"])
+
+
+def test_a_library_reference_id_must_not_be_empty():
+    """The model would take it, but decode_id will not, and that is just as far
+    past the point where the history exists."""
+    res = validate_inputs(SLOTS, {"0": {"src": "ldda", "id": ""}}, MAP)
+
+    assert len(res["rejects"]) == 1
+    assert res["rejects"][0]["reason"] == (
+        "The id on a library dataset reference must not be empty."
+    )
+
+
+@pytest.mark.parametrize("hid", [None, 3, 0, -1, True, False, 10**30])
+def test_a_library_reference_hid_may_be_any_whole_number(hid):
+    """A bool is an int in Python and the model takes one too, and an int of any
+    size passes there, so none of these may be refused."""
+    res = validate_inputs(SLOTS, {"0": {"src": "ldda", "id": LIB_ID, "hid": hid}}, MAP)
+
+    assert res["rejects"] == []
+
+
+@pytest.mark.parametrize("hid", ["abc", "", 3.5, ["3"], {"a": 1}, "1e2", 1e19])
+def test_a_library_reference_hid_must_be_a_whole_number(hid):
+    res = validate_inputs(SLOTS, {"0": {"src": "ldda", "id": LIB_ID, "hid": hid}}, MAP)
+
+    assert len(res["rejects"]) == 1
+    assert (
+        "The hid on a library dataset reference must be a whole number or null"
+        in (res["rejects"][0]["reason"])
+    )
+
+
+@pytest.mark.parametrize("hid", ["3", "3.0", 3.0, "3.0000000000000001", "9" * 400])
+def test_a_library_reference_hid_is_refused_where_galaxy_would_coerce(hid):
+    """Deliberately stricter than Galaxy. Its field is not strict, so some of
+    these coerce there -- but reproducing that grammar for a legacy key is not
+    worth it, and getting it subtly wrong is how "1e2" and a 400-digit string
+    ended up on the opposite side of the line from where Galaxy puts them. A
+    refusal costs a retry; a miss costs a history."""
+    res = validate_inputs(SLOTS, {"0": {"src": "ldda", "id": LIB_ID, "hid": hid}}, MAP)
+
+    assert len(res["rejects"]) == 1
+    assert "send it as a number" in res["rejects"][0]["reason"]
+
+
+@pytest.mark.parametrize("key", ["map_over_type", "workflow_step_id", "label"])
+@pytest.mark.parametrize("bad", [3, True, 3.5, ["x"], {"a": 1}])
+def test_the_library_reference_legacy_string_fields_must_be_strings(key, bad):
+    res = validate_inputs(SLOTS, {"0": {"src": "ldda", "id": LIB_ID, key: bad}}, MAP)
+
+    assert len(res["rejects"]) == 1
+    assert (
+        f"The {key} on a library dataset reference must be a string or null"
+        in (res["rejects"][0]["reason"])
+    )
+
+
+@pytest.mark.parametrize("key", ["map_over_type", "workflow_step_id", "label"])
+def test_the_library_reference_legacy_string_fields_may_be_null(key):
+    res = validate_inputs(SLOTS, {"0": {"src": "ldda", "id": LIB_ID, key: None}}, MAP)
+
+    assert res["rejects"] == []
+
+
+@pytest.mark.parametrize(
+    "bad", ["xyz", "1", "aa", "f2db41e1fa331b3", "f2db41e1fa331b3e0", "zzzzzzzzzzzzzzzz"]
+)
+def test_a_library_reference_id_must_look_like_an_encoded_id(bad):
+    """decode_id hex-decodes the id and hands it to the cipher, so a non-hex
+    string, an odd-length one and one that is not a whole number of blocks each
+    come back as a MalformedId -- after the history exists."""
+    res = validate_inputs(SLOTS, {"0": {"src": "ldda", "id": bad}}, MAP)
+
+    assert len(res["rejects"]) == 1
+    assert "does not look like a Galaxy encoded id" in res["rejects"][0]["reason"]
+
+
+@pytest.mark.parametrize("ok", ["f2db41e1fa331b3e", "F2DB41E1FA331B3E", "f2db41e1fa331b3e" * 2])
+def test_a_library_reference_id_may_be_any_whole_number_of_blocks(ok):
+    """encode_id pads to whole 8-byte blocks, so 16 hex digits or a multiple of
+    them, and the hex codec takes either case."""
+    res = validate_inputs(SLOTS, {"0": {"src": "ldda", "id": ok}}, MAP)
+
+    assert res["rejects"] == []
+
+
+def test_a_library_reference_reports_every_problem_it_has():
+    """One reject per thing wrong, so a caller fixes them in one pass rather than
+    one round trip each."""
+    res = validate_inputs(SLOTS, {"0": {"src": "ldda", "hid": "abc", "ext": "bam"}}, MAP)
+
+    reasons = sorted(r["reason"] for r in res["rejects"])
+    assert len(reasons) == 3
+    assert "forbids the extra key 'ext'" in reasons[0]
+    assert reasons[1].endswith("needs an id.")
+    assert "must be a whole number or null" in reasons[2]
+
+
+@pytest.mark.parametrize("src", ["ldda", "ld"])
+def test_a_bare_library_reference_still_draws_the_unknown_datatype_warning(src):
+    """Accepting the src must not skip the checks that follow it. Nothing resolves
+    an ext for a library dataset, so the slot's datatype stays unproven."""
+    res = validate_inputs(SLOTS, {"0": {"src": src, "id": LIB_ID}}, MAP)
+
+    assert res["rejects"] == []
+    assert any("Could not determine datatype" in w["message"] for w in res["warnings"])
+
+
+@pytest.mark.parametrize(
+    "ref",
+    [
+        {"src": "hda", "id": "d1", "ext": "bed"},
+        {"src": "hda"},
+        {"src": "hda", "id": 7},
+        {"src": "hda", "id": ""},
+    ],
+)
+def test_the_library_checks_do_not_touch_an_hda_reference(ref):
+    """Galaxy refuses all four, and this accepts all four, exactly as it did
+    before any of this. An hda's ext is where the datatype check has always got
+    its value and the server writes that key itself, so there is no telling the
+    server's value from the caller's by the time this sees the reference; the
+    rest goes with it. Left alone, not endorsed."""
+    res = validate_inputs(SLOTS, {"0": ref}, MAP)
+
+    assert res["rejects"] == []
 
 
 @pytest.mark.parametrize("src", ["hda", "ldda", "ld"])
 def test_a_dataset_source_in_a_collection_slot_is_still_rejected(src):
     """The collection slot's rule is unchanged."""
-    res = validate_inputs(SLOTS, {"1": {"src": src, "id": "d1"}}, MAP)
+    res = validate_inputs(SLOTS, {"1": {"src": src, "id": LIB_ID}}, MAP)
 
     assert any("expects a dataset collection" in r["reason"] for r in res["rejects"])
 
 
 @pytest.mark.parametrize("src", [["hda"], {"a": 1}, 7, None])
 def test_validate_does_not_crash_on_a_non_string_src(src):
-    """A set lookup on an arbitrary JSON value raises; the old != comparison did not.
+    """A dict lookup on an arbitrary JSON value raises; the old != comparison did not.
 
     Worse than a crash: invoke_workflow's preflight catches everything and falls
     back to an empty verdict, so one bad value would disable every other check in
@@ -935,18 +1125,46 @@ def test_one_bad_value_does_not_disable_the_other_checks():
 
 
 def test_a_collection_element_is_rejected_from_a_data_slot():
-    """run_request has no dce branch, so Galaxy refuses it; say so without
-    calling it a collection, since a dce may wrap either."""
+    """Galaxy's request model parses a dce, but run_request has no branch for it,
+    so it is the one refusal here that Galaxy would also make. Call it an element
+    rather than a collection, since a dce may wrap either."""
     res = validate_inputs(SLOTS, {"2": {"src": "dce", "id": "e1"}}, MAP)
 
     assert len(res["rejects"]) == 1
     assert "a collection element (dce)" in res["rejects"][0]["reason"]
 
 
-def test_a_source_galaxy_supports_but_this_does_not_know_is_passed_through():
-    """Galaxy takes url for a data step; refusing it would be a false reject."""
-    res = validate_inputs(SLOTS, {"2": {"src": "url", "id": "https://example/x"}}, MAP)
+# ---------------------------------------------------------------------------
+# A url reference is Galaxy's, but not this checker's
+# ---------------------------------------------------------------------------
+#
+# run_request does dereference one into a new HDA. Its request model is strict
+# about the shape, though -- the location under url or location, a datatype under
+# ext, filetype or extension with the last of those winning, and nothing else
+# allowed -- and a preflight that reads only some of that is worse than one that
+# says up front it does not read it.
+
+
+def test_a_url_reference_is_refused_for_now():
+    res = validate_inputs(
+        SLOTS, {"2": {"src": "url", "url": "https://example/x.txt", "ext": "txt"}}, MAP
+    )
+
+    assert len(res["rejects"]) == 1
+    reason = res["rejects"][0]["reason"]
+    assert "a url reference (url)" in reason
+    assert "Galaxy does take one on a data input" in reason
+    assert "pass the hda" in reason
+
+
+@pytest.mark.parametrize("ext", [["bam"], {"a": 1}, 7])
+def test_a_non_string_ext_does_not_crash_the_validator(ext):
+    """The datatype lookup is a dict lookup, so a list ext raised straight out of
+    validate_inputs, and invoke_workflow's blanket handler would have turned that
+    into an empty verdict that disabled every other check in the call. An hda is
+    the one src that can still get here with one: the server resolves the ext
+    itself and leaves the caller's value alone when that lookup fails."""
+    res = validate_inputs(SLOTS, {"0": {"src": "hda", "id": "d1", "ext": ext}}, MAP)
 
     assert res["rejects"] == []
-    assert any("url" in w["message"] for w in res["warnings"])
-    assert not any("takes hda, ldda or ld" in w["message"] for w in res["warnings"])
+    assert any("Could not determine datatype" in w["message"] for w in res["warnings"])
