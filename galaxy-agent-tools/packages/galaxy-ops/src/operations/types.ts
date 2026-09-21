@@ -12,7 +12,8 @@ export type OperationDomain =
   | "userTools"
   | "workflows"
   | "invocations"
-  | "iwc";
+  | "iwc"
+  | "pages";
 
 /** The parsed input object derived from an op's raw Zod shape. */
 export type InputOf<Shape extends ZodRawShape> = z.infer<ZodObject<Shape>>;

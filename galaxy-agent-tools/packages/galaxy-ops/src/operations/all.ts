@@ -38,3 +38,7 @@ import "./get-workflow-input-template";
 import "./invoke-workflow";
 import "./upload-file";
 import "./upload-file-from-url";
+import "./list-pages";
+import "./get-page";
+import "./create-page";
+import "./update-page";
