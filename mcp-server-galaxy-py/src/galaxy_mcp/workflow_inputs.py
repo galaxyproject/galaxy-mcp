@@ -7,6 +7,7 @@ tools) lives in server.py. Mirrors tool_inputs.py.
 """
 
 import json
+import re
 from typing import Any
 
 
@@ -70,6 +71,115 @@ _INPUT_TYPE_MAP = {
     "parameter_input": "parameter",
 }
 _SRC_MAP = {"data": "hda", "data_collection": "hdca", "parameter": None}
+
+# The srcs a data input slot takes, each of which Galaxy resolves to one dataset:
+# run_request turns a library dataset, in either spelling, into an HDA before the
+# invocation starts (lib/galaxy/workflow/run_request.py). The list is closed,
+# because a src Galaxy has no branch for still costs a created history before it
+# fails.
+_DATA_SRCS = ("hda", "ldda", "ld")
+_DATA_SRC_LIST = ", ".join(_DATA_SRCS)
+# Sources Galaxy's request model parses that a data slot still refuses, each with
+# the rest of the sentence that says why.
+_REFUSED_DATA_SRCS = {
+    "hdca": (
+        "a dataset collection (hdca). Galaxy would map the workflow over its "
+        "elements, but nothing here tells a map-over that was meant apart from "
+        "the wrong reference pasted in, so a data slot wants one dataset"
+    ),
+    "dce": (
+        "a collection element (dce). Galaxy's request model parses one, but "
+        "run_request has no branch for it and answers 'Unknown workflow input "
+        "source'"
+    ),
+    "url": (
+        "a url reference (url). Galaxy does take one on a data input, but its "
+        "request model is strict about the shape and this check cannot read that "
+        "shape yet, so it would only be half-checked -- upload the file first and "
+        "pass the hda"
+    ),
+}
+
+
+# A library dataset reference is its src and its id, and nothing else. The four
+# leftovers the model still tolerates are bioblend's.
+_LIBRARY_SRCS = ("ldda", "ld")
+_LIBRARY_REF_KEYS = frozenset({"src", "id", "map_over_type", "hid", "workflow_step_id", "label"})
+_LIBRARY_STR_KEYS = ("map_over_type", "workflow_step_id", "label")
+# Every shape an encoded id can have: encode_id pads the plaintext to a whole
+# number of 8-byte cipher blocks and hex-encodes it
+# (lib/galaxy/security/idencoding.py:38-49), so an id Galaxy issued is always a
+# positive multiple of 16 hex digits, in either case. Matching proves only that
+# decode_id could get as far as trying; it says nothing about the dataset.
+_ENCODED_ID_RE = re.compile(r"(?:[0-9a-fA-F]{16})+")
+
+
+def _library_ref_problems(src: str, value: dict[str, Any]) -> list[str]:
+    """Everything Galaxy would refuse about a library dataset reference.
+
+    Mirrors DataRequestLdda and DataRequestLd field by field
+    (lib/galaxy/tool_util_models/parameters.py:555-575). They are StrictModel, so
+    an unknown key is refused outright, and ``id`` is a StrictStr, which takes a
+    string and nothing else. An id that is empty or not shaped like an encoded one
+    gets no further than decode_id, which turns the codec's error into a
+    MalformedId (lib/galaxy/security/idencoding.py:91-102).
+    """
+    problems: list[str] = []
+    stray = sorted(k for k in value if k not in _LIBRARY_REF_KEYS)
+    if stray:
+        named = ", ".join(repr(k) for k in stray)
+        problems.append(
+            f"A library dataset reference ({src}) is just src and id;"
+            f" Galaxy's request model forbids the extra"
+            f" {'keys' if len(stray) > 1 else 'key'} {named}."
+        )
+    if "id" not in value:
+        problems.append(f"A library dataset reference ({src}) needs an id.")
+    elif not isinstance(value["id"], str):
+        problems.append(
+            f"The id on a library dataset reference must be a string; {value['id']!r} is not one."
+        )
+    elif not value["id"]:
+        problems.append("The id on a library dataset reference must not be empty.")
+    elif not _ENCODED_ID_RE.fullmatch(value["id"]):
+        problems.append(
+            f"The id on a library dataset reference does not look like a Galaxy"
+            f" encoded id, which is a multiple of 16 hex digits;"
+            f" {value['id']!r} is not."
+        )
+    # Stricter than Galaxy on purpose. The field is not strict there, so pydantic
+    # would coerce "3" and 3.0 -- but reproducing that grammar exactly is not worth
+    # it for a legacy key Galaxy strips from the request anyway: refusing one costs
+    # a retry with an obvious fix, missing one costs a created history. A bool is an
+    # int in Python and the model takes it too, so it stays; size never matters,
+    # since an int of any magnitude passes there.
+    if "hid" in value and not (value["hid"] is None or isinstance(value["hid"], int)):
+        problems.append(
+            f"The hid on a library dataset reference must be a whole number or null;"
+            f" {value['hid']!r} is not one -- send it as a number."
+        )
+    for key in _LIBRARY_STR_KEYS:
+        if key in value and value[key] is not None and not isinstance(value[key], str):
+            problems.append(
+                f"The {key} on a library dataset reference must be a string or null;"
+                f" {value[key]!r} is not one."
+            )
+    return problems
+
+
+def _supplied_ext(value: dict[str, Any]) -> str | None:
+    """The datatype on a data reference, or None if there is no usable one.
+
+    Only an hda reaches here carrying one: the server resolves the ext itself and
+    falls back to whatever the caller put there when that lookup fails, so a list
+    or a dict can still arrive. That would raise out of the datatype lookup --
+    which invoke_workflow's blanket handler would turn into an empty verdict,
+    disabling every other check in the same call.
+    """
+    ext = value.get("ext")
+    return ext if isinstance(ext, str) else None
+
+
 _FALLBACK_LABEL = {
     "data": "Input dataset",
     "data_collection": "Input dataset collection",
@@ -377,19 +487,42 @@ def validate_inputs(
             continue
 
         if itype == "data":
-            if value["src"] != "hda":
+            src = value["src"]
+            # src arrives from whatever the caller sent, so it need not be a string
+            # and must not be used as a dict key before that is established.
+            got: str | None
+            if not isinstance(src, str):
+                got = f"a {type(src).__name__} where a src string was expected"
+            elif src in _REFUSED_DATA_SRCS:
+                got = _REFUSED_DATA_SRCS[src]
+            elif src not in _DATA_SRCS:
+                got = f"src '{src}'"
+            else:
+                got = None
+            if got is not None:
                 rejects.append(
                     {
                         "step_index": slot["step_index"],
                         "label": slot["label"],
                         "reason": (
-                            f"Slot expects a single dataset (hda);"
-                            f" got a collection ({value['src']})."
+                            f"Slot expects a single dataset (src: {_DATA_SRC_LIST}); got {got}."
                         ),
                     }
                 )
                 continue
-            ext = value.get("ext")
+            if src in _LIBRARY_SRCS:
+                problems = _library_ref_problems(src, value)
+                if problems:
+                    rejects.extend(
+                        {
+                            "step_index": slot["step_index"],
+                            "label": slot["label"],
+                            "reason": problem,
+                        }
+                        for problem in problems
+                    )
+                    continue
+            ext = _supplied_ext(value)
             if ext and not _ext_accepted(ext, slot, mapping):
                 rejects.append(
                     {
