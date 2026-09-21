@@ -176,7 +176,7 @@ client sees.
 - `get_job_details`: The job that produced a dataset, with its state and parameters
 - `upload_file`: Upload a local file into a history
 - `upload_file_from_url`: Have Galaxy fetch a file from a URL into a history
-- `download_dataset`: Fetch a dataset's content, optionally writing it to disk
+- `download_dataset`: Download a dataset to a `file_path` on disk
 
 ### Galaxy tools
 
@@ -185,7 +185,7 @@ client sees.
 - `get_tool_details`: A tool's metadata, optionally including its full input schema
 - `get_tool_panel`: The tool panel as Galaxy organizes it, section by section
 - `get_tool_citations`: How to cite a tool
-- `get_tool_run_examples`: The tool's own XML test definitions -- real, working invocations
+- `get_tool_run_examples`: The tool's own XML test definitions, as written -- good for seeing how inputs are shaped, but some expect failure and their input files are test fixtures
 - `get_tool_input_template`: A ready-to-fill `inputs` skeleton plus a compact schema; call this before `run_tool` when the shape is unclear
 - `run_tool`: Run a Galaxy tool in a history
 - `recommend_biocontainer`: Resolve a verified `quay.io/biocontainers` image for a set of conda packages. Registered **only** when the `container-recommend` extra is installed
@@ -225,7 +225,9 @@ These tools read that public manifest; only the import touches your Galaxy.
 ### Pages
 
 Pages are Galaxy-flavored markdown documents. One attached to a history is a Notebook; a
-standalone one is a Report. Embedded datasets are referenced by encoded id.
+standalone one is a Report. Embedded datasets are referenced by encoded id. Pages written as
+HTML in the Galaxy UI are the exception: their body is in `content`, which `get_page` only
+returns with `include_rendered`, and they stay HTML when updated, so don't send markdown to one.
 
 - `list_pages`: Pages, optionally filtered by history or search term
 - `get_page`: A page and its latest revision, editable markdown and optionally rendered
@@ -363,16 +365,16 @@ Test across multiple Python versions using tox:
 
 ```bash
 # Test on all supported Python versions
-tox
+uv run tox
 
 # Test on specific version
-tox -e py312
+uv run tox -e py312
 
 # Run only linting
-tox -e lint
+uv run tox -e lint
 
 # Run type checking
-tox -e type
+uv run tox -e type
 ```
 
 ### Pre-commit Hooks

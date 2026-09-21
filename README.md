@@ -52,7 +52,7 @@ doesn't advertise it.
 ```bash
 uvx --from 'galaxy-mcp[container-recommend]' galaxy-mcp
 # or, for a local checkout:
-uv sync --extra container-recommend
+cd mcp-server-galaxy-py && uv sync --extra container-recommend
 ```
 
 The same resolver is also available as a standalone CLI once installed:
