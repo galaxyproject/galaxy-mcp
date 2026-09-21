@@ -1,5 +1,5 @@
 {
-  "$comment": "Every way the TypeScript ops and the Python MCP server disagree, one entry each. The parity test fails on a divergence that is not listed here and on a listing the two surfaces no longer support, so this file is the TypeScript to-do list and cannot quietly rot. An entry records that a difference is KNOWN, not that it is fine -- read the status. Statuses: intentional (settled, will not change), pending-port (a TS op is on its way), pending-decision (waiting on a call nobody has made), unreviewed-gap (found by the comparator, nobody has ruled on it yet).",
+  "$comment": "Every way the TypeScript ops and the Python MCP server disagree about which tools exist, what parameters they take and whether they change anything -- one entry each. Wording, value constraints, what is inside an object, whether a tool accepts parameters it does not declare (Python closes its schemas with additionalProperties false, the ops say nothing) and every annotation but the read-only hint are outside what the check compares, so they never show up here. What the check will not do is summarize a construct nobody taught it: it follows no references at all, and a $ref, a $defs, a keyword at the top of an input schema it cannot read, or a composition it does not model stops the run instead of quietly comparing what is left. The parity test fails on a divergence that is not listed here and on a listing the two surfaces no longer support, so this file is the TypeScript to-do list and cannot quietly rot. An entry records that a difference is KNOWN, not that it is fine -- read the status. Statuses: intentional (settled, will not change), pending-port (a TS op is on its way), pending-decision (waiting on a call nobody has made), unreviewed-gap (found by the comparator, nobody has ruled on it yet).",
   "normalization": {
     "snakeCaseParamNames": {
       "enabled": true,
@@ -22,7 +22,7 @@
       "tool": "connect",
       "param": null,
       "kind": "missing-ts-tool",
-      "observed": "",
+      "observed": "python=write (tag) params=[api_key type=string required=false default=none; url type=string required=false default=none]",
       "status": "intentional",
       "reason": "TS takes the Galaxy URL and key when the server is built, so there is no per-session connect call to expose."
     },
@@ -30,7 +30,7 @@
       "tool": "create_page",
       "param": null,
       "kind": "missing-ts-tool",
-      "observed": "",
+      "observed": "python=write (tag) params=[annotation type=string required=false default=none; content type=string required=false default=none; history_id type=string required=false default=none; slug type=string required=false default=none; title type=string required=false default=none]",
       "status": "pending-port",
       "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
     },
@@ -38,7 +38,7 @@
       "tool": "download_dataset",
       "param": null,
       "kind": "mutability-mismatch",
-      "observed": "python=read typescript=write",
+      "observed": "python=read (tag) typescript=write (hint)",
       "status": "unreviewed-gap",
       "reason": "Python tags the tool read; the TS op advertises readOnlyHint false because it can write the bytes to a local path. One of the two is wrong about what read-only means for a tool that touches the caller's disk, and MCP clients gate approval on that hint."
     },
@@ -182,7 +182,7 @@
       "tool": "get_page",
       "param": null,
       "kind": "missing-ts-tool",
-      "observed": "",
+      "observed": "python=read (tag) params=[include_rendered type=boolean required=false default=false; page_id type=string required=true default=none]",
       "status": "pending-port",
       "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
     },
@@ -190,7 +190,7 @@
       "tool": "get_page_revision",
       "param": null,
       "kind": "missing-ts-tool",
-      "observed": "",
+      "observed": "python=read (tag) params=[page_id type=string required=true default=none; revision_id type=string required=true default=none]",
       "status": "pending-port",
       "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
     },
@@ -246,7 +246,7 @@
       "tool": "list_page_revisions",
       "param": null,
       "kind": "missing-ts-tool",
-      "observed": "",
+      "observed": "python=read (tag) params=[page_id type=string required=true default=none; sort_desc type=boolean required=false default=false]",
       "status": "pending-port",
       "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
     },
@@ -254,7 +254,7 @@
       "tool": "list_pages",
       "param": null,
       "kind": "missing-ts-tool",
-      "observed": "",
+      "observed": "python=read (tag) params=[history_id type=string required=false default=none; limit type=integer required=false default=100; offset type=integer required=false default=0; search type=string required=false default=none; show_published type=boolean required=false default=false; show_shared type=boolean required=false default=false]",
       "status": "pending-port",
       "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
     },
@@ -286,7 +286,7 @@
       "tool": "recommend_biocontainer",
       "param": null,
       "kind": "missing-ts-tool",
-      "observed": "",
+      "observed": "python=read (tag) params=[packages type=array&items<string> required=true default=none]",
       "status": "unreviewed-gap",
       "reason": "Needs galaxy.tool_util's mulled recommender, which has no TS equivalent, so a port means reimplementing mulled name resolution rather than translating an op."
     },
@@ -302,7 +302,7 @@
       "tool": "revert_page_revision",
       "param": null,
       "kind": "missing-ts-tool",
-      "observed": "",
+      "observed": "python=write (tag) params=[page_id type=string required=true default=none; revision_id type=string required=true default=none]",
       "status": "pending-port",
       "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
     },
@@ -318,7 +318,7 @@
       "tool": "update_page",
       "param": null,
       "kind": "missing-ts-tool",
-      "observed": "",
+      "observed": "python=write (tag) params=[content type=string required=false default=none; page_id type=string required=true default=none; title type=string required=false default=none]",
       "status": "pending-port",
       "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
     },

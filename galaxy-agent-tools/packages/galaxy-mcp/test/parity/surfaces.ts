@@ -6,11 +6,17 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../../src/server";
 import {
+  describe as describeValue,
+  isPlainObject,
+  read,
+  surfaceByName,
   NORMALIZATION_RULES,
   type DivergenceKind,
   type JsonSchema,
   type Normalization,
   type NormalizationRuleName,
+  type Surface,
+  type ToolAnnotations,
   type ToolContract,
 } from "./compare";
 
@@ -31,6 +37,8 @@ export interface ManifestTool {
   tags: string[];
   /** Set when the Python server registers the tool only under an optional extra. */
   conditionalOn?: string;
+  /** The MCP annotations the Python tool advertises; empty when it advertises none. */
+  annotations: ToolAnnotations;
   inputSchema: JsonSchema;
 }
 
@@ -88,21 +96,67 @@ export function loadRegistry(): Registry {
 
 /** Every rule the comparator knows about, switched by the registry. */
 export function normalizationFrom(registry: Registry): Normalization {
-  const rules = {} as Normalization;
+  const node = registry as unknown as Record<string, unknown>;
+  const written = (read(node, "normalization", "object", "the registry") ?? {}) as Record<
+    string,
+    unknown
+  >;
+  // Read as the registry's own entries: looked up on an object, a rule named like
+  // something every object answers to would be found whether it wrote one or not.
+  const declared = new Map(Object.entries(written));
+  const switches: [NormalizationRuleName, boolean][] = [];
   for (const name of NORMALIZATION_RULES) {
-    const rule = registry.normalization?.[name];
+    const rule = declared.get(name);
     if (!rule) throw new Error(`the registry does not declare the "${name}" normalization rule`);
-    rules[name] = rule.enabled;
+    if (!isPlainObject(rule)) {
+      throw new Error(`the registry's "${name}" rule is ${describeValue(rule)}, not a rule`);
+    }
+    const enabled = read(rule, "enabled", "boolean", `the registry's "${name}" rule`);
+    if (enabled === undefined) {
+      throw new Error(`the registry does not say whether "${name}" is enabled`);
+    }
+    switches.push([name, enabled as boolean]);
   }
-  return rules;
+  return Object.fromEntries(switches) as Normalization;
 }
 
-export function pythonSurface(manifest: Manifest): Record<string, ToolContract> {
-  return Object.fromEntries(
-    manifest.tools.map((t) => [
-      t.name,
-      { inputSchema: t.inputSchema, mutating: t.tags.includes("write") },
-    ]),
+export function pythonSurface(manifest: Manifest): Surface {
+  const node = manifest as unknown as Record<string, unknown>;
+  const tools = read(node, "tools", "list", "the manifest");
+  if (tools === undefined) throw new Error("the manifest does not list any tools");
+  return surfaceByName(
+    (tools as unknown[]).map((entry, index) => {
+      const where = `the manifest's tool ${index}`;
+      if (!isPlainObject(entry)) {
+        throw new Error(`${where} is ${describeValue(entry)}, not a tool`);
+      }
+      const name = read(entry, "name", "string", where);
+      if (name === undefined) throw new Error(`${where} has no name`);
+      const about = `${name as string} (manifest)`;
+      // Each of these is read rather than defaulted: a manifest that stopped
+      // recording one would quietly take the comparison back to guessing.
+      const annotations = read(entry, "annotations", "object", about);
+      if (annotations === undefined) {
+        throw new Error(`the manifest does not say what ${name as string} advertises`);
+      }
+      const inputSchema = read(entry, "inputSchema", "object", about);
+      if (inputSchema === undefined) {
+        throw new Error(`the manifest does not say what ${name as string} takes`);
+      }
+      const tags = read(entry, "tags", "names", about);
+      if (tags === undefined) {
+        throw new Error(`the manifest does not say how ${name as string} is tagged`);
+      }
+      return [
+        name as string,
+        {
+          inputSchema: inputSchema as JsonSchema,
+          annotations: annotations as ToolAnnotations,
+          tags: tags as string[],
+        },
+      ] as [string, ToolContract];
+    }),
+    "the manifest",
   );
 }
 
@@ -110,21 +164,28 @@ export function pythonSurface(manifest: Manifest): Record<string, ToolContract> 
  * What an MCP client actually sees from this package -- asked of a running server
  * rather than rebuilt from the op shapes, so a registration bug shows up here too.
  */
-export async function typescriptSurface(): Promise<Record<string, ToolContract>> {
+export async function typescriptSurface(): Promise<Surface> {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const server = buildServer({ baseUrl: "https://galaxy.invalid", apiKey: "not-used" });
   const client = new Client({ name: "parity-check", version: "0" });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {
     const { tools } = await client.listTools();
-    return Object.fromEntries(
-      tools.map((t) => [
-        t.name,
-        {
-          inputSchema: t.inputSchema as JsonSchema,
-          mutating: t.annotations?.readOnlyHint === false,
-        },
-      ]),
+    return surfaceByName(
+      tools.map((t) => {
+        const advertised = t as unknown as Record<string, unknown>;
+        const where = `${t.name} (advertised)`;
+        return [
+          t.name,
+          {
+            inputSchema: (read(advertised, "inputSchema", "object", where) ?? {}) as JsonSchema,
+            // No tags: an MCP server advertises the read/write split as a hint or not at all.
+            annotations: (read(advertised, "annotations", "object", where) ??
+              {}) as ToolAnnotations,
+          },
+        ] as [string, ToolContract];
+      }),
+      "the advertised tools",
     );
   } finally {
     await client.close();
