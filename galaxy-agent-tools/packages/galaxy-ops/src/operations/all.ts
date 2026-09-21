@@ -42,3 +42,6 @@ import "./list-pages";
 import "./get-page";
 import "./create-page";
 import "./update-page";
+import "./list-page-revisions";
+import "./get-page-revision";
+import "./revert-page-revision";

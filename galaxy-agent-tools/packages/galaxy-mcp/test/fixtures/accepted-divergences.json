@@ -179,14 +179,6 @@
       "reason": "TS applies the same default inside run() but leaves it off the advertised schema, so an agent reading the tool cannot see it. The TS op passes `i.includeRendered ?? false` to stripRendered; declaring `.default(false)` on the input closes it."
     },
     {
-      "tool": "get_page_revision",
-      "param": null,
-      "kind": "missing-ts-tool",
-      "observed": "python=read (tag) params=[page_id type=string required=true default=none; revision_id type=string required=true default=none]",
-      "status": "pending-port",
-      "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
-    },
-    {
       "tool": "get_tool_details",
       "param": "io_details",
       "kind": "default-mismatch",
@@ -236,11 +228,11 @@
     },
     {
       "tool": "list_page_revisions",
-      "param": null,
-      "kind": "missing-ts-tool",
-      "observed": "python=read (tag) params=[page_id type=string required=true default=none; sort_desc type=boolean required=false default=false]",
+      "param": "sort_desc",
+      "kind": "default-mismatch",
+      "observed": "python=false typescript=none",
       "status": "pending-port",
-      "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
+      "reason": "TS applies the same default inside run() but leaves it off the advertised schema, so an agent reading the tool cannot see it. The TS op sends `i.sortDesc ?? false` as the sort_desc query parameter; declaring `.default(false)` on the input closes it."
     },
     {
       "tool": "list_pages",
@@ -313,14 +305,6 @@
       "observed": "python=5 typescript=none",
       "status": "unreviewed-gap",
       "reason": "TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it."
-    },
-    {
-      "tool": "revert_page_revision",
-      "param": null,
-      "kind": "missing-ts-tool",
-      "observed": "python=write (tag) params=[page_id type=string required=true default=none; revision_id type=string required=true default=none]",
-      "status": "pending-port",
-      "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
     },
     {
       "tool": "run_tool",
