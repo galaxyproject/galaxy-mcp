@@ -1,7 +1,7 @@
 # @galaxyproject/galaxy-cli
 
 Galaxy agent operations on the command line. One subcommand per operation --
-histories, datasets, tools, workflows, and the IWC catalog -- with table / JSON
+histories, datasets, tools, workflows, pages, and the IWC catalog -- with table / JSON
 output and meaningful exit codes. Built on
 [`@galaxyproject/galaxy-ops`](https://www.npmjs.com/package/@galaxyproject/galaxy-ops).
 

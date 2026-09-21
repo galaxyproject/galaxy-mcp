@@ -3,7 +3,7 @@
 A TypeScript toolkit for driving the [Galaxy](https://galaxyproject.org/)
 bioinformatics platform from the command line and from AI agents. It exposes
 Galaxy's core operations -- histories, datasets, tools, workflows, invocations,
-the IWC catalog -- two ways, both built on a single shared core:
+pages, the IWC catalog -- two ways, both built on a single shared core:
 
 - **`galaxy-cli`** -- a command-line tool. One subcommand per operation, with
   table / JSON / plain-text output and meaningful exit codes. Good for scripts,
@@ -281,6 +281,22 @@ the rest are read-only.
 | `search_iwc_workflows` | Search curated IWC workflows by substring |
 | `recommend_iwc_workflows` | Rank IWC workflows by relevance to a free-text intent (BM25) |
 | `import_workflow_from_iwc` *(write)* | Import an IWC curated workflow into the connected Galaxy |
+
+### Pages (notebooks & reports)
+| Operation | What it does |
+| --- | --- |
+| `list_pages` | List pages (markdown notebooks and reports); filter to one history's notebooks |
+| `get_page` | One page with its editable `content_editor` markdown |
+| `create_page` *(write)* | Create a standalone report, or a notebook attached to a history |
+| `update_page` *(write)* | Update a page's content, creating a new revision, or just its title, which does not |
+| `list_page_revisions` | A page's revision history, newest or oldest first |
+| `get_page_revision` | One revision: the editable `content_editor` and the expanded `content` |
+| `revert_page_revision` *(write)* | Restore an earlier revision by writing it back as a new one |
+
+These need Galaxy 26.1 or newer -- earlier servers have no pages revision API and
+return nothing editable from create or update. `content_editor` on a *revision* is
+newer still and arrives after 26.1; where a server does not send it, the ops fill it
+from that revision's `content`, which has its embeds already expanded.
 
 Run `galaxy-cli <command> --help` for the exact arguments of any one.
 

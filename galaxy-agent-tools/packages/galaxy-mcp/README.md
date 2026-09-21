@@ -2,7 +2,7 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server (Node) that
 exposes [Galaxy](https://galaxyproject.org/) agent operations -- histories,
-datasets, tools, workflows, and the IWC catalog -- as MCP tools over stdio. Built
+datasets, tools, workflows, pages, and the IWC catalog -- as MCP tools over stdio. Built
 on [`@galaxyproject/galaxy-ops`](https://www.npmjs.com/package/@galaxyproject/galaxy-ops).
 
 ## Install / run
