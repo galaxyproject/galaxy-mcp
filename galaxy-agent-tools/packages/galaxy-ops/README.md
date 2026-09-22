@@ -41,6 +41,13 @@ typed data or throws a typed `GalaxyError`. For the surface-style envelope
 registered op with `runWithEnvelope`; iterate `allOperations` to enumerate the
 full set.
 
+An operation may declare a minimum Galaxy version (`requires: { galaxy: ">=26.1" }`).
+That is checked before the operation runs -- through the direct call above as much as
+through `runWithEnvelope` -- and a server that is too old is refused with a
+`GalaxyVersionError` before any request is sent. The version is read from
+`/api/version` once per context, or taken from the `serverVersion` you pass to
+`createGalaxyContext`; a version that cannot be read refuses nothing.
+
 ## Documentation
 
 See the [galaxy-agent-tools workspace README](https://github.com/galaxyproject/galaxy-mcp/tree/main/galaxy-agent-tools#readme)
