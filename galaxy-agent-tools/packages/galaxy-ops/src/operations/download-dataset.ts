@@ -6,7 +6,7 @@ import { writeFile } from "node:fs/promises";
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { classifyHttp, GalaxyConnectionError } from "../errors";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 export interface DownloadDatasetResult {
@@ -114,4 +114,4 @@ export const downloadDatasetOp: Operation<typeof input, DownloadDatasetResult> =
 
 register(downloadDatasetOp as AnyOperation);
 
-export const downloadDataset = (i: In, ctx: GalaxyContext) => downloadDatasetOp.run(i, ctx);
+export const downloadDataset = (i: In, ctx: GalaxyContext) => runOperation(downloadDatasetOp, i, ctx);

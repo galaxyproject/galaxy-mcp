@@ -5,11 +5,14 @@
 // carry ENCODED ids (e.g. history_dataset_display(history_dataset_id=f2db41e1fa331b3e)),
 // so there is no encode/decode step: content_editor is read, edited and posted back as-is.
 //
-// These ops need Galaxy 26.1. The models below are hand-written from its schema because the
-// pinned bindings are 26.0.x, which predate the notebook work: a page there has no history_id
-// and no edit_source, its slug is required rather than optional, /api/pages/{id}/revisions* is
-// absent entirely, and create/update declare a response_model of PageSummary -- which carries no
-// content_editor at all, so against a 26.0 server those two ops return nothing worth editing.
+// Most of these ops declare Galaxy 26.1, each for its own reason -- get_page does not, because
+// 26.0 already answers it with a content_editor. list_pages does, not for the endpoint but for
+// its history filter, which 26.0 ignores while answering with every page the user can see.
+// The models below are hand-written from 26.1's schema because the pinned bindings are 26.0.x,
+// which predate the notebook work: a page there has no history_id and no edit_source, its slug
+// is required rather than optional, /api/pages/{id}/revisions* is absent entirely, the update
+// payload has no content field at all, and create/update declare a response_model of
+// PageSummary -- which carries no content_editor, so those two return nothing worth editing.
 // One field runs the other way: content_editor on a REVISION postdates 26.1 and is not in its
 // schema, so the revision model below describes both shapes rather than only the newer one.
 // Deriving from the bindings is not an option either way: the 26.0 PageDetails ends in an
@@ -78,28 +81,43 @@ export interface PageRevisionResponse extends PageRevisionSummary {
   title?: string | null;
 }
 
+/** Which field of the response the editable markdown was taken from. */
+export type ContentEditorSource = "server" | "content" | "none";
+
 /**
  * A revision as the ops hand it on. `content_editor` is the editable markdown with its
  * directives intact and `content` is the same document with its embeds expanded for export, so
- * callers edit and send back `content_editor`. Where the server sends no content_editor it is
- * filled from `content`, and then both carry the expanded form -- editing that and passing it to
- * update_page bakes the expansion into the page.
+ * callers edit and send back `content_editor`.
+ *
+ * `content_editor_source` says where that text came from, as a fact about the response rather
+ * than a guess from the server's version: "server" is the revision's own content_editor,
+ * "content" is the expanded render standing in for it -- editing that and passing it to
+ * update_page bakes the expansion into the page -- and "none" is a revision that carried
+ * neither, where content_editor is null.
  */
 export interface PageRevisionDetails extends PageRevisionResponse {
   content_editor: string | null;
+  content_editor_source: ContentEditorSource;
 }
 
 /**
- * Give a revision one field to edit whatever the server sent.
+ * Give a revision one field to edit whatever the server sent, and say which it was.
  *
  * `content` is the only body an older Galaxy puts in a revision, so falling back to it beats
- * handing a caller nothing. Empty counts as missing: content_editor defaults to the empty
- * string and Galaxy fills it on the markdown path only, so an HTML revision arrives with an
- * empty one and its body in `content`. Copies rather than handing back the parsed response.
+ * handing a caller nothing -- but silently, a caller cannot tell an expanded body from an
+ * editable one, so the fallback is reported rather than inferred. Empty counts as missing:
+ * content_editor defaults to the empty string and Galaxy fills it on the markdown path only,
+ * so an HTML revision arrives with an empty one and its body in `content`. Copies rather than
+ * handing back the parsed response.
  */
 export function withEditableContent(rev: PageRevisionResponse): PageRevisionDetails {
-  const editable = rev.content_editor || rev.content;
-  return { ...rev, content_editor: editable ?? null };
+  if (rev.content_editor) {
+    return { ...rev, content_editor: rev.content_editor, content_editor_source: "server" };
+  }
+  if (rev.content != null) {
+    return { ...rev, content_editor: rev.content, content_editor_source: "content" };
+  }
+  return { ...rev, content_editor: null, content_editor_source: "none" };
 }
 
 /**

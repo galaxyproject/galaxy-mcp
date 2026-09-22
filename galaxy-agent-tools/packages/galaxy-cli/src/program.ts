@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import {
   allOperations,
+  describeOperation,
   runWithEnvelope,
   createGalaxyContext,
   type GalaxyContext,
@@ -28,7 +29,7 @@ export function buildProgram(deps: CliDeps = {}): Command {
     .option("--timeout <ms>", "poll timeout for blocking ops");
 
   for (const op of allOperations) {
-    const cmd = program.command(op.name).description(op.summary);
+    const cmd = program.command(op.name).description(describeOperation(op));
     applyInputs(cmd, op);
     cmd.action(async (...args: unknown[]) => {
       // commander passes positionals..., the command's own options, then the Command.

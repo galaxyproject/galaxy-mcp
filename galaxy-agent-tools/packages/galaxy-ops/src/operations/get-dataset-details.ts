@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 export type DatasetDetail = GetJson<"/api/datasets/{dataset_id}">;
@@ -29,4 +29,4 @@ export const getDatasetDetailsOp: Operation<typeof input, DatasetDetail> = {
 
 register(getDatasetDetailsOp as AnyOperation);
 
-export const getDatasetDetails = (i: In, ctx: GalaxyContext) => getDatasetDetailsOp.run(i, ctx);
+export const getDatasetDetails = (i: In, ctx: GalaxyContext) => runOperation(getDatasetDetailsOp, i, ctx);

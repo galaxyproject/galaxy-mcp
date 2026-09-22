@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 export type HistoryContents = GetJson<"/api/histories/{history_id}/contents">;
@@ -38,4 +38,4 @@ export const getHistoryContentsOp: Operation<typeof input, HistoryContents> = {
 
 register(getHistoryContentsOp as AnyOperation);
 
-export const getHistoryContents = (i: In, ctx: GalaxyContext) => getHistoryContentsOp.run(i, ctx);
+export const getHistoryContents = (i: In, ctx: GalaxyContext) => runOperation(getHistoryContentsOp, i, ctx);

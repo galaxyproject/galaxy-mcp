@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { legacyGet } from "../legacy";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 export interface ToolKeywordMatch {
@@ -139,4 +139,4 @@ export const searchToolsByKeywordsOp: Operation<typeof input, ToolKeywordMatch[]
 
 register(searchToolsByKeywordsOp as AnyOperation);
 
-export const searchToolsByKeywords = (i: In, ctx: GalaxyContext) => searchToolsByKeywordsOp.run(i, ctx);
+export const searchToolsByKeywords = (i: In, ctx: GalaxyContext) => runOperation(searchToolsByKeywordsOp, i, ctx);

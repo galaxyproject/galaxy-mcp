@@ -11,12 +11,22 @@ export {
 } from "./version";
 export { isJobTerminal, isJobSuccess } from "./terminal-states";
 export type { Operation, OperationDomain, GalaxyResult, Pagination, InputOf, AnyOperation } from "./operations/types";
-export { allOperations, runWithEnvelope } from "./operations/registry";
+export {
+  allOperations,
+  assertVersionSupported,
+  describeOperation,
+  runOperation,
+  runWithEnvelope,
+} from "./operations/registry";
 export { getUserOp, getUser, type CurrentUser } from "./operations/get-user";
 export { runToolOp, runTool } from "./operations/run-tool";
 export type { ToolRun, ToolInputs, ImplicitCollectionRef } from "./execute-tool-request";
 export { getInvocationsOp, getInvocations, type InvocationDetail } from "./operations/get-invocations";
-export { getServerInfoOp, getServerInfo, type ServerInfo } from "./operations/get-server-info";
+export {
+  getServerInfoOp,
+  getServerInfo,
+  type ServerInfo,
+} from "./operations/get-server-info";
 export { getHistoriesOp, getHistories, type Histories } from "./operations/get-histories";
 export { listHistoryIdsOp, listHistoryIds, type HistoryRef } from "./operations/list-history-ids";
 export { getHistoryDetailsOp, getHistoryDetails, type HistoryDetail } from "./operations/get-history-details";
@@ -57,7 +67,13 @@ export { updatePageOp, updatePage } from "./operations/update-page";
 export { listPageRevisionsOp, listPageRevisions } from "./operations/list-page-revisions";
 export { getPageRevisionOp, getPageRevision } from "./operations/get-page-revision";
 export { revertPageRevisionOp, revertPageRevision } from "./operations/revert-page-revision";
-export type { PageSummary, PageDetail, PageRevisionSummary, PageRevisionDetails } from "./operations/pages-common";
+export type {
+  PageSummary,
+  PageDetail,
+  PageRevisionSummary,
+  PageRevisionDetails,
+  ContentEditorSource,
+} from "./operations/pages-common";
 export type { WorkflowInputTemplate, WorkflowSlot, WorkflowGuide, DatatypesMapping, ValidationReport } from "./workflow-inputs";
 export { validateInputs, subtypeSatisfies } from "./workflow-inputs";
 export type { IwcWorkflow, EnrichedIwcWorkflow } from "./iwc-manifest";

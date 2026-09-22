@@ -1,5 +1,5 @@
 import type { GalaxyContext } from "../context";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import { getHistoriesOp } from "./get-histories";
 import type { AnyOperation, Operation } from "./types";
 
@@ -8,7 +8,7 @@ export interface HistoryRef { id: string; name: string; }
 const input = {};
 
 async function run(_in: Record<string, never>, ctx: GalaxyContext): Promise<HistoryRef[]> {
-  const histories = (await getHistoriesOp.run({}, ctx)) as Array<{ id?: string; name?: string }>;
+  const histories = (await runOperation(getHistoriesOp, {}, ctx)) as Array<{ id?: string; name?: string }>;
   return histories.map((h) => ({ id: h.id ?? "", name: h.name ?? "" }));
 }
 
@@ -23,4 +23,4 @@ export const listHistoryIdsOp: Operation<typeof input, HistoryRef[]> = {
 
 register(listHistoryIdsOp as AnyOperation);
 
-export const listHistoryIds = (i: Record<string, never>, ctx: GalaxyContext) => listHistoryIdsOp.run(i, ctx);
+export const listHistoryIds = (i: Record<string, never>, ctx: GalaxyContext) => runOperation(listHistoryIdsOp, i, ctx);

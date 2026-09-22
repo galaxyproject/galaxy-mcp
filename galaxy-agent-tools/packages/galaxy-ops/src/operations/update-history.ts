@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { PutJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { classifyHttp, GalaxyConnectionError } from "../errors";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 export type UpdatedHistory = PutJson<"/api/histories/{history_id}">;
@@ -62,4 +62,4 @@ export const updateHistoryOp: Operation<typeof input, UpdatedHistory> = {
 
 register(updateHistoryOp as AnyOperation);
 
-export const updateHistory = (i: In, ctx: GalaxyContext) => updateHistoryOp.run(i, ctx);
+export const updateHistory = (i: In, ctx: GalaxyContext) => runOperation(updateHistoryOp, i, ctx);

@@ -47,10 +47,15 @@ run("integration: pages on a real Galaxy", () => {
 
     const revision = await getPageRevision({ pageId: created.id, revisionId: first.id }, ctx());
     expect(revision.content).toContain("first");
+    // A revision with a body always yields one; which field it came from is what varies by
+    // version, and this is the only place that answer comes from a real server.
+    expect(revision.content_editor_source).not.toBe("none");
+    expect(revision.content_editor).toContain("first");
 
     const restored = await revertPageRevision({ pageId: created.id, revisionId: first.id }, ctx());
     expect(restored.edit_source).toBe("restore");
     expect(restored.content).toContain("first");
+    expect(restored.content_editor_source).not.toBe("none");
   }, 60_000);
 
   it("creates a history-attached notebook and finds it by history", async () => {

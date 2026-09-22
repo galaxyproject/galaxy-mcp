@@ -8,7 +8,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { legacyPost } from "../legacy";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 export interface UploadFileFromUrlResult {
@@ -64,4 +64,4 @@ export const uploadFileFromUrlOp: Operation<typeof input, UploadFileFromUrlResul
 
 register(uploadFileFromUrlOp as AnyOperation);
 
-export const uploadFileFromUrl = (i: In, ctx: GalaxyContext) => uploadFileFromUrlOp.run(i, ctx);
+export const uploadFileFromUrl = (i: In, ctx: GalaxyContext) => runOperation(uploadFileFromUrlOp, i, ctx);

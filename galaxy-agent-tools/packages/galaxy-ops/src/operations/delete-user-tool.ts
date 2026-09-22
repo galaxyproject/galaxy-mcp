@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { legacyDelete } from "../legacy";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 export interface DeletedUserTool {
@@ -34,4 +34,4 @@ export const deleteUserToolOp: Operation<typeof input, DeletedUserTool> = {
 
 register(deleteUserToolOp as AnyOperation);
 
-export const deleteUserTool = (i: In, ctx: GalaxyContext) => deleteUserToolOp.run(i, ctx);
+export const deleteUserTool = (i: In, ctx: GalaxyContext) => runOperation(deleteUserToolOp, i, ctx);

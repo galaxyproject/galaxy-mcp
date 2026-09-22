@@ -33,6 +33,7 @@ describe("get_page_revision", () => {
     expect(out.content_editor).toBe("history_dataset_name(history_dataset_id=f2db41e1fa331b3e)");
     expect(out.content).toBe("Input data");
     expect(out.edit_source).toBe("user");
+    expect(out.content_editor_source).toBe("server");
   });
 
   it("falls back to content on a server that sends no content_editor", async () => {
@@ -55,6 +56,8 @@ describe("get_page_revision", () => {
     const out = await getPageRevision({ pageId: "page1", revisionId: "rev1" }, ctxWith(client));
     expect(out.content_editor).toBe("Input data");
     expect(out.content).toBe("Input data");
+    // The caller is told, rather than left to notice the two bodies are identical.
+    expect(out.content_editor_source).toBe("content");
   });
 
   it("treats a null content_editor the same as a missing one", async () => {
@@ -73,6 +76,7 @@ describe("get_page_revision", () => {
     });
     const out = await getPageRevision({ pageId: "page1", revisionId: "rev1" }, ctxWith(client));
     expect(out.content_editor).toBe("Input data");
+    expect(out.content_editor_source).toBe("content");
   });
 
   it("treats an empty content_editor as missing, which is what an html revision sends", async () => {
@@ -92,6 +96,43 @@ describe("get_page_revision", () => {
     });
     const out = await getPageRevision({ pageId: "page1", revisionId: "rev1" }, ctxWith(client));
     expect(out.content_editor).toBe("<h1>Results</h1>");
+    expect(out.content_editor_source).toBe("content");
+  });
+
+  it("counts an empty content as a body, because that is what the caller gets", async () => {
+    const client = mockClient({
+      GET: () => ({
+        data: {
+          id: "rev1",
+          page_id: "page1",
+          content_editor: "",
+          content: "",
+          create_time: "2026-01-01T00:00:00",
+          update_time: "2026-01-01T00:00:00",
+        },
+        response: { status: 200 },
+      }),
+    });
+    const out = await getPageRevision({ pageId: "page1", revisionId: "rev1" }, ctxWith(client));
+    expect(out.content_editor).toBe("");
+    expect(out.content_editor_source).toBe("content");
+  });
+
+  it("says so when the revision carried no body at all", async () => {
+    const client = mockClient({
+      GET: () => ({
+        data: {
+          id: "rev1",
+          page_id: "page1",
+          create_time: "2026-01-01T00:00:00",
+          update_time: "2026-01-01T00:00:00",
+        },
+        response: { status: 200 },
+      }),
+    });
+    const out = await getPageRevision({ pageId: "page1", revisionId: "rev1" }, ctxWith(client));
+    expect(out.content_editor).toBeNull();
+    expect(out.content_editor_source).toBe("none");
   });
 
   it("envelopes a missing revision as not_found", async () => {

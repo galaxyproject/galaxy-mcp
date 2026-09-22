@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { fetchIwcWorkflows, enrichWorkflowResult, type EnrichedIwcWorkflow } from "../iwc-manifest";
 import type { GalaxyContext } from "../context";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 const input = {
@@ -36,4 +36,4 @@ export const searchIwcWorkflowsOp: Operation<typeof input, EnrichedIwcWorkflow[]
 
 register(searchIwcWorkflowsOp as AnyOperation);
 
-export const searchIwcWorkflows = (i: In, ctx: GalaxyContext) => searchIwcWorkflowsOp.run(i, ctx);
+export const searchIwcWorkflows = (i: In, ctx: GalaxyContext) => runOperation(searchIwcWorkflowsOp, i, ctx);

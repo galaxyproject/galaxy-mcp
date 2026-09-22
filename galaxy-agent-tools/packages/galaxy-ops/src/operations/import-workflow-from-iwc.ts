@@ -3,7 +3,7 @@ import { fetchIwcWorkflows } from "../iwc-manifest";
 import type { GalaxyContext } from "../context";
 import { GalaxyNotFoundError } from "../errors";
 import { legacyPost } from "../legacy";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 /** Hand-typed: the /api/workflows import endpoint returns a stored-workflow summary. */
@@ -42,4 +42,4 @@ export const importWorkflowFromIwcOp: Operation<typeof input, ImportedWorkflow> 
 
 register(importWorkflowFromIwcOp as AnyOperation);
 
-export const importWorkflowFromIwc = (i: In, ctx: GalaxyContext) => importWorkflowFromIwcOp.run(i, ctx);
+export const importWorkflowFromIwc = (i: In, ctx: GalaxyContext) => runOperation(importWorkflowFromIwcOp, i, ctx);

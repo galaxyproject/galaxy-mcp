@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 export type CollectionDetail = GetJson<"/api/dataset_collections/{hdca_id}">;
@@ -36,4 +36,4 @@ export const getCollectionDetailsOp: Operation<typeof input, CollectionDetail> =
 
 register(getCollectionDetailsOp as AnyOperation);
 
-export const getCollectionDetails = (i: In, ctx: GalaxyContext) => getCollectionDetailsOp.run(i, ctx);
+export const getCollectionDetails = (i: In, ctx: GalaxyContext) => runOperation(getCollectionDetailsOp, i, ctx);
