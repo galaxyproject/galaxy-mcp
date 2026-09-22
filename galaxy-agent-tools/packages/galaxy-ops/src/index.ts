@@ -26,6 +26,7 @@ export {
   getServerInfoOp,
   getServerInfo,
   type ServerInfo,
+  type UnsupportedOp,
 } from "./operations/get-server-info";
 export { getHistoriesOp, getHistories, type Histories } from "./operations/get-histories";
 export { listHistoryIdsOp, listHistoryIds, type HistoryRef } from "./operations/list-history-ids";
