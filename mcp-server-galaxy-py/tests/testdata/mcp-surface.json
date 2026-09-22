@@ -93,6 +93,9 @@
         "pages",
         "write"
       ],
+      "requires": {
+        "galaxy": ">=26.1"
+      },
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -599,6 +602,9 @@
         "pages",
         "read"
       ],
+      "requires": {
+        "galaxy": ">=26.1"
+      },
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -966,6 +972,9 @@
         "pages",
         "read"
       ],
+      "requires": {
+        "galaxy": ">=26.1"
+      },
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -993,6 +1002,9 @@
         "pages",
         "read"
       ],
+      "requires": {
+        "galaxy": ">=26.1"
+      },
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -1169,6 +1181,9 @@
         "pages",
         "write"
       ],
+      "requires": {
+        "galaxy": ">=26.1"
+      },
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -1416,6 +1431,9 @@
         "pages",
         "write"
       ],
+      "requires": {
+        "galaxy": ">=26.1"
+      },
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,

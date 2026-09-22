@@ -228,8 +228,8 @@ class TestPageOperations:
         assert kwargs["params"]["sort_desc"] == "true"
 
     def test_get_page_revision_returns_content(self):
-        # A revision's editable markdown lives in `content` (no content_editor),
-        # and unlike get_page it is NOT stripped.
+        # A revision through 26.1.1 carries no content_editor, and its `content` is
+        # the export-expanded form -- which is kept alongside the editable field.
         self.gi.make_get_request.return_value = _get_response(
             {
                 "id": "rev1",
@@ -243,6 +243,8 @@ class TestPageOperations:
 
         assert result.success is True
         assert result.data["content"] == "raw md"
+        assert result.data["content_editor"] == "raw md"
+        assert result.data["content_editor_source"] == "content"
         assert result.data["edit_source"] == "user"
         assert (
             self.gi.make_get_request.call_args.args[0]
@@ -264,10 +266,36 @@ class TestPageOperations:
         assert result.data["edit_source"] == "restore"
         # restored revision content is returned, not stripped
         assert result.data["content"] == "restored md"
+        assert result.data["content_editor"] == "restored md"
+        assert result.data["content_editor_source"] == "content"
         assert (
             self.gi.make_post_request.call_args.args[0]
             == f"{GALAXY_API_URL}/pages/page1/revisions/rev1/revert"
         )
+
+    @pytest.mark.parametrize(
+        ("revision", "editable", "source"),
+        [
+            ({"content_editor": "edit me", "content": "expanded"}, "edit me", "server"),
+            ({"content_editor": None, "content": "expanded"}, "expanded", "content"),
+            # content_editor defaults to the empty string, and Galaxy fills it on the
+            # markdown path only -- an HTML revision arrives with an empty one.
+            ({"content_editor": "", "content": "expanded"}, "expanded", "content"),
+            ({"content": ""}, "", "content"),
+            ({"content_editor": "edit me"}, "edit me", "server"),
+            ({}, None, "none"),
+            ({"content_editor": None, "content": None}, None, "none"),
+        ],
+    )
+    def test_get_page_revision_says_where_its_editable_text_came_from(
+        self, revision, editable, source
+    ):
+        self.gi.make_get_request.return_value = _get_response({"id": "rev1", **revision})
+
+        result = get_page_revision_fn("page1", "rev1")
+
+        assert result.data["content_editor"] == editable
+        assert result.data["content_editor_source"] == source
 
     def test_list_pages_not_connected(self):
         galaxy_state["connected"] = False
