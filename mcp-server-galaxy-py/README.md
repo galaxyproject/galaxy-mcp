@@ -154,10 +154,34 @@ most list operations, and `pagination` on the ones that actually page. Names and
 are the contract; arguments live in each tool's own description, which is what the MCP
 client sees.
 
+### Version requirements
+
+A few tools need a Galaxy newer than the oldest one this server speaks to. Each declares its
+own minimum, says so in its description, and is refused *before* anything is sent -- so a write
+can never half-succeed against a server that was never going to accept it:
+
+```
+list_pages needs Galaxy 26.1 or newer; this server reports 26.0. Nothing was sent to Galaxy.
+```
+
+The version comes from `/api/version`, asked once per server. A server that will not answer
+leaves its version unknown, and an unknown version refuses nothing: the tool is attempted and
+stands or falls on its own. `get_server_info` reports what the connected server cannot run in
+`unsupported_tools`, and says in `version_known` whether an empty list means anything.
+
+A tool is gated as a whole, and some of them are gated for part of what they do: the check runs
+before the arguments are looked at, and answering the wrong thing quietly is worse than refusing.
+`list_pages` needs 26.1 because 26.0 has no history filter and no `history_id` on a page, so it
+would answer a request for one history's notebooks with every page the user can see and no way to
+tell which is which; `create_page` because 26.0 cannot attach a page to a history and answers with
+a summary that has no editable content in it. `get_page` is not gated -- 26.0 answers it with the
+editable markdown, which is what it is for.
+
 ### Connection and account
 
 - `connect`: Point the session at a Galaxy instance and validate the credentials
-- `get_server_info`: Version, URL, and public configuration of the connected Galaxy
+- `get_server_info`: Version, URL, and public configuration of the connected Galaxy, plus
+  the tools it is too old to run
 - `get_user`: The authenticated user
 
 ### Histories
@@ -229,12 +253,15 @@ standalone one is a Report. Embedded datasets are referenced by encoded id. Page
 HTML in the Galaxy UI are the exception: their body is in `content`, which `get_page` only
 returns with `include_rendered`, and they stay HTML when updated, so don't send markdown to one.
 
+All of these need Galaxy 26.1 or newer except `get_page`, which 26.0 answers in full.
+
 - `list_pages`: Pages, optionally filtered by history or search term
 - `get_page`: A page and its latest revision, editable markdown and optionally rendered
 - `create_page`: Create a page
 - `update_page`: Update a page; a content change records a new revision
 - `list_page_revisions`: A page's revision history
-- `get_page_revision`: One revision's content
+- `get_page_revision`: One revision's editable content, and `content_editor_source` saying
+  whether that came from the server or from the export-expanded `content` standing in for it
 - `revert_page_revision`: Restore an earlier revision as a new one
 
 ## Testing
