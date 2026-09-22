@@ -42,6 +42,14 @@ export { getWorkflowInputTemplateOp, getWorkflowInputTemplate, resolveWorkflowSl
 export { invokeWorkflowOp, invokeWorkflow, getDatatypesMapping, type InvocationResult } from "./operations/invoke-workflow";
 export { uploadFileOp, uploadFile, type UploadFileResult } from "./operations/upload-file";
 export { uploadFileFromUrlOp, uploadFileFromUrl, type UploadFileFromUrlResult } from "./operations/upload-file-from-url";
+export { listPagesOp, listPages } from "./operations/list-pages";
+export { getPageOp, getPage } from "./operations/get-page";
+export { createPageOp, createPage } from "./operations/create-page";
+export { updatePageOp, updatePage } from "./operations/update-page";
+export { listPageRevisionsOp, listPageRevisions } from "./operations/list-page-revisions";
+export { getPageRevisionOp, getPageRevision } from "./operations/get-page-revision";
+export { revertPageRevisionOp, revertPageRevision } from "./operations/revert-page-revision";
+export type { PageSummary, PageDetail, PageRevisionSummary, PageRevisionDetails } from "./operations/pages-common";
 export type { WorkflowInputTemplate, WorkflowSlot, WorkflowGuide, DatatypesMapping, ValidationReport } from "./workflow-inputs";
 export { validateInputs, subtypeSatisfies } from "./workflow-inputs";
 export type { IwcWorkflow, EnrichedIwcWorkflow } from "./iwc-manifest";

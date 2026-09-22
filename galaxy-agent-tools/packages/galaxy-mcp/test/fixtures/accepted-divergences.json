@@ -1,5 +1,5 @@
 {
-  "$comment": "Every way the TypeScript ops and the Python MCP server disagree about which tools exist, what parameters they take and whether they change anything -- one entry each. Wording, value constraints, what is inside an object, whether a tool accepts parameters it does not declare (Python closes its schemas with additionalProperties false, the ops say nothing) and every annotation but the read-only hint are outside what the check compares, so they never show up here. What the check will not do is summarize a construct nobody taught it: it follows no references at all, and a $ref, a $defs, a keyword at the top of an input schema it cannot read, or a composition it does not model stops the run instead of quietly comparing what is left. The parity test fails on a divergence that is not listed here and on a listing the two surfaces no longer support, so this file is the TypeScript to-do list and cannot quietly rot. An entry records that a difference is KNOWN, not that it is fine -- read the status. Statuses: intentional (settled, will not change), pending-port (a TS op is on its way), pending-decision (waiting on a call nobody has made), unreviewed-gap (found by the comparator, nobody has ruled on it yet).",
+  "$comment": "Every way the TypeScript ops and the Python MCP server disagree about which tools exist, what parameters they take and whether they change anything -- one entry each. Result shapes, runtime guards, wording, value constraints, what is inside an object, whether a tool accepts parameters it does not declare (Python closes its schemas with additionalProperties false, the ops say nothing) and every annotation but the read-only hint are outside what the check compares, so they never show up here: a difference can be real and still have no entry, and list_pages carrying no total_matches on the TypeScript side is the standing example. What the check will not do is summarize a construct nobody taught it: it follows no references at all, and a $ref, a $defs, a keyword at the top of an input schema it cannot read, or a composition it does not model stops the run instead of quietly comparing what is left. The parity test fails on a divergence that is not listed here and on a listing the two surfaces no longer support, so this file is the TypeScript to-do list and cannot quietly rot. An entry records that a difference is KNOWN, not that it is fine -- read the status. Statuses: intentional (settled, will not change), pending-port (somebody has read both sides and a TS-side change is owed -- a whole op, or something an existing op still lacks), pending-decision (waiting on a call nobody has made), unreviewed-gap (found by the comparator, nobody has ruled on it yet). What separates pending-port from unreviewed-gap is whether anyone has read both sides, not how serious the difference is: several unreviewed-gap entries describe the same undeclared-default problem as the pending-port ones.",
   "normalization": {
     "snakeCaseParamNames": {
       "enabled": true,
@@ -25,14 +25,6 @@
       "observed": "python=write (tag) params=[api_key type=string required=false default=none; url type=string required=false default=none]",
       "status": "intentional",
       "reason": "TS takes the Galaxy URL and key when the server is built, so there is no per-session connect call to expose."
-    },
-    {
-      "tool": "create_page",
-      "param": null,
-      "kind": "missing-ts-tool",
-      "observed": "python=write (tag) params=[annotation type=string required=false default=none; content type=string required=false default=none; history_id type=string required=false default=none; slug type=string required=false default=none; title type=string required=false default=none]",
-      "status": "pending-port",
-      "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
     },
     {
       "tool": "download_dataset",
@@ -180,19 +172,11 @@
     },
     {
       "tool": "get_page",
-      "param": null,
-      "kind": "missing-ts-tool",
-      "observed": "python=read (tag) params=[include_rendered type=boolean required=false default=false; page_id type=string required=true default=none]",
+      "param": "include_rendered",
+      "kind": "default-mismatch",
+      "observed": "python=false typescript=none",
       "status": "pending-port",
-      "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
-    },
-    {
-      "tool": "get_page_revision",
-      "param": null,
-      "kind": "missing-ts-tool",
-      "observed": "python=read (tag) params=[page_id type=string required=true default=none; revision_id type=string required=true default=none]",
-      "status": "pending-port",
-      "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
+      "reason": "TS applies the same default inside run() but leaves it off the advertised schema, so an agent reading the tool cannot see it. The TS op passes `i.includeRendered ?? false` to stripRendered; declaring `.default(false)` on the input closes it."
     },
     {
       "tool": "get_tool_details",
@@ -244,19 +228,43 @@
     },
     {
       "tool": "list_page_revisions",
-      "param": null,
-      "kind": "missing-ts-tool",
-      "observed": "python=read (tag) params=[page_id type=string required=true default=none; sort_desc type=boolean required=false default=false]",
+      "param": "sort_desc",
+      "kind": "default-mismatch",
+      "observed": "python=false typescript=none",
       "status": "pending-port",
-      "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
+      "reason": "TS applies the same default inside run() but leaves it off the advertised schema, so an agent reading the tool cannot see it. The TS op sends `i.sortDesc ?? false` as the sort_desc query parameter; declaring `.default(false)` on the input closes it."
     },
     {
       "tool": "list_pages",
-      "param": null,
-      "kind": "missing-ts-tool",
-      "observed": "python=read (tag) params=[history_id type=string required=false default=none; limit type=integer required=false default=100; offset type=integer required=false default=0; search type=string required=false default=none; show_published type=boolean required=false default=false; show_shared type=boolean required=false default=false]",
+      "param": "limit",
+      "kind": "default-mismatch",
+      "observed": "python=100 typescript=none",
       "status": "pending-port",
-      "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
+      "reason": "TS applies the same default inside run() but leaves it off the advertised schema, so an agent reading the tool cannot see it. Python advertises the 100-row cap; the TS op applies the same cap through its DEFAULT_LIMIT constant, so an agent deciding whether to pass limit has to guess what omitting it does. `.default(100)` closes this entry. It does not tell a caller whether more rows exist: the TS result carries no total_matches at all, which is a separate gap this comparator cannot see."
+    },
+    {
+      "tool": "list_pages",
+      "param": "offset",
+      "kind": "default-mismatch",
+      "observed": "python=0 typescript=none",
+      "status": "pending-port",
+      "reason": "TS applies the same default inside run() but leaves it off the advertised schema, so an agent reading the tool cannot see it. The TS op sends `i.offset ?? 0`; declaring `.default(0)` on the input closes it."
+    },
+    {
+      "tool": "list_pages",
+      "param": "show_published",
+      "kind": "default-mismatch",
+      "observed": "python=false typescript=none",
+      "status": "pending-port",
+      "reason": "TS applies the same default inside run() but leaves it off the advertised schema, so an agent reading the tool cannot see it. Both sides deliberately override Galaxy's own index default, which is on; the TS op sends `i.showPublished ?? false` but advertises nothing, so an agent cannot see which way the flag falls. `.default(false)` closes it."
+    },
+    {
+      "tool": "list_pages",
+      "param": "show_shared",
+      "kind": "default-mismatch",
+      "observed": "python=false typescript=none",
+      "status": "pending-port",
+      "reason": "TS applies the same default inside run() but leaves it off the advertised schema, so an agent reading the tool cannot see it. The TS op sends `i.showShared ?? false`; declaring `.default(false)` on the input closes it."
     },
     {
       "tool": "list_user_tools",
@@ -299,28 +307,12 @@
       "reason": "TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it."
     },
     {
-      "tool": "revert_page_revision",
-      "param": null,
-      "kind": "missing-ts-tool",
-      "observed": "python=write (tag) params=[page_id type=string required=true default=none; revision_id type=string required=true default=none]",
-      "status": "pending-port",
-      "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
-    },
-    {
       "tool": "run_tool",
       "param": "tool_version",
       "kind": "missing-py-param",
       "observed": "typescript=type=string required=false default=none",
       "status": "unreviewed-gap",
       "reason": "TS accepts toolVersion; Python's run_tool takes only history_id, tool_id and inputs, so pinning a tool version is not expressible there."
-    },
-    {
-      "tool": "update_page",
-      "param": null,
-      "kind": "missing-ts-tool",
-      "observed": "python=write (tag) params=[content type=string required=false default=none; page_id type=string required=true default=none; title type=string required=false default=none]",
-      "status": "pending-port",
-      "reason": "Pages tool with no TS op yet; the port is in flight. Remove this entry when it lands."
     },
     {
       "tool": "upload_file_from_url",
