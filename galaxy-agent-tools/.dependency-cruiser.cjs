@@ -16,5 +16,15 @@ module.exports = {
       },
     },
   ],
-  options: { doNotFollow: { path: "node_modules" }, tsPreCompilationDeps: true },
+  options: {
+    doNotFollow: { path: "node_modules" },
+    tsPreCompilationDeps: true,
+    // dependency-cruiser 16 declares TypeScript support as <6 and we are on 6, so
+    // it leaves .ts out of its default extension list and an extensionless
+    // "./program" is never tried as program.ts -- which left the cruise stopping at
+    // each package's entry file and reporting a clean run.
+    enhancedResolveOptions: {
+      extensions: [".ts", ".tsx", ".d.ts", ".js", ".mjs", ".cjs", ".json"],
+    },
+  },
 };
