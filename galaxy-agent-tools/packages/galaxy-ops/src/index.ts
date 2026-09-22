@@ -1,6 +1,14 @@
 import "./operations/all";
 export * from "./context";
 export * from "./errors";
+export {
+  parseGalaxyVersion,
+  parseRequirement,
+  requirementSentence,
+  satisfiesRequirement,
+  type GalaxyVersion,
+  type VersionRequirement,
+} from "./version";
 export { isJobTerminal, isJobSuccess } from "./terminal-states";
 export type { Operation, OperationDomain, GalaxyResult, Pagination, InputOf, AnyOperation } from "./operations/types";
 export { allOperations, runWithEnvelope } from "./operations/registry";
