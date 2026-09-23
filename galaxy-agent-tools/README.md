@@ -348,7 +348,27 @@ pnpm -r typecheck    # tsc --noEmit (strict)
 pnpm -r test         # vitest
 pnpm depcruise       # enforce the surface -> core import boundary
 pnpm -r build        # tsup -> dist/
+pnpm parity:report   # regenerate PARITY.md (see below)
 ```
+
+### Parity with the Python server
+
+Lockstep with the Python MCP server is a check rather than a good intention:
+`pnpm -r test` compares what this package advertises against that server's
+generated surface manifest -- which tools exist, what parameters they take, their
+types, requiredness and declared defaults, whether a tool says it changes
+anything, and what it says it needs from the Galaxy it runs against. Anything the
+two disagree about has to be listed in
+`packages/galaxy-mcp/test/fixtures/accepted-divergences.json` with a status and a
+reason, and an entry the surfaces no longer support fails the check too, so the
+list cannot quietly rot. The `unreviewed-gap` status -- the comparator found it and
+nobody has read both sides -- is ratcheted: the registry pins how many of those it
+may hold, and one more needs a reviewed status and a reason rather than a bigger
+number. [`PARITY.md`](../PARITY.md) in the repository root is that whole state as a
+table, one row per tool and one per parameter the two disagree about; regenerate it
+with `pnpm parity:report` when a change moves parity. CI holds the checked-in copy
+to the generator and prints the same table into the job summary, so the movement
+arrives in the diff instead of waiting for somebody to go looking.
 
 ## License
 
