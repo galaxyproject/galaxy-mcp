@@ -9,6 +9,9 @@ on:
       # The TS parity check reads the Python server's generated surface manifest, so a
       # change to it has to run this workflow or a new gap lands unnoticed.
       - "mcp-server-galaxy-py/tests/testdata/mcp-surface.json"
+      # The report is generated from both surfaces, so an edit to it alone is still
+      # something the check has to have an opinion about.
+      - "PARITY.md"
   pull_request:
     branches: [main]
     paths:
@@ -17,6 +20,9 @@ on:
       # The TS parity check reads the Python server's generated surface manifest, so a
       # change to it has to run this workflow or a new gap lands unnoticed.
       - "mcp-server-galaxy-py/tests/testdata/mcp-surface.json"
+      # The report is generated from both surfaces, so an edit to it alone is still
+      # something the check has to have an opinion about.
+      - "PARITY.md"
   workflow_dispatch:
 
 defaults:
@@ -56,3 +62,11 @@ jobs:
 
       - name: Build
         run: pnpm -r build
+
+      # Generated here rather than read off the checked-in copy, so the summary says
+      # what the code says. Last, and whether or not the gates above passed: a report
+      # that cannot be built must not be what skips them, and a failing parity check is
+      # exactly when somebody wants the table in front of them.
+      - name: Parity report
+        if: ${{ !cancelled() }}
+        run: pnpm --silent parity:report:print >> "$GITHUB_STEP_SUMMARY"
