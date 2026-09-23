@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { legacyGet } from "../legacy";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 /** Hand-typed: Galaxy's tool panel endpoint is not in the OpenAPI bindings. */
@@ -29,4 +29,4 @@ export const getToolPanelOp: Operation<typeof input, ToolPanel> = {
 
 register(getToolPanelOp as AnyOperation);
 
-export const getToolPanel = (i: In, ctx: GalaxyContext) => getToolPanelOp.run(i, ctx);
+export const getToolPanel = (i: In, ctx: GalaxyContext) => runOperation(getToolPanelOp, i, ctx);

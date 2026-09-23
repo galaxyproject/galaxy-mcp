@@ -23,6 +23,19 @@ describe("buildProgram", () => {
     expect(names.length).toBe(allOperations.length);
   });
 
+  it("says in --help what an op needs from the server", () => {
+    const program = buildProgram({ makeContext: ctxFactory });
+    const described = new Map(program.commands.map((c) => [c.name(), c.description()]));
+    for (const op of allOperations) {
+      const text = described.get(op.name) ?? "";
+      expect(text.startsWith(op.summary), op.name).toBe(true);
+      expect(text.includes("Requires Galaxy"), op.name).toBe(op.requires !== undefined);
+    }
+    expect(described.get("list_page_revisions")).toContain("Requires Galaxy 26.1 or newer.");
+    // get_page works on 26.0, so it must not pick the sentence up.
+    expect(described.get("get_page")).not.toContain("Requires Galaxy");
+  });
+
   it("runs an op and renders json to stdout", async () => {
     const out = vi.spyOn(console, "log").mockImplementation(() => {});
     const program = buildProgram({ makeContext: ctxFactory });

@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
 import type { PageSummary } from "./pages-common";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 const DEFAULT_LIMIT = 100;
@@ -53,8 +53,10 @@ export const listPagesOp: Operation<typeof input, PageSummary[]> = {
   domain: "pages",
   summary:
     "List Galaxy pages (markdown notebooks and reports) the user can see. " +
-    "Pass historyId to list only that history's notebooks.",
+    "Pass historyId to list only that history's notebooks. The history filter is what needs " +
+    "26.1: an older server ignores it and answers with every page instead of that history's.",
   input,
+  requires: { galaxy: ">=26.1" },
   run,
   project: (pages, i) => ({
     message: `${pages.length} page(s)`,
@@ -66,4 +68,4 @@ export const listPagesOp: Operation<typeof input, PageSummary[]> = {
 
 register(listPagesOp as AnyOperation);
 
-export const listPages = (i: In, ctx: GalaxyContext) => listPagesOp.run(i, ctx);
+export const listPages = (i: In, ctx: GalaxyContext) => runOperation(listPagesOp, i, ctx);

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { legacyGet } from "../legacy";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 /** Hand-typed: Galaxy's tool-show endpoint is not in the OpenAPI bindings. */
@@ -51,4 +51,4 @@ export const getToolCitationsOp: Operation<typeof input, ToolCitationsResult> = 
 
 register(getToolCitationsOp as AnyOperation);
 
-export const getToolCitations = (i: In, ctx: GalaxyContext) => getToolCitationsOp.run(i, ctx);
+export const getToolCitations = (i: In, ctx: GalaxyContext) => runOperation(getToolCitationsOp, i, ctx);

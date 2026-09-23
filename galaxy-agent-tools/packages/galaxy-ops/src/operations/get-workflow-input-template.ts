@@ -11,7 +11,7 @@ import {
   type WorkflowInputTemplate,
   type WorkflowSlot,
 } from "../workflow-inputs";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -154,5 +154,4 @@ export const getWorkflowInputTemplateOp: Operation<typeof input, WorkflowInputTe
 
 register(getWorkflowInputTemplateOp as AnyOperation);
 
-export const getWorkflowInputTemplate = (i: In, ctx: GalaxyContext) =>
-  getWorkflowInputTemplateOp.run(i, ctx);
+export const getWorkflowInputTemplate = (i: In, ctx: GalaxyContext) => runOperation(getWorkflowInputTemplateOp, i, ctx);

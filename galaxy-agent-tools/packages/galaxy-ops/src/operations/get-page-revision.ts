@@ -6,7 +6,7 @@ import {
   type PageRevisionDetails,
   type PageRevisionResponse,
 } from "./pages-common";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 const input = {
@@ -32,13 +32,14 @@ export const getPageRevisionOp: Operation<typeof input, PageRevisionDetails> = {
   summary:
     "Get one page revision. Edit `content_editor` and pass it to update_page; `content` is " +
     "the same document with its embeds expanded for export. Galaxy began sending " +
-    "content_editor on a revision after 26.1; against an older server it is filled from " +
-    "`content`, so both come back expanded.",
+    "content_editor on a revision after 26.1, so check `content_editor_source`: " +
+    '"content" means the server sent none and the editable text is the expanded form.',
   input,
+  requires: { galaxy: ">=26.1" },
   run,
-  project: (rev) => ({ message: `Revision ${rev.id} of page ${rev.page_id} (${rev.edit_source ?? "unknown"})` }),
+  project: (rev) => ({ message: `Revision ${rev.id} of page ${rev.page_id} (${rev.edit_source ?? "unknown"}, content_editor from ${rev.content_editor_source})` }),
 };
 
 register(getPageRevisionOp as AnyOperation);
 
-export const getPageRevision = (i: In, ctx: GalaxyContext) => getPageRevisionOp.run(i, ctx);
+export const getPageRevision = (i: In, ctx: GalaxyContext) => runOperation(getPageRevisionOp, i, ctx);

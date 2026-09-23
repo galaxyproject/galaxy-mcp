@@ -16,7 +16,7 @@ import type { GalaxyContext } from "../context";
 import { GalaxyConnectionError } from "../errors";
 import { legacyPost } from "../legacy";
 import { tusUploadFile } from "../tus-upload";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 export interface UploadFileResult {
@@ -88,4 +88,4 @@ export const uploadFileOp: Operation<typeof input, UploadFileResult> = {
 
 register(uploadFileOp as AnyOperation);
 
-export const uploadFile = (i: In, ctx: GalaxyContext) => uploadFileOp.run(i, ctx);
+export const uploadFile = (i: In, ctx: GalaxyContext) => runOperation(uploadFileOp, i, ctx);

@@ -34,7 +34,12 @@ export interface Operation<Shape extends ZodRawShape, O> {
   readonly domain: OperationDomain;
   readonly summary: string; // reused verbatim as the MCP tool description
   readonly input: Shape; // raw shape -> MCP inputSchema directly
-  readonly minGalaxyVersion?: string;
+  /**
+   * What the op needs from the server, as `{ galaxy: ">=26.1" }`. The registry refuses the
+   * op before it runs against anything older, and both surfaces say so in their own words
+   * for the op's description.
+   */
+  readonly requires?: { galaxy: string };
   /** Read-only by default. Write/mutating ops set this false (drives MCP annotations). */
   readonly readOnly?: boolean;
   /** Destructive (delete/cancel) ops set this true (drives MCP destructiveHint). */

@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { classifyHttp, GalaxyConnectionError } from "../errors";
 import { stripRendered, type PageDetail } from "./pages-common";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 const input = {
@@ -44,6 +44,7 @@ export const updatePageOp: Operation<typeof input, PageDetail> = {
     "edit_source=agent; a title-only change does not. The page keeps its content_format, so " +
     "sending markdown to a page authored as HTML stores it under the wrong format.",
   input,
+  requires: { galaxy: ">=26.1" },
   readOnly: false,
   run,
   project: (_p, i) => {
@@ -54,4 +55,4 @@ export const updatePageOp: Operation<typeof input, PageDetail> = {
 
 register(updatePageOp as AnyOperation);
 
-export const updatePage = (i: In, ctx: GalaxyContext) => updatePageOp.run(i, ctx);
+export const updatePage = (i: In, ctx: GalaxyContext) => runOperation(updatePageOp, i, ctx);

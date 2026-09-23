@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { legacyGet } from "../legacy";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 export interface ToolRunExamples {
@@ -43,4 +43,4 @@ export const getToolRunExamplesOp: Operation<typeof input, ToolRunExamples> = {
 
 register(getToolRunExamplesOp as AnyOperation);
 
-export const getToolRunExamples = (i: In, ctx: GalaxyContext) => getToolRunExamplesOp.run(i, ctx);
+export const getToolRunExamples = (i: In, ctx: GalaxyContext) => runOperation(getToolRunExamplesOp, i, ctx);

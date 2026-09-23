@@ -38,6 +38,7 @@ describe("revert_page_revision", () => {
     expect(out.edit_source).toBe("restore");
     expect(out.content_editor).toBe("history_dataset_name(history_dataset_id=f2db41e1fa331b3e)");
     expect(out.content).toBe("Input data");
+    expect(out.content_editor_source).toBe("server");
   });
 
   it("falls back to content on a server that sends no content_editor", async () => {
@@ -57,6 +58,7 @@ describe("revert_page_revision", () => {
     const out = await revertPageRevision({ pageId: "page1", revisionId: "rev1" }, ctxWith(client));
     expect(out.content_editor).toBe("Input data");
     expect(out.content).toBe("Input data");
+    expect(out.content_editor_source).toBe("content");
   });
 
   it("envelopes a missing revision as not_found", async () => {

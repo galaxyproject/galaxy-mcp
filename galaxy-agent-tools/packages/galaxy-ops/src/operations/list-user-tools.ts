@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { legacyGet } from "../legacy";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 /** Hand-typed: user-defined tool record from /api/unprivileged_tools. */
@@ -35,4 +35,4 @@ export const listUserToolsOp: Operation<typeof input, UserTool[]> = {
 
 register(listUserToolsOp as AnyOperation);
 
-export const listUserTools = (i: In, ctx: GalaxyContext) => listUserToolsOp.run(i, ctx);
+export const listUserTools = (i: In, ctx: GalaxyContext) => runOperation(listUserToolsOp, i, ctx);

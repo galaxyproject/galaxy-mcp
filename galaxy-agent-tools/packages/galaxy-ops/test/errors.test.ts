@@ -3,6 +3,7 @@ import {
   GalaxyAuthError,
   GalaxyNotFoundError,
   GalaxyConnectionError,
+  GalaxyVersionError,
   ToolRequestRejectedError,
   JobFailedError,
   classifyHttp,
@@ -37,8 +38,15 @@ describe("GalaxyError.kind", () => {
     expect(new GalaxyAuthError("x").kind).toBe("auth");
     expect(new GalaxyNotFoundError("x").kind).toBe("not_found");
     expect(new GalaxyConnectionError("x", 500).kind).toBe("connection");
+    expect(new GalaxyVersionError("x").kind).toBe("version");
     expect(new ToolRequestRejectedError("t", "m").kind).toBe("tool_request_rejected");
     expect(new JobFailedError("j", "error").kind).toBe("job_failed");
+  });
+  it("does not classify any HTTP status as a version problem", () => {
+    // The version kind is only ever raised before a request; no status maps to it.
+    for (const status of [400, 401, 403, 404, 409, 422, 500, 502, 503]) {
+      expect(classifyHttp(status, null).kind).not.toBe("version");
+    }
   });
   it("classifyHttp returns subclasses whose kind matches the status", () => {
     expect(classifyHttp(401, null).kind).toBe("auth");

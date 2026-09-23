@@ -2,7 +2,7 @@ import { z } from "zod";
 import { fetchIwcWorkflows, enrichWorkflowResult, type EnrichedIwcWorkflow } from "../iwc-manifest";
 import type { GalaxyContext } from "../context";
 import { GalaxyNotFoundError } from "../errors";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 // Extend the enriched type with details-only fields
@@ -83,4 +83,4 @@ export const getIwcWorkflowDetailsOp: Operation<typeof input, IwcWorkflowDetail>
 
 register(getIwcWorkflowDetailsOp as AnyOperation);
 
-export const getIwcWorkflowDetails = (i: In, ctx: GalaxyContext) => getIwcWorkflowDetailsOp.run(i, ctx);
+export const getIwcWorkflowDetails = (i: In, ctx: GalaxyContext) => runOperation(getIwcWorkflowDetailsOp, i, ctx);

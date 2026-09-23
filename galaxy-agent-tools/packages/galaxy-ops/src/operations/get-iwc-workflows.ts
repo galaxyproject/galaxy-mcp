@@ -1,6 +1,6 @@
 import { fetchIwcWorkflows, type IwcWorkflow } from "../iwc-manifest";
 import type { GalaxyContext } from "../context";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 const input = {};
@@ -21,4 +21,4 @@ export const getIwcWorkflowsOp: Operation<typeof input, IwcWorkflow[]> = {
 
 register(getIwcWorkflowsOp as AnyOperation);
 
-export const getIwcWorkflows = (_i: In, ctx: GalaxyContext) => getIwcWorkflowsOp.run(_i, ctx);
+export const getIwcWorkflows = (_i: In, ctx: GalaxyContext) => runOperation(getIwcWorkflowsOp, _i, ctx);

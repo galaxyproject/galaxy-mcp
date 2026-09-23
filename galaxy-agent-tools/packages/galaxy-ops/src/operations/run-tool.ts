@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { executeToolRequest, type ToolRun } from "../execute-tool-request";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 // Nested inputs only. We accept an opaque record (server `strict:true` is the real gate);
@@ -43,4 +43,4 @@ export const runToolOp: Operation<typeof input, ToolRun> = {
 
 register(runToolOp as AnyOperation);
 
-export const runTool = (i: RunToolInput, ctx: GalaxyContext) => runToolOp.run(i, ctx);
+export const runTool = (i: RunToolInput, ctx: GalaxyContext) => runOperation(runToolOp, i, ctx);

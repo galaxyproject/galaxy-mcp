@@ -4,7 +4,7 @@ import { GalaxyConnectionError } from "../errors";
 import { legacyGet } from "../legacy";
 import { validateInputs, buildWorkflowInputTemplate, type DatatypesMapping } from "../workflow-inputs";
 import { resolveWorkflowSlots } from "./get-workflow-input-template";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -234,4 +234,4 @@ export const invokeWorkflowOp: Operation<typeof input, InvocationResult> = {
 
 register(invokeWorkflowOp as AnyOperation);
 
-export const invokeWorkflow = (i: In, ctx: GalaxyContext) => invokeWorkflowOp.run(i, ctx);
+export const invokeWorkflow = (i: In, ctx: GalaxyContext) => runOperation(invokeWorkflowOp, i, ctx);

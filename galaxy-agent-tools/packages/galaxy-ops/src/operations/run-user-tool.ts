@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { GalaxyNotFoundError } from "../errors";
 import { legacyGet, legacyPost } from "../legacy";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 /** Hand-typed: result from POST /api/tools for a user-defined tool run. */
@@ -64,4 +64,4 @@ export const runUserToolOp: Operation<typeof input, UserToolRun> = {
 
 register(runUserToolOp as AnyOperation);
 
-export const runUserTool = (i: In, ctx: GalaxyContext) => runUserToolOp.run(i, ctx);
+export const runUserTool = (i: In, ctx: GalaxyContext) => runOperation(runUserToolOp, i, ctx);

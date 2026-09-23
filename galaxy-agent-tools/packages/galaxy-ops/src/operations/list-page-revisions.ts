@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { legacyGet } from "../legacy";
 import type { PageRevisionSummary } from "./pages-common";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 const input = {
@@ -26,10 +26,11 @@ export const listPageRevisionsOp: Operation<typeof input, PageRevisionSummary[]>
     '"user", "agent" or "restore" where Galaxy recorded one -- a page\'s first revision ' +
     "has none.",
   input,
+  requires: { galaxy: ">=26.1" },
   run,
   project: (revs, i) => ({ message: `${revs.length} revision(s) for page ${i.pageId}` }),
 };
 
 register(listPageRevisionsOp as AnyOperation);
 
-export const listPageRevisions = (i: In, ctx: GalaxyContext) => listPageRevisionsOp.run(i, ctx);
+export const listPageRevisions = (i: In, ctx: GalaxyContext) => runOperation(listPageRevisionsOp, i, ctx);

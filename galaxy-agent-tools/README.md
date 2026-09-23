@@ -143,6 +143,7 @@ The process exit code reflects the outcome, following `sysexits.h` conventions:
 | `65` | Tool request rejected |
 | `69` | Connection / server unavailable |
 | `70` | Software error or job failure |
+| `76` | The connected Galaxy is too old for the operation |
 | `77` | Authentication failure (bad/missing API key) |
 
 ### Examples
@@ -221,7 +222,7 @@ the rest are read-only.
 | Operation | What it does |
 | --- | --- |
 | `get_user` | Current authenticated user (id, email, username) |
-| `get_server_info` | Connected Galaxy's URL, version, and public configuration |
+| `get_server_info` | Connected Galaxy's URL, version, public configuration, and the operations it is too old to run |
 
 ### Histories
 | Operation | What it does |
@@ -290,15 +291,55 @@ the rest are read-only.
 | `create_page` *(write)* | Create a standalone report, or a notebook attached to a history |
 | `update_page` *(write)* | Update a page's content, creating a new revision, or just its title, which does not |
 | `list_page_revisions` | A page's revision history, newest or oldest first |
-| `get_page_revision` | One revision: the editable `content_editor` and the expanded `content` |
+| `get_page_revision` | One revision: the editable `content_editor`, the expanded `content`, and which of the two the editable text came from |
 | `revert_page_revision` *(write)* | Restore an earlier revision by writing it back as a new one |
 
-These need Galaxy 26.1 or newer -- earlier servers have no pages revision API and
-return nothing editable from create or update. `content_editor` on a *revision* is
-newer still and arrives after 26.1; where a server does not send it, the ops fill it
-from that revision's `content`, which has its embeds already expanded.
+Six of the seven declare Galaxy 26.1 or newer (see
+[Version requirements](#version-requirements)) -- each one because 26.0 cannot actually serve
+it, not as a blanket rule for the set:
 
-Run `galaxy-cli <command> --help` for the exact arguments of any one.
+| Operation | On a 26.0 server |
+| --- | --- |
+| `get_page` | **Works** -- 26.0 already returns `content_editor`, so it is not gated |
+| `list_pages` | Endpoint works, but `--history-id` is silently ignored and you get *every* page |
+| `create_page` *(write)* | Makes a report, never a notebook, and answers without `content_editor` |
+| `update_page` *(write)* | Cannot change content at all: 26.0's update payload has no content field |
+| `list_page_revisions`, `get_page_revision`, `revert_page_revision` | No such endpoint |
+
+`list_pages` is gated for the filter rather than the endpoint: answering a request for one
+history's notebooks with every page on the server is worse than refusing.
+
+`content_editor` on a *revision* is newer still and arrives after 26.1; where a server does
+not send it the ops fill it from that revision's `content`, which has its embeds already
+expanded, and say which it was in `content_editor_source`.
+
+### Version requirements
+
+A few operations need a Galaxy newer than the oldest one these tools speak to. Each
+declares its own minimum; `galaxy-cli <command> --help` and the MCP tool description
+say what it is, and the check happens *before* anything is sent -- so a write can
+never half-succeed against a server that was never going to accept it. An operation is
+gated only where the server really cannot serve it; one that merely returns less on an
+older Galaxy says so in its description instead.
+
+```bash
+$ galaxy-cli list_page_revisions f2db41e1fa331b3e
+list_page_revisions needs Galaxy 26.1 or newer; this server reports 26.0   # on stderr
+$ echo $?
+76
+```
+
+The explanation goes to stderr, so `--quiet` leaves you with exit code 76 alone. Over MCP
+the same refusal arrives as the usual envelope with `success: false` and
+`errorKind: "version"`.
+
+The version comes from `/api/version`, asked once per connection. A server that will
+not answer leaves its version unknown, and an unknown version refuses nothing: the
+operation is attempted and stands or falls on its own. `get_server_info` reports what
+the connected server cannot run in `unsupported_ops`, and says in `version_known`
+whether an empty list means anything.
+
+Run `galaxy-cli <command> --help` for the exact arguments of any operation.
 
 ## Development
 

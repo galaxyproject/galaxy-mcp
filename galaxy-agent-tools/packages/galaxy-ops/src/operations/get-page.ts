@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
 import { stripRendered, type PageDetail } from "./pages-common";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 const input = {
@@ -35,4 +35,4 @@ export const getPageOp: Operation<typeof input, PageDetail> = {
 
 register(getPageOp as AnyOperation);
 
-export const getPage = (i: In, ctx: GalaxyContext) => getPageOp.run(i, ctx);
+export const getPage = (i: In, ctx: GalaxyContext) => runOperation(getPageOp, i, ctx);

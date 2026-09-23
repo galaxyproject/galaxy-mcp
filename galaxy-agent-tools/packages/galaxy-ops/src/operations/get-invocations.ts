@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { components } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 export type InvocationDetail = components["schemas"]["WorkflowInvocationElementView"];
@@ -34,4 +34,4 @@ export const getInvocationsOp: Operation<typeof input, InvocationDetail> = {
 
 register(getInvocationsOp as AnyOperation);
 
-export const getInvocations = (i: In, ctx: GalaxyContext) => getInvocationsOp.run(i, ctx);
+export const getInvocations = (i: In, ctx: GalaxyContext) => runOperation(getInvocationsOp, i, ctx);

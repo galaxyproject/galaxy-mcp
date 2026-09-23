@@ -6,7 +6,7 @@ import {
   type PageRevisionDetails,
   type PageRevisionResponse,
 } from "./pages-common";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 const input = {
@@ -32,9 +32,10 @@ export const revertPageRevisionOp: Operation<typeof input, PageRevisionDetails> 
   summary:
     "Roll a page back to an earlier revision. The history is append-only: this writes a NEW " +
     "revision from the old content, tagged edit_source=restore, and deletes nothing. Its " +
-    "`content_editor` follows the same rule as get_page_revision -- filled from `content` " +
-    "where the server sends none, and that form has its embeds expanded.",
+    "`content_editor_source` follows the same rule as get_page_revision -- \"content\" means " +
+    "the editable text is the expanded render, because the server sent no content_editor.",
   input,
+  requires: { galaxy: ">=26.1" },
   readOnly: false,
   run,
   project: (rev, i) => ({ message: `Reverted page ${i.pageId} to revision ${i.revisionId} as ${rev.id}` }),
@@ -42,4 +43,4 @@ export const revertPageRevisionOp: Operation<typeof input, PageRevisionDetails> 
 
 register(revertPageRevisionOp as AnyOperation);
 
-export const revertPageRevision = (i: In, ctx: GalaxyContext) => revertPageRevisionOp.run(i, ctx);
+export const revertPageRevision = (i: In, ctx: GalaxyContext) => runOperation(revertPageRevisionOp, i, ctx);

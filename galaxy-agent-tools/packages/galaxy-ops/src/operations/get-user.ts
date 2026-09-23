@@ -1,6 +1,6 @@
 import type { GalaxyContext } from "../context";
 import { classifyHttp, GalaxyAuthError } from "../errors";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 export interface CurrentUser {
@@ -38,4 +38,4 @@ export const getUserOp: Operation<typeof input, CurrentUser> = {
 register(getUserOp as AnyOperation);
 
 /** Code-mode entry. */
-export const getUser = (i: Record<string, never>, ctx: GalaxyContext) => getUserOp.run(i, ctx);
+export const getUser = (i: Record<string, never>, ctx: GalaxyContext) => runOperation(getUserOp, i, ctx);

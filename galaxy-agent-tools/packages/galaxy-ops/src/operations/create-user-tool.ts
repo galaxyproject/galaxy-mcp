@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { GalaxyConnectionError } from "../errors";
 import { legacyPost } from "../legacy";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 /** Hand-typed: created user-defined tool record from POST /api/unprivileged_tools. */
@@ -64,4 +64,4 @@ export const createUserToolOp: Operation<typeof input, CreatedUserTool> = {
 
 register(createUserToolOp as AnyOperation);
 
-export const createUserTool = (i: In, ctx: GalaxyContext) => createUserToolOp.run(i, ctx);
+export const createUserTool = (i: In, ctx: GalaxyContext) => runOperation(createUserToolOp, i, ctx);

@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 export type Workflows = GetJson<"/api/workflows">;
@@ -34,4 +34,4 @@ export const listWorkflowsOp: Operation<typeof input, Workflows> = {
 
 register(listWorkflowsOp as AnyOperation);
 
-export const listWorkflows = (i: In, ctx: GalaxyContext) => listWorkflowsOp.run(i, ctx);
+export const listWorkflows = (i: In, ctx: GalaxyContext) => runOperation(listWorkflowsOp, i, ctx);

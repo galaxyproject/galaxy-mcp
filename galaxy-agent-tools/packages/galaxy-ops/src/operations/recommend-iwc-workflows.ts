@@ -7,7 +7,7 @@ import {
 } from "../iwc-manifest";
 import { tokenizeForSearch, BM25Okapi } from "../bm25";
 import type { GalaxyContext } from "../context";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 const input = {
@@ -71,4 +71,4 @@ export const recommendIwcWorkflowsOp: Operation<typeof input, RecommendedWorkflo
 
 register(recommendIwcWorkflowsOp as AnyOperation);
 
-export const recommendIwcWorkflows = (i: In, ctx: GalaxyContext) => recommendIwcWorkflowsOp.run(i, ctx);
+export const recommendIwcWorkflows = (i: In, ctx: GalaxyContext) => runOperation(recommendIwcWorkflowsOp, i, ctx);

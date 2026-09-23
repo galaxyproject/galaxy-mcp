@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { classifyHttp, GalaxyNotFoundError } from "../errors";
 import { legacyGet } from "../legacy";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 // The provenance endpoint's job_id field is not always typed; hand-type for safety.
@@ -91,4 +91,4 @@ export const getJobDetailsOp: Operation<typeof input, GetJobDetailsResult> = {
 
 register(getJobDetailsOp as AnyOperation);
 
-export const getJobDetails = (i: In, ctx: GalaxyContext) => getJobDetailsOp.run(i, ctx);
+export const getJobDetails = (i: In, ctx: GalaxyContext) => runOperation(getJobDetailsOp, i, ctx);

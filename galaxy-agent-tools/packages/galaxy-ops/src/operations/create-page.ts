@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { classifyHttp, GalaxyConnectionError } from "../errors";
 import { stripRendered, type PageDetail } from "./pages-common";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 const input = {
@@ -60,6 +60,7 @@ export const createPageOp: Operation<typeof input, PageDetail> = {
     "Create a markdown page. With historyId it is a notebook attached to that history; " +
     "without one it is a standalone report, which requires a title and a unique slug.",
   input,
+  requires: { galaxy: ">=26.1" },
   readOnly: false,
   run,
   project: (p) => ({ message: `Created page ${p.id} (${p.title})` }),
@@ -67,4 +68,4 @@ export const createPageOp: Operation<typeof input, PageDetail> = {
 
 register(createPageOp as AnyOperation);
 
-export const createPage = (i: In, ctx: GalaxyContext) => createPageOp.run(i, ctx);
+export const createPage = (i: In, ctx: GalaxyContext) => runOperation(createPageOp, i, ctx);

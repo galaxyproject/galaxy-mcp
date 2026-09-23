@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
-import { register } from "./registry";
+import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
 export interface CancelledInvocation {
@@ -36,4 +36,4 @@ export const cancelWorkflowInvocationOp: Operation<typeof input, CancelledInvoca
 
 register(cancelWorkflowInvocationOp as AnyOperation);
 
-export const cancelWorkflowInvocation = (i: In, ctx: GalaxyContext) => cancelWorkflowInvocationOp.run(i, ctx);
+export const cancelWorkflowInvocation = (i: In, ctx: GalaxyContext) => runOperation(cancelWorkflowInvocationOp, i, ctx);

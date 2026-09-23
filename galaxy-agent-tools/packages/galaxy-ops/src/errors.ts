@@ -2,6 +2,7 @@ export type GalaxyErrorKind =
   | "auth"
   | "not_found"
   | "connection"
+  | "version"
   | "tool_request_rejected"
   | "job_failed"
   | "unknown";
@@ -26,6 +27,17 @@ export class GalaxyConnectionError extends GalaxyError {
   ) {
     super(message);
   }
+}
+
+/**
+ * The connected Galaxy is older than the operation needs, and nothing was sent.
+ *
+ * Its own kind because none of the others tells the truth here: the call did not fail, it
+ * was never made, and neither a retry nor a different argument can change the answer -- the
+ * server is what has to change.
+ */
+export class GalaxyVersionError extends GalaxyError {
+  readonly kind = "version" as const;
 }
 
 /** tool_request.state === 'failed' -- the request couldn't even expand. */
