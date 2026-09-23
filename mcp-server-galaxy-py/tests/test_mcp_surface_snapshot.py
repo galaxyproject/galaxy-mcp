@@ -16,6 +16,7 @@ from fastmcp.tools import Tool
 from mcp.types import ToolAnnotations
 
 from galaxy_mcp import server
+from galaxy_mcp.version import TOOL_REQUIREMENTS
 from tests.surface_manifest import (
     CONDITIONAL_TOOLS,
     MANIFEST_PATH,
@@ -159,3 +160,18 @@ def test_manifest_refuses_two_registrations_of_one_name(monkeypatch):
     monkeypatch.setattr(server.mcp, "list_tools", with_two_of_them)
     with pytest.raises(ValueError, match=name):
         build_manifest()
+
+
+def test_manifest_records_what_a_tool_needs_from_the_server(checked_in):
+    """The declared minimum is a field of the contract, not a sentence in a description."""
+    by_name = {t["name"]: t for t in checked_in["tools"]}
+    assert TOOL_REQUIREMENTS, "no tool declares a requirement, so this test proves nothing"
+    for name, spec in TOOL_REQUIREMENTS.items():
+        # A requirement is recorded under the Python function's name; a tool registered
+        # under a different one would drop out of the manifest and be named in
+        # unsupported_tools as something no client has ever heard of.
+        assert name in by_name, f"{name} declares a requirement but is not a registered tool"
+        assert by_name[name].get("requires") == {"galaxy": spec}, _STALE
+    for name, entry in by_name.items():
+        if name not in TOOL_REQUIREMENTS:
+            assert "requires" not in entry, f"{name} declares nothing. {_STALE}"

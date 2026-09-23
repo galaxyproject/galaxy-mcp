@@ -108,6 +108,7 @@ def _reset_galaxy_state():
         galaxy_state,
         get_manifest_json,
     )
+    from galaxy_mcp.version import TOOL_REQUIREMENTS, clear_version_cache
 
     # Clear lru_cache to prevent test pollution
     get_manifest_json.cache_clear()
@@ -115,6 +116,13 @@ def _reset_galaxy_state():
     # Clear schema caches to prevent cross-test pollution
     _TOOL_SCHEMA_CACHE.clear()
     _DATATYPES_MAPPING_CACHE.clear()
+    # The version cache outlives a connection on purpose, so a test that wants a
+    # particular server version has to start from nothing remembered.
+    clear_version_cache()
+
+    # A test that declares a requirement of its own must not leave it on the registry the
+    # manifest and unsupported_tools are built from.
+    declared = TOOL_REQUIREMENTS.copy()
 
     # Save original state
     original_state = galaxy_state.copy()
@@ -132,6 +140,8 @@ def _reset_galaxy_state():
     galaxy_state.update(original_state)
     _session_connections.clear()
     _session_connections.update(original_session_connections)
+    TOOL_REQUIREMENTS.clear()
+    TOOL_REQUIREMENTS.update(declared)
 
 
 @pytest.fixture

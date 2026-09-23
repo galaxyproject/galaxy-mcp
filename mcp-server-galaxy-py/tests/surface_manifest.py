@@ -18,6 +18,7 @@ from typing import Any
 from fastmcp.tools import Tool
 
 from galaxy_mcp import server
+from galaxy_mcp.version import TOOL_REQUIREMENTS
 
 MANIFEST_PATH = Path(__file__).parent / "testdata" / "mcp-surface.json"
 REGENERATE_COMMAND = "uv run python -m tests.surface_manifest"
@@ -74,6 +75,11 @@ def _assert_numbers_survive_json(value: Any, where: str) -> None:
 
 def _entry(tool: Tool, conditional_on: str | None) -> dict[str, Any]:
     entry: dict[str, Any] = {"name": tool.name, "tags": sorted(tool.tags)}
+    # Recorded structurally rather than left to the description, so the TypeScript side's
+    # `requires` can be compared against this one instead of against English.
+    requires = TOOL_REQUIREMENTS.get(tool.name)
+    if requires:
+        entry["requires"] = {"galaxy": requires}
     if conditional_on:
         entry["conditionalOn"] = conditional_on
     entry["annotations"] = _annotations(tool)

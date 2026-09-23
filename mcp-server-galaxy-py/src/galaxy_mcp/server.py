@@ -3,16 +3,19 @@ import concurrent.futures
 import contextlib
 import importlib.metadata
 import importlib.util
+import inspect
 import json
 import logging
 import os
 import threading
 import time
 import types
+from collections.abc import Callable
+from contextvars import ContextVar
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import lru_cache, wraps
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal, TypeVar, cast
 
 import bioblend
 import requests
@@ -38,6 +41,17 @@ from galaxy_mcp.tool_inputs import (
     format_input_mismatch_error,
     is_input_related_error,
     summarize_tool_inputs,
+)
+from galaxy_mcp.version import (
+    GalaxyVersion,
+    GalaxyVersionError,
+    GalaxyVersionReport,
+    lookup_version,
+    parse_requirement,
+    record_requirement,
+    requirement_sentence,
+    satisfies,
+    unsupported_tools,
 )
 from galaxy_mcp.workflow_inputs import (
     _clean_readme_summary,
@@ -613,7 +627,127 @@ def ensure_connected() -> dict[str, Any]:
             "Galaxy URL and API key. Example: connect(url='https://your-galaxy.org', "
             "api_key='your-key')"
         )
+    _assert_version_supported(state)
     return state
+
+
+def _galaxy_version_report(state: dict[str, Any], *, refresh: bool = False) -> GalaxyVersionReport:
+    """What the connected Galaxy says it is, asked once per server and remembered.
+
+    Keyed by the address the connection resolved to, because a version is a property of the
+    server and not of the caller, which is how the schema and datatype caches above are
+    keyed too. Two sessions on two Galaxies therefore never share an answer; two ways of
+    writing one Galaxy's address cost two entries, which is the cheaper mistake to make.
+    ``refresh`` re-asks, which is how a server upgraded under a long-running process stops
+    being judged on the version it used to report.
+    """
+    gi: GalaxyInstance = state["gi"]
+    # base_url exactly as bioblend holds it, never the url in the state: the state keeps
+    # what a caller typed, and bioblend is the one that decided whether that meant https or
+    # http and where the trailing slash went. Requests go where base_url says, so that is
+    # what an answer belongs to -- and it is used verbatim, because every part of a URL can
+    # be something a gateway routes on.
+    base_url = getattr(gi, "base_url", None)
+    key = base_url if isinstance(base_url, str) else ""
+    return lookup_version(key, gi.config.get_version, refresh=refresh)
+
+
+def _connected_galaxy_version(state: dict[str, Any]) -> GalaxyVersion | None:
+    """One connection's server version, or None when it will not say.
+
+    A server we cannot read is an unknown version, and an unknown version refuses nothing:
+    the flag exists to spare a caller a round trip that cannot succeed, not to gate a
+    server whose answer we failed to get.
+    """
+    try:
+        return _galaxy_version_report(state).version
+    except Exception as exc:
+        logger.debug("Galaxy version lookup failed for %s: %s", state.get("url"), exc)
+        return None
+
+
+# What the tool currently running declared it needs, if anything. Set by requires_galaxy for
+# the length of one call and read by ensure_connected, which is where every tool body gets
+# the connection it is about to use.
+_active_requirement: ContextVar[tuple[str, str] | None] = ContextVar(
+    "galaxy_mcp_active_requirement", default=None
+)
+
+
+def _assert_version_supported(state: dict[str, Any]) -> None:
+    """Refuse the running tool when THIS connection's Galaxy is too old for it.
+
+    Checked here rather than once on the way in, because a session can be reconnected to a
+    different Galaxy while a call is in flight: a version checked against the server we had
+    when the call started is no promise about the server the body is about to write to.
+    Every body obtains its connection through ensure_connected, so checking here is checking
+    the server the request will actually reach, however many times the body asks and whatever
+    happened in between.
+    """
+    declared = _active_requirement.get()
+    if declared is None:
+        return
+    tool_name, spec = declared
+    version = _connected_galaxy_version(state)
+    if version is None or satisfies(version, spec):
+        return
+    want = parse_requirement(spec)
+    raise GalaxyVersionError(
+        f"{tool_name} needs Galaxy {want.major}.{want.minor} or newer; this server reports "
+        f"{version.raw}. Nothing was sent to Galaxy."
+    )
+
+
+def _describe_requirement(fn: Callable[..., Any], spec: str) -> str:
+    """Put the declared minimum into the tool's description, after the summary paragraph.
+
+    Generated from the same spec the guard compares, so an agent reading the description
+    and the check it will run against cannot disagree. A one-paragraph docstring has
+    nothing to come after, so the sentence lands at the end instead.
+    """
+    doc = inspect.getdoc(fn) or ""
+    summary, separator, rest = doc.partition("\n\n")
+    sentence = requirement_sentence(spec)
+    if not separator:
+        return f"{doc}\n\n{sentence}" if doc else sentence
+    return f"{summary}\n\n{sentence}\n\n{rest}"
+
+
+F = TypeVar("F", bound=Callable[..., Any])
+
+
+def requires_galaxy(spec: str) -> Callable[[F], F]:
+    """Declare the oldest Galaxy a tool works on, and refuse anything older before it runs.
+
+    The declaration goes on the function itself rather than on the way in, because the tools
+    are reached three ways -- over MCP, through code mode's call_tool, and directly by name
+    in process -- and a check on one of those is a check the other two walk around. What the
+    wrapper does is announce the requirement for the length of the call; ensure_connected
+    does the comparing, against the connection it is handing over. Refusing there still means
+    no request is sent, which matters most for the writes: a tool that fails after Galaxy has
+    already created something leaves a mess behind.
+
+    A tool that declares a minimum and then never calls ensure_connected would go unchecked;
+    tests/test_version_requirements.py holds every gated tool to calling it, before its
+    first request and outside any handler that would dress the refusal up as a Galaxy error.
+    """
+    parse_requirement(spec)
+
+    def decorate(fn: F) -> F:
+        record_requirement(fn.__name__, spec)
+
+        @wraps(fn)
+        def guarded(*args: Any, **kwargs: Any) -> Any:
+            token = _active_requirement.set((fn.__name__, spec))
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                _active_requirement.reset(token)
+
+        guarded.__doc__ = _describe_requirement(fn, spec)
+        return cast(F, guarded)
+
+    return decorate
 
 
 def _parse_tag_env(var_name: str) -> set[str] | None:
@@ -1349,6 +1483,10 @@ def get_server_info() -> GalaxyResult:
     """
     Get Galaxy server information including version, URL, and configuration details
 
+    Also reports which tools this server is too old to run, in `unsupported_tools`,
+    and whether its version could be read at all, in `version_known` -- an empty
+    `unsupported_tools` means nothing is ruled out only when `version_known` is true.
+
     Returns:
         GalaxyResult with server information in data field
     """
@@ -1360,13 +1498,19 @@ def get_server_info() -> GalaxyResult:
         # Get server configuration info
         config_info = gi.config.get_config()
 
-        # Get server version info
-        version_info = gi.config.get_version()
+        # Through the same lookup the version guard reads, never a probe of its own: two
+        # probes can reach two answers, and then this reports a set of refusals that will
+        # not happen -- or stays quiet about ones that will.
+        # Refreshed rather than read: reporting the server is this tool's whole job, so it
+        # asks every time, and what it learns is what every later guard compares against.
+        report = _galaxy_version_report(state, refresh=True)
 
         # Build comprehensive server info response
         server_info = {
             "url": url,
-            "version": version_info,
+            "version": report.payload,
+            "version_known": report.version is not None,
+            "unsupported_tools": unsupported_tools(report.version),
             "config": {
                 "brand": config_info.get("brand", "Galaxy"),
                 "logo_url": config_info.get("logo_url"),
@@ -3590,7 +3734,34 @@ def _strip_rendered(page: dict[str, Any], include_rendered: bool) -> dict[str, A
     return page
 
 
+def _with_editable_content(revision: dict[str, Any]) -> dict[str, Any]:
+    """Give a revision one field to edit whatever the server sent, and say which it was.
+
+    Galaxy only started returning ``content_editor`` on a revision after 26.1 -- through
+    26.1.1 the revision response model lists title, content and content_format and nothing
+    else -- and on that server ``content`` is the same document with its embeds expanded
+    for export. Falling back to it beats handing a caller nothing, but doing so silently
+    would leave them unable to tell an editable body from an expanded one, so
+    ``content_editor_source`` reports where the text came from rather than leaving it to be
+    guessed from the server's version. Empty counts as missing: content_editor defaults to
+    the empty string and Galaxy fills it on the markdown path only, so an HTML revision
+    arrives with an empty one and its body in ``content``. Copies rather than handing back
+    the dict it was given.
+    """
+    revision = dict(revision)
+    if revision.get("content_editor"):
+        revision["content_editor_source"] = "server"
+    elif revision.get("content") is not None:
+        revision["content_editor"] = revision["content"]
+        revision["content_editor_source"] = "content"
+    else:
+        revision["content_editor"] = None
+        revision["content_editor_source"] = "none"
+    return revision
+
+
 @mcp.tool(tags={"pages", "read", "extended"})
+@requires_galaxy(">=26.1")
 def list_pages(
     history_id: str | None = None,
     search: str | None = None,
@@ -3600,6 +3771,11 @@ def list_pages(
     show_shared: bool = False,
 ) -> GalaxyResult:
     """List Galaxy pages (markdown documents) viewable by the user.
+
+    The history is what needs the newer server, and the whole tool is refused
+    rather than only a filtered call: an older one has no history_id query
+    parameter and no history_id on a page, so it would answer with every page
+    the user can see and no way to tell a notebook from a report.
 
     A page attached to a history is a "Galaxy Notebook"; a standalone page is
     a "Report". Pass history_id to list only that history's notebooks.
@@ -3709,6 +3885,7 @@ def get_page(page_id: str, include_rendered: bool = False) -> GalaxyResult:
 
 
 @mcp.tool(tags={"pages", "write", "extended"})
+@requires_galaxy(">=26.1")
 def create_page(
     history_id: str | None = None,
     title: str | None = None,
@@ -3717,6 +3894,11 @@ def create_page(
     slug: str | None = None,
 ) -> GalaxyResult:
     """Create a markdown page (Galaxy Notebook or Report).
+
+    Attaching a page to a history is what needs the newer server, and the whole
+    tool is refused rather than only that call: an older one has no history_id
+    on the create payload, and answers with a summary carrying no editable
+    content whichever kind you asked for.
 
     Pass history_id to create a history-attached notebook (title auto-fills
     from the history if omitted). Omit history_id to create a standalone
@@ -3774,6 +3956,7 @@ def create_page(
 
 
 @mcp.tool(tags={"pages", "write", "extended"})
+@requires_galaxy(">=26.1")
 def update_page(
     page_id: str,
     content: str | None = None,
@@ -3825,6 +4008,7 @@ def update_page(
 
 
 @mcp.tool(tags={"pages", "read", "extended"})
+@requires_galaxy(">=26.1")
 def list_page_revisions(page_id: str, sort_desc: bool = False) -> GalaxyResult:
     """List the revision history of a page.
 
@@ -3864,21 +4048,24 @@ def list_page_revisions(page_id: str, sort_desc: bool = False) -> GalaxyResult:
 
 
 @mcp.tool(tags={"pages", "read", "extended"})
+@requires_galaxy(">=26.1")
 def get_page_revision(page_id: str, revision_id: str) -> GalaxyResult:
     """Get the content of a single page revision.
 
-    Returns the revision's `content`: the editable Galaxy-flavored markdown with
-    ENCODED ids in directives -- the form to diff against get_page or pass back
-    to update_page. Note: a revision exposes its editable markdown as `content`;
-    revisions have no separate `content_editor` field (unlike get_page).
+    Edit `content_editor` and pass it to update_page; `content` is the same
+    document with its embeds expanded for export, not the editable form. Galaxy
+    only began sending content_editor on a revision after 26.1, so check
+    `content_editor_source`: "content" means the server sent none and the
+    editable text you are being handed is that expanded form -- editing it and
+    saving it bakes the expansion into the page.
 
     Args:
         page_id: Encoded id of the page.
         revision_id: Encoded id of the revision (from list_page_revisions).
 
     Returns:
-        GalaxyResult with the revision details including `content`, `edit_source`,
-        and timestamps in data.
+        GalaxyResult with the revision details including `content_editor`,
+        `content_editor_source`, `edit_source`, and timestamps in data.
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
@@ -3887,7 +4074,7 @@ def get_page_revision(page_id: str, revision_id: str) -> GalaxyResult:
         response = gi.make_get_request(f"{gi.url}/pages/{page_id}/revisions/{revision_id}")
         response.raise_for_status()
         return GalaxyResult(
-            data=response.json(),
+            data=_with_editable_content(response.json()),
             success=True,
             message=f"Retrieved revision '{revision_id}' of page '{page_id}'",
         )
@@ -3898,11 +4085,14 @@ def get_page_revision(page_id: str, revision_id: str) -> GalaxyResult:
 
 
 @mcp.tool(tags={"pages", "write", "extended"})
+@requires_galaxy(">=26.1")
 def revert_page_revision(page_id: str, revision_id: str) -> GalaxyResult:
     """Roll a page back to an earlier revision.
 
     Creates a NEW revision from the target revision's content, recorded with
     edit_source="restore" (the history is append-only -- nothing is deleted).
+    The new revision comes back the way get_page_revision returns one, with
+    `content_editor` and the `content_editor_source` that says where it came from.
 
     Args:
         page_id: Encoded id of the page.
@@ -3917,7 +4107,7 @@ def revert_page_revision(page_id: str, revision_id: str) -> GalaxyResult:
     try:
         revision = gi.make_post_request(f"{gi.url}/pages/{page_id}/revisions/{revision_id}/revert")
         return GalaxyResult(
-            data=revision,
+            data=_with_editable_content(revision),
             success=True,
             message=f"Reverted page '{page_id}' to revision '{revision_id}'",
         )
