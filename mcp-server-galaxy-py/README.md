@@ -187,7 +187,7 @@ editable markdown, which is what it is for.
 ### Histories
 
 - `get_histories`: List histories, optionally filtered by name
-- `list_history_ids`: A compact id-and-name list, for when you just need an id
+- `list_history_ids`: A compact id-and-name list, for when you just need an id; 100 per page
 - `get_history_details`: One history's metadata and item counts, without its contents
 - `get_history_contents`: The datasets and collections inside a history
 - `create_history`: Create a history
@@ -204,10 +204,10 @@ editable markdown, which is what it is for.
 
 ### Galaxy tools
 
-- `search_tools_by_name`: Substring search over tool name, id, and description
-- `search_tools_by_keywords`: Match keywords against tool names, descriptions, and the file extensions a tool accepts as input
+- `search_tools_by_name`: Substring search over tool name, id, and description; 25 per page
+- `search_tools_by_keywords`: Match keywords against tool names, descriptions, and the file extensions a tool accepts as input; 50 per page
 - `get_tool_details`: A tool's metadata, optionally including its full input schema
-- `get_tool_panel`: The tool panel as Galaxy organizes it, section by section
+- `get_tool_panel`: Browse the tool panel one level at a time -- the sections and their sizes, or one section's tools with `section_id`. The whole panel is megabytes on a production server, so it is never returned whole; 100 entries per page
 - `get_tool_citations`: How to cite a tool
 - `get_tool_run_examples`: The tool's own XML test definitions, as written -- good for seeing how inputs are shaped, but some expect failure and their input files are test fixtures
 - `get_tool_input_template`: A ready-to-fill `inputs` skeleton plus a compact schema; call this before `run_tool` when the shape is unclear
@@ -221,14 +221,14 @@ are addressed by UUID rather than by tool id, and `run_user_tool` resolves that 
 submitting the run, so they need their own run tool even though the run itself goes through
 the same Galaxy tools API as a catalog tool.
 
-- `list_user_tools`: The current user's user-defined tools
+- `list_user_tools`: The current user's user-defined tools; 25 per page, because each entry carries the tool's full representation
 - `create_user_tool`: Create one from a tool representation
 - `delete_user_tool`: Deactivate one, so it stops loading into the toolbox
 - `run_user_tool`: Run one in a history
 
 ### Workflows and invocations
 
-- `list_workflows`: Stored workflows, optionally filtered by name or published state
+- `list_workflows`: Stored workflows, optionally filtered by name or published state; 50 per page
 - `get_workflow_details`: One workflow's steps and inputs, at a given version
 - `get_workflow_input_template`: A ready-to-fill input template plus a run guide; call this before `invoke_workflow`
 - `invoke_workflow`: Run a workflow, validating the inputs against its steps first
@@ -240,9 +240,9 @@ the same Galaxy tools API as a catalog tool.
 The Intergalactic Workflow Commission publishes a curated, versioned workflow catalog.
 These tools read that public manifest; only the import touches your Galaxy.
 
-- `get_iwc_workflows`: The whole IWC manifest
-- `search_iwc_workflows`: Substring search across the catalog
-- `recommend_iwc_workflows`: Rank catalog workflows against a free-text description of what you want to do
+- `get_iwc_workflows`: The IWC manifest, 20 workflows per page
+- `search_iwc_workflows`: Substring search across the catalog; 20 per page
+- `recommend_iwc_workflows`: Rank catalog workflows against a free-text description of what you want to do; the best 5 by default, up to 25
 - `get_iwc_workflow_details`: Everything about one workflow before you commit to importing it
 - `import_workflow_from_iwc`: Import a catalog workflow into the connected Galaxy
 

@@ -530,7 +530,18 @@
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {},
+        "properties": {
+          "limit": {
+            "default": 20,
+            "type": "integer",
+            "description": "Maximum workflows to return per page (default 20, max 100). A page\n   is also cut short when it would not fit the output budget."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Skip this many workflows (default 0). Pass pagination.next_offset\n    to walk to the following page."
+          }
+        },
         "type": "object"
       }
     },
@@ -719,7 +730,30 @@
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {},
+        "properties": {
+          "section_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Panel section to open, from a previous summary call. Omit to\n        list the sections themselves."
+          },
+          "limit": {
+            "default": 100,
+            "type": "integer",
+            "description": "Maximum entries to return per page (default 100, max 500). A page is\n   also cut short when it would not fit the output budget."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Skip this many entries (default 0). Pass pagination.next_offset\n    to walk to the following page."
+          }
+        },
         "type": "object"
       }
     },
@@ -961,7 +995,18 @@
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {},
+        "properties": {
+          "limit": {
+            "default": 100,
+            "type": "integer",
+            "description": "Maximum histories to return per page (default 100, max 500). A page\n   is also cut short when it would not fit the output budget."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Skip this many histories (default 0). Pass pagination.next_offset\n    to walk to the following page."
+          }
+        },
         "type": "object"
       }
     },
@@ -1072,6 +1117,16 @@
             "default": true,
             "type": "boolean",
             "description": "If True (default), only show active tools. Set False to include deactivated tools."
+          },
+          "limit": {
+            "default": 25,
+            "type": "integer",
+            "description": "Maximum tools to return per page (default 25, max 100). Each entry\ncarries the tool's full representation, so a page is often cut short to\nfit the output budget; walk pagination.next_offset for the rest."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Skip this many tools (default 0). Pass pagination.next_offset to\nwalk to the following page."
           }
         },
         "type": "object"
@@ -1116,6 +1171,16 @@
             "default": false,
             "type": "boolean",
             "description": "Include published workflows (default: False, shows only user workflows)"
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "description": "Maximum workflows to return per page (default 50, max 200). A page\n   is also cut short when it would not fit the output budget."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Skip this many workflows (default 0). Pass pagination.next_offset\n    to walk to the following page."
           }
         },
         "type": "object"
@@ -1165,7 +1230,7 @@
           "limit": {
             "default": 5,
             "type": "integer",
-            "description": "Maximum number of recommendations to return (default: 5)"
+            "description": "Maximum number of recommendations to return (default 5, max 25)"
           }
         },
         "required": [
@@ -1284,6 +1349,16 @@
           "query": {
             "type": "string",
             "description": "Search query (case-insensitive). Matches against:\n   - Workflow name (e.g., \"RNA-seq\")\n   - Description/annotation\n   - Tags (e.g., \"assembly\", \"transcriptomics\")"
+          },
+          "limit": {
+            "default": 20,
+            "type": "integer",
+            "description": "Maximum workflows to return per page (default 20, max 100). A broad\n   query matches most of the 123-workflow corpus, which is ~184 KB\n   unpaged and more than an MCP client will pass through intact."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Skip this many matches (default 0). Pass pagination.next_offset\n    to walk to the following page."
           }
         },
         "required": [
@@ -1309,6 +1384,16 @@
             },
             "type": "array",
             "description": "A list of keywords or phrases describing what you're looking for,\ne.g., [\"csv\", \"rna\", \"alignment\", \"visualization\"]. The search will match tools\nwhose name, description, or accepted input formats contain any of these keywords."
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "description": "Maximum tools to return per page (default 50, max 200). A page is\n   also cut short when it would not fit the output budget."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Skip this many matches (default 0). Pass pagination.next_offset for\nthe following page."
           }
         },
         "required": [
@@ -1331,6 +1416,16 @@
           "query": {
             "type": "string",
             "description": "Search query - matches against tool name, ID, or description.\n   Examples: \"fastq\", \"alignment\", \"filter\", \"bwa\""
+          },
+          "limit": {
+            "default": 25,
+            "type": "integer",
+            "description": "Maximum tools to return per page (default 25, max 100). A page is\n   also cut short when it would not fit the output budget, so ask for\n   what you want and walk pagination.next_offset."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Skip this many matches (default 0). Pass pagination.next_offset\n    to walk to the following page."
           }
         },
         "required": [

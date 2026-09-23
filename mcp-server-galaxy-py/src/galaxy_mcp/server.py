@@ -10,7 +10,7 @@ import os
 import threading
 import time
 import types
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import lru_cache, wraps
@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Literal, TypeVar, cast
 
 import bioblend
+import pydantic_core
 import requests
 from bioblend.galaxy import GalaxyInstance
 from dotenv import find_dotenv, load_dotenv
@@ -65,6 +66,8 @@ from galaxy_mcp.workflow_inputs import (
 
 _galaxy_mcp_version = importlib.metadata.version("galaxy-mcp")
 USER_AGENT = f"galaxy-mcp/{_galaxy_mcp_version} bioblend/{bioblend.__version__}"
+
+T = TypeVar("T")
 
 _gi_lock = threading.Lock()
 _session_state_lock = threading.Lock()
@@ -159,6 +162,36 @@ class WorkflowInputValidationError(ValueError):
     """
 
 
+# What one tool response may reach, in UTF-8 bytes. MCP clients cap tool output -- 50 KB
+# is a common limit -- and a response past the cap arrives as truncated, unparseable JSON
+# rather than as a short answer, which is worse than a short page.
+#
+# Measured on the TEXT content block, which is the JSON an adapter shows the model and so
+# the thing a truncating one truncates. It is NOT the whole CallToolResult: FastMCP also
+# attaches structuredContent carrying the same data, so what goes over the wire is about
+# twice this. A client that counts the envelope rather than the text block therefore has
+# half the room this assumes, which is an argument for lowering the number and not for
+# measuring something the model never sees.
+OUTPUT_BUDGET_BYTES = 50_000
+
+# The most a caller may ask one list tool for in a single page. A ceiling on the
+# request, not a promise about the response -- the response is bounded by
+# OUTPUT_BUDGET_BYTES, which is the only thing that can be. These say what a sensible
+# page looks like for the kind of item the tool returns, so an agent asking for a
+# thousand tool records gets told no rather than getting a page cut to a fifth of it.
+MAX_PAGE_SIZE = {
+    "get_iwc_workflows": 100,
+    "get_tool_panel": 500,
+    "list_history_ids": 500,
+    "list_user_tools": 100,
+    "list_workflows": 200,
+    "recommend_iwc_workflows": 25,
+    "search_iwc_workflows": 100,
+    "search_tools_by_keywords": 200,
+    "search_tools_by_name": 100,
+}
+
+
 class PaginationInfo(BaseModel):
     """Pagination metadata for list operations."""
 
@@ -188,6 +221,163 @@ class GalaxyResult(BaseModel):
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+# Bounded list tools share these. MCP clients cap tool output (one common adapter
+# truncates at 50 KB), and a truncated response reaches the model as broken JSON it
+# cannot page past, so every list tool returns a window plus enough metadata to walk it.
+def _validate_pagination(limit: int, offset: int, *, max_limit: int, pageable: bool = True) -> None:
+    """Reject page windows nobody should be asking for.
+
+    ``max_limit`` is a ceiling on the request, not a promise about the response. What
+    comes back is bounded by OUTPUT_BUDGET_BYTES, measured on the way out, because an
+    item count cannot bound a response whose items have no maximum size.
+
+    ``pageable`` is False for a tool with no ``offset`` parameter, which cannot act
+    on advice to page through the rest.
+    """
+    if limit < 1:
+        raise ValueError(f"limit must be at least 1 (got {limit})")
+    if limit > max_limit:
+        rest = " and use offset to page through the rest" if pageable else ""
+        raise ValueError(
+            f"limit must be at most {max_limit} (got {limit}); request {max_limit} or fewer{rest}"
+        )
+    if offset < 0:
+        raise ValueError(f"offset must be 0 or greater (got {offset})")
+
+
+def _pagination_info(
+    *,
+    total_items: int,
+    returned_items: int,
+    limit: int,
+    offset: int,
+    noun: str,
+    trimmed_for_size: bool = False,
+) -> PaginationInfo:
+    """Describe one page of ``total_items`` results.
+
+    ``has_next`` comes from what was actually returned rather than from ``limit``
+    so a short final page reports itself as the last one.
+
+    ``trimmed_for_size`` says the page was cut to fit the output budget rather than
+    because the caller asked for that many, so an agent reading a short page does not
+    conclude the server had nothing more.
+    """
+    # A caller that pages server-side reads the total separately, so the two can
+    # disagree. Items in hand prove a floor; an empty page proves nothing, so an
+    # offset past the end must not inflate the total.
+    if returned_items:
+        total_items = max(total_items, offset + returned_items)
+    has_next = (offset + returned_items) < total_items
+    has_previous = offset > 0
+    if returned_items == 0 and offset >= total_items and total_items > 0:
+        helper_text = (
+            f"offset {offset} is past the end of {total_items} {noun}; use a smaller offset"
+        )
+    else:
+        cut = (
+            " This page was cut short to fit the output budget, not because there is nothing more."
+            if trimmed_for_size
+            else ""
+        )
+        helper_text = (
+            f"Showing {returned_items} of {total_items} {noun} (offset {offset}).{cut} "
+            + (
+                f"Use offset={offset + (returned_items or limit)} for the next page."
+                if has_next
+                else "This is the last page."
+            )
+        )
+
+    return PaginationInfo(
+        total_items=total_items,
+        returned_items=returned_items,
+        limit=limit,
+        offset=offset,
+        has_next=has_next,
+        has_previous=has_previous,
+        # Advance by what we got, falling back to limit so an empty page never stalls.
+        next_offset=offset + (returned_items or limit) if has_next else None,
+        previous_offset=max(0, offset - limit) if has_previous else None,
+        helper_text=helper_text,
+    )
+
+
+def _paginate(
+    items: Sequence[T], *, limit: int, offset: int, noun: str
+) -> tuple[list[T], PaginationInfo]:
+    """Slice ``items`` client-side and describe the window."""
+    page = list(items[offset : offset + limit])
+    return page, _pagination_info(
+        total_items=len(items),
+        returned_items=len(page),
+        limit=limit,
+        offset=offset,
+        noun=noun,
+    )
+
+
+def _serialized_size(result: GalaxyResult) -> int:
+    """How many bytes a client is handed for this result.
+
+    The call FastMCP makes to turn a tool's return value into the text block it sends
+    (``default_serializer`` in ``fastmcp.tools.base``), so this measures the payload
+    itself rather than something standing in for it. Bytes, not characters: a name in
+    a non-Latin script is several bytes per character and a length in characters can
+    be half the truth.
+    """
+    return len(pydantic_core.to_json(result, fallback=str))
+
+
+def _budgeted_page(
+    items: Sequence[Any],
+    *,
+    limit: int,
+    offset: int,
+    noun: str,
+    build: Callable[[list[Any], PaginationInfo], GalaxyResult],
+    project: Callable[[Any], Any] | None = None,
+) -> GalaxyResult:
+    """One page, cut short if the text block a client reads would not fit its budget.
+
+    A count cannot bound a response. Galaxy names, tool commands, descriptions and
+    readmes have no useful maximum, so whatever item count we pick, items exist that
+    beat it -- which is why ``limit`` is a ceiling on what a caller may ask for and
+    not a promise about size. The promise is made here instead, on the thing that can
+    actually be checked: the serialised result, measured and cut until it fits.
+
+    A page cut this way still reports what it returned, so ``has_next`` and
+    ``next_offset`` follow from it and a walk sees every item exactly once.
+
+    One item that is over budget by itself is returned anyway. A list tool has nothing
+    better to offer -- trimming fields inside the item would hand back something that
+    is not the item.
+    """
+    window = list(items[offset : offset + limit])
+    if project is not None:
+        window = [project(item) for item in window]
+
+    page = window
+    while True:
+        result = build(
+            page,
+            _pagination_info(
+                total_items=len(items),
+                returned_items=len(page),
+                limit=limit,
+                offset=offset,
+                noun=noun,
+                trimmed_for_size=len(page) < len(window),
+            ),
+        )
+        size = _serialized_size(result)
+        if size <= OUTPUT_BUDGET_BYTES or len(page) <= 1:
+            return result
+        # Scale by how far over budget we are, and always drop at least one item so
+        # this cannot stall on a page whose overshoot is all envelope.
+        page = page[: min(len(page) - 1, max(1, len(page) * OUTPUT_BUDGET_BYTES // size))]
 
 
 def _get_tool_credentials_context(gi: GalaxyInstance, tool_id: str) -> list[dict[str, Any]] | None:
@@ -890,9 +1080,12 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
 
 
 @mcp.tool(tags={"tools", "read", "extended"})
-def search_tools_by_name(query: str) -> GalaxyResult:
+def search_tools_by_name(query: str, limit: int = 25, offset: int = 0) -> GalaxyResult:
     """
     Search Galaxy tools whose name, ID, or description contains the given query (substring match).
+
+    Results are paginated. pagination.total_items is how many tools matched in total;
+    pagination.next_offset is where the next page starts (None on the last page).
 
     RECOMMENDED WORKFLOW:
     1. Use this function to find tools by name/keyword
@@ -903,11 +1096,18 @@ def search_tools_by_name(query: str) -> GalaxyResult:
     Args:
         query: Search query - matches against tool name, ID, or description.
                Examples: "fastq", "alignment", "filter", "bwa"
+        limit: Maximum tools to return per page (default 25, max 100). A page is
+               also cut short when it would not fit the output budget, so ask for
+               what you want and walk pagination.next_offset.
+        offset: Skip this many matches (default 0). Pass pagination.next_offset
+                to walk to the following page.
 
     Returns:
         GalaxyResult with:
-        - data: List of matching tools with id, name, version, description
-        - count: Number of tools found
+        - data: This page of matching tools, as Galaxy's tool index returns them
+          (id, name, version, description, panel section, EDAM terms and more)
+        - count: Number of tools on this page
+        - pagination: Total matches, this window, and the offset for the next page
         - message: Summary of results
 
     Example:
@@ -918,14 +1118,16 @@ def search_tools_by_name(query: str) -> GalaxyResult:
                 {"id": "fastq_filter", "name": "Filter FASTQ", ...}
             ],
             count=15,
-            message="Found 15 tools matching 'fastq'"
+            message="Found 15 tools matching 'fastq', returning 15"
         )
 
     NEXT STEPS:
     - To see full tool parameters: get_tool_details(tool_id)
     - To see example inputs: get_tool_run_examples(tool_id)
     - To run a tool: run_tool(history_id, tool_id, inputs)
+    - For the next page: search_tools_by_name(query, offset=pagination.next_offset)
     """
+    _validate_pagination(limit, offset, max_limit=MAX_PAGE_SIZE["search_tools_by_name"])
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
@@ -944,11 +1146,21 @@ def search_tools_by_name(query: str) -> GalaxyResult:
             or query_lower in tool.get("description", "").lower()
         ]
 
-        return GalaxyResult(
-            data=matching_tools,
-            success=True,
-            message=f"Found {len(matching_tools)} tools matching '{query}'",
-            count=len(matching_tools),
+        # Galaxy's tool index has no pagination either, so the window is applied here.
+        return _budgeted_page(
+            matching_tools,
+            limit=limit,
+            offset=offset,
+            noun="tools",
+            build=lambda page, pagination: GalaxyResult(
+                data=page,
+                success=True,
+                message=(
+                    f"Found {len(matching_tools)} tools matching '{query}', returning {len(page)}"
+                ),
+                count=len(page),
+                pagination=pagination,
+            ),
         )
     except Exception as e:
         raise ValueError(format_error("Search tools", e, {"query": query})) from e
@@ -1220,27 +1432,146 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyRes
         ) from e
 
 
-@mcp.tool(tags={"tools", "read", "extended"})
-def get_tool_panel() -> GalaxyResult:
+def _slim_tool(tool: dict[str, Any]) -> dict[str, Any]:
+    """The four fields an agent needs to pick a tool and then call get_tool_details."""
+    return {
+        "id": tool.get("id", ""),
+        "name": tool.get("name", ""),
+        "description": tool.get("description", ""),
+        "versions": tool.get("versions", []),
+    }
+
+
+def _is_panel_tool(entry: Any) -> bool:
+    """Tool panel entries are sections, labels or tools; only the tools are runnable."""
+    if not isinstance(entry, dict) or "elems" in entry:
+        return False
+    return entry.get("model_class") != "ToolSectionLabel"
+
+
+def _summarize_panel_entry(entry: dict[str, Any]) -> dict[str, Any] | None:
+    """Describe one top-level panel entry without listing the tools inside it.
+
+    Returns None for a divider label, which is neither a section to open nor a
+    tool to run.
     """
-    Get the tool panel structure (toolbox)
+    if "elems" in entry:
+        elems = entry["elems"] if isinstance(entry["elems"], list) else []
+        return {
+            "id": entry.get("id", ""),
+            "name": entry.get("name", ""),
+            "type": "section",
+            "tool_count": sum(1 for elem in elems if _is_panel_tool(elem)),
+        }
+    if not _is_panel_tool(entry):
+        return None
+    return {
+        "id": entry.get("id", ""),
+        "name": entry.get("name", ""),
+        "type": "tool",
+        "description": entry.get("description", ""),
+    }
+
+
+@mcp.tool(tags={"tools", "read", "extended"})
+def get_tool_panel(
+    section_id: str | None = None, limit: int = 100, offset: int = 0
+) -> GalaxyResult:
+    """
+    Browse the Galaxy tool panel (toolbox) one level at a time.
+
+    The whole panel is megabytes on a production server, so it is never returned
+    whole. Called with no arguments this lists the top-level entries - each section
+    with the number of tools in it, plus any tools that sit outside a section.
+    Pass section_id to list the tools in one section.
+
+    Args:
+        section_id: Panel section to open, from a previous summary call. Omit to
+                    list the sections themselves.
+        limit: Maximum entries to return per page (default 100, max 500). A page is
+               also cut short when it would not fit the output budget.
+        offset: Skip this many entries (default 0). Pass pagination.next_offset
+                to walk to the following page.
 
     Returns:
-        GalaxyResult with tool panel hierarchy in data field
+        GalaxyResult whose data is
+        - without section_id: {"entries": [{id, name, type, tool_count|description}]}
+        - with section_id: {"section_id", "section_name", "tools": [{id, name,
+          description, versions}]}
+        plus count for this page and pagination carrying the total.
+
+    NEXT STEPS:
+    - Open a section: get_tool_panel(section_id="fastq_manipulation")
+    - Full parameters for one tool: get_tool_details(tool_id)
+    - Search across every section instead of browsing: search_tools_by_name(query)
     """
+    _validate_pagination(limit, offset, max_limit=MAX_PAGE_SIZE["get_tool_panel"])
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
+    # Only the call is wrapped: a "section not found" ValueError raised below should
+    # reach the agent as itself, not re-labelled as a Galaxy failure.
     try:
-        # Get the tool panel structure
         tool_panel = gi.tools.get_tool_panel()
-        return GalaxyResult(
-            data=tool_panel,
-            success=True,
-            message="Retrieved tool panel structure",
-        )
     except Exception as e:
-        raise ValueError(format_error("Get tool panel", e)) from e
+        raise ValueError(format_error("Get tool panel", e, {"section_id": section_id})) from e
+
+    if section_id is None:
+        summaries = [
+            summary
+            for entry in tool_panel
+            if isinstance(entry, dict) and (summary := _summarize_panel_entry(entry)) is not None
+        ]
+        return _budgeted_page(
+            summaries,
+            limit=limit,
+            offset=offset,
+            noun="entries",
+            build=lambda page, pagination: GalaxyResult(
+                data={"entries": page},
+                success=True,
+                message=(
+                    f"Retrieved {len(page)} of {len(summaries)} tool panel entries; "
+                    "pass section_id to list a section's tools"
+                ),
+                count=len(page),
+                pagination=pagination,
+            ),
+        )
+
+    section = next(
+        (
+            entry
+            for entry in tool_panel
+            if isinstance(entry, dict) and entry.get("id") == section_id and "elems" in entry
+        ),
+        None,
+    )
+    if section is None:
+        raise ValueError(
+            f"Tool panel section '{section_id}' not found. "
+            "Call get_tool_panel() with no arguments to list the available section ids."
+        )
+
+    elems = section["elems"] if isinstance(section["elems"], list) else []
+    tools = [_slim_tool(elem) for elem in elems if _is_panel_tool(elem)]
+    return _budgeted_page(
+        tools,
+        limit=limit,
+        offset=offset,
+        noun="tools",
+        build=lambda page, pagination: GalaxyResult(
+            data={
+                "section_id": section_id,
+                "section_name": section.get("name", ""),
+                "tools": page,
+            },
+            success=True,
+            message=f"Retrieved {len(page)} of {len(tools)} tools in section '{section_id}'",
+            count=len(page),
+            pagination=pagination,
+        ),
+    )
 
 
 @mcp.tool(tags={"histories", "write", "core"})
@@ -1367,23 +1698,35 @@ def update_history(
 
 
 @mcp.tool(tags={"tools", "read", "extended"})
-def search_tools_by_keywords(keywords: list[str]) -> GalaxyResult:
+def search_tools_by_keywords(keywords: list[str], limit: int = 50, offset: int = 0) -> GalaxyResult:
     """
     Recommend Galaxy tools based on a list of keywords.
+
+    Matches on name and description first, then on accepted input formats, and keeps
+    that order so paging is stable. Results are paginated: pagination.total_items is
+    the full match count, pagination.next_offset is where the next page starts.
+
+    Expensive: finding the format matches costs one detail lookup per tool that did
+    not match by name, and every page repeats the whole scan. Prefer
+    search_tools_by_name when a name or description substring will do.
 
     Args:
         keywords (list[str]): A list of keywords or phrases describing what you're looking for,
             e.g., ["csv", "rna", "alignment", "visualization"]. The search will match tools
             whose name, description, or accepted input formats contain any of these keywords.
+        limit: Maximum tools to return per page (default 50, max 200). A page is
+               also cut short when it would not fit the output budget.
+        offset: Skip this many matches (default 0). Pass pagination.next_offset for
+            the following page.
 
     Returns:
-        GalaxyResult with recommended tools in data field
+        GalaxyResult with this page of recommended tools in data, the page size in
+        count, and the total match count in pagination.total_items
     """
+    _validate_pagination(limit, offset, max_limit=MAX_PAGE_SIZE["search_tools_by_keywords"])
 
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
-
-    lock = threading.Lock()
 
     keywords_lower = [k.lower() for k in keywords]
 
@@ -1449,30 +1792,30 @@ def search_tools_by_keywords(keywords: list[str]) -> GalaxyResult:
                 return None
 
         # Use a thread pool to concurrently check tools that require detail retrieval.
+        # executor.map keeps panel order instead of completion order, without which
+        # a given offset would land on different tools from one call to the next.
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-            future_to_tool = {executor.submit(check_tool, tool): tool for tool in tools_to_fetch}
-            for future in concurrent.futures.as_completed(future_to_tool):
-                result = future.result()
+            for result in executor.map(check_tool, tools_to_fetch):
                 if result is not None:
-                    # Use the lock to ensure thread-safe appending.
-                    with lock:
-                        recommended_tools.append(result)
+                    recommended_tools.append(result)
 
-        slim_tools = []
-        for tool in recommended_tools:
-            slim_tools.append(
-                {
-                    "id": tool.get("id", ""),
-                    "name": tool.get("name", ""),
-                    "description": tool.get("description", ""),
-                    "versions": tool.get("versions", []),
-                }
-            )
-        return GalaxyResult(
-            data=slim_tools,
-            success=True,
-            message=f"Found {len(slim_tools)} tools matching keywords: {', '.join(keywords)}",
-            count=len(slim_tools),
+        slim_tools = [_slim_tool(tool) for tool in recommended_tools]
+
+        return _budgeted_page(
+            slim_tools,
+            limit=limit,
+            offset=offset,
+            noun="tools",
+            build=lambda page, pagination: GalaxyResult(
+                data=page,
+                success=True,
+                message=(
+                    f"Found {len(slim_tools)} tools matching keywords: "
+                    f"{', '.join(keywords)}, returning {len(page)}"
+                ),
+                count=len(page),
+                pagination=pagination,
+            ),
         )
     except Exception as e:
         raise ValueError(f"Failed to search tools by keywords: {str(e)}") from e
@@ -1675,32 +2018,48 @@ def get_histories(
 
 
 @mcp.tool(tags={"histories", "read", "core"})
-def list_history_ids() -> GalaxyResult:
+def list_history_ids(limit: int = 100, offset: int = 0) -> GalaxyResult:
     """
-    Get a simplified list of history IDs and names for easy reference
+    Get a simplified, paginated list of history IDs and names for easy reference
+
+    Args:
+        limit: Maximum histories to return per page (default 100, max 500). A page
+               is also cut short when it would not fit the output budget.
+        offset: Skip this many histories (default 0). Pass pagination.next_offset
+                to walk to the following page.
 
     Returns:
-        GalaxyResult with list of {id, name} dictionaries in data field
+        GalaxyResult with a list of {id, name} dictionaries in data, the page size
+        in count, and the account's history total in pagination.total_items
     """
+    _validate_pagination(limit, offset, max_limit=MAX_PAGE_SIZE["list_history_ids"])
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
     try:
+        # Galaxy pages this index server-side, but it returns no total, and this tool
+        # has to report one. Asking for the window and then asking again unpaged just
+        # to count costs more than the single unpaged fetch it already did, so slice
+        # here instead: one call, an exact total, and no window that can disagree
+        # with the count taken beside it.
         histories = gi.histories.get_histories()
-        if not histories:
-            return GalaxyResult(
-                data=[],
+        simplified = [{"id": h["id"], "name": h.get("name", "Unnamed")} for h in histories or []]
+        return _budgeted_page(
+            simplified,
+            limit=limit,
+            offset=offset,
+            noun="histories",
+            build=lambda page, pagination: GalaxyResult(
+                data=page,
                 success=True,
-                message="No histories found",
-                count=0,
-            )
-        # Extract just the id and name for convenience
-        simplified = [{"id": h["id"], "name": h.get("name", "Unnamed")} for h in histories]
-        return GalaxyResult(
-            data=simplified,
-            success=True,
-            message=f"Found {len(simplified)} histories",
-            count=len(simplified),
+                message=(
+                    "No histories found"
+                    if not simplified
+                    else f"Found {len(page)} of {len(simplified)} histories"
+                ),
+                count=len(page),
+                pagination=pagination,
+            ),
         )
     except Exception as e:
         raise ValueError(f"Failed to list history IDs: {str(e)}") from e
@@ -2496,15 +2855,50 @@ def _fetch_iwc_workflows() -> GalaxyResult:
 
 
 @mcp.tool(tags={"iwc", "read", "niche"})
-def get_iwc_workflows() -> GalaxyResult:
+def get_iwc_workflows(limit: int = 20, offset: int = 0) -> GalaxyResult:
     """
-    Fetch all workflows from the IWC (Interactive Workflow Composer)
+    List workflows published by the IWC (Intergalactic Workflow Commission).
+
+    Returns one page of workflow summaries - the same shape search_iwc_workflows
+    returns - not the raw manifest entries. A single raw entry carries the whole
+    workflow definition: median ~50 KB, largest ~500 KB, so even one of them can
+    overflow an MCP client's output limit. Use get_iwc_workflow_details(trs_id) for
+    the full record.
+
+    Args:
+        limit: Maximum workflows to return per page (default 20, max 100). A page
+               is also cut short when it would not fit the output budget.
+        offset: Skip this many workflows (default 0). Pass pagination.next_offset
+                to walk to the following page.
 
     Returns:
-        GalaxyResult with workflow manifest in data field
+        GalaxyResult with this page of workflow summaries in data (trsID, name,
+        description, tags, readme_summary, step_count, authors, categories,
+        license, tools_used), the page size in count, and the IWC total in
+        pagination.total_items
+
+    NEXT STEPS:
+    - Narrow the list: search_iwc_workflows(query) or recommend_iwc_workflows(intent)
+    - Full record for one: get_iwc_workflow_details(trs_id)
     """
+    _validate_pagination(limit, offset, max_limit=MAX_PAGE_SIZE["get_iwc_workflows"])
+
     try:
-        return _fetch_iwc_workflows()
+        all_workflows = _fetch_iwc_workflows().data
+        return _budgeted_page(
+            all_workflows,
+            limit=limit,
+            offset=offset,
+            noun="workflows",
+            project=_enrich_workflow_result,
+            build=lambda summaries, pagination: GalaxyResult(
+                data=summaries,
+                success=True,
+                message=(f"Retrieved {len(summaries)} of {len(all_workflows)} workflows from IWC"),
+                count=len(summaries),
+                pagination=pagination,
+            ),
+        )
     except Exception as e:
         raise ValueError(f"Failed to fetch IWC workflows: {str(e)}") from e
 
@@ -2583,12 +2977,14 @@ def _enrich_workflow_result(workflow: dict[str, Any], include_full_readme: bool 
 
 
 @mcp.tool(tags={"iwc", "read", "niche"})
-def search_iwc_workflows(query: str) -> GalaxyResult:
+def search_iwc_workflows(query: str, limit: int = 20, offset: int = 0) -> GalaxyResult:
     """
     Search for workflows in the IWC (Intergalactic Workflow Commission) manifest.
 
     IWC hosts curated, best-practice workflows for common bioinformatics analyses.
     This function searches across workflow names, descriptions, tags, and readmes.
+    Results are paginated: pagination.total_items is how many workflows matched,
+    pagination.next_offset is where the next page starts.
 
     RECOMMENDED WORKFLOW:
     1. Search for workflows matching your analysis need
@@ -2602,9 +2998,15 @@ def search_iwc_workflows(query: str) -> GalaxyResult:
                - Workflow name (e.g., "RNA-seq")
                - Description/annotation
                - Tags (e.g., "assembly", "transcriptomics")
+        limit: Maximum workflows to return per page (default 20, max 100). A broad
+               query matches most of the 123-workflow corpus, which is ~184 KB
+               unpaged and more than an MCP client will pass through intact.
+        offset: Skip this many matches (default 0). Pass pagination.next_offset
+                to walk to the following page.
 
     Returns:
-        GalaxyResult with matching workflows in data field. Each workflow includes:
+        GalaxyResult with this page of matching workflows in data field.
+        Each workflow includes:
         - trsID: Unique identifier for importing
         - name: Human-readable workflow name
         - description: Brief annotation
@@ -2630,21 +3032,24 @@ def search_iwc_workflows(query: str) -> GalaxyResult:
                 "tools_used": ["fastqc", "hisat2", "featurecounts"]
             }],
             count=5,
-            message="Found 5 IWC workflows matching 'rna-seq'"
+            message="Found 5 IWC workflows matching 'rna-seq', returning 5"
         )
 
     NEXT STEPS:
     - Get full details: get_iwc_workflow_details(trs_id)
     - Import to Galaxy: import_workflow_from_iwc(trs_id)
     - For semantic search: recommend_iwc_workflows("I have RNA-seq data...")
+    - For the next page: search_iwc_workflows(query, offset=pagination.next_offset)
     """
+    _validate_pagination(limit, offset, max_limit=MAX_PAGE_SIZE["search_iwc_workflows"])
+
     try:
         # Get the full manifest
         iwc_result = _fetch_iwc_workflows()
         manifest = iwc_result.data
 
         # Filter workflows based on the search query
-        results = []
+        matches = []
         query_lower = query.lower()
 
         for workflow in manifest:
@@ -2667,13 +3072,26 @@ def search_iwc_workflows(query: str) -> GalaxyResult:
                 or (tags_lower and any(query_lower in tag for tag in tags_lower))
                 or query_lower in readme_lower
             ):
-                results.append(_enrich_workflow_result(workflow))
+                matches.append(workflow)
 
-        return GalaxyResult(
-            data=results,
-            success=True,
-            message=f"Found {len(results)} IWC workflows matching '{query}'",
-            count=len(results),
+        # The manifest is a single static JSON document, so the window is applied
+        # here; enriching only the page keeps the per-match work off the other pages.
+        return _budgeted_page(
+            matches,
+            limit=limit,
+            offset=offset,
+            noun="workflows",
+            project=_enrich_workflow_result,
+            build=lambda results, pagination: GalaxyResult(
+                data=results,
+                success=True,
+                message=(
+                    f"Found {len(matches)} IWC workflows matching '{query}', "
+                    f"returning {len(results)}"
+                ),
+                count=len(results),
+                pagination=pagination,
+            ),
         )
     except Exception as e:
         raise ValueError(f"Failed to search IWC workflows: {str(e)}") from e
@@ -2858,7 +3276,7 @@ def recommend_iwc_workflows(intent: str, limit: int = 5) -> GalaxyResult:
                 - "Assemble a bacterial genome from nanopore reads"
                 - "Variant calling from whole exome sequencing data"
                 - "Quality control for Illumina sequencing data"
-        limit: Maximum number of recommendations to return (default: 5)
+        limit: Maximum number of recommendations to return (default 5, max 25)
 
     Returns:
         GalaxyResult with ranked workflow recommendations. Each includes:
@@ -2888,6 +3306,11 @@ def recommend_iwc_workflows(intent: str, limit: int = 5) -> GalaxyResult:
     TIP: Be specific in your intent. "RNA-seq" will match many workflows,
     but "differential expression RNA-seq human samples" will rank better.
     """
+    # Without this a negative limit silently drops results via Python's slice rules.
+    _validate_pagination(
+        limit, 0, max_limit=MAX_PAGE_SIZE["recommend_iwc_workflows"], pageable=False
+    )
+
     try:
         from rank_bm25 import BM25Okapi
 
@@ -2945,20 +3368,36 @@ def recommend_iwc_workflows(intent: str, limit: int = 5) -> GalaxyResult:
 
         # Sort by score descending and take top N
         scored_workflows.sort(key=lambda x: x[1], reverse=True)
-        top_results = scored_workflows[:limit]
 
-        # Enrich results
-        results = []
-        for workflow, score in top_results:
+        def with_score(scored: tuple[dict[str, Any], float]) -> dict[str, Any]:
+            workflow, score = scored
             enriched = _enrich_workflow_result(workflow)
             enriched["match_score"] = round(score, 2)
-            results.append(enriched)
+            return enriched
 
-        return GalaxyResult(
-            data=results,
-            success=True,
-            message=f"Found {len(results)} workflows matching your intent",
-            count=len(results),
+        wanted = min(limit, len(scored_workflows))
+        # No pagination block, because there is no offset to page with: a ranking that
+        # will not fit is cut from the bottom, and the message says so without claiming
+        # the dropped entries scored lower -- ties are common with short queries.
+        return _budgeted_page(
+            scored_workflows,
+            limit=limit,
+            offset=0,
+            noun="workflows",
+            project=with_score,
+            build=lambda results, _pagination: GalaxyResult(
+                data=results,
+                success=True,
+                message=(
+                    f"Found {len(results)} workflows matching your intent"
+                    + (
+                        "; additional matches were dropped to fit the output budget"
+                        if len(results) < wanted
+                        else ""
+                    )
+                ),
+                count=len(results),
+            ),
         )
     except Exception as e:
         raise ValueError(f"Failed to recommend IWC workflows: {str(e)}") from e
@@ -3019,19 +3458,33 @@ def import_workflow_from_iwc(trs_id: str) -> GalaxyResult:
 
 @mcp.tool(tags={"workflows", "read", "extended"})
 def list_workflows(
-    workflow_id: str | None = None, name: str | None = None, published: bool = False
+    workflow_id: str | None = None,
+    name: str | None = None,
+    published: bool = False,
+    limit: int = 50,
+    offset: int = 0,
 ) -> GalaxyResult:
     """
-    List workflows available in the Galaxy instance
+    List workflows available in the Galaxy instance, one page at a time
 
     Args:
         workflow_id: Specific workflow ID to get (optional) - a hexadecimal hash string
         name: Filter workflows by name (optional)
         published: Include published workflows (default: False, shows only user workflows)
+        limit: Maximum workflows to return per page (default 50, max 200). A page
+               is also cut short when it would not fit the output budget.
+        offset: Skip this many workflows (default 0). Pass pagination.next_offset
+                to walk to the following page.
 
     Returns:
-        GalaxyResult with list of workflows in data field
+        GalaxyResult with this page of workflows in data, the page size in count,
+        and the total matching the filters in pagination.total_items
+
+    NEXT STEPS:
+    - Details for one: get_workflow_details(workflow_id)
+    - Inputs it needs: get_workflow_input_template(workflow_id)
     """
+    _validate_pagination(limit, offset, max_limit=MAX_PAGE_SIZE["list_workflows"])
     state = ensure_connected()
 
     try:
@@ -3039,11 +3492,20 @@ def list_workflows(
         workflows = gi.workflows.get_workflows(
             workflow_id=workflow_id, name=name, published=published
         )
-        return GalaxyResult(
-            data=workflows,
-            success=True,
-            message=f"Found {len(workflows)} workflows",
-            count=len(workflows),
+        # bioblend's get_workflows takes no limit/offset and filters name client-side,
+        # so the window is applied here too.
+        return _budgeted_page(
+            workflows,
+            limit=limit,
+            offset=offset,
+            noun="workflows",
+            build=lambda page, pagination: GalaxyResult(
+                data=page,
+                success=True,
+                message=f"Found {len(workflows)} workflows, returning {len(page)}",
+                count=len(page),
+                pagination=pagination,
+            ),
         )
     except Exception as e:
         raise ValueError(
@@ -3582,15 +4044,23 @@ else:
 
 
 @mcp.tool(tags={"tools", "read", "extended"})
-def list_user_tools(active: bool = True) -> GalaxyResult:
-    """List user-defined tools belonging to the current user.
+def list_user_tools(active: bool = True, limit: int = 25, offset: int = 0) -> GalaxyResult:
+    """List user-defined tools belonging to the current user, one page at a time.
 
     Args:
         active: If True (default), only show active tools. Set False to include deactivated tools.
+        limit: Maximum tools to return per page (default 25, max 100). Each entry
+            carries the tool's full representation, so a page is often cut short to
+            fit the output budget; walk pagination.next_offset for the rest.
+        offset: Skip this many tools (default 0). Pass pagination.next_offset to
+            walk to the following page.
 
     Returns:
-        GalaxyResult with list of user tools including id, uuid, tool_id, name, and active status.
+        GalaxyResult with this page of user tools (id, uuid, tool_id, name, active
+        status, representation) in data, the page size in count, and the total in
+        pagination.total_items.
     """
+    _validate_pagination(limit, offset, max_limit=MAX_PAGE_SIZE["list_user_tools"])
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
@@ -3598,11 +4068,19 @@ def list_user_tools(active: bool = True) -> GalaxyResult:
         url = f"{gi.url}/unprivileged_tools?active={str(active).lower()}"
         response = gi.make_get_request(url)
         tools = response.json()
-        return GalaxyResult(
-            data=tools,
-            success=True,
-            message=f"Found {len(tools)} user-defined tool(s)",
-            count=len(tools),
+        # The unprivileged_tools index takes no limit/offset, so slice here.
+        return _budgeted_page(
+            tools,
+            limit=limit,
+            offset=offset,
+            noun="user tools",
+            build=lambda page, pagination: GalaxyResult(
+                data=page,
+                success=True,
+                message=f"Found {len(tools)} user-defined tool(s), returning {len(page)}",
+                count=len(page),
+                pagination=pagination,
+            ),
         )
     except Exception as e:
         raise ValueError(format_error("List user tools", e)) from e
