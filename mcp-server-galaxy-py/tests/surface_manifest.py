@@ -142,7 +142,7 @@ def render(manifest: dict[str, Any]) -> str:
 
 
 def main() -> None:
-    MANIFEST_PATH.write_text(render(build_manifest()))
+    MANIFEST_PATH.write_text(render(build_manifest()), newline="\n")
     print(f"wrote {MANIFEST_PATH}")
 
 
