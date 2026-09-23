@@ -34,6 +34,7 @@ const KINDS = [
   "required-mismatch",
   "default-mismatch",
   "mutability-mismatch",
+  "requires-mismatch",
 ];
 
 /** The switches the check itself runs with, so a test cannot prove a shape CI never compares. */
@@ -962,5 +963,142 @@ describe("what each side says about changing things", () => {
       RULES,
     );
     expect(found).toEqual([]);
+  });
+});
+
+describe("what each side says it needs from the server", () => {
+  const tool = (requires?: { galaxy: string }): Record<string, ToolContract> => ({
+    example: { inputSchema: { type: "object" }, annotations: { readOnlyHint: true }, requires },
+  });
+
+  it("reports a bound only one side declares", () => {
+    expect(compare(tool({ galaxy: ">=26.1" }), tool(), RULES)).toEqual([
+      {
+        tool: "example",
+        param: null,
+        kind: "requires-mismatch",
+        observed: "python=>=26.1 typescript=none",
+      },
+    ]);
+  });
+
+  it("reports two bounds that do not read the same", () => {
+    expect(compare(tool({ galaxy: ">=26.1" }), tool({ galaxy: ">=26.2" }), RULES)).toContainEqual(
+      expect.objectContaining({
+        kind: "requires-mismatch",
+        observed: "python=>=26.1 typescript=>=26.2",
+      }),
+    );
+  });
+
+  it("does not invent one when both sides declare the same bound", () => {
+    expect(compare(tool({ galaxy: ">=26.1" }), tool({ galaxy: ">=26.1" }), RULES)).toEqual([]);
+  });
+
+  it("does not invent one over a spelling both surfaces read the same way", () => {
+    // `>= 26.1` is legal on both sides and is the same bound to every reader either
+    // one has, so it is not a difference; the report would otherwise say "mismatch"
+    // beside two columns that read alike.
+    expect(compare(tool({ galaxy: ">= 26.1" }), tool({ galaxy: ">=26.1" }), RULES)).toEqual([]);
+    expect(compare(tool({ galaxy: ">=26.01" }), tool({ galaxy: ">=26.1" }), RULES)).toEqual([]);
+  });
+
+  it("writes the bound in one spelling, whichever the surface used", () => {
+    expect(compare(tool({ galaxy: ">=  26.1" }), tool(), RULES)).toEqual([
+      expect.objectContaining({ observed: "python=>=26.1 typescript=none" }),
+    ]);
+    expect(compare(tool({ galaxy: ">=026.01" }), tool(), RULES)).toEqual([
+      expect.objectContaining({ observed: "python=>=26.1 typescript=none" }),
+    ]);
+  });
+
+  it("reports two bounds that differ only past the reach of a JavaScript number", () => {
+    // Python reads a component with int() and keeps every digit of it. Read as a
+    // number, these two are one value, and the comparison would report agreement
+    // between two servers that are not the same server.
+    const [older, newer] = [">=26.9007199254740992", ">=26.9007199254740993"];
+    expect(compare(tool({ galaxy: newer }), tool({ galaxy: older }), RULES)).toEqual([
+      expect.objectContaining({
+        kind: "requires-mismatch",
+        observed: `python=${newer} typescript=${older}`,
+      }),
+    ]);
+  });
+
+  it("records the bound in what a tool only one side has advertises", () => {
+    expect(compare(tool({ galaxy: ">=26.1" }), {}, RULES)).toEqual([
+      expect.objectContaining({
+        kind: "missing-ts-tool",
+        observed: "python=read (hint) requires=>=26.1 params=[]",
+      }),
+    ]);
+  });
+
+  it("stops the run on a bound it cannot write down", () => {
+    expect(() => compare(tool({ galaxy: "26.1" }), {}, RULES)).toThrow(
+      /example \(python\).*">=MAJOR\.MINOR"/s,
+    );
+  });
+
+  it("stops the run on a requirement that is about something else", () => {
+    const elsewhere = {
+      example: { inputSchema: { type: "object" }, annotations: {}, requires: {} },
+    } as unknown as Record<string, ToolContract>;
+    expect(() => compare(elsewhere, {}, RULES)).toThrow(
+      /example \(python\).*says nothing about Galaxy/s,
+    );
+  });
+
+  it("stops the run on a second requirement beside the Galaxy one", () => {
+    // A requirement on one side only is the divergence this reads for, so one it
+    // cannot read has to stop the run rather than compare equal to its absence.
+    const alsoNeeds = (requires: Record<string, string>) =>
+      ({
+        example: { inputSchema: { type: "object" }, annotations: { readOnlyHint: true }, requires },
+      }) as unknown as Record<string, ToolContract>;
+
+    expect(() =>
+      compare(alsoNeeds({ galaxy: ">=26.1", bioblend: ">=1.7" }), alsoNeeds({ galaxy: ">=26.1" }), RULES),
+    ).toThrow(/example \(python\).*"bioblend".*only reads what a tool needs from Galaxy/s);
+  });
+
+  it("has no bound the two surfaces disagree about today", () => {
+    // A statement about today, not a rule. A real disagreement goes in the registry
+    // like any other, with a status and a reason, and then this number changes -- the
+    // check that a divergence has to be registered is the one above, not this one.
+    const declared = [...pythonSurface(manifest)].filter(([, c]) => c.requires);
+    expect(
+      declared.length,
+      "no tool in the manifest declares a requirement, so this test proves nothing",
+    ).toBeGreaterThan(0);
+    expect(registry.divergences.filter((d) => d.kind === "requires-mismatch").map(where)).toEqual(
+      [],
+    );
+    expect(found.filter((d) => d.kind === "requires-mismatch").map(formatDivergence)).toEqual([]);
+  });
+
+  it("sees a bound one of the real surfaces stops declaring", () => {
+    const python = new Map(pythonSurface(manifest));
+    const declared = [...python]
+      .filter(([, contract]) => contract.requires)
+      .sort(([a], [b]) => (a < b ? -1 : 1));
+    const [name, contract] = declared[0] ?? [];
+    expect(name, "no tool in the manifest declares a requirement").toBeDefined();
+    const { requires, ...without } = contract as ToolContract;
+    python.set(name as string, without);
+
+    const now = compareSurfaces(python, advertised, RULES);
+    const gone = `${name} [requires-mismatch] python=none typescript=${requires?.galaxy}`;
+    expect(now.filter((d) => d.kind === "requires-mismatch").map(formatDivergence)).toEqual([gone]);
+
+    // And a difference like that one is accepted the way every other one is: register
+    // it and the check that everything found is registered has nothing left to say.
+    const accepted = new Set(
+      [
+        ...registry.divergences,
+        { tool: name as string, param: null, kind: "requires-mismatch" as const },
+      ].map(divergenceKey),
+    );
+    expect(now.filter((d) => !accepted.has(divergenceKey(d))).map(formatDivergence)).toEqual([]);
   });
 });

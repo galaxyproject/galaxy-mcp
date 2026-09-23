@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { allOperations } from "@galaxyproject/galaxy-ops";
 import { buildServer } from "../../src/server";
 import {
   describe as describeValue,
@@ -37,6 +38,8 @@ export interface ManifestTool {
   tags: string[];
   /** Set when the Python server registers the tool only under an optional extra. */
   conditionalOn?: string;
+  /** Written only for a tool that declares a lower bound on the Galaxy it runs against. */
+  requires?: { galaxy: string };
   /** The MCP annotations the Python tool advertises; empty when it advertises none. */
   annotations: ToolAnnotations;
   inputSchema: JsonSchema;
@@ -147,12 +150,18 @@ export function pythonSurface(manifest: Manifest): Surface {
       if (tags === undefined) {
         throw new Error(`the manifest does not say how ${name as string} is tagged`);
       }
+      // Absent for most tools, so unlike the fields above this one is read rather
+      // than demanded; what it has to look like when it is there is the comparison's call.
+      const requires = read(entry, "requires", "object", about) as
+        | { galaxy: string }
+        | undefined;
       return [
         name as string,
         {
           inputSchema: inputSchema as JsonSchema,
           annotations: annotations as ToolAnnotations,
           tags: tags as string[],
+          requires,
         },
       ] as [string, ToolContract];
     }),
@@ -169,12 +178,22 @@ export async function typescriptSurface(): Promise<Surface> {
   const server = buildServer({ baseUrl: "https://galaxy.invalid", apiKey: "not-used" });
   const client = new Client({ name: "parity-check", version: "0" });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  // MCP has no field for what a tool needs from the server, so this side declares it
+  // on the op and nowhere else -- over the wire it survives only as a sentence in the
+  // description, and `surface.test.ts` is what holds that sentence to the declaration.
+  const declaredRequirements = new Map(allOperations.map((op) => [op.name, op.requires]));
   try {
     const { tools } = await client.listTools();
     return surfaceByName(
       tools.map((t) => {
         const advertised = t as unknown as Record<string, unknown>;
         const where = `${t.name} (advertised)`;
+        if (!declaredRequirements.has(t.name)) {
+          throw new Error(
+            `${t.name} is advertised but is not a registered op, so there is nothing to read ` +
+              "what it needs from the server off",
+          );
+        }
         return [
           t.name,
           {
@@ -182,6 +201,7 @@ export async function typescriptSurface(): Promise<Surface> {
             // No tags: an MCP server advertises the read/write split as a hint or not at all.
             annotations: (read(advertised, "annotations", "object", where) ??
               {}) as ToolAnnotations,
+            requires: declaredRequirements.get(t.name),
           },
         ] as [string, ToolContract];
       }),

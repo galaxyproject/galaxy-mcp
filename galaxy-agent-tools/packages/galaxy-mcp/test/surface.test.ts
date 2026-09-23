@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { allOperations } from "@galaxyproject/galaxy-ops";
+import { allOperations, requirementSentence } from "@galaxyproject/galaxy-ops";
 import { buildServer, toolNames, toolAnnotations, annotationsFor } from "../src/server";
 
 describe("MCP surface is a mechanical projection", () => {
@@ -42,6 +42,12 @@ describe("MCP surface is a mechanical projection", () => {
         const described = byName.get(op.name) ?? "";
         expect(described.startsWith(op.summary), op.name).toBe(true);
         expect(described.includes("Requires Galaxy"), op.name).toBe(op.requires !== undefined);
+        // The bound it names, not merely that it names one. The parity check reads this
+        // side's requirement off the op, because MCP has no field for it, and that is
+        // only honest while the sentence a client is shown says the same thing.
+        if (op.requires) {
+          expect(described, op.name).toContain(requirementSentence(op.requires.galaxy));
+        }
       }
       expect(byName.get("list_page_revisions")).toContain("Requires Galaxy 26.1 or newer.");
       // get_page works on 26.0, so it must not pick the sentence up.

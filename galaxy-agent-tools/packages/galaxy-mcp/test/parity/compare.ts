@@ -5,9 +5,10 @@
  *
  * Both sides describe themselves as JSON Schema, so the comparison is over
  * parameter names, types, requiredness and declared defaults, plus whether each
- * tool says it mutates anything. Descriptions are deliberately not compared: the
- * two surfaces word things differently on purpose and diffing prose would bury
- * the contract differences that matter.
+ * tool says it mutates anything and what it says it needs from the server.
+ * Descriptions are deliberately not compared: the two surfaces word things
+ * differently on purpose and diffing prose would bury the contract differences
+ * that matter.
  *
  * It is a summary of JSON Schema, not an implementation of it, so it fails
  * closed: a construct it has not been taught stops the run or rides along as
@@ -23,13 +24,15 @@ export type DivergenceKind =
   | "type-mismatch"
   | "required-mismatch"
   | "default-mismatch"
-  | "mutability-mismatch";
+  | "mutability-mismatch"
+  | "requires-mismatch";
 
 /** Kinds that are about a whole tool rather than one of its parameters. */
 export const WHOLE_TOOL_KINDS: readonly DivergenceKind[] = [
   "missing-ts-tool",
   "missing-py-tool",
   "mutability-mismatch",
+  "requires-mismatch",
 ];
 
 export interface Divergence {
@@ -68,6 +71,8 @@ export interface ToolContract {
   annotations: ToolAnnotations;
   /** Tags, for a surface that advertises them -- FastMCP puts them in `_meta`. */
   tags?: readonly string[];
+  /** The lower bound the tool declares on the Galaxy it will run against, if it declares one. */
+  requires?: { galaxy: string };
 }
 
 /**
@@ -102,8 +107,82 @@ export function mutability(contract: ToolContract, where: string): Mutability {
   return { mutating: true, source: "mcp default" };
 }
 
-const showMutability = (m: Mutability): string =>
+export const showMutability = (m: Mutability): string =>
   `${m.mutating ? "write" : "read"} (${m.source})`;
+
+/**
+ * The one grammar a requirement is declared in, as both surfaces parse it when
+ * they load a tool. Whitespace after `>=` is theirs to allow, so it is read here
+ * too rather than refused.
+ */
+const REQUIREMENT = /^>=\s*(\d+)\.(\d+)$/;
+
+/** What a requirement may be about. The comparison reads the Galaxy bound and nothing else. */
+const REQUIREMENT_KEYS = new Set(["galaxy"]);
+
+/**
+ * One component of a bound, with the leading zeros taken off, which is what both
+ * surfaces do with it -- Python reads it with `int()` and treats `26.01` as `26.1`.
+ *
+ * Done on the digits and never through a number: a component is only ever compared
+ * for equality, and past 2^53 two different ones read back as one, which is the
+ * same trap the manifest generator refuses a default for.
+ */
+const withoutLeadingZeros = (digits: string): string => digits.replace(/^0+(?=\d)/, "");
+
+/**
+ * The lower bound a tool declares on the Galaxy it will run against, written back
+ * in the one spelling both surfaces read it as.
+ *
+ * Canonical rather than verbatim, because `>= 26.1` and `>=26.1` are the same
+ * bound however either side reads it, and a report showing the same bound in both
+ * columns beside the word "mismatch" would be saying something untrue. It is also
+ * what keeps the text writable: a spec is written into `observed`, and the
+ * grammar's whitespace includes newlines.
+ *
+ * Canonical does not mean numeric. The components stay digit strings, so nothing is
+ * lost to a number that cannot hold one, and two declarations are equal here exactly
+ * when they are the same declaration.
+ *
+ * That is the whole of what this says. Whether a surface then ENFORCES what it
+ * declared is its own business, and the TypeScript runtime's parser reads a component
+ * with `Number()`, so past 2^53 it would enforce a rounded bound where Python enforces
+ * the written one -- two surfaces declaring the same thing and doing different things
+ * with it, which this comparison reads as the agreement it is. That rounding is a
+ * separate thing to fix. A tool that declares nothing has no requirement, which is not
+ * the same as declaring one that everything satisfies.
+ */
+export function requirement(contract: ToolContract, where: string): string | undefined {
+  const node = contract as unknown as Record<string, unknown>;
+  const declared = read(node, "requires", "object", where) as Record<string, unknown> | undefined;
+  if (declared === undefined) return undefined;
+  const about = `${where} ${quoted("requires")}`;
+  // Refused rather than ignored: a second requirement on one side only is the very
+  // divergence this reads for, and skipping it would report agreement nobody checked.
+  const stray = Object.keys(declared).filter((key) => !REQUIREMENT_KEYS.has(key));
+  if (stray.length) {
+    throw new Error(
+      `${about} also asks for ${stray.map(quoted).join(", ")}, and the comparison only reads ` +
+        "what a tool needs from Galaxy; teach it that requirement before a surface declares one",
+    );
+  }
+  const galaxy = read(declared, "galaxy", "string", about);
+  if (galaxy === undefined) {
+    throw new Error(
+      `${where}: ${quoted("requires")} says nothing about Galaxy, and a Galaxy version is the ` +
+        "only requirement the comparison reads",
+    );
+  }
+  const bound = REQUIREMENT.exec((galaxy as string).trim());
+  if (!bound) {
+    throw new Error(
+      `${where}: ${JSON.stringify(galaxy)} is not a requirement of the form ">=MAJOR.MINOR", ` +
+        "which is the only one either surface declares and the only one the comparison reads",
+    );
+  }
+  const [, major, minor] = bound as unknown as [string, string, string];
+  return `>=${withoutLeadingZeros(major)}.${withoutLeadingZeros(minor)}`;
+}
 
 /**
  * Whole-surface differences that would otherwise produce a divergence per
@@ -625,7 +704,11 @@ function showTool(contract: ToolContract, rules: Normalization, where: string): 
     .sort(([a], [b]) => (a < b ? -1 : 1))
     .map(([name, p]) => `${name} ${showContract(p)}`)
     .join("; ");
-  return `${showMutability(mutability(contract, where))} params=[${params}]`;
+  // Written only when the tool declares one, so a tool that starts declaring a
+  // requirement makes its entry stale while the ones that never do stay put.
+  const needs = requirement(contract, where);
+  const declared = needs ? ` requires=${needs}` : "";
+  return `${showMutability(mutability(contract, where))}${declared} params=[${params}]`;
 }
 
 function compareTool(
@@ -645,6 +728,18 @@ function compareTool(
       param: null,
       kind: "mutability-mismatch",
       observed: `python=${showMutability(pySays)} typescript=${showMutability(tsSays)}`,
+    });
+  }
+  const [pyNeeds, tsNeeds] = [
+    requirement(python, `${tool} (python)`),
+    requirement(typescript, `${tool} (typescript)`),
+  ];
+  if (pyNeeds !== tsNeeds) {
+    found.push({
+      tool,
+      param: null,
+      kind: "requires-mismatch",
+      observed: `python=${pyNeeds ?? "none"} typescript=${tsNeeds ?? "none"}`,
     });
   }
   const py = normalizeParams(python.inputSchema, rules, `${tool} (python)`);
