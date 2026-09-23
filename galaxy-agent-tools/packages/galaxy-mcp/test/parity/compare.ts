@@ -695,7 +695,7 @@ export function normalizeParams(
 
 const show = (p: NormalParam): string => (p.hasDefault ? JSON.stringify(p.default) : "none");
 
-const showContract = (p: NormalParam): string =>
+export const showContract = (p: NormalParam): string =>
   `type=${p.type} required=${p.required} default=${show(p)}`;
 
 /**

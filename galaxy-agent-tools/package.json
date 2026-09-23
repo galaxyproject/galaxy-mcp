@@ -7,7 +7,9 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "depcruise": "dependency-cruiser --config .dependency-cruiser.cjs packages/galaxy-ops/src/index.ts packages/galaxy-mcp/src/index.ts packages/galaxy-cli/src/index.ts"
+    "depcruise": "dependency-cruiser --config .dependency-cruiser.cjs packages/galaxy-ops/src/index.ts packages/galaxy-mcp/src/index.ts packages/galaxy-cli/src/index.ts",
+    "parity:report": "pnpm --filter @galaxyproject/galaxy-mcp parity:report",
+    "parity:report:print": "pnpm --silent --filter @galaxyproject/galaxy-mcp parity:report:print"
   },
   "devDependencies": {
     "typescript": "^6.0.0",
