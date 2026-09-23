@@ -20,7 +20,10 @@ import {
   loadRegistry,
   normalizationFrom,
   pythonSurface,
+  ratchetProblems,
+  RATCHETED_STATUS,
   typescriptSurface,
+  type AcceptedDivergence,
   type Manifest,
   type Registry,
 } from "./parity/surfaces";
@@ -148,6 +151,82 @@ describe("the accepted-divergence registry itself", () => {
   it("covers every kind the comparator can report", () => {
     expect([...KINDS].sort()).toEqual([...new Set(KINDS)].sort());
     for (const kind of WHOLE_TOOL_KINDS) expect(KINDS).toContain(kind);
+  });
+});
+
+describe("the ratchet on unreviewed gaps", () => {
+  const gap: AcceptedDivergence = {
+    tool: "example",
+    param: "limit",
+    kind: "missing-ts-param",
+    observed: "python=type=integer required=false default=none",
+    status: RATCHETED_STATUS,
+    reason: "the comparator found it and nobody has read both sides yet",
+  };
+  const withEntries = (...extra: AcceptedDivergence[]): Registry => ({
+    ...registry,
+    divergences: [...registry.divergences, ...extra],
+  });
+
+  /**
+   * A registry made up for the occasion: so many gaps, so many allowed. The live one
+   * says what parity is today and will one day legitimately hold none, which is no
+   * basis for a test about what the ratchet does when the two numbers disagree.
+   */
+  const holding = (gaps: number, allowed: number): Registry => ({
+    ...registry,
+    ratchet: { unreviewedGaps: allowed },
+    divergences: Array.from({ length: gaps }, (_, index) => ({
+      ...gap,
+      param: `limit_${index}`,
+    })),
+  });
+
+  it("holds the registry at the number of unreviewed gaps it declares", () => {
+    expect(
+      ratchetProblems(registry),
+      "the registry and the number it pins itself at have come apart",
+    ).toEqual([]);
+  });
+
+  it("is tripped by one more unreviewed gap", () => {
+    expect(ratchetProblems(holding(4, 3))).toEqual([
+      expect.stringContaining("is the most it may hold"),
+    ]);
+    // And on the registry as it stands, whatever number that is today.
+    expect(ratchetProblems(withEntries(gap))).toEqual([
+      expect.stringContaining("is the most it may hold"),
+    ]);
+  });
+
+  it("lets a reviewed status through, however many there are", () => {
+    expect(ratchetProblems(withEntries({ ...gap, status: "pending-port" }))).toEqual([]);
+    expect(ratchetProblems(withEntries({ ...gap, status: "pending-decision" }))).toEqual([]);
+    expect(ratchetProblems(withEntries({ ...gap, status: "intentional" }))).toEqual([]);
+  });
+
+  it("asks for the number to come down when a gap is closed", () => {
+    // A made-up registry, not the live one: closing the last real gap is a good day,
+    // not a build failure, and the live number will legitimately reach zero.
+    expect(ratchetProblems(holding(2, 3))).toEqual([expect.stringContaining("Lower")]);
+    expect(ratchetProblems(holding(0, 1))).toEqual([expect.stringContaining("Lower")]);
+    expect(ratchetProblems(holding(0, 0))).toEqual([]);
+  });
+
+  it("stops the run when the registry declares no number at all", () => {
+    const { ratchet: _none, ...silent } = registry;
+    expect(() => ratchetProblems(silent as Registry)).toThrow(/how many.*may hold/s);
+  });
+
+  it("stops the run when the number is not a count", () => {
+    const wrong = { ...registry, ratchet: { unreviewedGaps: "24" } } as unknown as Registry;
+    expect(() => ratchetProblems(wrong)).toThrow(/"unreviewedGaps" is string.*a count/s);
+    // A number that is not a number of things: each would otherwise compare against the
+    // real count and quietly pass or quietly fail on an arithmetic nobody meant.
+    for (const nonsense of [-1, 24.5, Number.NaN, 2 ** 53, Number.POSITIVE_INFINITY]) {
+      const declared = { ...registry, ratchet: { unreviewedGaps: nonsense } };
+      expect(() => ratchetProblems(declared), String(nonsense)).toThrow(/a count/);
+    }
   });
 });
 

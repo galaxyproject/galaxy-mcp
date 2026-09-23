@@ -75,9 +75,71 @@ export interface NormalizationRule {
   reason: string;
 }
 
+export interface Ratchet {
+  unreviewedGaps: number;
+}
+
 export interface Registry {
   normalization: Record<NormalizationRuleName, NormalizationRule>;
+  ratchet: Ratchet;
   divergences: AcceptedDivergence[];
+}
+
+/**
+ * The status the registry is not allowed to accumulate: a difference the comparator
+ * found and nobody has ruled on. Everything else is somebody's decision and can be
+ * argued with; this one is just a pile.
+ */
+export const RATCHETED_STATUS: DivergenceStatus = "unreviewed-gap";
+
+/**
+ * How many divergences of the ratcheted status the registry says it may hold.
+ * Read rather than reached for, so everything that shows this number -- the check
+ * and the report -- refuses the same unreadable registry with the same words.
+ */
+export function ratchetCeiling(registry: Registry): number {
+  const node = registry as unknown as Record<string, unknown>;
+  const declared = (read(node, "ratchet", "object", "the registry") ?? {}) as Record<
+    string,
+    unknown
+  >;
+  const allowed = read(declared, "unreviewedGaps", "count", "the registry's ratchet");
+  if (allowed === undefined) {
+    throw new Error(
+      `the registry does not say how many "${RATCHETED_STATUS}" divergences it may hold, and ` +
+        "that number is the only thing stopping the pile growing",
+    );
+  }
+  return allowed as number;
+}
+
+/**
+ * What the ratchet has to say about the registry as it stands.
+ *
+ * Counted over the registry's own entries rather than over the live divergences,
+ * which is the same number: the two tests either side of this one fail the moment
+ * the registry lists a divergence the surfaces no longer support or misses one they
+ * do. A malformed declaration throws instead -- a count that cannot be read is not
+ * a parity problem, it is a registry nobody can check.
+ */
+export function ratchetProblems(registry: Registry): string[] {
+  const ceiling = ratchetCeiling(registry);
+  const held = registry.divergences.filter((d) => d.status === RATCHETED_STATUS).length;
+  if (held > ceiling) {
+    return [
+      `the registry holds ${held} "${RATCHETED_STATUS}" divergences where ${ceiling} is the most ` +
+        "it may hold. A new one needs somebody to read both sides and give it a reviewed status " +
+        "and a reason, or the gap closed in the op -- not a bigger number in `ratchet`.",
+    ];
+  }
+  if (held < ceiling) {
+    return [
+      `the registry holds ${held} "${RATCHETED_STATUS}" divergences and says it may hold ` +
+        `${ceiling}. Lower \`ratchet.unreviewedGaps\` to ${held}: a number left above the real ` +
+        "count is room for the next one to arrive unnoticed.",
+    ];
+  }
+  return [];
 }
 
 function readJson<T>(url: URL, what: string): T {

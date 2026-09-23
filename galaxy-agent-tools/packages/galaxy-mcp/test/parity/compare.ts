@@ -322,6 +322,10 @@ const SHAPES = {
     new Set(value).size === value.length,
   string: (value: unknown) => typeof value === "string",
   boolean: (value: unknown) => typeof value === "boolean",
+  // How many of something there are. A fraction, a negative or a number JSON cannot
+  // hand back unchanged is not a count of anything.
+  count: (value: unknown) =>
+    typeof value === "number" && Number.isSafeInteger(value) && value >= 0,
 } as const;
 
 export type Shape = keyof typeof SHAPES;
@@ -332,6 +336,7 @@ const SHAPE_NAMES: Record<Shape, string> = {
   names: "a list of names, none of them written twice",
   string: "a string",
   boolean: "a boolean",
+  count: "a count, which is a whole number and not a negative one",
 };
 
 export const describe = (value: unknown): string =>
