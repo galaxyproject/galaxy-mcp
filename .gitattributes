@@ -1,0 +1,4 @@
+# Generated files are compared against what their generator produces, so what is
+# committed has to be the same bytes on every checkout.
+PARITY.md text eol=lf
+mcp-server-galaxy-py/tests/testdata/mcp-surface.json text eol=lf

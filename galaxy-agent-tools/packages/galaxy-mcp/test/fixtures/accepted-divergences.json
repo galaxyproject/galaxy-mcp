@@ -17,6 +17,10 @@
       "reason": "An OPTIONAL Python parameter typed `T | None` is compared as plain `T`, because that union is how Python spells optional and requiredness is compared separately. A nullable parameter that is required keeps its null, where the union really is part of the contract."
     }
   },
+  "ratchet": {
+    "$comment": "unreviewed-gap is the one status nobody has ruled on, so it is the one meant to go only down. This number is how many of them the registry is allowed to hold: the check fails when there are more, and fails asking for this number to come down when there are fewer, so the count and the number cannot drift apart. What no check can do is stop somebody raising both together -- that edit is in the diff, and refusing it is a reviewer's job. A gap found from here on wants a status somebody reviewed and a reason, not a bigger number.",
+    "unreviewedGaps": 24
+  },
   "divergences": [
     {
       "tool": "connect",

@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { allOperations } from "@galaxyproject/galaxy-ops";
 import { buildServer } from "../../src/server";
 import {
   describe as describeValue,
@@ -37,6 +38,8 @@ export interface ManifestTool {
   tags: string[];
   /** Set when the Python server registers the tool only under an optional extra. */
   conditionalOn?: string;
+  /** Written only for a tool that declares a lower bound on the Galaxy it runs against. */
+  requires?: { galaxy: string };
   /** The MCP annotations the Python tool advertises; empty when it advertises none. */
   annotations: ToolAnnotations;
   inputSchema: JsonSchema;
@@ -72,9 +75,71 @@ export interface NormalizationRule {
   reason: string;
 }
 
+export interface Ratchet {
+  unreviewedGaps: number;
+}
+
 export interface Registry {
   normalization: Record<NormalizationRuleName, NormalizationRule>;
+  ratchet: Ratchet;
   divergences: AcceptedDivergence[];
+}
+
+/**
+ * The status the registry is not allowed to accumulate: a difference the comparator
+ * found and nobody has ruled on. Everything else is somebody's decision and can be
+ * argued with; this one is just a pile.
+ */
+export const RATCHETED_STATUS: DivergenceStatus = "unreviewed-gap";
+
+/**
+ * How many divergences of the ratcheted status the registry says it may hold.
+ * Read rather than reached for, so everything that shows this number -- the check
+ * and the report -- refuses the same unreadable registry with the same words.
+ */
+export function ratchetCeiling(registry: Registry): number {
+  const node = registry as unknown as Record<string, unknown>;
+  const declared = (read(node, "ratchet", "object", "the registry") ?? {}) as Record<
+    string,
+    unknown
+  >;
+  const allowed = read(declared, "unreviewedGaps", "count", "the registry's ratchet");
+  if (allowed === undefined) {
+    throw new Error(
+      `the registry does not say how many "${RATCHETED_STATUS}" divergences it may hold, and ` +
+        "that number is the only thing stopping the pile growing",
+    );
+  }
+  return allowed as number;
+}
+
+/**
+ * What the ratchet has to say about the registry as it stands.
+ *
+ * Counted over the registry's own entries rather than over the live divergences,
+ * which is the same number: the two tests either side of this one fail the moment
+ * the registry lists a divergence the surfaces no longer support or misses one they
+ * do. A malformed declaration throws instead -- a count that cannot be read is not
+ * a parity problem, it is a registry nobody can check.
+ */
+export function ratchetProblems(registry: Registry): string[] {
+  const ceiling = ratchetCeiling(registry);
+  const held = registry.divergences.filter((d) => d.status === RATCHETED_STATUS).length;
+  if (held > ceiling) {
+    return [
+      `the registry holds ${held} "${RATCHETED_STATUS}" divergences where ${ceiling} is the most ` +
+        "it may hold. A new one needs somebody to read both sides and give it a reviewed status " +
+        "and a reason, or the gap closed in the op -- not a bigger number in `ratchet`.",
+    ];
+  }
+  if (held < ceiling) {
+    return [
+      `the registry holds ${held} "${RATCHETED_STATUS}" divergences and says it may hold ` +
+        `${ceiling}. Lower \`ratchet.unreviewedGaps\` to ${held}: a number left above the real ` +
+        "count is room for the next one to arrive unnoticed.",
+    ];
+  }
+  return [];
 }
 
 function readJson<T>(url: URL, what: string): T {
@@ -147,12 +212,18 @@ export function pythonSurface(manifest: Manifest): Surface {
       if (tags === undefined) {
         throw new Error(`the manifest does not say how ${name as string} is tagged`);
       }
+      // Absent for most tools, so unlike the fields above this one is read rather
+      // than demanded; what it has to look like when it is there is the comparison's call.
+      const requires = read(entry, "requires", "object", about) as
+        | { galaxy: string }
+        | undefined;
       return [
         name as string,
         {
           inputSchema: inputSchema as JsonSchema,
           annotations: annotations as ToolAnnotations,
           tags: tags as string[],
+          requires,
         },
       ] as [string, ToolContract];
     }),
@@ -169,12 +240,22 @@ export async function typescriptSurface(): Promise<Surface> {
   const server = buildServer({ baseUrl: "https://galaxy.invalid", apiKey: "not-used" });
   const client = new Client({ name: "parity-check", version: "0" });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  // MCP has no field for what a tool needs from the server, so this side declares it
+  // on the op and nowhere else -- over the wire it survives only as a sentence in the
+  // description, and `surface.test.ts` is what holds that sentence to the declaration.
+  const declaredRequirements = new Map(allOperations.map((op) => [op.name, op.requires]));
   try {
     const { tools } = await client.listTools();
     return surfaceByName(
       tools.map((t) => {
         const advertised = t as unknown as Record<string, unknown>;
         const where = `${t.name} (advertised)`;
+        if (!declaredRequirements.has(t.name)) {
+          throw new Error(
+            `${t.name} is advertised but is not a registered op, so there is nothing to read ` +
+              "what it needs from the server off",
+          );
+        }
         return [
           t.name,
           {
@@ -182,6 +263,7 @@ export async function typescriptSurface(): Promise<Surface> {
             // No tags: an MCP server advertises the read/write split as a hint or not at all.
             annotations: (read(advertised, "annotations", "object", where) ??
               {}) as ToolAnnotations,
+            requires: declaredRequirements.get(t.name),
           },
         ] as [string, ToolContract];
       }),
