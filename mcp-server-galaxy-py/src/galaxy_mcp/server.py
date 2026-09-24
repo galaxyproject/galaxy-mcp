@@ -38,9 +38,17 @@ from galaxy_mcp.auth import (
 )
 from galaxy_mcp.middleware import ToolVisibilityMiddleware
 from galaxy_mcp.tool_inputs import (
+    SHAPE_HINT,
+    USER_TOOL_SHAPE_HINT,
+    ToolInputsUncheckableError,
     build_input_template,
+    check_tool_inputs,
     format_input_mismatch_error,
+    format_input_rejects,
     is_input_related_error,
+    is_reference,
+    schema_describes_tool,
+    schema_has_inputs,
     summarize_tool_inputs,
 )
 from galaxy_mcp.version import (
@@ -159,6 +167,15 @@ class WorkflowInputValidationError(ValueError):
 
     Carries a complete, model-facing message (reasons + slot template); the
     outer handler re-raises it unchanged so the message isn't wrapped or duplicated.
+    """
+
+
+class ToolInputValidationError(ValueError):
+    """Raised when run_tool's preflight finds a provable input mismatch.
+
+    Mirrors WorkflowInputValidationError: it already carries a complete,
+    model-facing message, so the handlers re-raise it rather than wrapping it in
+    "Run tool failed: ..." and a context dump.
     """
 
 
@@ -480,12 +497,133 @@ def _get_datatypes_mapping(gi: GalaxyInstance) -> dict[str, Any]:
     return mapping
 
 
-def _get_tool_schema(gi: GalaxyInstance, tool_id: str) -> dict[str, Any]:
-    """Fetch (and cache) a tool's io_details schema using the given request-scoped client."""
-    key = (getattr(gi, "base_url", None), tool_id)
-    if key not in _TOOL_SCHEMA_CACHE:
+def _tool_schema_key(gi: GalaxyInstance, tool_id: str) -> tuple[Any, str]:
+    """The cache key: the client's own base URL verbatim, plus the tool id.
+
+    Two Galaxy servers therefore never share an entry, and neither do two spellings
+    of the same one.
+    """
+    return (getattr(gi, "base_url", None), tool_id)
+
+
+def _get_tool_schema(gi: GalaxyInstance, tool_id: str, *, refresh: bool = False) -> dict[str, Any]:
+    """Fetch (and cache) a tool's io_details schema using the given request-scoped client.
+
+    The cache has no expiry and nothing invalidates it, so an entry is only ever
+    evidence of what this tool looked like the first time this process asked. That is
+    fine for building a message or a template out of, and never good enough to refuse
+    a run on -- ``refresh`` is how the preflight re-reads before it blocks anything.
+    """
+    key = _tool_schema_key(gi, tool_id)
+    if refresh or key not in _TOOL_SCHEMA_CACHE:
         _TOOL_SCHEMA_CACHE[key] = gi.tools.show_tool(tool_id, io_details=True)
     return _TOOL_SCHEMA_CACHE[key]
+
+
+def _supplies_a_reference(inputs: Any) -> bool:
+    """Whether any supplied value could be a dataset or collection reference.
+
+    check_tool_inputs only ever rejects a value is_reference() recognises, at the
+    top level or inside a list, so a run made entirely of scalars has nothing to
+    check. Saying so here skips a show_tool(io_details=True), which builds the whole
+    tool form server-side and scans the caller's history for every data parameter.
+
+    It asks the same predicate the checker asks, rather than a second copy of it:
+    the skip is only safe while the two agree about what a reference is, and one
+    function is how that stays true.
+    """
+    if not isinstance(inputs, dict):
+        return False
+
+    def carries_src(value: Any) -> bool:
+        if isinstance(value, dict):
+            return is_reference(value) or any(carries_src(item) for item in value.values())
+        if isinstance(value, list):
+            return any(carries_src(item) for item in value)
+        return False
+
+    return any(carries_src(value) for value in inputs.values())
+
+
+def _schema_to_check(
+    gi: GalaxyInstance, tool_id: str, *, refresh: bool = False
+) -> tuple[dict[str, Any], str | None]:
+    """The schema to check inputs against, or the reason it cannot be checked on."""
+    try:
+        schema = _get_tool_schema(gi, tool_id, refresh=refresh)
+    except Exception as e:  # noqa: BLE001 -- surfaced to the caller, not swallowed
+        return {}, f"could not fetch the schema for '{tool_id}' ({e})"
+
+    if not schema_describes_tool(tool_id, schema):
+        described = schema.get("id") if isinstance(schema, dict) else None
+        return schema, (
+            f"Galaxy returned a schema for '{described}', not '{tool_id}', so it may "
+            "describe a different version than the one being run"
+        )
+
+    if not schema_has_inputs(schema):
+        return schema, f"the definition of '{tool_id}' arrived without a parameter list"
+
+    return schema, None
+
+
+def _preflight_tool_inputs(
+    gi: GalaxyInstance,
+    tool_id: str,
+    inputs: dict[str, Any],
+    *,
+    schema: dict[str, Any] | None = None,
+) -> str | None:
+    """Check inputs against the tool's schema before anything is submitted.
+
+    Raises ToolInputValidationError naming the mismatch when the schema proves one.
+    Otherwise returns None, or -- when the check could not be made -- the reason
+    why, so the caller can say the inputs went unchecked rather than imply they
+    were vetted. invoke_workflow's preflight swallows that case silently; that is
+    the part of it not worth copying.
+
+    ``schema`` is for callers that already hold the definition, as run_user_tool
+    does: a user-defined tool is scoped to its owner and never enters the global
+    toolbox, so looking it up by id would just 404. A caller that holds one pays
+    nothing, so its inputs are always checked; one that would have to fetch it
+    does so only when the inputs contain something checkable.
+    """
+    held_schema = schema is not None
+    try:
+        cached = False
+        if schema is None:
+            if not _supplies_a_reference(inputs):
+                return None
+            cached = _tool_schema_key(gi, tool_id) in _TOOL_SCHEMA_CACHE
+            schema, unchecked = _schema_to_check(gi, tool_id)
+            if unchecked:
+                return unchecked
+        elif not schema_has_inputs(schema):
+            return f"the definition of '{tool_id}' arrived without a parameter list"
+
+        verdict = check_tool_inputs(schema, inputs)
+
+        if verdict["rejects"] and cached:
+            # A refusal must never rest on the cache. It has no expiry, so a tool
+            # upgraded in place would go on failing a check the live definition
+            # passes, for the life of the process. Read it again and believe that.
+            schema, unchecked = _schema_to_check(gi, tool_id, refresh=True)
+            if unchecked:
+                return unchecked
+            verdict = check_tool_inputs(schema, inputs)
+    except ToolInputsUncheckableError as e:
+        return f"the checker could not read the schema for '{tool_id}' ({e})"
+    except Exception as e:  # noqa: BLE001 -- reported, never allowed to block a run
+        return f"the input check for '{tool_id}' failed ({e})"
+
+    if verdict["rejects"]:
+        # A caller that handed us the definition is run_user_tool, and a user tool's
+        # shape does not come back from the tool-template call the default hint names.
+        hint = USER_TOOL_SHAPE_HINT if held_schema else SHAPE_HINT
+        raise ToolInputValidationError(
+            format_input_rejects(tool_id, verdict["rejects"], shape_hint=hint)
+        )
+    return None
 
 
 def _format_tool_input_error(
@@ -496,6 +634,8 @@ def _format_tool_input_error(
     history_id: str,
     inputs: dict[str, Any],
     action: str = "Run tool",
+    schema: dict[str, Any] | None = None,
+    shape_hint: str | None = None,
 ) -> str:
     """Build a truthful enriched error for an input-related tool failure.
 
@@ -503,22 +643,62 @@ def _format_tool_input_error(
     ``gi`` (never the module global). Both fetches are best-effort: if either
     fails we still return the disclaimer + original error. This function must
     never raise.
+
+    Naming an input as wrong is as definitive as refusing to submit one, so it gets
+    the same treatment: the definition is read again rather than taken from the
+    cache, and when it cannot be, nothing is named.
+
+    ``schema`` is for a caller that already holds the definition, as run_user_tool
+    does: a user tool is not in the toolbox, so every lookup by id here would 404
+    and the message would come back with nothing in it. ``shape_hint`` is where to
+    send that caller instead.
     """
     schema_summary = None
     example = None
-    with contextlib.suppress(Exception):
-        schema_summary = summarize_tool_inputs(_get_tool_schema(gi, tool_id))
-    with contextlib.suppress(Exception):
-        tests = gi.tools.get_tool_tests(
-            tool_id
-        )  # any version's example is fine -- structural hint only
-        if tests:
-            example = tests[0].get("inputs")
+    detected: list[str] = []
+    unmodelled: list[str] = []
+    held_schema = schema is not None
+    stale = False
+    if not held_schema:
+        with contextlib.suppress(Exception):
+            schema = _get_tool_schema(gi, tool_id, refresh=True)
+        if schema is None:
+            stale = True
+            with contextlib.suppress(Exception):
+                schema = _get_tool_schema(gi, tool_id)
+    if schema is not None and schema_has_inputs(schema):
+        with contextlib.suppress(Exception):
+            # An empty list dumped as "the expected parameters" is worse than saying
+            # nothing and pointing at a call that can show them.
+            schema_summary = summarize_tool_inputs(schema)
+            # Galaxy has already rejected this, so say which input looks wrong if the
+            # schema can tell -- but only when it is the schema for the tool that ran,
+            # and never off a copy that could not be confirmed against the server.
+            if schema_describes_tool(tool_id, schema):
+                verdict = check_tool_inputs(schema, inputs)
+                unmodelled = [w["param"] for w in verdict["warnings"]]
+                if not stale:
+                    detected = [f"  - {r['param']}: {r['reason']}" for r in verdict["rejects"]]
+    if not held_schema:
+        # Tests come from the toolbox too, so a tool that is not in it has none to ask for.
+        with contextlib.suppress(Exception):
+            tests = gi.tools.get_tool_tests(
+                tool_id
+            )  # any version's example is fine -- structural hint only
+            if tests:
+                example = tests[0].get("inputs")
     original = format_error(
         action, error, {"history_id": history_id, "tool_id": tool_id, "inputs": inputs}
     )
     return format_input_mismatch_error(
-        original_error=original, tool_id=tool_id, schema_summary=schema_summary, example=example
+        original_error=original,
+        tool_id=tool_id,
+        schema_summary=schema_summary,
+        example=example,
+        detected=detected,
+        unmodelled=unmodelled,
+        stale_schema=stale,
+        shape_hint=shape_hint,
     )
 
 
@@ -1390,9 +1570,16 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyRes
     - "Tool not found": Verify tool_id with search_tools_by_name()
     - "Invalid input": Check input format with get_tool_details(io_details=True)
     - "Dataset not found": Verify dataset_id exists in the history
+
+    INPUT PREFLIGHT:
+    Supplied datasets and collections are checked against the tool's schema before
+    submitting. Passing a collection where a parameter takes one dataset is refused
+    with the fix, rather than sent on for Galaxy to reject.
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
+
+    unchecked = _preflight_tool_inputs(gi, tool_id, inputs)
 
     try:
         credentials_context = None
@@ -1404,10 +1591,13 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyRes
             history_id, tool_id, inputs, credentials_context=credentials_context
         )
         cred_msg = " (with credentials)" if used_credentials else ""
+        unchecked_msg = f" (inputs not pre-checked: {unchecked})" if unchecked else ""
         return GalaxyResult(
             data=result,
             success=True,
-            message=f"Started tool '{tool_id}' in history '{history_id}'{cred_msg}",
+            message=(
+                f"Started tool '{tool_id}' in history '{history_id}'{cred_msg}{unchecked_msg}"
+            ),
         )
     except Exception as e:
         if _is_credential_related_error(e):
@@ -4133,6 +4323,11 @@ def run_user_tool(history_id: str, tool_uuid: str, inputs: dict[str, Any]) -> Ga
     Returns:
         GalaxyResult with job info and output dataset IDs.
 
+    INPUT PREFLIGHT:
+    Supplied datasets and collections are checked against the tool's own definition
+    before submitting. Passing a collection where a parameter takes one dataset is
+    refused with the fix, rather than sent on for Galaxy to reject.
+
     Example:
         >>> run_user_tool(
         ...     history_id="abc123",
@@ -4147,6 +4342,7 @@ def run_user_tool(history_id: str, tool_uuid: str, inputs: dict[str, Any]) -> Ga
     gi: GalaxyInstance = state["gi"]
 
     tool_id: str | None = None
+    representation: dict[str, Any] = {}
     try:
         url = f"{gi.url}/unprivileged_tools/{tool_uuid}"
         response = gi.make_get_request(url)
@@ -4154,7 +4350,9 @@ def run_user_tool(history_id: str, tool_uuid: str, inputs: dict[str, Any]) -> Ga
         tool_id = tool_info.get("tool_id")
         if not tool_id:
             raise ValueError(f"No user-defined tool found with UUID '{tool_uuid}'")
-        tool_version = tool_info.get("representation", {}).get("version", "0.1.0")
+        representation = tool_info.get("representation") or {}
+        tool_version = representation.get("version", "0.1.0")
+        unchecked = _preflight_tool_inputs(gi, tool_id, inputs, schema=representation)
 
         # POST /api/tools resolves the UDT by uuid and runs it synchronously.
         # tool_id and tool_uuid are mutually exclusive here -- send only the uuid.
@@ -4168,11 +4366,17 @@ def run_user_tool(history_id: str, tool_uuid: str, inputs: dict[str, Any]) -> Ga
         tools_url = f"{gi.url}/tools"
         result = gi.make_post_request(tools_url, payload=payload)
 
+        unchecked_msg = f" (inputs not pre-checked: {unchecked})" if unchecked else ""
         return GalaxyResult(
             data=result,
             success=True,
-            message=f"Started user tool '{tool_id}' (UUID: {tool_uuid}) in history '{history_id}'",
+            message=(
+                f"Started user tool '{tool_id}' (UUID: {tool_uuid}) "
+                f"in history '{history_id}'{unchecked_msg}"
+            ),
         )
+    except ToolInputValidationError:
+        raise
     except Exception as e:
         if tool_id and is_input_related_error(e):
             raise ValueError(
@@ -4183,6 +4387,8 @@ def run_user_tool(history_id: str, tool_uuid: str, inputs: dict[str, Any]) -> Ga
                     history_id=history_id,
                     inputs=inputs,
                     action="Run user tool",
+                    schema=representation or None,
+                    shape_hint=USER_TOOL_SHAPE_HINT,
                 )
             ) from e
         raise ValueError(
