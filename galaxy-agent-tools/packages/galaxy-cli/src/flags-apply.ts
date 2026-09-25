@@ -8,7 +8,10 @@ export function applyInputs(cmd: Command, op: AnyOperation): void {
     const kind = classifyField(schema);
     const flag = flagName(key);
     if (kind === "positional") cmd.argument(`<${key}>`, describe(schema) ?? key);
-    else if (kind === "boolean") cmd.option(`--${flag}`, describe(schema) ?? key);
+    else if (kind === "boolean") {
+      cmd.option(`--${flag}`, describe(schema) ?? key);
+      cmd.option(`--no-${flag}`, `Set ${flag} to false.`);
+    }
     else if (kind === "json") cmd.option(`--${flag} <json>`, `${describe(schema) ?? key} (JSON or @file.json)`);
     else cmd.option(`--${flag} <value>`, describe(schema) ?? key);
   }

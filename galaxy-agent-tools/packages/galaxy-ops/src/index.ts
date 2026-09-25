@@ -18,6 +18,8 @@ export {
   runOperation,
   runWithEnvelope,
 } from "./operations/registry";
+export { validatePagination, paginate, paginationInfo, OUTPUT_BUDGET_BYTES } from "./operations/pagination";
+export type { PaginationInfo, Paged } from "./operations/pagination";
 export { getUserOp, getUser, type CurrentUser } from "./operations/get-user";
 export { runToolOp, runTool } from "./operations/run-tool";
 export type { ToolRun, ToolInputs, ImplicitCollectionRef } from "./execute-tool-request";

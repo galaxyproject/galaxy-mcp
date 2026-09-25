@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { allOperations, requirementSentence } from "@galaxyproject/galaxy-ops";
-import { buildServer, toolNames, toolAnnotations, annotationsFor } from "../src/server";
+import { buildServer, toolNames, toolAnnotations, annotationsFor, toolResult } from "../src/server";
 
 describe("MCP surface is a mechanical projection", () => {
   it("registers one tool per registered op", () => {
@@ -60,5 +60,31 @@ describe("MCP surface is a mechanical projection", () => {
 
   it("builds a server without throwing", () => {
     expect(buildServer({ baseUrl: "https://g.example", apiKey: "K" })).toBeDefined();
+  });
+});
+
+/**
+ * What a model is handed for one call, pinned here because the ops derive every
+ * page cap from a reconstruction of it (`galaxy-ops/test/util/byte-budget.ts`)
+ * and cannot import this function. If a second block, structured content or any
+ * other wrapping is ever added, those caps are measuring a payload that no longer
+ * exists and this test is where that gets caught.
+ */
+describe("the text a tool call puts on the wire", () => {
+  const envelope = { data: [{ id: "h1" }], success: true, message: "1", pagination: { total: 1 } };
+
+  it("is the whole envelope, compact, in a single text block", () => {
+    const result = toolResult(envelope);
+    expect(result.content).toHaveLength(1);
+    expect(result.content[0]).toEqual({ type: "text", text: JSON.stringify(envelope) });
+    expect(Object.keys(result).sort()).toEqual(["content", "isError"]);
+  });
+
+  it("flags a failed envelope as an error without changing the text", () => {
+    const failed = { data: undefined, success: false, message: "nope", errorKind: "validation" };
+    expect(toolResult(failed)).toEqual({
+      content: [{ type: "text", text: JSON.stringify(failed) }],
+      isError: true,
+    });
   });
 });

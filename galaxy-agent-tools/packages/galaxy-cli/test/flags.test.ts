@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
+import { Command } from "commander";
 import { classifyField, buildInput } from "../src/flags";
+import { applyInputs } from "../src/flags-apply";
 
 describe("flags mapping", () => {
   it("classifies field kinds from a zod raw shape", () => {
@@ -26,5 +28,12 @@ describe("flags mapping", () => {
     const shape = { historyId: z.string() };
     const parsed = buildInput(shape, [], {});
     expect(parsed.success).toBe(false);
+  });
+
+  it("offers both values for boolean inputs", () => {
+    const command = new Command();
+    applyInputs(command, { input: { visible: z.boolean().optional() } } as any);
+    command.parse(["node", "test", "--no-visible"]);
+    expect(command.opts()).toMatchObject({ visible: false });
   });
 });

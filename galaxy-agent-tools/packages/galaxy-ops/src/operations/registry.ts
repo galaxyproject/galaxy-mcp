@@ -2,6 +2,7 @@ import type { ZodRawShape } from "zod";
 import type { GalaxyContext } from "../context";
 import { GalaxyError, GalaxyVersionError } from "../errors";
 import { parseRequirement, requirementSentence, satisfiesRequirement } from "../version";
+import { trimToBudget } from "./pagination";
 import type { AnyOperation, GalaxyResult, InputOf, Operation } from "./types";
 
 /** Something that can carry a Galaxy requirement: an op, or a copy of one. */
@@ -71,16 +72,27 @@ export function describeOperation(op: { summary: string; requires?: { galaxy: st
   return op.requires ? `${op.summary} ${requirementSentence(op.requires.galaxy)}` : op.summary;
 }
 
-/** Wrap an op for a surface: catch typed errors, apply project() metadata. */
+/** Wrap an op for a surface: catch typed errors, apply project() metadata, fit the budget. */
 export async function runWithEnvelope<Shape extends ZodRawShape, O>(
   op: Operation<Shape, O>,
   input: InputOf<Shape>,
   ctx: GalaxyContext,
+  /**
+   * How this surface will serialise the envelope, so the budget is measured on the
+   * bytes it actually emits. The default is the compact single line the MCP text
+   * block carries; the CLI prints indented JSON and passes that instead, because a
+   * budget measured against a shorter rendering than the one printed is not a
+   * budget.
+   */
+  serialize: (result: GalaxyResult<O>) => string = (result) => JSON.stringify(result),
 ): Promise<GalaxyResult<O>> {
   try {
     const data = await runOperation(op, input, ctx);
-    const meta = op.project?.(data, input) ?? {};
-    return { data, success: true, ...meta };
+    const envelope = (d: O): GalaxyResult<O> => ({ data: d, success: true, ...(op.project?.(d, input) ?? {}) });
+    // The budget is measured on the envelope rather than on the page, because the
+    // envelope is what gets serialised -- message and pagination included.
+    // Trimming re-projects, so a cut page's message is its own.
+    return envelope(op.budget ? trimToBudget(data, op.budget, (d) => serialize(envelope(d))) : data);
   } catch (err) {
     if (err instanceof GalaxyError) {
       return { data: undefined as unknown as O, success: false, message: err.message, errorKind: err.kind };

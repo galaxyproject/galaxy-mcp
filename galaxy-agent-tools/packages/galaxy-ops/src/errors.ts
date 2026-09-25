@@ -1,6 +1,7 @@
 export type GalaxyErrorKind =
   | "auth"
   | "not_found"
+  | "validation"
   | "connection"
   | "version"
   | "tool_request_rejected"
@@ -16,6 +17,17 @@ export class GalaxyAuthError extends GalaxyError {
 }
 export class GalaxyNotFoundError extends GalaxyError {
   readonly kind = "not_found" as const;
+}
+
+/**
+ * The caller has to change its input; retrying the same call cannot help.
+ *
+ * Distinct from `connection` on purpose: an agent that reads "connection" backs
+ * off and retries, which for a rejected argument loops forever, and the CLI
+ * exits 69 "service unavailable" for what is a usage error.
+ */
+export class GalaxyValidationError extends GalaxyError {
+  readonly kind = "validation" as const;
 }
 
 export class GalaxyConnectionError extends GalaxyError {
