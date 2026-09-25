@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, Mock, call, patch
 import bioblend
 import pytest
 
+from galaxy_mcp.ops.tool_inputs import check_tool_inputs
 from galaxy_mcp.server import _supplies_a_reference
-from galaxy_mcp.tool_inputs import check_tool_inputs
 
 from .test_helpers import (
     galaxy_state,
@@ -1143,7 +1143,7 @@ class TestTheSkipNeverHidesAReject:
         assert check_tool_inputs(schema, reference)["rejects"]
 
         monkeypatch.setattr("galaxy_mcp.server.is_reference", lambda value: False)
-        monkeypatch.setattr("galaxy_mcp.tool_inputs.is_reference", lambda value: False)
+        monkeypatch.setattr("galaxy_mcp.ops.tool_inputs.is_reference", lambda value: False)
 
         assert _supplies_a_reference(reference) is False
         assert check_tool_inputs(schema, reference)["rejects"] == []

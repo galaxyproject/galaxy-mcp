@@ -1,7 +1,7 @@
 import bioblend
 import pytest
 
-from galaxy_mcp.tool_inputs import (
+from galaxy_mcp.ops.tool_inputs import (
     ToolInputsUncheckableError,
     _lookup_param,
     build_input_template,

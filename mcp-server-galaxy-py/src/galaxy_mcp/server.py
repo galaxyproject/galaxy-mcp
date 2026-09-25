@@ -37,7 +37,7 @@ from galaxy_mcp.auth import (
     get_active_session,
 )
 from galaxy_mcp.middleware import ToolVisibilityMiddleware
-from galaxy_mcp.tool_inputs import (
+from galaxy_mcp.ops.tool_inputs import (
     SHAPE_HINT,
     USER_TOOL_SHAPE_HINT,
     ToolInputsUncheckableError,
@@ -51,6 +51,15 @@ from galaxy_mcp.tool_inputs import (
     schema_has_inputs,
     summarize_tool_inputs,
 )
+from galaxy_mcp.ops.workflow_inputs import (
+    _clean_readme_summary,
+    build_guide,
+    build_workflow_input_template,
+    find_legacy_warnings,
+    normalize_ga_steps,
+    normalize_run_model,
+    validate_inputs,
+)
 from galaxy_mcp.version import (
     GalaxyVersion,
     GalaxyVersionError,
@@ -61,15 +70,6 @@ from galaxy_mcp.version import (
     requirement_sentence,
     satisfies,
     unsupported_tools,
-)
-from galaxy_mcp.workflow_inputs import (
-    _clean_readme_summary,
-    build_guide,
-    build_workflow_input_template,
-    find_legacy_warnings,
-    normalize_ga_steps,
-    normalize_run_model,
-    validate_inputs,
 )
 
 _galaxy_mcp_version = importlib.metadata.version("galaxy-mcp")
