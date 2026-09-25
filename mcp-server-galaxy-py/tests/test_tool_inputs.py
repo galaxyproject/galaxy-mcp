@@ -154,6 +154,39 @@ def test_template_section_flattens():
     assert build_input_template(schema)["adv|p"] == 0
 
 
+# A conditional whose first case carries parameters of its own; BUILD_LIST_SCHEMA's does not.
+ADVANCED_SCHEMA = {
+    "inputs": [
+        {
+            "name": "adv",
+            "type": "conditional",
+            "test_param": {
+                "name": "mode",
+                "type": "select",
+                "options": [["Simple", "simple", True], ["Full", "full", False]],
+            },
+            "cases": [
+                {"value": "simple", "inputs": [{"name": "n", "type": "integer"}]},
+                {"value": "full", "inputs": [{"name": "x", "type": "float"}]},
+            ],
+        }
+    ]
+}
+
+
+def test_template_fills_the_first_cases_own_parameters():
+    t = build_input_template(ADVANCED_SCHEMA)
+    assert t["adv|mode"] == "simple"
+    assert t["adv|n"] == 0
+    assert "adv|x" not in t
+
+
+def test_summarize_gives_the_selector_its_choices_and_key():
+    selector = summarize_tool_inputs(ADVANCED_SCHEMA)[0]["selector"]
+    assert selector["choices"] == ["simple", "full"]
+    assert selector["key_hint"] == "adv|mode"
+
+
 def test_message_includes_schema_and_disclaimer_and_original():
     msg = format_input_mismatch_error(
         original_error="Run tool failed: Unexpected HTTP status code: 400: kwd not provided",
