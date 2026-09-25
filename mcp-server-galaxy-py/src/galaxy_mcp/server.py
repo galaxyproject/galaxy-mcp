@@ -806,7 +806,7 @@ if _discovery_mode == "code":
     # CodeMode execute meta-tool gets a distinct name to avoid collision.
     _transforms.append(CodeMode(execute_tool_name="run_galaxy_tool"))
     logger.info(
-        "CodeMode discovery enabled -- tools exposed via search / get_schemas / run_galaxy_tool."
+        "CodeMode discovery enabled -- tools exposed via search / get_schema / run_galaxy_tool."
     )
 elif _discovery_mode != "full":
     logger.warning("Unknown GALAXY_MCP_DISCOVERY_MODE=%r; falling back to 'full'.", _discovery_mode)
@@ -830,7 +830,8 @@ vetted Interactive Workflow Composer (IWC) workflow, then
 `import_workflow_from_iwc` and `invoke_workflow`.
 
 User-defined tools (created via `create_user_tool`) are run with
-`run_user_tool`, not `run_tool` -- they use a different Galaxy endpoint.
+`run_user_tool`, not `run_tool`. Both post to the same Galaxy endpoint; the
+difference is that a user-defined tool is addressed by UUID rather than tool id.
 
 Pages are Galaxy-flavored markdown documents: a history-attached page is a
 "Notebook", a standalone page a "Report". Manage them with `list_pages`,
