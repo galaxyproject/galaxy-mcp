@@ -441,22 +441,52 @@ def _format_run_tool_credential_error(
     )
 
 
+# One hint per status, in the order the text fallback below tries them.
+_STATUS_HINTS = {
+    401: "Authentication failed - check your API key",
+    403: "Permission denied - check your account permissions",
+    404: "Resource not found - check IDs and URLs",
+    500: "Server error - try again later or contact admin",
+}
+
+# Tells "no status_code attribute" apart from one that is set to None.
+_NO_STATUS_FIELD = object()
+
+
 def format_error(action: str, error: Exception, context: dict | None = None) -> str:
-    """Format error messages consistently"""
+    """Format error messages consistently.
+
+    The hints are the same ones; where they come from is not. bioblend's ConnectionError
+    carries the status as a field, so when that field holds one the hint is read from it
+    and never from the text -- the text is requests' own whenever the request did not
+    complete, and requests quotes the URL in it, so an identifier with "404" in it was
+    being reported as a missing resource.
+
+    A field set to None means the failure has no HTTP status. bioblend's GET path
+    substitutes an empty Response for a requests ConnectionError, which covers a
+    connection that was never made and equally a reply Galaxy did send whose body failed
+    partway through (SSLError is a ConnectionError), so there is nothing true to say
+    about a status that is not there -- and nothing is said. The exception's own text is
+    the whole answer in that case. Other bioblend paths let requests' own exceptions
+    through with no field at all, and those keep the text search.
+
+    Anything else in the field is not a status this understands, so it falls back to the
+    text like an error carrying no such field at all.
+    """
     if context is None:
         context = {}
-    msg = f"{action} failed: {str(error)}"
-
-    # Add HTTP status code interpretations
     error_str = str(error)
-    if "401" in error_str:
-        msg += " (Authentication failed - check your API key)"
-    elif "403" in error_str:
-        msg += " (Permission denied - check your account permissions)"
-    elif "404" in error_str:
-        msg += " (Resource not found - check IDs and URLs)"
-    elif "500" in error_str:
-        msg += " (Server error - try again later or contact admin)"
+    msg = f"{action} failed: {error_str}"
+
+    status = getattr(error, "status_code", _NO_STATUS_FIELD)
+    if isinstance(status, int):
+        if status in _STATUS_HINTS:
+            msg += f" ({_STATUS_HINTS[status]})"
+    elif status is not None:
+        for code, hint in _STATUS_HINTS.items():
+            if str(code) in error_str:
+                msg += f" ({hint})"
+                break
 
     # Add context if provided
     if context:
