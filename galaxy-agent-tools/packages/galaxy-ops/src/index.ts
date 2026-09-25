@@ -41,7 +41,15 @@ export { listWorkflowsOp, listWorkflows, type Workflows } from "./operations/lis
 export { getWorkflowDetailsOp, getWorkflowDetails, type WorkflowDetail } from "./operations/get-workflow-details";
 export { getToolDetailsOp, getToolDetails, type ToolDetail } from "./operations/get-tool-details";
 export { searchToolsByNameOp, searchToolsByName, type ToolListItem } from "./operations/search-tools-by-name";
-export { getToolPanelOp, getToolPanel, type ToolPanel } from "./operations/get-tool-panel";
+export {
+  getToolPanelOp,
+  getToolPanel,
+  type ToolPanelResult,
+  type ToolPanelOverview,
+  type ToolPanelSection,
+  type PanelEntry,
+  type SlimTool,
+} from "./operations/get-tool-panel";
 export { getToolCitationsOp, getToolCitations, type ToolCitationsResult } from "./operations/get-tool-citations";
 export { getToolRunExamplesOp, getToolRunExamples, type ToolRunExamples } from "./operations/get-tool-run-examples";
 export { searchToolsByKeywordsOp, searchToolsByKeywords, type ToolKeywordMatch } from "./operations/search-tools-by-keywords";

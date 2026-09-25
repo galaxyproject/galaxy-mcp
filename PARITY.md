@@ -11,10 +11,10 @@ Every difference carries the status and the reason recorded in `galaxy-agent-too
 | Status | Differences |
 | --- | --- |
 | `intentional` | `1` |
-| `pending-port` | `17` |
+| `pending-port` | `14` |
 | `pending-decision` | `0` |
 | `unreviewed-gap` | `22` |
-| **total** | `40` |
+| **total** | `37` |
 
 `unreviewed-gap` is the status nobody has ruled on yet. The check holds the registry to the 22 it declares, so the count cannot drift from the number; raising that number is an edit somebody has to make in the diff, and it is meant to come down, never up.
 
@@ -65,9 +65,6 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `get_tool_details` | `io_details` | `type=boolean required=false default=false` | `type=boolean required=false default=none` | `default-mismatch` | `unreviewed-gap` | TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it. |
 | `get_tool_input_template` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_tool_panel` |  | `read (tag)` | `read (hint)` |  |  |  |
-| `get_tool_panel` | `limit` | `type=integer required=false default=100` | -- | `missing-ts-param` | `pending-port` | The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter. |
-| `get_tool_panel` | `offset` | `type=integer required=false default=0` | -- | `missing-ts-param` | `pending-port` | The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter. |
-| `get_tool_panel` | `section_id` | `type=string required=false default=none` | -- | `missing-ts-param` | `pending-port` | The Python tool summarizes the sections and opens one on request; the TS op returns the whole panel, so it has nothing to name a section with yet. |
 | `get_tool_run_examples` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_user` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_workflow_details` |  | `read (tag)` | `read (hint)` |  |  |  |

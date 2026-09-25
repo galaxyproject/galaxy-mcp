@@ -183,30 +183,6 @@
       "reason": "TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it."
     },
     {
-      "tool": "get_tool_panel",
-      "param": "limit",
-      "kind": "missing-ts-param",
-      "observed": "python=type=integer required=false default=100",
-      "status": "pending-port",
-      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
-    },
-    {
-      "tool": "get_tool_panel",
-      "param": "offset",
-      "kind": "missing-ts-param",
-      "observed": "python=type=integer required=false default=0",
-      "status": "pending-port",
-      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
-    },
-    {
-      "tool": "get_tool_panel",
-      "param": "section_id",
-      "kind": "missing-ts-param",
-      "observed": "python=type=string required=false default=none",
-      "status": "pending-port",
-      "reason": "The Python tool summarizes the sections and opens one on request; the TS op returns the whole panel, so it has nothing to name a section with yet."
-    },
-    {
       "tool": "get_workflow_input_template",
       "param": "verbose",
       "kind": "default-mismatch",
