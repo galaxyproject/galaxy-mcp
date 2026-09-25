@@ -88,3 +88,44 @@ describe("the text a tool call puts on the wire", () => {
     });
   });
 });
+
+/**
+ * A window over the ceiling comes back as a tool error carrying the sentence the
+ * Python server uses, which is the same channel Python answers on: the check is
+ * inside the op rather than on the advertised schema, so the schema accepts
+ * exactly what Python's accepts and the refusal reads the same on both surfaces.
+ * This is the path an agent uses, and the one the ops' own tests cannot reach --
+ * they call the library entry point. The base URL here is never reached; if it
+ * were, this would be a connection failure rather than a refusal.
+ */
+describe("a page bigger than the cap", () => {
+  const paged = async (args: Record<string, unknown>) => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = buildServer({ baseUrl: "https://unreachable.invalid", apiKey: "K" });
+    const client = new Client({ name: "cap-check", version: "0" });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      return await client.callTool({ name: "search_tools_by_name", arguments: args });
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  };
+
+  const textOf = (result: Awaited<ReturnType<typeof paged>>) =>
+    (result.content as Array<{ text?: string }>).map((c) => c.text ?? "").join("");
+
+  it("tells the model the ceiling and how to page instead", async () => {
+    const result = await paged({ query: "bwa", limit: 999 });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain(
+      "limit must be at most 100 (got 999); request 100 or fewer and use offset to page through the rest",
+    );
+  });
+
+  it("refuses a negative offset too, in the other sentence Python uses", async () => {
+    const result = await paged({ query: "bwa", offset: -1 });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("offset must be 0 or greater (got -1)");
+  });
+});

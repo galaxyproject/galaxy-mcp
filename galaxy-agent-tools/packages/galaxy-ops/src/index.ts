@@ -52,7 +52,7 @@ export { downloadDatasetOp, downloadDataset, type DownloadDatasetResult } from "
 export { getIwcWorkflowsOp, getIwcWorkflows } from "./operations/get-iwc-workflows";
 export { getIwcWorkflowDetailsOp, getIwcWorkflowDetails, type IwcWorkflowDetail } from "./operations/get-iwc-workflow-details";
 export { searchIwcWorkflowsOp, searchIwcWorkflows } from "./operations/search-iwc-workflows";
-export { recommendIwcWorkflowsOp, recommendIwcWorkflows } from "./operations/recommend-iwc-workflows";
+export { recommendIwcWorkflowsOp, recommendIwcWorkflows, type Recommendations } from "./operations/recommend-iwc-workflows";
 export { importWorkflowFromIwcOp, importWorkflowFromIwc, type ImportedWorkflow } from "./operations/import-workflow-from-iwc";
 export { listUserToolsOp, listUserTools, type UserTool } from "./operations/list-user-tools";
 export { createUserToolOp, createUserTool, type CreatedUserTool } from "./operations/create-user-tool";
