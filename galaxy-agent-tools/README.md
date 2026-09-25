@@ -218,6 +218,23 @@ Both surfaces expose the same set -- CLI command names and MCP tool names are
 identical. Operations marked *(write)* create or change state on the server;
 the rest are read-only.
 
+The history, tool, workflow and IWC listings return one page at a time. `limit`
+and `offset` default to a page sized for what a model can actually read, each
+operation's help says what its default is, and the result carries a `pagination`
+block with the offset to ask for next. Nine of them also have a ceiling -- the
+same one the Python server enforces -- and refuse a bigger `limit` before the
+call goes out; a page that would still be too many bytes is cut to fit and says
+so. Three do not fit that description: `get_histories` has no default limit and
+no ceiling, so leaving `limit` off returns everything there is;
+`get_history_contents` has a default but no ceiling, and neither of those two has a
+byte budget either, exactly as on the Python side; and `recommend_iwc_workflows`
+takes a `limit` but no `offset`, because a ranking is cut from the bottom rather
+than paged through. The two history listings count their own items and filter,
+sort and slice them here rather than asking Galaxy to, which is what the Python
+tools do and is why they can report a real total. The Pages operations are not in this scheme at all:
+`list_pages` takes `limit` and `offset` but tells you nothing about what is left,
+and `list_page_revisions` returns every revision.
+
 ### Connection
 | Operation | What it does |
 | --- | --- |
@@ -250,7 +267,7 @@ the rest are read-only.
 | `search_tools_by_name` | Search tools by name, id, or description substring |
 | `search_tools_by_keywords` | Search tools by keywords (name, description, input extensions) |
 | `get_tool_details` | A tool's metadata by id (name, version, description) |
-| `get_tool_panel` | The full Galaxy tool panel (nested sections) |
+| `get_tool_panel` | The tool panel's sections with their tool counts; name one with `--section-id` to list its tools |
 | `get_tool_citations` | Citations for a tool by id |
 | `get_tool_run_examples` | Test-data examples (inputs/outputs) for a tool |
 | `get_tool_input_template` | A ready-to-fill inputs skeleton for a tool (call before `run_tool`) |
