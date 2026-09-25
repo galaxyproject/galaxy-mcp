@@ -46,10 +46,10 @@ from galaxy_mcp.ops.tool_inputs import (
     format_input_mismatch_error,
     format_input_rejects,
     is_input_related_error,
-    is_reference,
     schema_describes_tool,
     schema_has_inputs,
     summarize_tool_inputs,
+    supplies_a_reference,
 )
 from galaxy_mcp.ops.workflow_inputs import (
     _clean_readme_summary,
@@ -520,31 +520,6 @@ def _get_tool_schema(gi: GalaxyInstance, tool_id: str, *, refresh: bool = False)
     return _TOOL_SCHEMA_CACHE[key]
 
 
-def _supplies_a_reference(inputs: Any) -> bool:
-    """Whether any supplied value could be a dataset or collection reference.
-
-    check_tool_inputs only ever rejects a value is_reference() recognises, at the
-    top level or inside a list, so a run made entirely of scalars has nothing to
-    check. Saying so here skips a show_tool(io_details=True), which builds the whole
-    tool form server-side and scans the caller's history for every data parameter.
-
-    It asks the same predicate the checker asks, rather than a second copy of it:
-    the skip is only safe while the two agree about what a reference is, and one
-    function is how that stays true.
-    """
-    if not isinstance(inputs, dict):
-        return False
-
-    def carries_src(value: Any) -> bool:
-        if isinstance(value, dict):
-            return is_reference(value) or any(carries_src(item) for item in value.values())
-        if isinstance(value, list):
-            return any(carries_src(item) for item in value)
-        return False
-
-    return any(carries_src(value) for value in inputs.values())
-
-
 def _schema_to_check(
     gi: GalaxyInstance, tool_id: str, *, refresh: bool = False
 ) -> tuple[dict[str, Any], str | None]:
@@ -592,7 +567,7 @@ def _preflight_tool_inputs(
     try:
         cached = False
         if schema is None:
-            if not _supplies_a_reference(inputs):
+            if not supplies_a_reference(inputs):
                 return None
             cached = _tool_schema_key(gi, tool_id) in _TOOL_SCHEMA_CACHE
             schema, unchecked = _schema_to_check(gi, tool_id)
