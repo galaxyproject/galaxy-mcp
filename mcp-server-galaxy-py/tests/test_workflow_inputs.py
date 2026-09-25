@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from galaxy_mcp.workflow_inputs import (
+from galaxy_mcp.ops.workflow_inputs import (
     _clean_readme_summary,
     _collection_type_compatible,
     build_guide,
