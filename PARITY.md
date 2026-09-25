@@ -13,10 +13,10 @@ Every difference carries the status and the reason recorded in `galaxy-agent-too
 | `intentional` | `1` |
 | `pending-port` | `14` |
 | `pending-decision` | `0` |
-| `unreviewed-gap` | `22` |
-| **total** | `37` |
+| `unreviewed-gap` | `17` |
+| **total** | `32` |
 
-`unreviewed-gap` is the status nobody has ruled on yet. The check holds the registry to the 22 it declares, so the count cannot drift from the number; raising that number is an edit somebody has to make in the diff, and it is meant to come down, never up.
+`unreviewed-gap` is the status nobody has ruled on yet. The check holds the registry to the 17 it declares, so the count cannot drift from the number; raising that number is an edit somebody has to make in the diff, and it is meant to come down, never up.
 
 ## Tools
 
@@ -40,11 +40,6 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `get_dataset_details` | `preview_lines` | `type=integer required=false default=10` | -- | `missing-ts-param` | `pending-port` | The TS op's own summary defers content preview to a later phase. |
 | `get_histories` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_history_contents` |  | `read (tag)` | `read (hint)` |  |  |  |
-| `get_history_contents` | `deleted` | `type=boolean required=false default=false` | `type=boolean required=false default=none` | `default-mismatch` | `unreviewed-gap` | Python pins deleted=False; TS leaves the filter unset, so Galaxy decides and the same call can return a different set of items. |
-| `get_history_contents` | `limit` | `type=integer required=false default=100` | `type=integer required=false default=none` | `default-mismatch` | `unreviewed-gap` | Python caps the listing at 100 items; TS leaves limit unset, so a large history comes back unbounded. |
-| `get_history_contents` | `offset` | `type=integer required=false default=0` | `type=integer required=false default=none` | `default-mismatch` | `unreviewed-gap` | TS leaves offset unset and takes Galaxy's default of 0, which is the same value Python sends; only the declaration differs. |
-| `get_history_contents` | `order` | `type=string required=false default="hid-asc"` | -- | `missing-ts-param` | `unreviewed-gap` | Python orders by hid-asc and lets you change it; TS has no ordering control. |
-| `get_history_contents` | `visible` | `type=boolean required=false default=true` | `type=boolean required=false default=none` | `default-mismatch` | `unreviewed-gap` | Python pins visible=True; TS leaves the filter unset, so Galaxy decides and the same call can return a different set of items. |
 | `get_history_details` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_invocations` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_invocations` | `history_id` | `type=string required=false default=none` | -- | `missing-ts-param` | `pending-port` | The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version. |
