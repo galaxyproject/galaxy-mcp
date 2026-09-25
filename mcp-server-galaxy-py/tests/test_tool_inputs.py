@@ -14,6 +14,7 @@ from galaxy_mcp.ops.tool_inputs import (
     schema_describes_tool,
     schema_has_inputs,
     summarize_tool_inputs,
+    supplies_a_reference,
 )
 
 
@@ -1544,3 +1545,84 @@ def test_naming_both_cases_still_judges_the_value():
     inputs = {"c1|s1": "b", "c1|c2|s2": "y", "c1|c2|P": HDCA}
 
     assert [r["param"] for r in rejects(schema, inputs)] == ["c1|c2|P"]
+
+
+class TestTheSkipNeverHidesAReject:
+    """The preflight skips a schema fetch when nothing carries `src`.
+
+    That is only safe if the checker could not have rejected such inputs anyway.
+    Rather than argue it, walk every combination of a schema, a key shape and a
+    value shape and assert the two never disagree.
+    """
+
+    SCHEMAS = [
+        {"id": "t", "inputs": [{"name": "p", "type": "data", "multiple": False}]},
+        {"id": "t", "inputs": [{"name": "p", "type": "data", "multiple": True}]},
+        {"id": "t", "inputs": [{"name": "p", "type": "data_collection"}]},
+        {"id": "t", "inputs": [{"name": "p", "type": "text"}]},
+        {
+            "id": "t",
+            "inputs": [
+                {
+                    "name": "c",
+                    "type": "conditional",
+                    "cases": [
+                        {
+                            "value": "a",
+                            "inputs": [{"name": "p", "type": "data", "multiple": False}],
+                        }
+                    ],
+                }
+            ],
+        },
+    ]
+    VALUES = [
+        5,
+        "hello",
+        None,
+        [],
+        {},
+        [1, 2],
+        {"src": "hda", "id": "d"},
+        {"src": "hdca", "id": "c"},
+        {"src": "ldda", "id": "l"},
+        {"src": "dce", "id": "e"},
+        [{"src": "hda", "id": "d"}],
+        [{"src": "hdca", "id": "c"}],
+        [{"src": "hda", "id": "d"}, {"src": "hdca", "id": "c"}],
+        {"batch": True, "values": [{"src": "hdca", "id": "c"}]},
+        {"nested": {"src": "hda", "id": "d"}},
+        {"src": 5, "id": "x"},
+        {"id": "x"},
+    ]
+
+    def test_a_skipped_check_would_never_have_rejected_anything(self):
+        hidden = []
+        for schema in self.SCHEMAS:
+            for key in ("p", "c|p", "unknown"):
+                for value in self.VALUES:
+                    inputs = {key: value}
+                    if supplies_a_reference(inputs):
+                        continue
+                    if check_tool_inputs(schema, inputs)["rejects"]:
+                        hidden.append((key, value))
+
+        assert hidden == []
+
+    def test_the_skip_and_the_checker_ask_the_same_question(self, monkeypatch):
+        """The sweep above only holds while both sides mean the same by "reference".
+
+        They share one predicate rather than a copy each, which is what makes the
+        skip safe. Take the predicate away and both have to fall silent together; if
+        either grows its own idea of what a reference is, this fails.
+        """
+        reference = {"input1": {"src": "hdca", "id": "c1"}}
+        schema = {"id": "t", "inputs": [{"name": "input1", "type": "data", "multiple": False}]}
+
+        assert supplies_a_reference(reference) is True
+        assert check_tool_inputs(schema, reference)["rejects"]
+
+        monkeypatch.setattr("galaxy_mcp.ops.tool_inputs.is_reference", lambda value: False)
+
+        assert supplies_a_reference(reference) is False
+        assert check_tool_inputs(schema, reference)["rejects"] == []
