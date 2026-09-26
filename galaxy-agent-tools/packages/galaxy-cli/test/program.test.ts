@@ -54,6 +54,37 @@ function invocationsContext(asked: string[]) {
     });
 }
 
+/**
+ * Answers any GET with an empty list, recording every URL asked for. The version route
+ * answers 26.1 so an op with a requirement gets past its guard and on to the call this
+ * is about; `asked` therefore holds that request too.
+ */
+function recordingContext(asked: string[], body: unknown = []) {
+  return () =>
+    createGalaxyContext({
+      baseUrl: "https://g.example",
+      apiKey: "K",
+      fetchImpl: (async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        asked.push(url);
+        const payload = url.includes("/api/version")
+          ? { version_major: "26.1", version_minor: "26.1.1" }
+          : body;
+        return new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }) as typeof fetch,
+    });
+}
+
+/** The one recorded URL for a given route, so a version lookup cannot be mistaken for it. */
+const asking = (asked: string[], route: string): string => {
+  const hit = asked.find((url) => url.includes(route));
+  expect(hit, `nothing asked for ${route}`).toBeDefined();
+  return hit!;
+};
+
 describe("buildProgram", () => {
   beforeEach(() => { process.exitCode = 0; });
 
@@ -95,6 +126,47 @@ describe("buildProgram", () => {
     expect(asked[0]).not.toContain("workflow_id=");
     expect(run.stdout).toContain('"success": true');
     expect(run.exitCode).toBe(0);
+  });
+
+  /**
+   * Every op whose default is now declared, driven through the real program. A declared
+   * default lands on the parsed input, so these are the calls that would break if a
+   * `.default()` disagreed with the flag it belongs to -- and the ones that show the
+   * query Galaxy is actually asked for.
+   */
+  it("sends the declared defaults for a paged op without being told to", async () => {
+    const asked: string[] = [];
+    const run = await runCli(["list_pages", "--format", "json"], recordingContext(asked));
+    const query = asking(asked, "/api/pages");
+    expect(query).toContain("limit=100");
+    expect(query).toContain("offset=0");
+    expect(query).toContain("show_published=false");
+    expect(query).toContain("show_shared=false");
+    expect(run.exitCode).toBe(0);
+  });
+
+  it("still takes a flag over the declared default", async () => {
+    const asked: string[] = [];
+    const run = await runCli(
+      ["list_pages", "--limit", "5", "--show-published", "--format", "json"],
+      recordingContext(asked),
+    );
+    const query = asking(asked, "/api/pages");
+    expect(query).toContain("limit=5");
+    expect(query).toContain("show_published=true");
+    expect(run.exitCode).toBe(0);
+  });
+
+  it("leaves list_workflows' published flag off the query unless it is asked for", async () => {
+    // bioblend sends show_published only when it is true, so a defaulted false is an
+    // absent parameter rather than an explicit one.
+    const asked: string[] = [];
+    const context = recordingContext(asked);
+    await runCli(["list_workflows", "--format", "json"], context);
+    expect(asking(asked, "/api/workflows")).not.toContain("show_published");
+    asked.length = 0;
+    await runCli(["list_workflows", "--published", "--format", "json"], context);
+    expect(asking(asked, "/api/workflows")).toContain("show_published=true");
   });
 
   it("runs an op and renders json to stdout", async () => {

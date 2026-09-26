@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { legacyGet } from "../legacy";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, Operation } from "./types";
+import type { AnyOperation, InputOf, Operation } from "./types";
 
 /** Hand-typed: Galaxy's classic tool API is not in the OpenAPI bindings (see legacy.ts). */
 export interface ToolDetail {
@@ -16,7 +16,7 @@ export interface ToolDetail {
 
 const input = {
   toolId: z.string().describe("Tool id, e.g. 'cat1' or 'toolshed.../fastqc/0.74'"),
-  ioDetails: z.boolean().optional().describe("Include full input/output details"),
+  ioDetails: z.boolean().default(false).describe("Include full input/output details (default false)"),
 };
 type In = { toolId: string; ioDetails?: boolean };
 
@@ -37,4 +37,7 @@ export const getToolDetailsOp: Operation<typeof input, ToolDetail> = {
 
 register(getToolDetailsOp as AnyOperation);
 
-export const getToolDetails = (i: In, ctx: GalaxyContext) => runOperation(getToolDetailsOp, i, ctx);
+// A library caller may leave the defaulted arguments out; run() applies the same
+// values the schema declares for the parsed surface path.
+export const getToolDetails = (i: In, ctx: GalaxyContext) =>
+  runOperation(getToolDetailsOp, i as InputOf<typeof input>, ctx);

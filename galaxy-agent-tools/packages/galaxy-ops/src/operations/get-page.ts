@@ -3,13 +3,13 @@ import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
 import { stripRendered, type PageDetail } from "./pages-common";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, Operation } from "./types";
+import type { AnyOperation, InputOf, Operation } from "./types";
 
 const input = {
   pageId: z.string().min(1).describe("Encoded page id (from list_pages or create_page)"),
   includeRendered: z
     .boolean()
-    .optional()
+    .default(false)
     .describe("Also return `content`, the embed-expanded render. Can be large (default false)"),
 };
 type In = { pageId: string; includeRendered?: boolean };
@@ -35,4 +35,7 @@ export const getPageOp: Operation<typeof input, PageDetail> = {
 
 register(getPageOp as AnyOperation);
 
-export const getPage = (i: In, ctx: GalaxyContext) => runOperation(getPageOp, i, ctx);
+// A library caller may leave the defaulted arguments out; run() applies the same
+// values the schema declares for the parsed surface path.
+export const getPage = (i: In, ctx: GalaxyContext) =>
+  runOperation(getPageOp, i as InputOf<typeof input>, ctx);

@@ -3,17 +3,17 @@ import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
 import type { PageSummary } from "./pages-common";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, Operation } from "./types";
+import type { AnyOperation, InputOf, Operation } from "./types";
 
 const DEFAULT_LIMIT = 100;
 
 const input = {
   historyId: z.string().min(1).optional().describe("Encoded history id; lists only that history's notebooks"),
   search: z.string().optional().describe("Freetext filter over title, slug, tag and owner"),
-  limit: z.coerce.number().int().positive().optional().describe("Max pages to return (default 100)"),
-  offset: z.coerce.number().int().min(0).optional().describe("Skip the first N"),
-  showPublished: z.boolean().optional().describe("Also include pages published by other users (default false)"),
-  showShared: z.boolean().optional().describe("Also include pages shared with the user (default false)"),
+  limit: z.coerce.number().int().positive().default(DEFAULT_LIMIT).describe(`Max pages to return (default ${DEFAULT_LIMIT})`),
+  offset: z.coerce.number().int().min(0).default(0).describe("Skip the first N"),
+  showPublished: z.boolean().default(false).describe("Also include pages published by other users (default false)"),
+  showShared: z.boolean().default(false).describe("Also include pages shared with the user (default false)"),
 };
 type In = {
   historyId?: string;
@@ -68,4 +68,7 @@ export const listPagesOp: Operation<typeof input, PageSummary[]> = {
 
 register(listPagesOp as AnyOperation);
 
-export const listPages = (i: In, ctx: GalaxyContext) => runOperation(listPagesOp, i, ctx);
+// A library caller may leave the defaulted arguments out; run() applies the same
+// values the schema declares for the parsed surface path.
+export const listPages = (i: In, ctx: GalaxyContext) =>
+  runOperation(listPagesOp, i as InputOf<typeof input>, ctx);

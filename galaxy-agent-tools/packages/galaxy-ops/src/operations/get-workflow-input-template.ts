@@ -12,7 +12,7 @@ import {
   type WorkflowSlot,
 } from "../workflow-inputs";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, Operation } from "./types";
+import type { AnyOperation, InputOf, Operation } from "./types";
 
 // ---------------------------------------------------------------------------
 // Types for the off-schema endpoints
@@ -100,8 +100,8 @@ const input = {
     ),
   verbose: z
     .boolean()
-    .optional()
-    .describe("Return the full readme and uncapped option lists"),
+    .default(false)
+    .describe("Return the full readme and uncapped option lists (default false)"),
 };
 type In = { workflowId: string; historyId?: string; verbose?: boolean };
 
@@ -154,4 +154,7 @@ export const getWorkflowInputTemplateOp: Operation<typeof input, WorkflowInputTe
 
 register(getWorkflowInputTemplateOp as AnyOperation);
 
-export const getWorkflowInputTemplate = (i: In, ctx: GalaxyContext) => runOperation(getWorkflowInputTemplateOp, i, ctx);
+// A library caller may leave the defaulted arguments out; run() applies the same
+// values the schema declares for the parsed surface path.
+export const getWorkflowInputTemplate = (i: In, ctx: GalaxyContext) =>
+  runOperation(getWorkflowInputTemplateOp, i as InputOf<typeof input>, ctx);

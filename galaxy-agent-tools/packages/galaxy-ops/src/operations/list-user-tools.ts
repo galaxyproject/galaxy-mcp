@@ -19,7 +19,7 @@ const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
 
 const input = {
-  active: z.boolean().optional().describe("filter by active state, default true"),
+  active: z.boolean().default(true).describe("filter by active state, default true"),
   limit: z.number()
     .int()
     .default(DEFAULT_LIMIT)

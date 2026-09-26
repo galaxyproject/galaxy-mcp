@@ -14,7 +14,7 @@ const MAX_LIMIT = 200;
 
 const input = {
   name: z.string().nullish().describe("Return only workflows with exactly this name"),
-  published: z.boolean().optional().describe("Only published workflows"),
+  published: z.boolean().default(false).describe("Only published workflows (default false)"),
   limit: z.number()
     .int()
     .default(DEFAULT_LIMIT)
@@ -36,7 +36,9 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<WorkflowItem>> {
   const offset = i.offset ?? 0;
   validatePagination(limit, offset, { maxLimit: MAX_LIMIT });
   const { data, error, response } = await ctx.client.GET("/api/workflows", {
-    params: { query: { show_published: i.published ?? null } },
+    // bioblend sends show_published only when it is true (`if published:`), so a false
+    // default is an omitted parameter rather than an explicit false.
+    params: { query: { show_published: i.published ? true : null } },
   });
   if (error || !data) throw classifyHttp(response.status, error);
   // A 200 carrying something other than a list is Galaxy breaking its contract.
