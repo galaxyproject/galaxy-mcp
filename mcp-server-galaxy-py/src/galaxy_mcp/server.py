@@ -496,9 +496,9 @@ def format_error(action: str, error: Exception, context: dict | None = None) -> 
     return msg
 
 
-# Cache tool io_details schemas. Keyed by (server base URL, tool_id);
-# version is not part of the key because bioblend's show_tool fetches the default version only.
-_TOOL_SCHEMA_CACHE: dict[tuple[str | None, str], dict[str, Any]] = {}
+# Cache tool io_details schemas. Keyed by (server base URL, tool_id, tool_version), so a
+# run pinned to a version is never checked against the parameters of another one.
+_TOOL_SCHEMA_CACHE: dict[tuple[str | None, str, str | None], dict[str, Any]] = {}
 
 # Cache Galaxy's datatype class mapping per base URL -- it's static for a given server version,
 # so one fetch per server is fine even across many requests.
@@ -527,26 +527,50 @@ def _get_datatypes_mapping(gi: GalaxyInstance) -> dict[str, Any]:
     return mapping
 
 
-def _tool_schema_key(gi: GalaxyInstance, tool_id: str) -> tuple[Any, str]:
-    """The cache key: the client's own base URL verbatim, plus the tool id.
+def _tool_schema_key(
+    gi: GalaxyInstance, tool_id: str, tool_version: str | None = None
+) -> tuple[Any, str, str | None]:
+    """The cache key: the client's base URL verbatim, the tool id, the version asked for.
 
     Two Galaxy servers therefore never share an entry, and neither do two spellings
-    of the same one.
+    of the same one. The version is in the key because an id on its own resolves to
+    whichever version is installed: two versions of a tool can take different
+    parameters, so an entry for one is not an answer about the other.
     """
-    return (getattr(gi, "base_url", None), tool_id)
+    return (getattr(gi, "base_url", None), tool_id, tool_version)
 
 
-def _get_tool_schema(gi: GalaxyInstance, tool_id: str, *, refresh: bool = False) -> dict[str, Any]:
+def _get_tool_schema(
+    gi: GalaxyInstance, tool_id: str, *, tool_version: str | None = None, refresh: bool = False
+) -> dict[str, Any]:
     """Fetch (and cache) a tool's io_details schema using the given request-scoped client.
 
     The cache has no expiry and nothing invalidates it, so an entry is only ever
     evidence of what this tool looked like the first time this process asked. That is
     fine for building a message or a template out of, and never good enough to refuse
     a run on -- ``refresh`` is how the preflight re-reads before it blocks anything.
+
+    ``tool_version`` asks Galaxy for that version rather than the installed default.
+    bioblend's show_tool sends io_details and link_details and nothing else, so the
+    request is built here: GET /api/tools/{id} reads tool_version out of the query
+    string (v26.1.1 api/tools.py show), and make_get_request is the public method the
+    thread-safety wrapper covers.
     """
-    key = _tool_schema_key(gi, tool_id)
+    key = _tool_schema_key(gi, tool_id, tool_version)
     if refresh or key not in _TOOL_SCHEMA_CACHE:
-        _TOOL_SCHEMA_CACHE[key] = gi.tools.show_tool(tool_id, io_details=True)
+        if tool_version is None:
+            _TOOL_SCHEMA_CACHE[key] = gi.tools.show_tool(tool_id, io_details=True)
+        else:
+            response = gi.make_get_request(
+                f"{gi.url}/tools/{tool_id}",
+                params={
+                    "io_details": True,
+                    "link_details": False,
+                    "tool_version": tool_version,
+                },
+            )
+            response.raise_for_status()
+            _TOOL_SCHEMA_CACHE[key] = response.json()
     return _TOOL_SCHEMA_CACHE[key]
 
 
@@ -576,11 +600,11 @@ def _supplies_a_reference(inputs: Any) -> bool:
 
 
 def _schema_to_check(
-    gi: GalaxyInstance, tool_id: str, *, refresh: bool = False
+    gi: GalaxyInstance, tool_id: str, *, tool_version: str | None = None, refresh: bool = False
 ) -> tuple[dict[str, Any], str | None]:
     """The schema to check inputs against, or the reason it cannot be checked on."""
     try:
-        schema = _get_tool_schema(gi, tool_id, refresh=refresh)
+        schema = _get_tool_schema(gi, tool_id, tool_version=tool_version, refresh=refresh)
     except Exception as e:  # noqa: BLE001 -- surfaced to the caller, not swallowed
         return {}, f"could not fetch the schema for '{tool_id}' ({e})"
 
@@ -590,6 +614,19 @@ def _schema_to_check(
             f"Galaxy returned a schema for '{described}', not '{tool_id}', so it may "
             "describe a different version than the one being run"
         )
+
+    if tool_version is not None:
+        # Asking for a version is not the same as getting it: the toolbox returns the
+        # newest installed version when the one asked for is missing (v26.1.1
+        # tool_util/toolbox/base.py get_tool). Checking v1 inputs against v2's
+        # parameters is how a preflight invents a mismatch, so say nothing instead.
+        served = schema.get("version") if isinstance(schema, dict) else None
+        if isinstance(served, str) and served != tool_version:
+            return schema, (
+                f"Galaxy described version {served} of '{tool_id}' rather than the "
+                f"{tool_version} asked for, so its parameters are not the ones this "
+                "run would use"
+            )
 
     if not schema_has_inputs(schema):
         return schema, f"the definition of '{tool_id}' arrived without a parameter list"
@@ -603,6 +640,7 @@ def _preflight_tool_inputs(
     inputs: dict[str, Any],
     *,
     schema: dict[str, Any] | None = None,
+    tool_version: str | None = None,
 ) -> str | None:
     """Check inputs against the tool's schema before anything is submitted.
 
@@ -617,6 +655,10 @@ def _preflight_tool_inputs(
     toolbox, so looking it up by id would just 404. A caller that holds one pays
     nothing, so its inputs are always checked; one that would have to fetch it
     does so only when the inputs contain something checkable.
+
+    ``tool_version`` is the version the run will ask Galaxy for. The schema is
+    fetched and cached for that version, because a run pinned to one version has
+    nothing to do with the parameters of the version Galaxy would otherwise pick.
     """
     held_schema = schema is not None
     try:
@@ -624,8 +666,8 @@ def _preflight_tool_inputs(
         if schema is None:
             if not _supplies_a_reference(inputs):
                 return None
-            cached = _tool_schema_key(gi, tool_id) in _TOOL_SCHEMA_CACHE
-            schema, unchecked = _schema_to_check(gi, tool_id)
+            cached = _tool_schema_key(gi, tool_id, tool_version) in _TOOL_SCHEMA_CACHE
+            schema, unchecked = _schema_to_check(gi, tool_id, tool_version=tool_version)
             if unchecked:
                 return unchecked
         elif not schema_has_inputs(schema):
@@ -637,7 +679,9 @@ def _preflight_tool_inputs(
             # A refusal must never rest on the cache. It has no expiry, so a tool
             # upgraded in place would go on failing a check the live definition
             # passes, for the life of the process. Read it again and believe that.
-            schema, unchecked = _schema_to_check(gi, tool_id, refresh=True)
+            schema, unchecked = _schema_to_check(
+                gi, tool_id, tool_version=tool_version, refresh=True
+            )
             if unchecked:
                 return unchecked
             verdict = check_tool_inputs(schema, inputs)
@@ -666,6 +710,7 @@ def _format_tool_input_error(
     action: str = "Run tool",
     schema: dict[str, Any] | None = None,
     shape_hint: str | None = None,
+    tool_version: str | None = None,
 ) -> str:
     """Build a truthful enriched error for an input-related tool failure.
 
@@ -681,7 +726,8 @@ def _format_tool_input_error(
     ``schema`` is for a caller that already holds the definition, as run_user_tool
     does: a user tool is not in the toolbox, so every lookup by id here would 404
     and the message would come back with nothing in it. ``shape_hint`` is where to
-    send that caller instead.
+    send that caller instead. ``tool_version`` is the version the run asked Galaxy
+    for, so the definition read back here is that one and not the default.
     """
     schema_summary = None
     example = None
@@ -691,11 +737,18 @@ def _format_tool_input_error(
     stale = False
     if not held_schema:
         with contextlib.suppress(Exception):
-            schema = _get_tool_schema(gi, tool_id, refresh=True)
+            schema = _get_tool_schema(gi, tool_id, tool_version=tool_version, refresh=True)
         if schema is None:
             stale = True
             with contextlib.suppress(Exception):
-                schema = _get_tool_schema(gi, tool_id)
+                schema = _get_tool_schema(gi, tool_id, tool_version=tool_version)
+    if tool_version is not None and isinstance(schema, dict):
+        # The toolbox falls back to an installed version when the one asked for is
+        # missing, and naming an input off another version's parameters is the same
+        # mistake as refusing on them.
+        served = schema.get("version")
+        if isinstance(served, str) and served != tool_version:
+            stale = True
     if schema is not None and schema_has_inputs(schema):
         with contextlib.suppress(Exception):
             # An empty list dumped as "the expected parameters" is worse than saying
@@ -1540,8 +1593,39 @@ def get_tool_citations(tool_id: str) -> GalaxyResult:
         raise ValueError(format_error("Get tool citations", e, {"tool_id": tool_id})) from e
 
 
+def _reported_tool_version(result: Any) -> str | None:
+    """The version that ran, when every job Galaxy returned names the same one.
+
+    POST /api/tools serialises each job with Job.to_dict(view="collection"), and
+    tool_version is one of that view's visible keys (v26.1.1 model/__init__.py), so
+    the reply says what ran. Asking for a version does not: the toolbox returns the
+    newest installed version when the requested one is not there.
+
+    Every job has to say it. One job that names no version, or two that name
+    different ones, leaves the submission's provenance unknown -- and so does a
+    reply with no jobs in it. There is no partly-known version to report, so the
+    answer is None and the caller says nothing.
+    """
+    if not isinstance(result, dict):
+        return None
+    jobs = result.get("jobs")
+    if not isinstance(jobs, list) or not jobs:
+        return None
+    versions = set()
+    for job in jobs:
+        version = job.get("tool_version") if isinstance(job, dict) else None
+        if not isinstance(version, str) or not version:
+            return None
+        versions.add(version)
+    if len(versions) == 1:
+        return versions.pop()
+    return None
+
+
 @mcp.tool(tags={"tools", "write", "core"})
-def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyResult:
+def run_tool(
+    history_id: str, tool_id: str, inputs: dict[str, Any], tool_version: str | None = None
+) -> GalaxyResult:
     """
     Run a Galaxy tool on datasets in a history.
 
@@ -1560,10 +1644,18 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyRes
                  - Toolshed: "toolshed.g2.bx.psu.edu/repos/iuc/fastqc/fastqc/0.73"
         inputs: Tool input parameters. Dataset inputs use this format:
                 {"input_name": {"src": "hda", "id": "dataset_id"}}
+        tool_version: Ask Galaxy for a specific version of the tool rather than
+                      whichever one it would pick. It is a request, not a guarantee:
+                      Galaxy falls back to an installed version when the one asked
+                      for is not there. Omit it and Galaxy chooses, which is the
+                      default and almost always what you want. Versions come from
+                      get_tool_details(tool_id).
 
     Returns:
         GalaxyResult with:
-        - data.jobs: List of job objects with state and IDs
+        - data.jobs: List of job objects with state and IDs. Each carries the
+          tool_version that actually ran, which is the only place the version is
+          known -- asking for one does not make it so.
         - data.outputs: List of output datasets created
         - data.output_collections: List of output collections (if any)
 
@@ -1610,7 +1702,7 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyRes
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
-    unchecked = _preflight_tool_inputs(gi, tool_id, inputs)
+    unchecked = _preflight_tool_inputs(gi, tool_id, inputs, tool_version=tool_version)
 
     try:
         credentials_context = None
@@ -1618,16 +1710,49 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyRes
             credentials_context = _get_tool_credentials_context(gi, tool_id)
 
         used_credentials = credentials_context is not None
-        result = gi.tools.run_tool(
-            history_id, tool_id, inputs, credentials_context=credentials_context
-        )
+        if tool_version is None:
+            result = gi.tools.run_tool(
+                history_id, tool_id, inputs, credentials_context=credentials_context
+            )
+        else:
+            # bioblend's run_tool has no tool_version, so for that one case the payload
+            # it would have built is built here and posted the same way -- its own _post
+            # is a one-line call to make_post_request, which is public and is the method
+            # the thread-safety wrapper covers. Galaxy reads tool_version out of the
+            # payload in services/tools.py _create, so this is the supported route and
+            # not a query-string trick. test_the_payload_is_bioblends_plus_the_version
+            # captures what bioblend sends and holds these two together.
+            payload: dict[str, Any] = {
+                "history_id": history_id,
+                "tool_id": tool_id,
+                "input_format": "legacy",
+                "inputs": inputs,
+                "tool_version": tool_version,
+            }
+            if credentials_context is not None:
+                payload["credentials_context"] = credentials_context
+            result = gi.make_post_request(f"{gi.url}/tools", payload=payload)
         cred_msg = " (with credentials)" if used_credentials else ""
+        version_msg = ""
+        if tool_version is not None:
+            # Only the job knows. Galaxy's toolbox hands back the newest installed
+            # version when the requested one is missing, so repeating the request
+            # back as if it were the answer is how a caller ends up recording a run
+            # at a version that never ran.
+            ran = _reported_tool_version(result)
+            if ran is None:
+                version_msg = f" at an unreported version ({tool_version} requested)"
+            elif ran == tool_version:
+                version_msg = f" at version {ran}"
+            else:
+                version_msg = f" at version {ran} (not the {tool_version} requested)"
         unchecked_msg = f" (inputs not pre-checked: {unchecked})" if unchecked else ""
         return GalaxyResult(
             data=result,
             success=True,
             message=(
-                f"Started tool '{tool_id}' in history '{history_id}'{cred_msg}{unchecked_msg}"
+                f"Started tool '{tool_id}'{version_msg} in history "
+                f"'{history_id}'{cred_msg}{unchecked_msg}"
             ),
         )
     except Exception as e:
@@ -1643,7 +1768,12 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyRes
         if is_input_related_error(e):
             raise ValueError(
                 _format_tool_input_error(
-                    e, gi=gi, tool_id=tool_id, history_id=history_id, inputs=inputs
+                    e,
+                    gi=gi,
+                    tool_id=tool_id,
+                    history_id=history_id,
+                    inputs=inputs,
+                    tool_version=tool_version,
                 )
             ) from e
         raise ValueError(

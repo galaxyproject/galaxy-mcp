@@ -1280,6 +1280,18 @@
             "additionalProperties": true,
             "type": "object",
             "description": "Tool input parameters. Dataset inputs use this format:\n    {\"input_name\": {\"src\": \"hda\", \"id\": \"dataset_id\"}}"
+          },
+          "tool_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Ask Galaxy for a specific version of the tool rather than\n          whichever one it would pick. It is a request, not a guarantee:\n          Galaxy falls back to an installed version when the one asked\n          for is not there. Omit it and Galaxy chooses, which is the\n          default and almost always what you want. Versions come from\n          get_tool_details(tool_id)."
           }
         },
         "required": [
