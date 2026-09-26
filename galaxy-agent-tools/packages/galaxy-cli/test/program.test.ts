@@ -169,6 +169,22 @@ describe("buildProgram", () => {
     expect(asking(asked, "/api/workflows")).toContain("show_published=true");
   });
 
+  it("still converts a numeric flag for the ops that stopped coercing", async () => {
+    // These three were the last schemas doing their own coercion; the conversion the
+    // command line needs belongs in buildInput, and this is the proof it is there.
+    const asked: string[] = [];
+    const run = await runCli(["list_pages", "--offset", "7", "--format", "json"], recordingContext(asked));
+    expect(asking(asked, "/api/pages")).toContain("offset=7");
+    expect(run.exitCode).toBe(0);
+  });
+
+  it("refuses a numeric flag that is not a number, with a usage exit", async () => {
+    const asked: string[] = [];
+    const run = await runCli(["list_pages", "--limit", "abc", "--format", "json"], recordingContext(asked));
+    expect(run.exitCode).toBe(64);
+    expect(asked.some((url) => url.includes("/api/pages"))).toBe(false);
+  });
+
   it("runs an op and renders json to stdout", async () => {
     const out = vi.spyOn(console, "log").mockImplementation(() => {});
     const program = buildProgram({ makeContext: ctxFactory });

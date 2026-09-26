@@ -7,6 +7,9 @@ import { listWorkflowsOp, listWorkflows } from "../../src/operations/list-workfl
 import { searchToolsByNameOp } from "../../src/operations/search-tools-by-name";
 import { searchToolsByKeywordsOp } from "../../src/operations/search-tools-by-keywords";
 import { getToolPanelOp, getToolPanel } from "../../src/operations/get-tool-panel";
+import { getCollectionDetailsOp } from "../../src/operations/get-collection-details";
+import { getWorkflowDetailsOp } from "../../src/operations/get-workflow-details";
+import { listPagesOp } from "../../src/operations/list-pages";
 import { getIwcWorkflowsOp } from "../../src/operations/get-iwc-workflows";
 import { searchIwcWorkflowsOp } from "../../src/operations/search-iwc-workflows";
 import { recommendIwcWorkflowsOp } from "../../src/operations/recommend-iwc-workflows";
@@ -29,6 +32,10 @@ const ctxWith = (client: any): GalaxyContext => ({ client, poll: DEFAULT_POLL })
  * pinned here instead.
  */
 const integerInputs: Array<[string, { safeParse(v: unknown): { success: boolean } }]> = [
+  ["get_collection_details.max_elements", getCollectionDetailsOp.input.maxElements],
+  ["get_workflow_details.version", getWorkflowDetailsOp.input.version],
+  ["list_pages.limit", listPagesOp.input.limit],
+  ["list_pages.offset", listPagesOp.input.offset],
   ["get_histories.limit", getHistoriesOp.input.limit],
   ["get_histories.offset", getHistoriesOp.input.offset],
   ["get_history_contents.limit", getHistoryContentsOp.input.limit],
@@ -58,6 +65,8 @@ describe("input acceptance matches the Python manifest", () => {
       expect(schema.safeParse("5").success, `${where} took a string`).toBe(false);
       expect(schema.safeParse([1]).success, `${where} took a list`).toBe(false);
       expect(schema.safeParse(1.5).success, `${where} took a fraction`).toBe(false);
+      expect(schema.safeParse("").success, `${where} took an empty string`).toBe(false);
+      expect(schema.safeParse(true).success, `${where} took a boolean`).toBe(false);
     }
   });
 
@@ -67,6 +76,7 @@ describe("input acceptance matches the Python manifest", () => {
     expect(getHistoriesOp.input.name.safeParse(null).success).toBe(true);
     expect(listWorkflowsOp.input.name.safeParse(null).success).toBe(true);
     expect(getToolPanelOp.input.sectionId.safeParse(null).success).toBe(true);
+    expect(getWorkflowDetailsOp.input.version.safeParse(null).success).toBe(true);
   });
 
   it("refuses null everywhere Python declares a plain integer or string", () => {
@@ -76,6 +86,8 @@ describe("input acceptance matches the Python manifest", () => {
     expect(listHistoryIdsOp.input.offset.safeParse(null).success).toBe(false);
     expect(searchToolsByNameOp.input.limit.safeParse(null).success).toBe(false);
     expect(getToolPanelOp.input.limit.safeParse(null).success).toBe(false);
+    expect(listPagesOp.input.limit.safeParse(null).success).toBe(false);
+    expect(getCollectionDetailsOp.input.maxElements.safeParse(null).success).toBe(false);
     expect(recommendIwcWorkflowsOp.input.intent.safeParse(null).success).toBe(false);
   });
 

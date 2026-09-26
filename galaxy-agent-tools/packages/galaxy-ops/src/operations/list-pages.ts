@@ -10,8 +10,8 @@ const DEFAULT_LIMIT = 100;
 const input = {
   historyId: z.string().min(1).optional().describe("Encoded history id; lists only that history's notebooks"),
   search: z.string().optional().describe("Freetext filter over title, slug, tag and owner"),
-  limit: z.coerce.number().int().positive().default(DEFAULT_LIMIT).describe(`Max pages to return (default ${DEFAULT_LIMIT})`),
-  offset: z.coerce.number().int().min(0).default(0).describe("Skip the first N"),
+  limit: z.number().int().default(DEFAULT_LIMIT).describe(`Max pages to return (default ${DEFAULT_LIMIT})`),
+  offset: z.number().int().default(0).describe("Skip the first N"),
   showPublished: z.boolean().default(false).describe("Also include pages published by other users (default false)"),
   showShared: z.boolean().default(false).describe("Also include pages shared with the user (default false)"),
 };

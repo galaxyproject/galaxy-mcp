@@ -12,10 +12,9 @@ const MAX_ELEMENTS = 100;
 
 const input = {
   collectionId: z.string().describe("Encoded HDCA (history dataset collection) id"),
-  maxElements: z.coerce
+  maxElements: z
     .number()
     .int()
-    .positive()
     .default(MAX_ELEMENTS)
     .describe(`Truncate the elements list to N (default ${MAX_ELEMENTS})`),
 };
