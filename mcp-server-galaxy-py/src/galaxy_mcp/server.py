@@ -2705,7 +2705,21 @@ def get_dataset_details(
 
     Returns:
         GalaxyResult with dataset metadata (name, size, state, extension) and optional
-        content preview in data field
+        content preview in data field.
+
+        data.preview is Galaxy's own text peek -- up to about 1 MB of text read from
+        the start of the dataset, never the dataset itself -- sliced to preview_lines
+        lines. It carries:
+        - lines: those lines, or None when Galaxy has no text preview for the
+          datatype (it previews text datatypes only)
+        - preview_lines: how many lines that came to
+        - truncated: our line slice dropped some of the text Galaxy sent
+        - content_truncated_by_galaxy: Galaxy's own truncated flag, verbatim. Galaxy
+          sets it from the stored byte size while reading up to 1,000,000 decoded
+          characters, and those two disagree in both directions: compressed text can
+          be clipped with the flag false, and uncompressed multibyte text can come
+          back whole with the flag true. Read it as what Galaxy said, not as a
+          statement about how much of the dataset this is.
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
@@ -2719,33 +2733,48 @@ def get_dataset_details(
         # Add content preview if requested and dataset is in 'ok' state
         if include_preview and dataset_info.get("state") == "ok":
             try:
-                # Get dataset content for preview
-                content = gi.datasets.download_dataset(
-                    dataset_id, use_default_filename=False, require_ok_state=False
+                # Galaxy's own preview route, which reads about a megabyte of text
+                # (hda_manager.text_data_truncated, MAX_PEEK_SIZE) rather than the
+                # dataset. Ten lines used to cost a download of the whole file.
+                # bioblend has no wrapper for it, and make_get_request is the public
+                # method the thread-safety wrapper covers, so the request goes out
+                # that way rather than through the client's private _get.
+                response = gi.make_get_request(
+                    f"{gi.url}/datasets/{dataset_id}/get_content_as_text"
                 )
+                response.raise_for_status()
+                body = response.json()
+                content_str = body.get("item_data")
+                # Galaxy's flag, passed through as it stands and described as no more
+                # than that. It comes from the stored byte size while the read takes up
+                # to 1,000,000 decoded characters through a decompressing reader
+                # (managers/hdas.py text_data_truncated), so the two disagree both
+                # ways: bgzipped text can be clipped with the flag false, and
+                # uncompressed multibyte text can be complete with it true. Nothing
+                # here can tell which, so nothing here says what the peek covers.
+                cut_by_galaxy = bool(body.get("truncated"))
 
-                # Convert bytes to string if needed
-                if isinstance(content, bytes):
-                    try:
-                        content_str = content.decode("utf-8")
-                    except UnicodeDecodeError:
-                        # For binary files, show first part as hex
-                        content_str = (
-                            f"[Binary content - first 100 bytes as hex: {content[:100].hex()}]"
-                        )
+                if content_str is None:
+                    # text_data returns nothing for a datatype that is not text, and
+                    # for a file that is not where Galaxy expects it.
+                    result_data["preview"] = {
+                        "lines": None,
+                        "error": "No text preview: Galaxy previews text datatypes only",
+                        "content_truncated_by_galaxy": cut_by_galaxy,
+                    }
                 else:
-                    content_str = content
+                    lines = content_str.split("\n")
+                    preview = "\n".join(lines[:preview_lines])
 
-                # Get preview lines
-                lines = content_str.split("\n")
-                preview = "\n".join(lines[:preview_lines])
-
-                result_data["preview"] = {
-                    "lines": preview,
-                    "total_lines": len(lines),
-                    "preview_lines": min(preview_lines, len(lines)),
-                    "truncated": len(lines) > preview_lines,
-                }
+                    # No total_lines: it only ever meant something while the whole
+                    # file was downloaded, and counting the lines of a peek reads as a
+                    # count of the dataset.
+                    result_data["preview"] = {
+                        "lines": preview,
+                        "preview_lines": min(preview_lines, len(lines)),
+                        "truncated": len(lines) > preview_lines,
+                        "content_truncated_by_galaxy": cut_by_galaxy,
+                    }
 
             except Exception as preview_error:
                 logger.warning(f"Could not get preview for dataset {dataset_id}: {preview_error}")
