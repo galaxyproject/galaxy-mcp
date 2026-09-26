@@ -23,6 +23,14 @@
           "invocation_id"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "cancelled",
+          "invocation"
+        ],
+        "paginated": false
       }
     },
     {
@@ -62,6 +70,16 @@
           }
         },
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "auth",
+          "connected",
+          "url",
+          "user"
+        ],
+        "paginated": false
       }
     },
     {
@@ -207,6 +225,14 @@
           "uuid"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "deactivated",
+          "uuid"
+        ],
+        "paginated": false
       }
     },
     {
@@ -251,6 +277,19 @@
           "dataset_id"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "content_available",
+          "dataset_id",
+          "dataset_info",
+          "file_path",
+          "file_size",
+          "note",
+          "suggested_filename"
+        ],
+        "paginated": false
       }
     },
     {
@@ -278,6 +317,18 @@
           "collection_id"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "collection",
+          "collection_id",
+          "elements",
+          "elements_truncated",
+          "history_content_type",
+          "note"
+        ],
+        "paginated": false
       }
     },
     {
@@ -310,6 +361,10 @@
           "dataset_id"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "paginated": false
       }
     },
     {
@@ -401,6 +456,14 @@
           "history_id"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "contents",
+          "history_id"
+        ],
+        "paginated": true
       }
     },
     {
@@ -423,6 +486,14 @@
           "history_id"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "contents_summary",
+          "history"
+        ],
+        "paginated": false
       }
     },
     {
@@ -577,6 +648,10 @@
           }
         },
         "type": "object"
+      },
+      "result": {
+        "kind": "list",
+        "paginated": true
       }
     },
     {
@@ -628,6 +703,15 @@
           }
         },
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "dataset_id",
+          "job",
+          "job_id"
+        ],
+        "paginated": false
       }
     },
     {
@@ -726,6 +810,17 @@
         "additionalProperties": false,
         "properties": {},
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "config",
+          "unsupported_tools",
+          "url",
+          "version",
+          "version_known"
+        ],
+        "paginated": false
       }
     },
     {
@@ -748,6 +843,15 @@
           "tool_id"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "citations",
+          "tool_name",
+          "tool_version"
+        ],
+        "paginated": false
       }
     },
     {
@@ -808,6 +912,15 @@
           "tool_id"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "inputs_template",
+          "parameters",
+          "tool_id"
+        ],
+        "paginated": false
       }
     },
     {
@@ -845,6 +958,10 @@
           }
         },
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "paginated": true
       }
     },
     {
@@ -879,6 +996,15 @@
           "tool_id"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "requested_version",
+          "test_cases",
+          "tool_id"
+        ],
+        "paginated": false
       }
     },
     {
@@ -1131,6 +1257,10 @@
           }
         },
         "type": "object"
+      },
+      "result": {
+        "kind": "list",
+        "paginated": true
       }
     },
     {
@@ -1336,6 +1466,10 @@
           }
         },
         "type": "object"
+      },
+      "result": {
+        "kind": "list",
+        "paginated": true
       }
     },
     {
@@ -1378,6 +1512,10 @@
           }
         },
         "type": "object"
+      },
+      "result": {
+        "kind": "list",
+        "paginated": true
       }
     },
     {
@@ -1431,6 +1569,10 @@
           "intent"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "list",
+        "paginated": false
       }
     },
     {
@@ -1571,6 +1713,10 @@
           "query"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "list",
+        "paginated": true
       }
     },
     {
@@ -1606,6 +1752,10 @@
           "keywords"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "list",
+        "paginated": true
       }
     },
     {
@@ -1638,6 +1788,10 @@
           "query"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "list",
+        "paginated": true
       }
     },
     {

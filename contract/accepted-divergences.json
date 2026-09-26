@@ -43,6 +43,70 @@
       "observed": "python=read (tag) typescript=write (hint)",
       "status": "intentional",
       "reason": "Both surfaces write the bytes to a local path when they are given one, and both say so; they disagree because the two flags are about different things. Python's read tag is a statement about Galaxy: the tags exist to gate GALAXY_MCP_INCLUDE/EXCLUDE_TAGS, and the tool is two GETs that create, change and delete nothing on the server -- the file Python writes to file_path is outside what the tag speaks to. The MCP readOnlyHint has no such scope: the SDK defines readOnlyHint true as a tool that does not modify its environment, and with filePath the TS op overwrites whatever file is at that path, so it advertises false and clients that gate approval on the hint ask before it runs. Dannon's call (2026-09-26): each flag is correct about its own scope, so neither side moves and the mismatch is what the two scopes look like from the comparator."
+    },
+    {
+      "tool": "download_dataset",
+      "param": "file_path",
+      "kind": "result-shape",
+      "observed": "python=present typescript=absent",
+      "status": "intentional",
+      "reason": "Set only on the branch that was given a path to write to; the in-memory branch has no path to name, so the field is not promised."
+    },
+    {
+      "tool": "download_dataset",
+      "param": "file_size",
+      "kind": "result-shape",
+      "observed": "python=present typescript=absent",
+      "status": "intentional",
+      "reason": "Set only on the in-memory branch, which is the one that measured the bytes. Mutually exclusive with file_path, so neither is promised."
+    },
+    {
+      "tool": "download_dataset",
+      "param": "note",
+      "kind": "result-shape",
+      "observed": "python=present typescript=absent",
+      "status": "pending-port",
+      "reason": "Python's result carries a next-steps note and the TS op builds none."
+    },
+    {
+      "tool": "get_dataset_details",
+      "param": null,
+      "kind": "result-shape",
+      "observed": "python=object typescript=undeclared",
+      "status": "pending-decision",
+      "reason": "Python nests the dataset under a `dataset` key beside `dataset_id`; the TS op returns Galaxy's dataset at the top level with `preview` added. Python's key list is not stated because `preview` is added conditionally after the literal."
+    },
+    {
+      "tool": "get_histories",
+      "param": null,
+      "kind": "result-shape",
+      "observed": "python=undeclared typescript=list",
+      "status": "intentional",
+      "reason": "No known difference: both answer with the rows in data, and both report a window only when given a limit. Python's data is bioblend's return value, which the manifest generator cannot read, so only the TS side states a kind."
+    },
+    {
+      "tool": "get_workflow_input_template",
+      "param": null,
+      "kind": "result-shape",
+      "observed": "python=undeclared typescript=object[guide, inputs_by, inputs_template, slots, warnings]",
+      "status": "intentional",
+      "reason": "No known difference: both answer with the same five keys in every golden case. Python's data is a template its builder returns, which the manifest generator cannot read, so only the TS side states the keys."
+    },
+    {
+      "tool": "list_page_revisions",
+      "param": null,
+      "kind": "result-shape",
+      "observed": "python=undeclared typescript=list",
+      "status": "intentional",
+      "reason": "No known difference: both return the rows, and Python's data is the route's own body, which the generator cannot read."
+    },
+    {
+      "tool": "list_pages",
+      "param": null,
+      "kind": "result-shape",
+      "observed": "python=undeclared typescript=list paged-envelope",
+      "status": "intentional",
+      "reason": "No known difference in the rows: both return them and both report a window. Python's data is the route's own body, which the generator cannot read, so only the TS side can state that it is a list."
     }
   ],
   "builtin": {
