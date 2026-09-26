@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -55,6 +57,28 @@ describe("MCP surface is a mechanical projection", () => {
       expect(byName.get("list_page_revisions")).toContain("Requires Galaxy 26.1 or newer.");
       // get_page works on 26.0, so it must not pick the sentence up.
       expect(byName.get("get_page")).not.toContain("Requires Galaxy");
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  /**
+   * What the server calls itself. Read from package.json here rather than from the same
+   * import the server uses, so the two cannot agree on a stale number: a client asks the
+   * server for its version to decide what it can rely on, and 0.0.0 told it nothing.
+   */
+  it("tells a client the version this package was published as", async () => {
+    const declared = JSON.parse(
+      readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8"),
+    ) as { version: string };
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = buildServer({ baseUrl: "https://g.example", apiKey: "K" });
+    const client = new Client({ name: "surface-check", version: "0" });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      expect(declared.version).toMatch(/^\d+\.\d+\.\d+/);
+      expect(client.getServerVersion()).toEqual({ name: "galaxy", version: declared.version });
     } finally {
       await client.close();
       await server.close();

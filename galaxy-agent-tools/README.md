@@ -19,7 +19,9 @@ lockstep with it, so a tool called `get_histories` here behaves like
 
 > The packages are published on npm under the
 > [`@galaxyproject`](https://www.npmjs.com/org/galaxyproject) scope -- install
-> them (below), or build from source to develop.
+> them (below), or build from source to develop. All three share a version and
+> are released together; [CHANGELOG.md](CHANGELOG.md) is what changed, including
+> what breaks.
 
 ## Layout
 

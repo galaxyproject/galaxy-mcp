@@ -4,6 +4,9 @@ import type { ZodRawShape } from "zod";
 import { allOperations, createGalaxyContext, describeOperation, runWithEnvelope } from "@galaxyproject/galaxy-ops";
 import { LaxArgumentsTransport } from "./lax-transport.js";
 import { inWireNames, toOperationInput, wireShape } from "./wire-names.js";
+// The version a client is told, read from the package rather than written twice. tsup
+// inlines it into dist/, so nothing looks for a package.json at run time.
+import { version } from "../package.json";
 
 export function toolNames(): string[] {
   return allOperations.map((op) => op.name);
@@ -39,7 +42,7 @@ export function toolResult(result: { success: boolean }): {
 }
 
 export function buildServer(conn: { baseUrl: string; apiKey: string }): McpServer {
-  const server = new McpServer({ name: "galaxy", version: "0.0.0" });
+  const server = new McpServer({ name: "galaxy", version });
   const ctx = createGalaxyContext(conn);
   const annotations = toolAnnotations();
   const shapes = new Map<string, ZodRawShape>();
