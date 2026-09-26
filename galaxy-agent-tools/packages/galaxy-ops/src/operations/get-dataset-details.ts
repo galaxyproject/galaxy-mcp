@@ -24,10 +24,11 @@ export interface DatasetPreview {
   /** Our line slice dropped some of the text Galaxy sent. */
   truncated?: boolean;
   /**
-   * Galaxy's own `truncated` flag, verbatim. Galaxy sets it by comparing the stored file
-   * size against 1 MB while reading a million decoded characters, so a compressed or
-   * multibyte dataset can be clipped with the flag false. False means Galaxy did not say
-   * it clipped, not that this is the whole dataset.
+   * Galaxy's own `truncated` flag, verbatim. Galaxy sets it from the stored byte size while
+   * reading up to 1,000,000 decoded characters, and those two disagree in both directions:
+   * compressed text can be clipped with the flag false, and uncompressed multibyte text can
+   * come back whole with the flag true. Read it as what Galaxy said, not as a statement
+   * about how much of the dataset this is.
    */
   content_truncated_by_galaxy?: boolean;
   /** Why there are no lines. */
@@ -170,8 +171,10 @@ export const getDatasetDetailsOp: Operation<typeof input, DatasetDetailsResult> 
     "The preview is Galaxy's own text peek -- up to about 1 MB of text read from the start of the " +
     "dataset, never the dataset itself -- sliced to previewLines lines, and only for a dataset in " +
     "the 'ok' state. preview.lines is null for a datatype Galaxy has no text preview for; " +
-    "preview.truncated means the line slice cut the text Galaxy sent, and " +
-    "preview.content_truncated_by_galaxy is Galaxy's own flag, which false does not prove.",
+    "preview.truncated means the line slice cut the text Galaxy sent; and " +
+    "preview.content_truncated_by_galaxy is Galaxy's own flag, set from the stored byte size " +
+    "while the read counts decoded characters -- read it as what Galaxy said, not as a " +
+    "statement about how much of the dataset this is.",
   input,
   run,
   project: (d) => ({ message: `Dataset ${(d as { id?: string }).id} state=${(d as { state?: string }).state}` }),
