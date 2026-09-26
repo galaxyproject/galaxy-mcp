@@ -16,6 +16,7 @@ import {
   type JsonSchema,
   type Normalization,
   type NormalizationRuleName,
+  type ResultShape,
   type Surface,
   type ToolAnnotations,
   type ToolContract,
@@ -217,6 +218,9 @@ export function pythonSurface(manifest: Manifest): Surface {
       const requires = read(entry, "requires", "object", about) as
         | { galaxy: string }
         | undefined;
+      // Written only for a tool whose result the generator could read structurally, so absent
+      // here means "not stated" rather than "returns nothing".
+      const result = read(entry, "result", "object", about) as ResultShape | undefined;
       return [
         name as string,
         {
@@ -224,6 +228,7 @@ export function pythonSurface(manifest: Manifest): Surface {
           annotations: annotations as ToolAnnotations,
           tags: tags as string[],
           requires,
+          result,
         },
       ] as [string, ToolContract];
     }),
@@ -244,6 +249,8 @@ export async function typescriptSurface(): Promise<Surface> {
   // on the op and nowhere else -- over the wire it survives only as a sentence in the
   // description, and `surface.test.ts` is what holds that sentence to the declaration.
   const declaredRequirements = new Map(allOperations.map((op) => [op.name, op.requires]));
+  // Also op-side only: MCP has no field for the shape of a result either.
+  const declaredResults = new Map(allOperations.map((op) => [op.name, op.result]));
   try {
     const { tools } = await client.listTools();
     return surfaceByName(
@@ -264,6 +271,7 @@ export async function typescriptSurface(): Promise<Surface> {
             annotations: (read(advertised, "annotations", "object", where) ??
               {}) as ToolAnnotations,
             requires: declaredRequirements.get(t.name),
+            result: declaredResults.get(t.name),
           },
         ] as [string, ToolContract];
       }),
