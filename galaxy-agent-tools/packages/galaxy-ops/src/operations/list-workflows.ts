@@ -4,7 +4,7 @@ import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
 import { paginate, shrinkPaged, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, InputOf, Operation } from "./types";
+import type { AnyOperation, Operation } from "./types";
 
 export type Workflows = GetJson<"/api/workflows">;
 
@@ -73,7 +73,4 @@ export const listWorkflowsOp: Operation<typeof input, Paged<WorkflowItem>> = {
 
 register(listWorkflowsOp as AnyOperation);
 
-// A library caller may leave the paged arguments out; run() applies the same
-// defaults the schema declares for the parsed surface path.
-export const listWorkflows = (i: In, ctx: GalaxyContext) =>
-  runOperation(listWorkflowsOp, i as InputOf<typeof input>, ctx);
+export const listWorkflows = (i: In, ctx: GalaxyContext) => runOperation(listWorkflowsOp, i, ctx);
