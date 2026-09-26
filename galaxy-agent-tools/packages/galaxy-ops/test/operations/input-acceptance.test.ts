@@ -21,15 +21,21 @@ import type { ToolPanelOverview } from "../../src/operations/get-tool-panel";
 const ctxWith = (client: any): GalaxyContext => ({ client, poll: DEFAULT_POLL });
 
 /**
- * What these tools accept, against what the Python server's manifest says they
- * accept (`mcp-server-galaxy-py/tests/testdata/mcp-surface.json`).
+ * What these schemas declare, against what the Python server's manifest declares
+ * (`mcp-server-galaxy-py/tests/testdata/mcp-surface.json`).
  *
- * The parity check compares the types, but its normalization folds an optional
- * `T | null` together with a plain optional `T` -- deliberately, because that
- * union is how Python spells optional -- so it cannot see the difference between a
- * parameter that takes an explicit null and one that refuses it. Nor does it look
- * at what a schema coerces. Both are things a client trips over, so they are
- * pinned here instead.
+ * This is about the contract, not about what a caller may send. Both surfaces publish
+ * `type: integer` and mean it here: the schema takes a number and refuses a string, a list
+ * or a fraction. What an ARGUMENT may be is a separate question with a different answer --
+ * FastMCP hands arguments to pydantic in non-strict mode, so `"5"` is decoded into 5 before
+ * validation over there, and `laxenLikePydantic` does the same as a call arrives here. That
+ * half is pinned where it happens: `galaxy-mcp/test/lax-arguments.test.ts` and
+ * `galaxy-cli/test/lax-arguments.test.ts`.
+ *
+ * The parity check compares the declared types, but its normalization folds an optional
+ * `T | null` together with a plain optional `T` -- deliberately, because that union is how
+ * Python spells optional -- so it cannot see the difference between a parameter that takes
+ * an explicit null and one that refuses it. That is why it is pinned here.
  */
 const integerInputs: Array<[string, { safeParse(v: unknown): { success: boolean } }]> = [
   ["get_collection_details.max_elements", getCollectionDetailsOp.input.maxElements],
@@ -60,7 +66,10 @@ describe("input acceptance matches the Python manifest", () => {
     }
   });
 
-  it("refuses what an integer parameter is not, rather than coercing it", () => {
+  it("declares an integer and nothing else, so the schema itself coerces nothing", () => {
+    // The published contract, which is what a client reads and the parity check compares.
+    // A caller that sends "5" is served by the decoding at the edge, not by the schema
+    // quietly widening -- that is the difference this test is about.
     for (const [where, schema] of integerInputs) {
       expect(schema.safeParse("5").success, `${where} took a string`).toBe(false);
       expect(schema.safeParse([1]).success, `${where} took a list`).toBe(false);

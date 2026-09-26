@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { z, type ZodRawShape, type ZodTypeAny } from "zod";
+import { laxenLikePydantic } from "@galaxyproject/galaxy-ops";
 
 export type FieldKind = "positional" | "option" | "boolean" | "json";
 
@@ -45,42 +46,30 @@ function readJsonArg(raw: string): unknown {
   return JSON.parse(text);
 }
 
-/** True when the field wants a number, so an argument off the command line needs converting. */
-export function isNumberField(schema: ZodTypeAny): boolean {
-  return typeTag(schema) === "number";
-}
-
 /**
- * Commander hands every argument over as a string, and the op schemas want a real number --
- * `--limit 5` is otherwise "expected number, received string". Anything that is not a number
- * is left alone rather than mangled, so the schema gets to refuse it and say why: "" stays ""
- * instead of becoming 0, and "abc" stays "abc" instead of becoming NaN.
+ * Reassemble the op input object from commander positionals + options, then validate.
+ *
+ * Commander hands every argument over as a string, and the schemas take a real number or a
+ * real boolean and nothing else -- `--limit 5` would otherwise be "expected number, received
+ * string". The decoding is `laxenLikePydantic`, the same one the MCP surface applies to an
+ * incoming call and the same one FastMCP gets from pydantic's non-strict mode, so `--limit 5`,
+ * `--limit 5.0` and `--active yes` mean here what they mean there. Anything the tables do not
+ * accept is passed through untouched, so the schema refuses it and says why: `--limit abc`
+ * stays "abc" rather than arriving as NaN.
  */
-function readNumberArg(raw: unknown): unknown {
-  if (typeof raw !== "string" || raw.trim() === "") return raw;
-  const n = Number(raw);
-  return Number.isNaN(n) ? raw : n;
-}
-
-/** Reassemble the op input object from commander positionals + options, then validate. */
 export function buildInput(shape: ZodRawShape, positionals: string[], options: Record<string, unknown>) {
   const raw: Record<string, unknown> = {};
   let pi = 0;
   for (const [key, schema] of Object.entries(shape)) {
     const kind = classifyField(schema as ZodTypeAny);
-    const wantsNumber = isNumberField(schema as ZodTypeAny);
     if (kind === "positional") {
-      if (pi < positionals.length) {
-        const val = positionals[pi++];
-        raw[key] = wantsNumber ? readNumberArg(val) : val;
-      }
+      if (pi < positionals.length) raw[key] = positionals[pi++];
     } else {
       const flag = flagName(key);
       const val = options[key] ?? options[flag.replace(/-([a-z])/g, (_, c) => c.toUpperCase())];
       if (val === undefined) continue;
-      if (kind === "json") raw[key] = readJsonArg(String(val));
-      else raw[key] = wantsNumber ? readNumberArg(val) : val;
+      raw[key] = kind === "json" ? readJsonArg(String(val)) : val;
     }
   }
-  return z.object(shape).safeParse(raw);
+  return z.object(shape).safeParse(laxenLikePydantic(shape, raw));
 }
