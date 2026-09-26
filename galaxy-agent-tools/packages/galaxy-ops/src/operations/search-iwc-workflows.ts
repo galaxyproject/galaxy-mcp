@@ -46,6 +46,7 @@ async function run(i: In, _ctx: GalaxyContext): Promise<Paged<EnrichedIwcWorkflo
 export const searchIwcWorkflowsOp: Operation<typeof input, Paged<EnrichedIwcWorkflow>> = {
   name: "search_iwc_workflows",
   domain: "iwc",
+  result: { kind: "object", fields: ["items", "pagination"], paginated: true },
   summary: "Search IWC curated workflows by substring (case-insensitive) against name, annotation, tags, or readme.",
   input,
   run,

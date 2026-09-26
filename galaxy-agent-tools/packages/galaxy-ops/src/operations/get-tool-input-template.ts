@@ -41,6 +41,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<ToolInputTemplateResult> 
 export const getToolInputTemplateOp: Operation<typeof input, ToolInputTemplateResult> = {
   name: "get_tool_input_template",
   domain: "tools",
+  result: { kind: "object", fields: ["tool_id", "inputs_template", "parameters"] },
   summary:
     "Return a ready-to-fill inputs skeleton for a Galaxy tool, plus a compact parameter summary. Call before run_tool when unsure how to shape inputs.",
   input,

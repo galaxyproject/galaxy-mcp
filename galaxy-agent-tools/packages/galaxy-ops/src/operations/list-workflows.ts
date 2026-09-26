@@ -72,6 +72,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<WorkflowItem>> {
 export const listWorkflowsOp: Operation<typeof input, Paged<WorkflowItem>> = {
   name: "list_workflows",
   domain: "workflows",
+  result: { kind: "object", fields: ["items", "pagination"], paginated: true },
   summary:
     "List stored workflows (id, name), a page at a time. Optional exact-name + published filter.",
   input,

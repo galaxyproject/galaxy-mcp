@@ -66,6 +66,10 @@ async function run(_in: Record<string, never>, ctx: GalaxyContext): Promise<Serv
 export const getServerInfoOp: Operation<typeof input, ServerInfo> = {
   name: "get_server_info",
   domain: "connection",
+  result: {
+    kind: "object",
+    fields: ["url", "version", "config", "version_known", "version_source", "unsupported_ops"],
+  },
   summary:
     "Return the connected Galaxy's URL, version, and public configuration, plus " +
     "`unsupported_ops` -- the operations this server is too old to run.",

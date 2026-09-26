@@ -123,6 +123,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<HistoryContents> {
 export const getHistoryContentsOp: Operation<typeof input, HistoryContents> = {
   name: "get_history_contents",
   domain: "histories",
+  result: { kind: "object", fields: ["items", "pagination"], paginated: true },
   summary: "List the datasets and collections in a history, one page at a time.",
   input,
   run,

@@ -51,6 +51,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<PageSummary[]> {
 export const listPagesOp: Operation<typeof input, PageSummary[]> = {
   name: "list_pages",
   domain: "pages",
+  result: { kind: "list", paginated: true },
   summary:
     "List Galaxy pages (markdown notebooks and reports) the user can see. " +
     "Pass historyId to list only that history's notebooks. The history filter is what needs " +

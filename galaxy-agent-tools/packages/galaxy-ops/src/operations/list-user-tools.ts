@@ -46,6 +46,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<UserTool>> {
 export const listUserToolsOp: Operation<typeof input, Paged<UserTool>> = {
   name: "list_user_tools",
   domain: "userTools",
+  result: { kind: "object", fields: ["items", "pagination"], paginated: true },
   summary: "List user-defined tools belonging to the current user, a page at a time.",
   input,
   run,

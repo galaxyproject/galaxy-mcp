@@ -35,6 +35,7 @@ async function run(i: In, _ctx: GalaxyContext): Promise<Paged<EnrichedIwcWorkflo
 export const getIwcWorkflowsOp: Operation<typeof input, Paged<EnrichedIwcWorkflow>> = {
   name: "get_iwc_workflows",
   domain: "iwc",
+  result: { kind: "object", fields: ["items", "pagination"], paginated: true },
   summary:
     "Browse IWC (Intergalactic Workflow Commission) curated workflows, a page of summaries at a time. " +
     "Call get_iwc_workflow_details for one workflow's full record.",
