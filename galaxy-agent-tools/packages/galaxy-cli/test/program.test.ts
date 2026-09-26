@@ -247,6 +247,33 @@ describe("buildProgram", () => {
     expect(run.stdout).toContain('"cat1"');
   });
 
+  it("runs recommend_biocontainer off --packages, with quay.io stubbed", async () => {
+    // The op reaches quay.io itself rather than through the injected context, so this
+    // is the only place a CLI test has to stub the global fetch.
+    const asked: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      asked.push(url);
+      // A real Response, because the op streams the body to time out on inactivity.
+      return new Response(
+        JSON.stringify({ tags: { "1.17--h00cdaf9_0": { name: "1.17--h00cdaf9_0" } } }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    try {
+      const run = await runCli(
+        ["recommend_biocontainer", "--packages", "samtools=1.17", "--format", "json"],
+        ctxFactory,
+      );
+      expect(run.exitCode).toBe(0);
+      expect(asked[0]).toBe("https://quay.io/api/v1/repository/biocontainers/samtools");
+      expect(run.stdout).toContain("quay.io/biocontainers/samtools:1.17--h00cdaf9_0");
+      expect(run.stdout).toContain('"match_quality": "exact_version"');
+      expect(run.stdout).toContain('"verified": true');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("runs an op and renders json to stdout", async () => {
     const out = vi.spyOn(console, "log").mockImplementation(() => {});
     const program = buildProgram({ makeContext: ctxFactory });
