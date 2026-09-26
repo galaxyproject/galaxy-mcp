@@ -9,9 +9,9 @@ export type WorkflowDetail = GetJson<"/api/workflows/{workflow_id}">;
 
 const input = {
   workflowId: z.string().describe("Encoded stored-workflow id"),
-  version: z.coerce.number().int().min(0).optional().describe("Specific workflow version"),
+  version: z.number().int().nullish().describe("Specific workflow version"),
 };
-type In = { workflowId: string; version?: number };
+type In = { workflowId: string; version?: number | null };
 
 async function run(i: In, ctx: GalaxyContext): Promise<WorkflowDetail> {
   const { data, error, response } = await ctx.client.GET("/api/workflows/{workflow_id}", {

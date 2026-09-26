@@ -3,11 +3,11 @@ import type { GalaxyContext } from "../context";
 import { legacyGet } from "../legacy";
 import type { PageRevisionSummary } from "./pages-common";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, Operation } from "./types";
+import type { AnyOperation, InputOf, Operation } from "./types";
 
 const input = {
   pageId: z.string().min(1).describe("Encoded page id"),
-  sortDesc: z.boolean().optional().describe("Newest first when true (default oldest first)"),
+  sortDesc: z.boolean().default(false).describe("Newest first when true (default oldest first)"),
 };
 type In = { pageId: string; sortDesc?: boolean };
 
@@ -33,4 +33,7 @@ export const listPageRevisionsOp: Operation<typeof input, PageRevisionSummary[]>
 
 register(listPageRevisionsOp as AnyOperation);
 
-export const listPageRevisions = (i: In, ctx: GalaxyContext) => runOperation(listPageRevisionsOp, i, ctx);
+// A library caller may leave the defaulted arguments out; run() applies the same
+// values the schema declares for the parsed surface path.
+export const listPageRevisions = (i: In, ctx: GalaxyContext) =>
+  runOperation(listPageRevisionsOp, i as InputOf<typeof input>, ctx);

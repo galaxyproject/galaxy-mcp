@@ -19,7 +19,7 @@
   },
   "ratchet": {
     "$comment": "unreviewed-gap is the one status nobody has ruled on, so it is the one meant to go only down. This number is how many of them the registry is allowed to hold: the check fails when there are more, and fails asking for this number to come down when there are fewer, so the count and the number cannot drift apart. What no check can do is stop somebody raising both together -- that edit is in the diff, and refusing it is a reviewer's job. A gap found from here on wants a status somebody reviewed and a reason, not a bigger number.",
-    "unreviewedGaps": 13
+    "unreviewedGaps": 7
   },
   "divergences": [
     {
@@ -55,14 +55,6 @@
       "reason": "Python can write next to the dataset's own name; TS only writes to the exact filePath it is given."
     },
     {
-      "tool": "get_collection_details",
-      "param": "max_elements",
-      "kind": "default-mismatch",
-      "observed": "python=100 typescript=none",
-      "status": "unreviewed-gap",
-      "reason": "Python always truncates the element list to 100; TS truncates only when asked, so the same call can return a much larger payload."
-    },
-    {
       "tool": "get_dataset_details",
       "param": "include_preview",
       "kind": "missing-ts-param",
@@ -77,94 +69,6 @@
       "observed": "python=type=integer required=false default=10",
       "status": "pending-port",
       "reason": "The TS op's own summary defers content preview to a later phase."
-    },
-    {
-      "tool": "get_page",
-      "param": "include_rendered",
-      "kind": "default-mismatch",
-      "observed": "python=false typescript=none",
-      "status": "pending-port",
-      "reason": "TS applies the same default inside run() but leaves it off the advertised schema, so an agent reading the tool cannot see it. The TS op passes `i.includeRendered ?? false` to stripRendered; declaring `.default(false)` on the input closes it."
-    },
-    {
-      "tool": "get_tool_details",
-      "param": "io_details",
-      "kind": "default-mismatch",
-      "observed": "python=false typescript=none",
-      "status": "unreviewed-gap",
-      "reason": "TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it."
-    },
-    {
-      "tool": "get_workflow_input_template",
-      "param": "verbose",
-      "kind": "default-mismatch",
-      "observed": "python=false typescript=none",
-      "status": "unreviewed-gap",
-      "reason": "TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it."
-    },
-    {
-      "tool": "list_page_revisions",
-      "param": "sort_desc",
-      "kind": "default-mismatch",
-      "observed": "python=false typescript=none",
-      "status": "pending-port",
-      "reason": "TS applies the same default inside run() but leaves it off the advertised schema, so an agent reading the tool cannot see it. The TS op sends `i.sortDesc ?? false` as the sort_desc query parameter; declaring `.default(false)` on the input closes it."
-    },
-    {
-      "tool": "list_pages",
-      "param": "limit",
-      "kind": "default-mismatch",
-      "observed": "python=100 typescript=none",
-      "status": "pending-port",
-      "reason": "TS applies the same default inside run() but leaves it off the advertised schema, so an agent reading the tool cannot see it. Python advertises the 100-row cap; the TS op applies the same cap through its DEFAULT_LIMIT constant, so an agent deciding whether to pass limit has to guess what omitting it does. `.default(100)` closes this entry. It does not tell a caller whether more rows exist: the TS result carries no total_matches at all, which is a separate gap this comparator cannot see."
-    },
-    {
-      "tool": "list_pages",
-      "param": "offset",
-      "kind": "default-mismatch",
-      "observed": "python=0 typescript=none",
-      "status": "pending-port",
-      "reason": "TS applies the same default inside run() but leaves it off the advertised schema, so an agent reading the tool cannot see it. The TS op sends `i.offset ?? 0`; declaring `.default(0)` on the input closes it."
-    },
-    {
-      "tool": "list_pages",
-      "param": "show_published",
-      "kind": "default-mismatch",
-      "observed": "python=false typescript=none",
-      "status": "pending-port",
-      "reason": "TS applies the same default inside run() but leaves it off the advertised schema, so an agent reading the tool cannot see it. Both sides deliberately override Galaxy's own index default, which is on; the TS op sends `i.showPublished ?? false` but advertises nothing, so an agent cannot see which way the flag falls. `.default(false)` closes it."
-    },
-    {
-      "tool": "list_pages",
-      "param": "show_shared",
-      "kind": "default-mismatch",
-      "observed": "python=false typescript=none",
-      "status": "pending-port",
-      "reason": "TS applies the same default inside run() but leaves it off the advertised schema, so an agent reading the tool cannot see it. The TS op sends `i.showShared ?? false`; declaring `.default(false)` on the input closes it."
-    },
-    {
-      "tool": "list_user_tools",
-      "param": "active",
-      "kind": "default-mismatch",
-      "observed": "python=true typescript=none",
-      "status": "unreviewed-gap",
-      "reason": "TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it."
-    },
-    {
-      "tool": "list_workflows",
-      "param": "published",
-      "kind": "default-mismatch",
-      "observed": "python=false typescript=none",
-      "status": "unreviewed-gap",
-      "reason": "TS sends Galaxy's show_published query parameter only when `published` is given, and Galaxy's own default for it is false, the value Python always sends; only the declaration differs."
-    },
-    {
-      "tool": "list_workflows",
-      "param": "workflow_id",
-      "kind": "missing-ts-param",
-      "observed": "python=type=string required=false default=none",
-      "status": "unreviewed-gap",
-      "reason": "Python's list_workflows doubles as a fetch-by-id; TS splits that into get_workflow_details. Probably right, but nobody has confirmed it."
     },
     {
       "tool": "recommend_biocontainer",

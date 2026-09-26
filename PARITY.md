@@ -11,12 +11,12 @@ Every difference carries the status and the reason recorded in `galaxy-agent-too
 | Status | Differences |
 | --- | --- |
 | `intentional` | `1` |
-| `pending-port` | `8` |
+| `pending-port` | `2` |
 | `pending-decision` | `0` |
-| `unreviewed-gap` | `13` |
-| **total** | `22` |
+| `unreviewed-gap` | `7` |
+| **total** | `10` |
 
-`unreviewed-gap` is the status nobody has ruled on yet. The check holds the registry to the 13 it declares, so the count cannot drift from the number; raising that number is an edit somebody has to make in the diff, and it is meant to come down, never up.
+`unreviewed-gap` is the status nobody has ruled on yet. The check holds the registry to the 7 it declares, so the count cannot drift from the number; raising that number is an edit somebody has to make in the diff, and it is meant to come down, never up.
 
 ## Tools
 
@@ -34,7 +34,6 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `download_dataset` | `require_ok_state` | `type=boolean required=false default=true` | `type=boolean required=false default=none` | `default-mismatch` | `unreviewed-gap` | TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it. |
 | `download_dataset` | `use_default_filename` | `type=boolean required=false default=true` | -- | `missing-ts-param` | `unreviewed-gap` | Python can write next to the dataset's own name; TS only writes to the exact filePath it is given. |
 | `get_collection_details` |  | `read (tag)` | `read (hint)` |  |  |  |
-| `get_collection_details` | `max_elements` | `type=integer required=false default=100` | `type=integer required=false default=none` | `default-mismatch` | `unreviewed-gap` | Python always truncates the element list to 100; TS truncates only when asked, so the same call can return a much larger payload. |
 | `get_dataset_details` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_dataset_details` | `include_preview` | `type=boolean required=false default=true` | -- | `missing-ts-param` | `pending-port` | The TS op's own summary defers content preview to a later phase. |
 | `get_dataset_details` | `preview_lines` | `type=integer required=false default=10` | -- | `missing-ts-param` | `pending-port` | The TS op's own summary defers content preview to a later phase. |
@@ -46,34 +45,23 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `get_iwc_workflows` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_job_details` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_page` |  | `read (tag)` | `read (hint)` |  |  |  |
-| `get_page` | `include_rendered` | `type=boolean required=false default=false` | `type=boolean required=false default=none` | `default-mismatch` | `pending-port` | TS applies the same default inside run() but leaves it off the advertised schema, so an agent reading the tool cannot see it. The TS op passes `i.includeRendered ?? false` to stripRendered; declaring `.default(false)` on the input closes it. |
 | `get_page_revision` |  | `read (tag), requires >=26.1` | `read (hint), requires >=26.1` |  |  |  |
 | `get_server_info` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_tool_citations` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_tool_details` |  | `read (tag)` | `read (hint)` |  |  |  |
-| `get_tool_details` | `io_details` | `type=boolean required=false default=false` | `type=boolean required=false default=none` | `default-mismatch` | `unreviewed-gap` | TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it. |
 | `get_tool_input_template` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_tool_panel` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_tool_run_examples` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_user` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_workflow_details` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_workflow_input_template` |  | `read (tag)` | `read (hint)` |  |  |  |
-| `get_workflow_input_template` | `verbose` | `type=boolean required=false default=false` | `type=boolean required=false default=none` | `default-mismatch` | `unreviewed-gap` | TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it. |
 | `import_workflow_from_iwc` |  | `write (tag)` | `write (hint)` |  |  |  |
 | `invoke_workflow` |  | `write (tag)` | `write (hint)` |  |  |  |
 | `list_history_ids` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `list_page_revisions` |  | `read (tag), requires >=26.1` | `read (hint), requires >=26.1` |  |  |  |
-| `list_page_revisions` | `sort_desc` | `type=boolean required=false default=false` | `type=boolean required=false default=none` | `default-mismatch` | `pending-port` | TS applies the same default inside run() but leaves it off the advertised schema, so an agent reading the tool cannot see it. The TS op sends `i.sortDesc ?? false` as the sort_desc query parameter; declaring `.default(false)` on the input closes it. |
 | `list_pages` |  | `read (tag), requires >=26.1` | `read (hint), requires >=26.1` |  |  |  |
-| `list_pages` | `limit` | `type=integer required=false default=100` | `type=integer required=false default=none` | `default-mismatch` | `pending-port` | TS applies the same default inside run() but leaves it off the advertised schema, so an agent reading the tool cannot see it. Python advertises the 100-row cap; the TS op applies the same cap through its DEFAULT_LIMIT constant, so an agent deciding whether to pass limit has to guess what omitting it does. `.default(100)` closes this entry. It does not tell a caller whether more rows exist: the TS result carries no total_matches at all, which is a separate gap this comparator cannot see. |
-| `list_pages` | `offset` | `type=integer required=false default=0` | `type=integer required=false default=none` | `default-mismatch` | `pending-port` | TS applies the same default inside run() but leaves it off the advertised schema, so an agent reading the tool cannot see it. The TS op sends `i.offset ?? 0`; declaring `.default(0)` on the input closes it. |
-| `list_pages` | `show_published` | `type=boolean required=false default=false` | `type=boolean required=false default=none` | `default-mismatch` | `pending-port` | TS applies the same default inside run() but leaves it off the advertised schema, so an agent reading the tool cannot see it. Both sides deliberately override Galaxy's own index default, which is on; the TS op sends `i.showPublished ?? false` but advertises nothing, so an agent cannot see which way the flag falls. `.default(false)` closes it. |
-| `list_pages` | `show_shared` | `type=boolean required=false default=false` | `type=boolean required=false default=none` | `default-mismatch` | `pending-port` | TS applies the same default inside run() but leaves it off the advertised schema, so an agent reading the tool cannot see it. The TS op sends `i.showShared ?? false`; declaring `.default(false)` on the input closes it. |
 | `list_user_tools` |  | `read (tag)` | `read (hint)` |  |  |  |
-| `list_user_tools` | `active` | `type=boolean required=false default=true` | `type=boolean required=false default=none` | `default-mismatch` | `unreviewed-gap` | TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it. |
 | `list_workflows` |  | `read (tag)` | `read (hint)` |  |  |  |
-| `list_workflows` | `published` | `type=boolean required=false default=false` | `type=boolean required=false default=none` | `default-mismatch` | `unreviewed-gap` | TS sends Galaxy's show_published query parameter only when `published` is given, and Galaxy's own default for it is false, the value Python always sends; only the declaration differs. |
-| `list_workflows` | `workflow_id` | `type=string required=false default=none` | -- | `missing-ts-param` | `unreviewed-gap` | Python's list_workflows doubles as a fetch-by-id; TS splits that into get_workflow_details. Probably right, but nobody has confirmed it. |
 | `recommend_biocontainer` |  | `read (tag)` | -- | `missing-ts-tool` | `unreviewed-gap` | Needs galaxy.tool_util's mulled recommender, which has no TS equivalent, so a port means reimplementing mulled name resolution rather than translating an op. |
 | `recommend_iwc_workflows` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `revert_page_revision` |  | `write (tag), requires >=26.1` | `write (hint), requires >=26.1` |  |  |  |

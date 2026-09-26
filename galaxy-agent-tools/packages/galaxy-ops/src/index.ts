@@ -19,6 +19,7 @@ export {
   runWithEnvelope,
 } from "./operations/registry";
 export { validatePagination, paginate, paginationInfo, OUTPUT_BUDGET_BYTES } from "./operations/pagination";
+export { laxenLikePydantic, isPlainObject } from "./laxen";
 export type { PaginationInfo, Paged } from "./operations/pagination";
 export { getUserOp, getUser, type CurrentUser } from "./operations/get-user";
 export { runToolOp, runTool } from "./operations/run-tool";

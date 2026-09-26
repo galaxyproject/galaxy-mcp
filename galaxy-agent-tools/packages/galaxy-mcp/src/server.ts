@@ -1,10 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import {
-  allOperations,
-  createGalaxyContext,
-  describeOperation,
-  runWithEnvelope,
-} from "@galaxyproject/galaxy-ops";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import type { ZodRawShape } from "zod";
+import { allOperations, createGalaxyContext, describeOperation, runWithEnvelope } from "@galaxyproject/galaxy-ops";
+import { LaxArgumentsTransport } from "./lax-transport.js";
 
 export function toolNames(): string[] {
   return allOperations.map((op) => op.name);
@@ -43,7 +41,9 @@ export function buildServer(conn: { baseUrl: string; apiKey: string }): McpServe
   const server = new McpServer({ name: "galaxy", version: "0.0.0" });
   const ctx = createGalaxyContext(conn);
   const annotations = toolAnnotations();
+  const shapes = new Map<string, ZodRawShape>();
   for (const op of allOperations) {
+    shapes.set(op.name, op.input as ZodRawShape);
     server.registerTool(
       op.name,
       {
@@ -54,5 +54,9 @@ export function buildServer(conn: { baseUrl: string; apiKey: string }): McpServe
       async (args: unknown) => toolResult(await runWithEnvelope(op as never, args as never, ctx)),
     );
   }
+  // Arguments are decoded as a call arrives; see LaxArgumentsTransport for why it is here
+  // and not in the handlers above.
+  const connect = server.connect.bind(server);
+  server.connect = (transport: Transport) => connect(new LaxArgumentsTransport(transport, shapes));
   return server;
 }

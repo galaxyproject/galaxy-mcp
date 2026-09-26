@@ -27,6 +27,32 @@ describe("list_workflows", () => {
   });
 });
 
+describe("list_workflows and the workflow_id it cannot honour", () => {
+  /**
+   * The Python tool declares workflow_id and then hands it to bioblend, which removed
+   * the parameter in 1.1.1 and raises for any value that is not None. So this listing
+   * has never fetched by id on either surface, and this one says so before it calls
+   * Galaxy rather than after.
+   */
+  it("refuses a workflow id and names the op that does fetch one", async () => {
+    const client = mockClient({ GET: () => { throw new Error("should not reach Galaxy"); } });
+    await expect(listWorkflows({ workflowId: "f2db41e1fa331b3e" }, ctxWith(client))).rejects.toMatchObject({
+      kind: "validation",
+    });
+    await expect(listWorkflows({ workflowId: "f2db41e1fa331b3e" }, ctxWith(client))).rejects.toThrow(
+      /get_workflow_details with id 'f2db41e1fa331b3e'/,
+    );
+  });
+
+  it("takes null for it, which is how the other surface spells absent", async () => {
+    const client = mockClient({
+      GET: () => ({ data: [{ id: "w1", name: "RNAseq" }], response: { status: 200 } }),
+    });
+    const out = await listWorkflows({ workflowId: null }, ctxWith(client));
+    expect(out.items).toHaveLength(1);
+  });
+});
+
 describe("list_workflows paging", () => {
   const serving = (n: number) => mockClient({ GET: () => ({ data: workflowIndex(n), response: { status: 200 } }) });
 
