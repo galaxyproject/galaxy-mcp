@@ -4,7 +4,7 @@ import { GalaxyValidationError } from "../errors";
 import { paginate, shrinkPaged, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import { getHistories } from "./get-histories";
-import type { AnyOperation, InputOf, Operation } from "./types";
+import type { AnyOperation, Operation } from "./types";
 
 export interface HistoryRef { id: string; name: string; }
 
@@ -76,7 +76,4 @@ export const listHistoryIdsOp: Operation<typeof input, Paged<HistoryRef>> = {
 
 register(listHistoryIdsOp as AnyOperation);
 
-// A library caller may leave the paged arguments out; run() applies the same
-// defaults the schema declares for the parsed surface path.
-export const listHistoryIds = (i: In, ctx: GalaxyContext) =>
-  runOperation(listHistoryIdsOp, i as InputOf<typeof input>, ctx);
+export const listHistoryIds = (i: In, ctx: GalaxyContext) => runOperation(listHistoryIdsOp, i, ctx);

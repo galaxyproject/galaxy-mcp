@@ -5,7 +5,7 @@ import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import { paginationInfo, wirePagination } from "./pagination";
 import type { PageSummary } from "./pages-common";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, InputOf, Operation } from "./types";
+import type { AnyOperation, Operation } from "./types";
 
 const DEFAULT_LIMIT = 100;
 
@@ -108,7 +108,4 @@ export const listPagesOp: Operation<typeof input, PageSummary[]> = {
 
 register(listPagesOp as AnyOperation);
 
-// A library caller may leave the defaulted arguments out; run() applies the same
-// values the schema declares for the parsed surface path.
-export const listPages = (i: In, ctx: GalaxyContext) =>
-  runOperation(listPagesOp, i as InputOf<typeof input>, ctx);
+export const listPages = (i: In, ctx: GalaxyContext) => runOperation(listPagesOp, i, ctx);
