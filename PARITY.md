@@ -13,10 +13,10 @@ Every difference carries the status and the reason recorded in `galaxy-agent-too
 | `intentional` | `1` |
 | `pending-port` | `2` |
 | `pending-decision` | `0` |
-| `unreviewed-gap` | `8` |
-| **total** | `11` |
+| `unreviewed-gap` | `7` |
+| **total** | `10` |
 
-`unreviewed-gap` is the status nobody has ruled on yet. The check holds the registry to the 8 it declares, so the count cannot drift from the number; raising that number is an edit somebody has to make in the diff, and it is meant to come down, never up.
+`unreviewed-gap` is the status nobody has ruled on yet. The check holds the registry to the 7 it declares, so the count cannot drift from the number; raising that number is an edit somebody has to make in the diff, and it is meant to come down, never up.
 
 ## Tools
 
@@ -62,7 +62,6 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `list_pages` |  | `read (tag), requires >=26.1` | `read (hint), requires >=26.1` |  |  |  |
 | `list_user_tools` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `list_workflows` |  | `read (tag)` | `read (hint)` |  |  |  |
-| `list_workflows` | `workflow_id` | `type=string required=false default=none` | -- | `missing-ts-param` | `unreviewed-gap` | Python's list_workflows doubles as a fetch-by-id; TS splits that into get_workflow_details. Probably right, but nobody has confirmed it. |
 | `recommend_biocontainer` |  | `read (tag)` | -- | `missing-ts-tool` | `unreviewed-gap` | Needs galaxy.tool_util's mulled recommender, which has no TS equivalent, so a port means reimplementing mulled name resolution rather than translating an op. |
 | `recommend_iwc_workflows` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `revert_page_revision` |  | `write (tag), requires >=26.1` | `write (hint), requires >=26.1` |  |  |  |

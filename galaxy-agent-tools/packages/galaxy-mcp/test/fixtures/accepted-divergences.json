@@ -19,7 +19,7 @@
   },
   "ratchet": {
     "$comment": "unreviewed-gap is the one status nobody has ruled on, so it is the one meant to go only down. This number is how many of them the registry is allowed to hold: the check fails when there are more, and fails asking for this number to come down when there are fewer, so the count and the number cannot drift apart. What no check can do is stop somebody raising both together -- that edit is in the diff, and refusing it is a reviewer's job. A gap found from here on wants a status somebody reviewed and a reason, not a bigger number.",
-    "unreviewedGaps": 8
+    "unreviewedGaps": 7
   },
   "divergences": [
     {
@@ -69,14 +69,6 @@
       "observed": "python=type=integer required=false default=10",
       "status": "pending-port",
       "reason": "The TS op's own summary defers content preview to a later phase."
-    },
-    {
-      "tool": "list_workflows",
-      "param": "workflow_id",
-      "kind": "missing-ts-param",
-      "observed": "python=type=string required=false default=none",
-      "status": "unreviewed-gap",
-      "reason": "Python's list_workflows doubles as a fetch-by-id; TS splits that into get_workflow_details. Probably right, but nobody has confirmed it."
     },
     {
       "tool": "recommend_biocontainer",

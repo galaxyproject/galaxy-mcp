@@ -185,6 +185,17 @@ describe("buildProgram", () => {
     expect(asked.some((url) => url.includes("/api/pages"))).toBe(false);
   });
 
+  it("exits 64 for list_workflows --workflow-id, without calling Galaxy", async () => {
+    const asked: string[] = [];
+    const run = await runCli(
+      ["list_workflows", "--workflow-id", "f2db41e1fa331b3e", "--format", "json"],
+      recordingContext(asked),
+    );
+    expect(run.exitCode).toBe(64);
+    expect(run.stdout + run.stderr).toContain("get_workflow_details");
+    expect(asked.some((url) => url.includes("/api/workflows"))).toBe(false);
+  });
+
   it("runs an op and renders json to stdout", async () => {
     const out = vi.spyOn(console, "log").mockImplementation(() => {});
     const program = buildProgram({ makeContext: ctxFactory });
