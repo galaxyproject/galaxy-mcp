@@ -10,6 +10,7 @@ Regenerate with `uv run python -m tests.surface_manifest`.
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import json
 from pathlib import Path
@@ -73,6 +74,152 @@ def _assert_numbers_survive_json(value: Any, where: str) -> None:
         )
 
 
+# A result is a sequence of rows or an object with named keys. Which one, and the keys when they
+# can be read, is what the TypeScript side declares too, so the two can be compared structurally
+# rather than through a docstring.
+SEQUENCE = "list"
+OBJECT = "object"
+
+
+def _dict_keys(node: ast.Dict) -> tuple[str, ...] | None:
+    """The literal's keys, or None when any of them is computed."""
+    keys = [k.value for k in node.keys if isinstance(k, ast.Constant) and isinstance(k.value, str)]
+    return tuple(keys) if keys and len(keys) == len(node.keys) else None
+
+
+def _lambda_parameters(scope: ast.AST) -> set[str]:
+    """Names bound by a lambda inside `scope`.
+
+    A tool's paged result is built by a continuation the paging helper calls back -- the page is
+    that lambda's parameter, so it has no binding in the tool body. The parameter is the page of
+    the sequence the helper was handed, which makes the result a sequence whatever the helper is
+    called.
+    """
+    names: set[str] = set()
+    for node in ast.walk(scope):
+        if isinstance(node, ast.Lambda):
+            args = node.args
+            names.update(a.arg for a in [*args.posonlyargs, *args.args, *args.kwonlyargs])
+    return names
+
+
+def _bindings(scope: ast.AST, name: str) -> list[ast.expr]:
+    """Every expression assigned to `name` anywhere in `scope`."""
+    found: list[ast.expr] = []
+    for node in ast.walk(scope):
+        if isinstance(node, ast.Assign):
+            targets = [t for t in node.targets if isinstance(t, ast.Name) and t.id == name]
+            found.extend(node.value for _ in targets)
+        elif isinstance(node, (ast.AnnAssign, ast.NamedExpr)):
+            target = node.target
+            if isinstance(target, ast.Name) and target.id == name and node.value is not None:
+                found.append(node.value)
+    return found
+
+
+def _is_slice(node: ast.expr) -> bool:
+    return isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Slice)
+
+
+def _keyed_after(scope: ast.AST, name: str) -> bool:
+    """Whether `name[...] = ...` adds a key somewhere, which a literal alone would not show."""
+    for node in ast.walk(scope):
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if not isinstance(target, ast.Subscript) or not isinstance(target.value, ast.Name):
+                continue
+            if target.value.id == name:
+                return True
+    return False
+
+
+def _shape_of(
+    expr: ast.expr, scope: ast.AST, seen: frozenset[str] = frozenset()
+) -> dict[str, Any] | None:
+    """What the expression is, structurally, or None when this generator cannot say.
+
+    Saying nothing is the point of the None: a shape nobody stated is not a shape the comparison
+    may assume, and an unread result is left to the op's own tests rather than guessed at here.
+    """
+    if isinstance(expr, ast.Dict):
+        keys = _dict_keys(expr)
+        return {"kind": OBJECT, "fields": sorted(keys)} if keys else {"kind": OBJECT}
+    if isinstance(expr, (ast.List, ast.ListComp)) or _is_slice(expr):
+        return {"kind": SEQUENCE}
+    if isinstance(expr, ast.Name):
+        if expr.id in seen:
+            return None
+        bound = _bindings(scope, expr.id)
+        if not bound:
+            return {"kind": SEQUENCE} if expr.id in _lambda_parameters(scope) else None
+        shape = _agreed([_shape_of(b, scope, seen | {expr.id}) for b in bound])
+        # A key added after the literal may be conditional, so the kind is a fact, the list is not.
+        if shape and shape["kind"] == OBJECT and _keyed_after(scope, expr.id):
+            return {"kind": OBJECT}
+        return shape
+    return None
+
+
+def _agreed(shapes: list[dict[str, Any] | None]) -> dict[str, Any] | None:
+    """One shape when they all say the same thing, the kind alone when only the keys differ."""
+    if not shapes or any(s is None for s in shapes):
+        return None
+    kinds = {s["kind"] for s in shapes if s}
+    if len(kinds) != 1:
+        return None
+    kind = kinds.pop()
+    fields = {tuple(s.get("fields", ())) for s in shapes if s}
+    if len(fields) == 1:
+        only = fields.pop()
+        return {"kind": kind, "fields": list(only)} if only else {"kind": kind}
+    # Two branches building different keys: the kind is still a fact, the field list is not.
+    return {"kind": kind}
+
+
+def _result(name: str) -> dict[str, Any] | None:
+    """The shape of the tool's result, and whether it pages, read off the calls it returns.
+
+    `paginated` says the envelope carries a page window beside the data, which is a fact about
+    where the window lives rather than about the rows -- the two surfaces need not agree on it,
+    and the report is the place that disagreement becomes visible.
+    """
+    fn = _SOURCE_FUNCTIONS.get(name)
+    if fn is None:
+        return None
+    shapes: list[dict[str, Any] | None] = []
+    paginated = False
+    for node in ast.walk(fn):
+        if not (isinstance(node, ast.Call) and getattr(node.func, "id", None) == "GalaxyResult"):
+            continue
+        keywords = {kw.arg: kw.value for kw in node.keywords if kw.arg}
+        if "data" not in keywords:
+            continue
+        shapes.append(_shape_of(keywords["data"], fn))
+        paginated = paginated or "pagination" in keywords
+    shape = _agreed(shapes)
+    if shape is None:
+        return None
+    return {**shape, "paginated": paginated}
+
+
+def _source_functions() -> dict[str, ast.FunctionDef | ast.AsyncFunctionDef]:
+    """Every tool-decorated function in server.py, by name."""
+    tree = ast.parse(Path(server.__file__).read_text())
+    out: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
+    for node in tree.body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator.func if isinstance(decorator, ast.Call) else decorator
+            if getattr(call, "attr", None) == "tool":
+                out[node.name] = node
+    return out
+
+
+_SOURCE_FUNCTIONS = _source_functions()
+
+
 def _entry(tool: Tool, conditional_on: str | None) -> dict[str, Any]:
     entry: dict[str, Any] = {"name": tool.name, "tags": sorted(tool.tags)}
     # Recorded structurally rather than left to the description, so the TypeScript side's
@@ -84,6 +231,9 @@ def _entry(tool: Tool, conditional_on: str | None) -> dict[str, Any]:
         entry["conditionalOn"] = conditional_on
     entry["annotations"] = _annotations(tool)
     entry["inputSchema"] = tool.parameters
+    result = _result(tool.name)
+    if result is not None:
+        entry["result"] = result
     _assert_numbers_survive_json(entry, tool.name)
     return entry
 

@@ -16,19 +16,24 @@
  * references: a schema is read exactly as the surface wrote it.
  */
 
-export type DivergenceKind =
-  | "missing-ts-tool"
-  | "missing-py-tool"
-  | "missing-builtin-tool"
-  | "missing-ts-param"
-  | "missing-py-param"
-  | "missing-builtin-param"
-  | "type-mismatch"
-  | "required-mismatch"
-  | "default-mismatch"
-  | "mutability-mismatch"
-  | "requires-mismatch"
-  | "extra-params-mismatch";
+/** Every difference the comparator can report. A list, so a check can read it back. */
+export const DIVERGENCE_KINDS = [
+  "missing-ts-tool",
+  "missing-py-tool",
+  "missing-builtin-tool",
+  "missing-ts-param",
+  "missing-py-param",
+  "missing-builtin-param",
+  "type-mismatch",
+  "required-mismatch",
+  "default-mismatch",
+  "mutability-mismatch",
+  "requires-mismatch",
+  "extra-params-mismatch",
+  "result-shape",
+] as const;
+
+export type DivergenceKind = (typeof DIVERGENCE_KINDS)[number];
 
 /** Kinds that are about a whole tool rather than one of its parameters. */
 export const WHOLE_TOOL_KINDS: readonly DivergenceKind[] = [
@@ -67,6 +72,9 @@ export interface OtherSide {
    */
   comparesMutability: boolean;
   comparesRequirements: boolean;
+  /** Whether this surface states what its results are; a surface that does not is not
+   * disagreeing about them. */
+  comparesResults: boolean;
 }
 
 export const TYPESCRIPT_SIDE: OtherSide = {
@@ -75,7 +83,16 @@ export const TYPESCRIPT_SIDE: OtherSide = {
   missingParam: "missing-ts-param",
   comparesMutability: true,
   comparesRequirements: true,
+  comparesResults: true,
 };
+
+/**
+ * Kinds that are about a whole tool or about one field, depending on what was found.
+ *
+ * A result shape is compared field by field when both sides state one, and whole when only one
+ * side does: there is no field to name against a surface that promises nothing.
+ */
+export const EITHER_WAY_KINDS: readonly DivergenceKind[] = ["result-shape"];
 
 export interface Divergence {
   tool: string;
@@ -106,6 +123,18 @@ export interface ToolAnnotations {
   [hint: string]: unknown;
 }
 
+/**
+ * A result is a sequence of rows or an object with named keys, and either may page.
+ *
+ * `fields` is absent when the keys vary by branch, and `paginated` says the envelope carries the
+ * page window beside the data rather than inside it. Both surfaces state the same three things.
+ */
+export interface ResultShape {
+  kind: "object" | "list";
+  fields?: readonly string[];
+  paginated?: boolean;
+}
+
 /** One tool as its own surface advertises it. */
 export interface ToolContract {
   inputSchema: JsonSchema;
@@ -115,6 +144,8 @@ export interface ToolContract {
   tags?: readonly string[];
   /** The lower bound the tool declares on the Galaxy it will run against, if it declares one. */
   requires?: { galaxy: string };
+  /** What the tool says its result is, when it says; undeclared and absent are different answers. */
+  result?: ResultShape;
 }
 
 /**
@@ -766,6 +797,52 @@ function showTool(contract: ToolContract, rules: Normalization, where: string): 
   return `${showMutability(mutability(contract, where))}${declared} params=[${params}]`;
 }
 
+/** How a surface describes its result, for the `observed` line. */
+function showResult(shape: ResultShape | undefined): string {
+  if (!shape) return "undeclared";
+  const fields = shape.fields ? `[${[...shape.fields].sort().join(", ")}]` : "";
+  return `${shape.kind}${fields}${shape.paginated ? " paged-envelope" : ""}`;
+}
+
+/**
+ * What the two sides say a caller may read out of the result.
+ *
+ * Three questions in order, and the first disagreement stops the rest: is there a shape to
+ * compare, is it the same kind of thing, and does it carry the same keys. Kinds are compared
+ * before fields because a list and an object do not have fields in common to report, and an
+ * envelope that pages beside the data is a difference about the envelope rather than the rows.
+ * Per field where both sides name keys, so each difference is accepted on its own and a second
+ * one cannot hide inside an entry already signed off.
+ */
+function compareResultShape(tool: string, python: ToolContract, typescript: ToolContract): Divergence[] {
+  const [py, ts] = [python.result, typescript.result];
+  if (py === undefined && ts === undefined) return [];
+  const whole = (): Divergence[] => [
+    { tool, param: null, kind: "result-shape", observed: `python=${showResult(py)} typescript=${showResult(ts)}` },
+  ];
+  if (py === undefined || ts === undefined) return whole();
+  if (py.kind !== ts.kind) return whole();
+  if (Boolean(py.paginated) !== Boolean(ts.paginated)) return whole();
+  // One side states keys and the other does not: there is nothing to line up field by field.
+  if ((py.fields === undefined) !== (ts.fields === undefined)) return whole();
+  if (py.fields === undefined || ts.fields === undefined) return [];
+  const [pySet, tsSet] = [new Set(py.fields), new Set(ts.fields)];
+  return [...new Set([...py.fields, ...ts.fields])].sort().flatMap((field) =>
+    pySet.has(field) === tsSet.has(field)
+      ? []
+      : [
+          {
+            tool,
+            param: field,
+            kind: "result-shape" as const,
+            observed: `python=${pySet.has(field) ? "present" : "absent"} typescript=${
+              tsSet.has(field) ? "present" : "absent"
+            }`,
+          },
+        ],
+  );
+}
+
 function compareTool(
   tool: string,
   python: ToolContract,
@@ -808,6 +885,9 @@ function compareTool(
       kind: "extra-params-mismatch",
       observed: `python=${pyTakes} ${side.label}=${tsTakes}`,
     });
+  }
+  if (side.comparesResults) {
+    found.push(...compareResultShape(tool, python, other));
   }
   const py = normalizeParams(python.inputSchema, rules, `${tool} (python)`);
   const ts = normalizeParams(other.inputSchema, rules, there);
