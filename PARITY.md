@@ -11,12 +11,12 @@ Every difference carries the status and the reason recorded in `galaxy-agent-too
 | Status | Differences |
 | --- | --- |
 | `intentional` | `1` |
-| `pending-port` | `14` |
+| `pending-port` | `8` |
 | `pending-decision` | `0` |
-| `unreviewed-gap` | `17` |
-| **total** | `32` |
+| `unreviewed-gap` | `13` |
+| **total** | `22` |
 
-`unreviewed-gap` is the status nobody has ruled on yet. The check holds the registry to the 17 it declares, so the count cannot drift from the number; raising that number is an edit somebody has to make in the diff, and it is meant to come down, never up.
+`unreviewed-gap` is the status nobody has ruled on yet. The check holds the registry to the 13 it declares, so the count cannot drift from the number; raising that number is an edit somebody has to make in the diff, and it is meant to come down, never up.
 
 ## Tools
 
@@ -42,12 +42,6 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `get_history_contents` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_history_details` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_invocations` |  | `read (tag)` | `read (hint)` |  |  |  |
-| `get_invocations` | `history_id` | `type=string required=false default=none` | -- | `missing-ts-param` | `pending-port` | The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version. |
-| `get_invocations` | `invocation_id` | `type=string required=false default=none` | `type=string required=true default=none` | `required-mismatch` | `pending-port` | The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version. |
-| `get_invocations` | `limit` | `type=integer required=false default=none` | -- | `missing-ts-param` | `pending-port` | The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version. |
-| `get_invocations` | `step_details` | `type=boolean required=false default=false` | -- | `missing-ts-param` | `pending-port` | The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version. |
-| `get_invocations` | `view` | `type=string required=false default="collection"` | -- | `missing-ts-param` | `pending-port` | The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version. |
-| `get_invocations` | `workflow_id` | `type=string required=false default=none` | -- | `missing-ts-param` | `pending-port` | The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version. |
 | `get_iwc_workflow_details` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_iwc_workflows` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_job_details` |  | `read (tag)` | `read (hint)` |  |  |  |
@@ -67,10 +61,6 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `get_workflow_input_template` | `verbose` | `type=boolean required=false default=false` | `type=boolean required=false default=none` | `default-mismatch` | `unreviewed-gap` | TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it. |
 | `import_workflow_from_iwc` |  | `write (tag)` | `write (hint)` |  |  |  |
 | `invoke_workflow` |  | `write (tag)` | `write (hint)` |  |  |  |
-| `invoke_workflow` | `inputs` | `type=anyOf<object\|string> required=false default=none` | `type=object required=false default=none` | `type-mismatch` | `unreviewed-gap` | Python also accepts a JSON string, which is what agents often send; TS accepts an object only and rejects the string form. |
-| `invoke_workflow` | `inputs_by` | `type=string required=false default="step_index"` | `type=string required=false default=none` | `default-mismatch` | `unreviewed-gap` | TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it. |
-| `invoke_workflow` | `parameters_normalized` | `type=boolean required=false default=false` | `type=boolean required=false default=none` | `default-mismatch` | `unreviewed-gap` | TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it. |
-| `invoke_workflow` | `params` | `type=anyOf<object\|string> required=false default=none` | `type=object required=false default=none` | `type-mismatch` | `unreviewed-gap` | Python also accepts a JSON string, which is what agents often send; TS accepts an object only and rejects the string form. |
 | `list_history_ids` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `list_page_revisions` |  | `read (tag), requires >=26.1` | `read (hint), requires >=26.1` |  |  |  |
 | `list_page_revisions` | `sort_desc` | `type=boolean required=false default=false` | `type=boolean required=false default=none` | `default-mismatch` | `pending-port` | TS applies the same default inside run() but leaves it off the advertised schema, so an agent reading the tool cannot see it. The TS op sends `i.sortDesc ?? false` as the sort_desc query parameter; declaring `.default(false)` on the input closes it. |

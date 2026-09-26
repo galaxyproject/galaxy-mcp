@@ -1,11 +1,11 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
-import { GalaxyConnectionError } from "../errors";
+import { GalaxyConnectionError, GalaxyValidationError } from "../errors";
 import { legacyGet } from "../legacy";
 import { validateInputs, buildWorkflowInputTemplate, type DatatypesMapping } from "../workflow-inputs";
 import { resolveWorkflowSlots } from "./get-workflow-input-template";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, Operation } from "./types";
+import type { AnyOperation, InputOf, Operation } from "./types";
 
 // ---------------------------------------------------------------------------
 // Datatype mapping fetch (port of Python _get_datatypes_mapping)
@@ -102,51 +102,104 @@ export interface InvocationResult {
 // Op
 // ---------------------------------------------------------------------------
 
+const DEFAULT_INPUTS_BY = "step_index";
+const DEFAULT_PARAMETERS_NORMALIZED = false;
+
+/** An object argument, or the JSON string some MCP clients send instead. */
+const jsonObjectArg = z.union([z.record(z.string(), z.unknown()), z.string()]);
+
 const input = {
   workflowId: z.string().describe("Encoded stored-workflow id (hexadecimal hash)"),
-  inputs: z
-    .record(z.string(), z.unknown())
-    .optional()
+  inputs: jsonObjectArg
+    .nullish()
     .describe(
-      "Workflow inputs keyed by step_index. Each value is {src, id} for datasets/collections or a scalar for parameters.",
+      "Workflow inputs keyed by step_index. Each value is {src, id} for datasets/collections or a scalar for parameters. A JSON object string is accepted too.",
     ),
-  params: z
-    .record(z.string(), z.unknown())
-    .optional()
-    .describe("Legacy step parameter overrides (use inputs for formal inputs instead)"),
+  params: jsonObjectArg
+    .nullish()
+    .describe(
+      "Legacy step parameter overrides (use inputs for formal inputs instead). A JSON object string is accepted too.",
+    ),
   historyId: z
     .string()
-    .optional()
+    .nullish()
     .describe("Encoded history id to store workflow outputs in"),
   historyName: z
     .string()
-    .optional()
+    .nullish()
     .describe("Name for a new history to create (ignored if historyId is provided)"),
   inputsBy: z
     .string()
-    .optional()
+    .default(DEFAULT_INPUTS_BY)
     .describe(
       "How inputs maps to workflow steps: 'step_index', 'step_uuid', 'name', or 'step_index|step_uuid'",
     ),
   parametersNormalized: z
     .boolean()
-    .optional()
+    .default(DEFAULT_PARAMETERS_NORMALIZED)
     .describe("Whether legacy parameters are already normalized (indexed by order_index)"),
 };
 
+type JsonObjectArg = Record<string, unknown> | string;
+
 type In = {
   workflowId: string;
-  inputs?: Record<string, unknown>;
-  params?: Record<string, unknown>;
-  historyId?: string;
-  historyName?: string;
+  inputs?: JsonObjectArg | null;
+  params?: JsonObjectArg | null;
+  historyId?: string | null;
+  historyName?: string | null;
   inputsBy?: string;
   parametersNormalized?: boolean;
 };
 
+/**
+ * Accept a nested argument as an object or as the JSON string clients serialize
+ * it to. A blank string means "not supplied"; anything that is not a JSON object
+ * fails here, naming the field, rather than obscurely deeper in.
+ */
+function coerceJsonObject(
+  value: JsonObjectArg | null | undefined,
+  name: string,
+): Record<string, unknown> | undefined {
+  if (value == null) return undefined;
+  if (typeof value !== "string") {
+    // The schema catches this on the MCP and CLI paths; a direct caller has nothing
+    // in front of it, and a bare array reaching the POST body fails obscurely.
+    if (typeof value !== "object" || Array.isArray(value)) {
+      throw new GalaxyValidationError(
+        `${name} must be a JSON object (a mapping) or a JSON object string, but got ${describeJson(value)}.`,
+      );
+    }
+    return value;
+  }
+  if (!value.trim()) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch (err) {
+    throw new GalaxyValidationError(
+      `${name} must be a JSON object string or an object, but got invalid JSON: ${(err as Error).message}`,
+    );
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new GalaxyValidationError(
+      `${name} must be a JSON object (a mapping), but the string parsed to ${describeJson(parsed)}.`,
+    );
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function describeJson(value: unknown): string {
+  if (value === null) return "null";
+  return Array.isArray(value) ? "an array" : `a ${typeof value}`;
+}
+
 async function run(i: In, ctx: GalaxyContext): Promise<InvocationResult> {
+  const inputs = coerceJsonObject(i.inputs, "inputs");
+  const params = coerceJsonObject(i.params, "params");
+
   // Preflight: only when inputs are provided and non-empty.
-  if (i.inputs && Object.keys(i.inputs).length > 0) {
+  if (inputs && Object.keys(inputs).length > 0) {
     // Wrap the whole preflight so that unexpected preflight failures (mapping
     // fetch error, slot resolution error, etc.) do NOT block a valid run.
     // Only a definitive reject from validateInputs blocks submission.
@@ -155,10 +208,10 @@ async function run(i: In, ctx: GalaxyContext): Promise<InvocationResult> {
     let slots: Awaited<ReturnType<typeof resolveWorkflowSlots>>["slots"] = [];
     let warnings: unknown[] = [];
     try {
-      const resolved = await resolveWorkflowSlots(ctx, i.workflowId, i.historyId);
+      const resolved = await resolveWorkflowSlots(ctx, i.workflowId, i.historyId ?? undefined);
       slots = resolved.slots;
       const mapping = await getDatatypesMapping(ctx);
-      const enriched = await enrichSuppliedInputs(ctx, i.inputs);
+      const enriched = await enrichSuppliedInputs(ctx, inputs);
       const report = validateInputs(slots, enriched, mapping);
       rejects = report.rejects;
       warnings = report.warnings;
@@ -173,9 +226,8 @@ async function run(i: In, ctx: GalaxyContext): Promise<InvocationResult> {
       const hint =
         "\n\nExpected input slots (fill and retry with inputs_by='step_index|step_uuid'):\n" +
         JSON.stringify(template.slots, null, 2);
-      throw new GalaxyConnectionError(
+      throw new GalaxyValidationError(
         "Workflow inputs failed validation; not submitting:\n" + lines + hint,
-        400,
       );
     }
   }
@@ -190,10 +242,10 @@ async function run(i: In, ctx: GalaxyContext): Promise<InvocationResult> {
       : undefined;
 
   const body: Record<string, unknown> = {
-    inputs: i.inputs ?? {},
-    inputs_by: i.inputsBy ?? "step_index",
-    parameters: i.params ?? {},
-    parameters_normalized: i.parametersNormalized ?? false,
+    inputs: inputs ?? {},
+    inputs_by: i.inputsBy ?? DEFAULT_INPUTS_BY,
+    parameters: params ?? {},
+    parameters_normalized: i.parametersNormalized ?? DEFAULT_PARAMETERS_NORMALIZED,
   };
   if (historyField != null) body["history"] = historyField;
 
@@ -234,4 +286,15 @@ export const invokeWorkflowOp: Operation<typeof input, InvocationResult> = {
 
 register(invokeWorkflowOp as AnyOperation);
 
-export const invokeWorkflow = (i: In, ctx: GalaxyContext) => runOperation(invokeWorkflowOp, i, ctx);
+// The declared defaults reach run() only through whatever parsed the input -- MCP's
+// registerTool, the CLI's safeParse -- and a programmatic caller supplies none of them, so
+// they are filled in here rather than asserted away with a cast. The return type is the
+// check: add a .default() above without one here and this stops compiling.
+const withDefaults = (i: In): InputOf<typeof input> => ({
+  ...i,
+  inputsBy: i.inputsBy ?? DEFAULT_INPUTS_BY,
+  parametersNormalized: i.parametersNormalized ?? DEFAULT_PARAMETERS_NORMALIZED,
+});
+
+export const invokeWorkflow = (i: In, ctx: GalaxyContext) =>
+  runOperation(invokeWorkflowOp, withDefaults(i), ctx);

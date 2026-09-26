@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
+import { z } from "zod";
 import { invokeWorkflowOp, invokeWorkflow, getDatatypesMapping } from "../../src/operations/invoke-workflow";
 import { validateInputs, subtypeSatisfies } from "../../src/workflow-inputs";
 import { mockClient } from "../util/mock-client";
 import { DEFAULT_POLL } from "../../src/context";
-import { GalaxyConnectionError } from "../../src/errors";
+import { GalaxyValidationError } from "../../src/errors";
 import type { GalaxyContext } from "../../src/context";
 
 const ctxWith = (client: any): GalaxyContext => ({ client, poll: DEFAULT_POLL });
@@ -140,7 +141,7 @@ describe("invoke_workflow op", () => {
   });
 
   // (c) rejecting input -> throws, NO POST fired
-  it("throws GalaxyConnectionError and does NOT POST when inputs fail validation", async () => {
+  it("throws a validation error and does NOT POST when inputs fail validation", async () => {
     let postCalled = false;
     const client = buildPreflightClient({
       datasetExt: "vcf", // fastq slot won't accept vcf
@@ -156,7 +157,7 @@ describe("invoke_workflow op", () => {
         },
         ctxWith(client),
       ),
-    ).rejects.toBeInstanceOf(GalaxyConnectionError);
+    ).rejects.toBeInstanceOf(GalaxyValidationError);
     expect(postCalled).toBe(false);
   });
 
@@ -290,7 +291,7 @@ describe("invoke_workflow op", () => {
           { workflowId: "wf1", inputs: { "0": { src: "hdca", id: "coll_bad" } } },
           ctxWith(client),
         ),
-      ).rejects.toBeInstanceOf(GalaxyConnectionError);
+      ).rejects.toBeInstanceOf(GalaxyValidationError);
       expect(postCalled).toBe(false);
     });
 
@@ -483,5 +484,186 @@ describe("getDatatypesMapping", () => {
     const mapping = await getDatatypesMapping(ctxWith(client));
     expect(mapping.ext_to_class_name).toEqual({});
     expect(mapping.class_to_classes).toEqual({});
+  });
+});
+
+// ---------------------------------------------------------------------------
+// inputs/params supplied as JSON strings (what several MCP clients send)
+// ---------------------------------------------------------------------------
+
+describe("invoke_workflow JSON-string arguments", () => {
+  it("parses a JSON object string for inputs and POSTs the parsed object", async () => {
+    let capturedBody: any = null;
+    const client = buildPreflightClient({
+      datasetExt: "fastq",
+      postSpy: (_path, init) => {
+        capturedBody = init?.body;
+      },
+    });
+    const out = await invokeWorkflow(
+      { workflowId: "wf1", inputs: '{"0": {"src": "hda", "id": "ds1"}}' },
+      ctxWith(client),
+    );
+    expect(out.id).toBe("inv42");
+    expect(capturedBody.inputs).toEqual({ "0": { src: "hda", id: "ds1" } });
+  });
+
+  it("parses a JSON object string for params into the parameters body field", async () => {
+    let capturedBody: any = null;
+    const client = buildPreflightClient({
+      postSpy: (_path, init) => {
+        capturedBody = init?.body;
+      },
+    });
+    await invokeWorkflow(
+      { workflowId: "wf1", params: '{"1": {"seed": 42}}' },
+      ctxWith(client),
+    );
+    expect(capturedBody.parameters).toEqual({ "1": { seed: 42 } });
+  });
+
+  it("validates string inputs before submitting, exactly as it does object inputs", async () => {
+    let postCalled = false;
+    const client = buildPreflightClient({
+      datasetExt: "vcf", // the fastq slot will not accept vcf
+      postSpy: () => {
+        postCalled = true;
+      },
+    });
+    await expect(
+      invokeWorkflow(
+        { workflowId: "wf1", inputs: '{"0": {"src": "hda", "id": "ds_bad"}}' },
+        ctxWith(client),
+      ),
+    ).rejects.toBeInstanceOf(GalaxyValidationError);
+    expect(postCalled).toBe(false);
+  });
+
+  it("treats a blank string as no inputs: no preflight, empty maps in the body", async () => {
+    let capturedBody: any = null;
+    let preflightFired = false;
+    const client = mockClient({
+      GET: () => {
+        preflightFired = true;
+        return { data: RUN_MODEL, response: { status: 200 } };
+      },
+      POST: (_path: string, init?: any) => {
+        capturedBody = init?.body;
+        return { data: INVOCATION_RESPONSE, response: { status: 200 } };
+      },
+    });
+    await invokeWorkflow({ workflowId: "wf1", inputs: "   ", params: "" }, ctxWith(client));
+    expect(preflightFired).toBe(false);
+    expect(capturedBody.inputs).toEqual({});
+    expect(capturedBody.parameters).toEqual({});
+  });
+
+  it("names the field and does not submit when the string is not valid JSON", async () => {
+    let postCalled = false;
+    const client = buildPreflightClient({
+      postSpy: () => {
+        postCalled = true;
+      },
+    });
+    await expect(
+      invokeWorkflow({ workflowId: "wf1", inputs: "{not json" }, ctxWith(client)),
+    ).rejects.toThrow(/^inputs must be a JSON object string or an object, but got invalid JSON:/);
+    await expect(
+      invokeWorkflow({ workflowId: "wf1", inputs: "{not json" }, ctxWith(client)),
+    ).rejects.toBeInstanceOf(GalaxyValidationError);
+    expect(postCalled).toBe(false);
+  });
+
+  it("names the field and what it got when the string parses to something other than an object", async () => {
+    const client = buildPreflightClient({});
+    await expect(
+      invokeWorkflow({ workflowId: "wf1", params: "[1, 2]" }, ctxWith(client)),
+    ).rejects.toThrow(/^params must be a JSON object \(a mapping\), but the string parsed to an array\./);
+    await expect(
+      invokeWorkflow({ workflowId: "wf1", inputs: "42" }, ctxWith(client)),
+    ).rejects.toThrow(/parsed to a number\./);
+    await expect(
+      invokeWorkflow({ workflowId: "wf1", inputs: "null" }, ctxWith(client)),
+    ).rejects.toThrow(/parsed to null\./);
+    await expect(
+      invokeWorkflow({ workflowId: "wf1", inputs: "true" }, ctxWith(client)),
+    ).rejects.toThrow(/parsed to a boolean\./);
+    await expect(
+      invokeWorkflow({ workflowId: "wf1", inputs: '"just a string"' }, ctxWith(client)),
+    ).rejects.toThrow(/parsed to a string\./);
+  });
+
+  it("rejects a non-object, non-string argument from a direct caller", async () => {
+    let postCalled = false;
+    const client = buildPreflightClient({
+      postSpy: () => {
+        postCalled = true;
+      },
+    });
+    await expect(
+      invokeWorkflow({ workflowId: "wf1", inputs: [1, 2] as any }, ctxWith(client)),
+    ).rejects.toThrow(/^inputs must be a JSON object \(a mapping\) or a JSON object string, but got an array\./);
+    await expect(
+      invokeWorkflow({ workflowId: "wf1", params: 42 as any }, ctxWith(client)),
+    ).rejects.toThrow(/^params must be a JSON object \(a mapping\) or a JSON object string, but got a number\./);
+    expect(postCalled).toBe(false);
+  });
+
+  it("reads an explicit null as not supplied on every argument that takes one", async () => {
+    let capturedBody: any = null;
+    let preflightFired = false;
+    const client = mockClient({
+      GET: () => {
+        preflightFired = true;
+        return { data: RUN_MODEL, response: { status: 200 } };
+      },
+      POST: (_path: string, init?: any) => {
+        capturedBody = init?.body;
+        return { data: INVOCATION_RESPONSE, response: { status: 200 } };
+      },
+    });
+    const schema = z.object(invokeWorkflowOp.input);
+    const parsed = schema.parse({
+      workflowId: "wf1",
+      inputs: null,
+      params: null,
+      historyId: null,
+      historyName: null,
+    });
+    await invokeWorkflow(parsed, ctxWith(client));
+    expect(preflightFired).toBe(false);
+    expect(capturedBody.inputs).toEqual({});
+    expect(capturedBody.parameters).toEqual({});
+    expect(capturedBody).not.toHaveProperty("history");
+  });
+
+  it("still refuses null where the other surface refuses it", () => {
+    const schema = z.object(invokeWorkflowOp.input);
+    // inputs_by and parameters_normalized are plain defaulted parameters there, with no null branch.
+    expect(() => schema.parse({ workflowId: "wf1", inputsBy: null })).toThrow();
+    expect(() => schema.parse({ workflowId: "wf1", parametersNormalized: null })).toThrow();
+  });
+
+  it("advertises both shapes, and the defaults it applies", () => {
+    const schema = z.object(invokeWorkflowOp.input);
+    expect(schema.parse({ workflowId: "wf1" })).toMatchObject({
+      inputsBy: "step_index",
+      parametersNormalized: false,
+    });
+    expect(schema.parse({ workflowId: "wf1", inputs: '{"0": 1}' }).inputs).toBe('{"0": 1}');
+    expect(schema.parse({ workflowId: "wf1", inputs: { "0": 1 } }).inputs).toEqual({ "0": 1 });
+    expect(() => schema.parse({ workflowId: "wf1", inputs: 42 })).toThrow();
+  });
+
+  it("applies the same inputs_by default when run() is called directly", async () => {
+    let capturedBody: any = null;
+    const client = buildPreflightClient({
+      postSpy: (_path, init) => {
+        capturedBody = init?.body;
+      },
+    });
+    await invokeWorkflow({ workflowId: "wf1" }, ctxWith(client));
+    expect(capturedBody.inputs_by).toBe("step_index");
+    expect(capturedBody.parameters_normalized).toBe(false);
   });
 });
