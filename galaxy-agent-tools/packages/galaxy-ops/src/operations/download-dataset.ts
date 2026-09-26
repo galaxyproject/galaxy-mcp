@@ -36,7 +36,13 @@ interface DatasetMeta {
 
 const input = {
   datasetId: z.string().describe("Dataset id to download"),
-  filePath: z.string().optional().describe("Local path to write; omit for in-memory"),
+  filePath: z
+    .string()
+    .optional()
+    .describe(
+      "Local path to write the bytes to; omit it and the result is metadata and file_size only, " +
+        "with no content",
+    ),
   /**
    * Declared because Python declares it, and inert because Python's is inert.
    *
@@ -112,6 +118,10 @@ async function run(i: In, ctx: GalaxyContext): Promise<DownloadDatasetResult> {
     };
   }
 
+  // No filePath, so the buffer is measured and dropped -- `content_available` says the fetch
+  // worked, not that the bytes are in here. Python answers the same way (its in-memory branch
+  // returns the length and not the content), so filePath is the only route to the bytes on
+  // either surface.
   return {
     dataset_id: i.datasetId,
     suggested_filename,
@@ -124,9 +134,25 @@ async function run(i: In, ctx: GalaxyContext): Promise<DownloadDatasetResult> {
 export const downloadDatasetOp: Operation<typeof input, DownloadDatasetResult> = {
   name: "download_dataset",
   domain: "datasets",
-  // readOnly: false because it can write to disk (filePath branch)
+  /**
+   * Not read-only, because `readOnlyHint` is about the environment, not about Galaxy.
+   *
+   * Nothing here creates, changes or deletes anything on the SERVER -- it is two GETs, and
+   * Python's `read` tag says that much, since the tags only gate
+   * GALAXY_MCP_INCLUDE/EXCLUDE_TAGS. The MCP hint is not scoped that way: the SDK defines it
+   * as a tool that "does not modify its environment", and with `filePath` this one overwrites
+   * whatever file is at that path. Clients gate approval on the hint, so a true here would be
+   * a false annotation -- and the description disclosing the overwrite does not correct it.
+   * Dannon's call (2026-09-26): the hint stays false and the registry records the mismatch
+   * with Python's tag as intentional, because each flag is right about its own scope.
+   */
   readOnly: false,
-  summary: "Download a dataset's content by id, optionally writing to a local file.",
+  summary:
+    "Download a dataset's content by id. With filePath the bytes are written to that local " +
+    "path, overwriting what is there, and that is the only way to get them. Without filePath " +
+    "the content is fetched and discarded: the result is metadata only -- file_size, " +
+    "content_available, and the dataset's name, extension, state and genome build -- with no " +
+    "content in it. Nothing on the Galaxy server is changed either way.",
   input,
   run,
   project: (out, i) => ({

@@ -10,13 +10,13 @@ Every difference carries the status and the reason recorded in `galaxy-agent-too
 
 | Status | Differences |
 | --- | --- |
-| `intentional` | `1` |
+| `intentional` | `2` |
 | `pending-port` | `0` |
 | `pending-decision` | `0` |
-| `unreviewed-gap` | `2` |
+| `unreviewed-gap` | `1` |
 | **total** | `3` |
 
-`unreviewed-gap` is the status nobody has ruled on yet. The check holds the registry to the 2 it declares, so the count cannot drift from the number; raising that number is an edit somebody has to make in the diff, and it is meant to come down, never up.
+`unreviewed-gap` is the status nobody has ruled on yet. The check holds the registry to the 1 it declares, so the count cannot drift from the number; raising that number is an edit somebody has to make in the diff, and it is meant to come down, never up.
 
 ## Tools
 
@@ -30,7 +30,7 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `create_page` |  | `write (tag), requires >=26.1` | `write (hint), requires >=26.1` |  |  |  |
 | `create_user_tool` |  | `write (tag)` | `write (hint)` |  |  |  |
 | `delete_user_tool` |  | `write (tag)` | `write (hint)` |  |  |  |
-| `download_dataset` |  | `read (tag)` | `write (hint)` | `mutability-mismatch` | `unreviewed-gap` | Python tags the tool read; the TS op advertises readOnlyHint false because it can write the bytes to a local path. One of the two is wrong about what read-only means for a tool that touches the caller's disk, and MCP clients gate approval on that hint. |
+| `download_dataset` |  | `read (tag)` | `write (hint)` | `mutability-mismatch` | `intentional` | Both surfaces write the bytes to a local path when they are given one, and both say so; they disagree because the two flags are about different things. Python's read tag is a statement about Galaxy: the tags exist to gate GALAXY_MCP_INCLUDE/EXCLUDE_TAGS, and the tool is two GETs that create, change and delete nothing on the server -- the file Python writes to file_path is outside what the tag speaks to. The MCP readOnlyHint has no such scope: the SDK defines readOnlyHint true as a tool that does not modify its environment, and with filePath the TS op overwrites whatever file is at that path, so it advertises false and clients that gate approval on the hint ask before it runs. Dannon's call (2026-09-26): each flag is correct about its own scope, so neither side moves and the mismatch is what the two scopes look like from the comparator. |
 | `get_collection_details` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_dataset_details` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_histories` |  | `read (tag)` | `read (hint)` |  |  |  |
