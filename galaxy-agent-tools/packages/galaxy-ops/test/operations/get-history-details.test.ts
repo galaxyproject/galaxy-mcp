@@ -17,7 +17,31 @@ describe("get_history_details", () => {
       },
     });
     const out = await getHistoryDetails({ historyId: "h1" }, ctxWith(client));
-    expect((out as any).id).toBe("h1");
+    expect((out.history as any).id).toBe("h1");
+  });
+
+  it("reports the item count Galaxy already holds, without listing the contents", async () => {
+    const asked: string[] = [];
+    const client = mockClient({
+      GET: (path) => {
+        asked.push(path);
+        return { data: { id: "h1", name: "alpha", state: "ok", count: 42 }, response: { status: 200 } };
+      },
+    });
+    const out = await getHistoryDetails({ historyId: "h1" }, ctxWith(client));
+    expect(out.contents_summary.total_items).toBe(42);
+    expect(out.contents_summary.note).toContain("get_history_contents");
+    // One request: the Python tool fetches the contents a second time to length them.
+    expect(asked).toEqual(["/api/histories/{history_id}"]);
+    expect(getHistoryDetailsOp.project!(out, { historyId: "h1" }).message).toBe(
+      "History h1 state=ok (42 item(s))",
+    );
+  });
+
+  it("says nought rather than nothing when Galaxy reports no count", async () => {
+    const client = mockClient({ GET: () => ({ data: { id: "h1" }, response: { status: 200 } }) });
+    const out = await getHistoryDetails({ historyId: "h1" }, ctxWith(client));
+    expect(out.contents_summary.total_items).toBe(0);
   });
   it("throws NotFound on 404", async () => {
     const client = mockClient({ GET: () => ({ error: { err_msg: "no" }, response: { status: 404 } }) });

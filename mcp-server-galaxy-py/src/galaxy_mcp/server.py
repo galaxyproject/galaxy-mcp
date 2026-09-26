@@ -838,7 +838,7 @@ Pages are Galaxy-flavored markdown documents: a history-attached page is a
 `get_page`, `create_page`, and `update_page`; inspect edit history via
 `list_page_revisions` / `get_page_revision` / `revert_page_revision`. Page
 content embeds datasets through directives that use ENCODED ids (e.g.
-`history_dataset_display(history_dataset_id=f2db41e1fa331b3e)`), which you get
+`history_dataset_display(history_dataset_id=<encoded-dataset-id>)`), which you get
 from `get_history_contents` / `get_dataset_details`.
 """
 
@@ -1553,7 +1553,7 @@ def run_tool(history_id: str, tool_id: str, inputs: dict[str, Any]) -> GalaxyRes
     5. Monitor job: get_job_details() or check history contents
 
     Args:
-        history_id: Galaxy history ID (16-char hex string like '1cd8e2f6b131e5aa').
+        history_id: Galaxy history ID (a 16-character hex string).
                     Get from create_history() or get_histories().
         tool_id: Tool identifier. Common formats:
                  - Simple built-in: "cat1", "Cut1", "upload1"
@@ -2297,7 +2297,7 @@ def get_history_details(history_id: str) -> GalaxyResult:
 
     Args:
         history_id: Galaxy history ID - a hexadecimal hash string identifying the history
-                   (e.g., '1cd8e2f6b131e5aa', typically 16 characters)
+                   (a 16-character hex string)
 
     Returns:
         GalaxyResult with history metadata and contents summary in data field
@@ -2356,7 +2356,7 @@ def get_history_contents(
 
     Args:
         history_id: Galaxy history ID - a hexadecimal hash string identifying the history
-                   (e.g., '1cd8e2f6b131e5aa', typically 16 characters)
+                   (a 16-character hex string)
         limit: Maximum number of items to return per page (default: 100, max recommended: 500)
         offset: Number of items to skip from the beginning (default: 0, for pagination)
         deleted: Include deleted datasets in results (default: False)
@@ -2486,9 +2486,9 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> GalaxyRes
 
     Args:
         dataset_id: Galaxy dataset ID - a hexadecimal hash string identifying the dataset
-                   (e.g., 'f2db41e1fa331b3e', typically 16 characters)
+                   (a 16-character hex string)
         history_id: Galaxy history ID containing the dataset - optional for performance optimization
-                   (e.g., '1cd8e2f6b131e5aa', typically 16 characters)
+                   (a 16-character hex string)
 
     Returns:
         GalaxyResult with job metadata, tool information, dataset ID, and job ID in data field
@@ -2568,7 +2568,7 @@ def get_dataset_details(
 
     Args:
         dataset_id: Galaxy dataset ID - a hexadecimal hash string identifying the dataset
-                   (e.g., 'f2db41e1fa331b3e', typically 16 characters)
+                   (a 16-character hex string)
         include_preview: Whether to include a preview of the dataset content showing first N lines
                         (default: True, only works for datasets in 'ok' state)
         preview_lines: Number of lines to include in the content preview (default: 10)
@@ -2759,7 +2759,7 @@ def download_dataset(
 
     Args:
         dataset_id: Galaxy dataset ID - a hexadecimal hash string identifying the dataset
-                   (e.g., 'f2db41e1fa331b3e', typically 16 characters)
+                   (a 16-character hex string)
         file_path: Local filesystem path where to save the downloaded file
                   (e.g., '/path/to/data.txt', requires write access to filesystem)
                   If not provided, downloads to memory instead
@@ -2945,7 +2945,7 @@ def upload_file_from_url(
     Args:
         url: URL of the file to upload (e.g., 'https://example.com/data.fasta')
         history_id: Galaxy history ID where to upload the file - optional, uses current history
-                   (e.g., '1cd8e2f6b131e5aa', typically 16 characters)
+                   (a 16-character hex string)
         file_type: Galaxy file format name (default: 'auto' for auto-detection)
                   Common types: 'fasta', 'fastq', 'bam', 'vcf', 'bed', 'tabular', etc.
         dbkey: Database key/genome build (default: '?', e.g., 'hg38', 'mm10', 'dm6')
@@ -3001,11 +3001,11 @@ def get_invocations(
 
     Args:
         invocation_id: Specific workflow invocation ID to view - a hexadecimal hash string
-                      (e.g., 'a1b2c3d4e5f6789a', typically 16 characters, optional)
+                      (a 16-character hex string, optional)
         workflow_id: Filter invocations by workflow ID - a hexadecimal hash string
-                    (e.g., 'b2c3d4e5f6789abc', typically 16 characters, optional)
+                    (a 16-character hex string, optional)
         history_id: Filter invocations by history ID - a hexadecimal hash string
-                   (e.g., '1cd8e2f6b131e5aa', typically 16 characters, optional)
+                   (a 16-character hex string, optional)
         limit: Maximum number of invocations to return (optional, default: no limit)
         view: Level of detail to return - 'element' for detailed or 'collection' for summary
              (default: 'collection')
@@ -4364,7 +4364,7 @@ def run_user_tool(history_id: str, tool_uuid: str, inputs: dict[str, Any]) -> Ga
         ...     history_id="abc123",
         ...     tool_uuid="61d15277-a911-45ef-aa66-5385146578cc",
         ...     inputs={
-        ...         "scorer_output": {"src": "hda", "id": "59ace41fc068d3ad"},
+        ...         "scorer_output": {"src": "hda", "id": "<dataset_id>"},
         ...         "top_tracks_per_variant": 5
         ...     }
         ... )
@@ -4432,7 +4432,7 @@ def run_user_tool(history_id: str, tool_uuid: str, inputs: dict[str, Any]) -> Ga
 # A Galaxy "Page" is the notebook/report. A page attached to a history is a
 # "Notebook"; a standalone page is a "Report". Content is Galaxy-flavored
 # markdown with directives referencing ENCODED ids (e.g.
-# history_dataset_display(history_dataset_id=f2db41e1fa331b3e)). bioblend hands
+# history_dataset_display(history_dataset_id=<encoded-dataset-id>)). bioblend hands
 # back encoded ids already, so -- unlike the in-Galaxy MCP -- there is no
 # encode/decode dance: content_editor is read, edited, and POSTed back as-is.
 
@@ -4566,7 +4566,7 @@ def get_page(page_id: str, include_rendered: bool = False) -> GalaxyResult:
     """Get a page and the content of its latest revision.
 
     Returns `content_editor`: the editable Galaxy-flavored markdown, with
-    ENCODED ids in directives (e.g. `history_dataset_id=f2db41e1fa331b3e`).
+    ENCODED ids in directives (e.g. `history_dataset_id=<encoded-dataset-id>`).
     This is the form to edit and pass back to update_page.
 
     Args:
@@ -4622,7 +4622,7 @@ def create_page(
 
     Content is Galaxy-flavored markdown. To embed a dataset, use a directive
     with the ENCODED dataset id, e.g.
-    `history_dataset_display(history_dataset_id=f2db41e1fa331b3e)` or
+    `history_dataset_display(history_dataset_id=<encoded-dataset-id>)` or
     `history_dataset_collection_display(history_dataset_collection_id=...)`.
     Get encoded ids from get_history_contents / get_dataset_details.
 
@@ -4680,7 +4680,7 @@ def update_page(
     """Update a page, creating a new revision when content changes.
 
     Content is Galaxy-flavored markdown using ENCODED ids in directives
-    (e.g. `history_dataset_id=f2db41e1fa331b3e`) -- never raw integer ids or
+    (e.g. `history_dataset_id=<encoded-dataset-id>`) -- never raw integer ids or
     HIDs. Get encoded ids from get_history_contents / get_dataset_details.
     Edits made through this tool are recorded with edit_source="agent". This does
     not change the page's content_format, so editing a page originally authored

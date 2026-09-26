@@ -15,8 +15,8 @@ export type OperationDomain =
   | "iwc"
   | "pages";
 
-/** The parsed input object derived from an op's raw Zod shape. */
-export type InputOf<Shape extends ZodRawShape> = z.infer<ZodObject<Shape>>;
+/** The input side, not the parsed side: nothing validates before run(), so a default is run()'s. */
+export type InputOf<Shape extends ZodRawShape> = z.input<ZodObject<Shape>>;
 
 export interface Pagination {
   total?: number;
@@ -54,6 +54,8 @@ export interface Operation<Shape extends ZodRawShape, O> {
   readonly readOnly?: boolean;
   /** Destructive (delete/cancel) ops set this true (drives MCP destructiveHint). */
   readonly destructive?: boolean;
+  /** What the result is; declared only where this package owns the shape rather than Galaxy. */
+  readonly result?: ResultShape;
   run(input: InputOf<Shape>, ctx: GalaxyContext): Promise<O>;
   /**
    * How to cut this op's page down, for the ops the Python server budgets.
@@ -65,6 +67,19 @@ export interface Operation<Shape extends ZodRawShape, O> {
   budget?: { rows(data: O): number; shrink(data: O, keep: number): O };
   project?(output: O, input: InputOf<Shape>): { message?: string; pagination?: Pagination };
 }
+
+/**
+ * A result is a sequence of rows or an object with named keys, and either may page.
+ *
+ * `fields` is left out when the keys vary by branch: the kind is still a fact then, the list is
+ * not. `paginated` says the envelope carries the page window beside the data, which a test holds
+ * to what `project` really emits. The Python surface states the same three things, so the parity
+ * report compares them.
+ */
+export type ResultShape = { paginated?: boolean } & (
+  | { kind: "object"; fields?: readonly string[] }
+  | { kind: "list" }
+);
 
 /** Heterogeneous registry element. */
 export type AnyOperation = Operation<ZodRawShape, unknown>;

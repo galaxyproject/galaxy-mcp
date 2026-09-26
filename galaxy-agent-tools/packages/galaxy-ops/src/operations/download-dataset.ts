@@ -102,6 +102,10 @@ async function run(i: In, ctx: GalaxyContext): Promise<DownloadDatasetResult> {
 export const downloadDatasetOp: Operation<typeof input, DownloadDatasetResult> = {
   name: "download_dataset",
   domain: "datasets",
+  result: {
+    kind: "object",
+    fields: ["dataset_id", "dataset_info", "suggested_filename", "content_available"],
+  },
   // readOnly: false because it can write to disk (filePath branch)
   readOnly: false,
   summary: "Download a dataset's content by id, optionally writing to a local file.",

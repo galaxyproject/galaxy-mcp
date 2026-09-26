@@ -23,6 +23,14 @@
           "invocation_id"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "cancelled",
+          "invocation"
+        ],
+        "paginated": false
       }
     },
     {
@@ -62,6 +70,16 @@
           }
         },
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "auth",
+          "connected",
+          "url",
+          "user"
+        ],
+        "paginated": false
       }
     },
     {
@@ -207,6 +225,14 @@
           "uuid"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "deactivated",
+          "uuid"
+        ],
+        "paginated": false
       }
     },
     {
@@ -222,7 +248,7 @@
         "properties": {
           "dataset_id": {
             "type": "string",
-            "description": "Galaxy dataset ID - a hexadecimal hash string identifying the dataset\n       (e.g., 'f2db41e1fa331b3e', typically 16 characters)"
+            "description": "Galaxy dataset ID - a hexadecimal hash string identifying the dataset\n       (a 16-character hex string)"
           },
           "file_path": {
             "anyOf": [
@@ -251,6 +277,19 @@
           "dataset_id"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "content_available",
+          "dataset_id",
+          "dataset_info",
+          "file_path",
+          "file_size",
+          "note",
+          "suggested_filename"
+        ],
+        "paginated": false
       }
     },
     {
@@ -278,6 +317,18 @@
           "collection_id"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "collection",
+          "collection_id",
+          "elements",
+          "elements_truncated",
+          "history_content_type",
+          "note"
+        ],
+        "paginated": false
       }
     },
     {
@@ -293,7 +344,7 @@
         "properties": {
           "dataset_id": {
             "type": "string",
-            "description": "Galaxy dataset ID - a hexadecimal hash string identifying the dataset\n       (e.g., 'f2db41e1fa331b3e', typically 16 characters)"
+            "description": "Galaxy dataset ID - a hexadecimal hash string identifying the dataset\n       (a 16-character hex string)"
           },
           "include_preview": {
             "default": true,
@@ -310,6 +361,10 @@
           "dataset_id"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "paginated": false
       }
     },
     {
@@ -369,7 +424,7 @@
         "properties": {
           "history_id": {
             "type": "string",
-            "description": "Galaxy history ID - a hexadecimal hash string identifying the history\n       (e.g., '1cd8e2f6b131e5aa', typically 16 characters)"
+            "description": "Galaxy history ID - a hexadecimal hash string identifying the history\n       (a 16-character hex string)"
           },
           "limit": {
             "default": 100,
@@ -401,6 +456,14 @@
           "history_id"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "contents",
+          "history_id"
+        ],
+        "paginated": true
       }
     },
     {
@@ -416,13 +479,21 @@
         "properties": {
           "history_id": {
             "type": "string",
-            "description": "Galaxy history ID - a hexadecimal hash string identifying the history\n       (e.g., '1cd8e2f6b131e5aa', typically 16 characters)"
+            "description": "Galaxy history ID - a hexadecimal hash string identifying the history\n       (a 16-character hex string)"
           }
         },
         "required": [
           "history_id"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "contents_summary",
+          "history"
+        ],
+        "paginated": false
       }
     },
     {
@@ -446,7 +517,7 @@
               }
             ],
             "default": null,
-            "description": "Specific workflow invocation ID to view - a hexadecimal hash string\n          (e.g., 'a1b2c3d4e5f6789a', typically 16 characters, optional)"
+            "description": "Specific workflow invocation ID to view - a hexadecimal hash string\n          (a 16-character hex string, optional)"
           },
           "workflow_id": {
             "anyOf": [
@@ -458,7 +529,7 @@
               }
             ],
             "default": null,
-            "description": "Filter invocations by workflow ID - a hexadecimal hash string\n        (e.g., 'b2c3d4e5f6789abc', typically 16 characters, optional)"
+            "description": "Filter invocations by workflow ID - a hexadecimal hash string\n        (a 16-character hex string, optional)"
           },
           "history_id": {
             "anyOf": [
@@ -470,7 +541,7 @@
               }
             ],
             "default": null,
-            "description": "Filter invocations by history ID - a hexadecimal hash string\n       (e.g., '1cd8e2f6b131e5aa', typically 16 characters, optional)"
+            "description": "Filter invocations by history ID - a hexadecimal hash string\n       (a 16-character hex string, optional)"
           },
           "limit": {
             "anyOf": [
@@ -543,6 +614,10 @@
           }
         },
         "type": "object"
+      },
+      "result": {
+        "kind": "list",
+        "paginated": true
       }
     },
     {
@@ -558,7 +633,7 @@
         "properties": {
           "dataset_id": {
             "type": "string",
-            "description": "Galaxy dataset ID - a hexadecimal hash string identifying the dataset\n       (e.g., 'f2db41e1fa331b3e', typically 16 characters)"
+            "description": "Galaxy dataset ID - a hexadecimal hash string identifying the dataset\n       (a 16-character hex string)"
           },
           "history_id": {
             "anyOf": [
@@ -570,13 +645,22 @@
               }
             ],
             "default": null,
-            "description": "Galaxy history ID containing the dataset - optional for performance optimization\n       (e.g., '1cd8e2f6b131e5aa', typically 16 characters)"
+            "description": "Galaxy history ID containing the dataset - optional for performance optimization\n       (a 16-character hex string)"
           }
         },
         "required": [
           "dataset_id"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "dataset_id",
+          "job",
+          "job_id"
+        ],
+        "paginated": false
       }
     },
     {
@@ -648,6 +732,17 @@
         "additionalProperties": false,
         "properties": {},
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "config",
+          "unsupported_tools",
+          "url",
+          "version",
+          "version_known"
+        ],
+        "paginated": false
       }
     },
     {
@@ -670,6 +765,15 @@
           "tool_id"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "citations",
+          "tool_name",
+          "tool_version"
+        ],
+        "paginated": false
       }
     },
     {
@@ -718,6 +822,15 @@
           "tool_id"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "inputs_template",
+          "parameters",
+          "tool_id"
+        ],
+        "paginated": false
       }
     },
     {
@@ -755,6 +868,10 @@
           }
         },
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "paginated": true
       }
     },
     {
@@ -789,6 +906,15 @@
           "tool_id"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "object",
+        "fields": [
+          "requested_version",
+          "test_cases",
+          "tool_id"
+        ],
+        "paginated": false
       }
     },
     {
@@ -1008,6 +1134,10 @@
           }
         },
         "type": "object"
+      },
+      "result": {
+        "kind": "list",
+        "paginated": true
       }
     },
     {
@@ -1130,6 +1260,10 @@
           }
         },
         "type": "object"
+      },
+      "result": {
+        "kind": "list",
+        "paginated": true
       }
     },
     {
@@ -1184,6 +1318,10 @@
           }
         },
         "type": "object"
+      },
+      "result": {
+        "kind": "list",
+        "paginated": true
       }
     },
     {
@@ -1237,6 +1375,10 @@
           "intent"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "list",
+        "paginated": false
       }
     },
     {
@@ -1282,7 +1424,7 @@
         "properties": {
           "history_id": {
             "type": "string",
-            "description": "Galaxy history ID (16-char hex string like '1cd8e2f6b131e5aa').\n        Get from create_history() or get_histories()."
+            "description": "Galaxy history ID (a 16-character hex string).\n        Get from create_history() or get_histories()."
           },
           "tool_id": {
             "type": "string",
@@ -1365,6 +1507,10 @@
           "query"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "list",
+        "paginated": true
       }
     },
     {
@@ -1400,6 +1546,10 @@
           "keywords"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "list",
+        "paginated": true
       }
     },
     {
@@ -1432,6 +1582,10 @@
           "query"
         ],
         "type": "object"
+      },
+      "result": {
+        "kind": "list",
+        "paginated": true
       }
     },
     {
@@ -1627,7 +1781,7 @@
               }
             ],
             "default": null,
-            "description": "Galaxy history ID where to upload the file - optional, uses current history\n       (e.g., '1cd8e2f6b131e5aa', typically 16 characters)"
+            "description": "Galaxy history ID where to upload the file - optional, uses current history\n       (a 16-character hex string)"
           },
           "file_type": {
             "default": "auto",

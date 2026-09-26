@@ -26,6 +26,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<CancelledInvocation> {
 export const cancelWorkflowInvocationOp: Operation<typeof input, CancelledInvocation> = {
   name: "cancel_workflow_invocation",
   domain: "invocations",
+  result: { kind: "object", fields: ["cancelled", "invocation"] },
   summary: "Cancel a running workflow invocation by id.",
   input,
   readOnly: false,

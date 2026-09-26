@@ -3,7 +3,7 @@ import { fetchIwcWorkflows, enrichWorkflowResult, type EnrichedIwcWorkflow } fro
 import type { GalaxyContext } from "../context";
 import { paginate, shrinkPaged, validatePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, InputOf, Operation } from "./types";
+import type { AnyOperation, Operation } from "./types";
 
 const DEFAULT_LIMIT = 20;
 // Python's ceiling for this tool; a window one surface refuses the other refuses.
@@ -35,6 +35,7 @@ async function run(i: In, _ctx: GalaxyContext): Promise<Paged<EnrichedIwcWorkflo
 export const getIwcWorkflowsOp: Operation<typeof input, Paged<EnrichedIwcWorkflow>> = {
   name: "get_iwc_workflows",
   domain: "iwc",
+  result: { kind: "object", fields: ["items", "pagination"], paginated: true },
   summary:
     "Browse IWC (Intergalactic Workflow Commission) curated workflows, a page of summaries at a time. " +
     "Call get_iwc_workflow_details for one workflow's full record.",
@@ -52,7 +53,4 @@ export const getIwcWorkflowsOp: Operation<typeof input, Paged<EnrichedIwcWorkflo
 
 register(getIwcWorkflowsOp as AnyOperation);
 
-// A library caller may leave the paged arguments out; run() applies the same
-// defaults the schema declares for the parsed surface path.
-export const getIwcWorkflows = (i: In, ctx: GalaxyContext) =>
-  runOperation(getIwcWorkflowsOp, i as InputOf<typeof input>, ctx);
+export const getIwcWorkflows = (i: In, ctx: GalaxyContext) => runOperation(getIwcWorkflowsOp, i, ctx);

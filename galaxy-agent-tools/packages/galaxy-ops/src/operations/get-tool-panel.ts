@@ -4,7 +4,7 @@ import { GalaxyNotFoundError } from "../errors";
 import { legacyGet } from "../legacy";
 import { paginate, paginationInfo, validatePagination, type PaginationInfo } from "./pagination";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, InputOf, Operation } from "./types";
+import type { AnyOperation, Operation } from "./types";
 
 interface PanelNode {
   id?: string;
@@ -33,13 +33,19 @@ export interface SlimTool {
   versions: string[];
 }
 
-export type ToolPanelOverview = { entries: PanelEntry[]; pagination: PaginationInfo };
+/** Counted over the whole panel, not the page. */
+export interface PanelTotals {
+  tool_count: number;
+  section_count: number;
+}
+
+export type ToolPanelOverview = { entries: PanelEntry[]; pagination: PaginationInfo } & PanelTotals;
 export type ToolPanelSection = {
   section_id: string;
   section_name: string;
   tools: SlimTool[];
   pagination: PaginationInfo;
-};
+} & PanelTotals;
 export type ToolPanelResult = ToolPanelOverview | ToolPanelSection;
 
 const DEFAULT_LIMIT = 100;
@@ -83,6 +89,23 @@ type In = { sectionId?: string | null; limit?: number; offset?: number };
 const isSection = (n: PanelNode): boolean => "elems" in n;
 const isPanelTool = (n: PanelNode): boolean => !isSection(n) && n.model_class !== "ToolSectionLabel";
 
+/** Walks nested sections: a page's entry count is not the server's tool count. */
+function totals(nodes: PanelNode[]): PanelTotals {
+  let tool_count = 0;
+  let section_count = 0;
+  for (const node of nodes) {
+    if (isSection(node)) {
+      section_count += 1;
+      const inner = totals(Array.isArray(node.elems) ? node.elems : []);
+      tool_count += inner.tool_count;
+      section_count += inner.section_count;
+    } else if (isPanelTool(node)) {
+      tool_count += 1;
+    }
+  }
+  return { tool_count, section_count };
+}
+
 const slim = (n: PanelNode): SlimTool => ({
   id: n.id ?? "",
   name: n.name ?? "",
@@ -99,6 +122,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<ToolPanelResult> {
     params: { query: { in_panel: true } },
   });
   const nodes = Array.isArray(panel) ? panel : [];
+  const counted = totals(nodes);
 
   if (i.sectionId != null) {
     const section = nodes.find((n) => isSection(n) && n.id === i.sectionId);
@@ -112,6 +136,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<ToolPanelResult> {
     const tools = (Array.isArray(section.elems) ? section.elems : []).filter(isPanelTool).map(slim);
     const page = paginate(tools, { limit, offset, noun: "tools" });
     return {
+      ...counted,
       section_id: section.id ?? "",
       section_name: section.name ?? "",
       tools: page.items,
@@ -135,7 +160,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<ToolPanelResult> {
         : { id: n.id ?? "", name: n.name ?? "", type: "tool" as const, description: n.description ?? "" },
     );
   const page = paginate(entries, { limit, offset, noun: "entries" });
-  return { entries: page.items, pagination: page.pagination };
+  return { ...counted, entries: page.items, pagination: page.pagination };
 }
 
 /** The two halves of `budget.shrink`, one per shape, so neither has to know the other's key. */
@@ -160,9 +185,11 @@ const reshape = (was: PaginationInfo, keep: number, noun: string): PaginationInf
 export const getToolPanelOp: Operation<typeof input, ToolPanelResult> = {
   name: "get_tool_panel",
   domain: "tools",
+  result: { kind: "object", fields: ["tool_count", "section_count"], paginated: true },
   summary:
-    "List the Galaxy tool panel's sections and their tool counts. Pass sectionId to list one " +
-    "section's tools instead. Legacy endpoint.",
+    "List the Galaxy tool panel's sections and their tool counts. Every answer carries " +
+    "tool_count, how many tools the server has installed, and section_count. Pass sectionId to " +
+    "list one section's tools instead. Legacy endpoint.",
   input,
   run,
   // Two shapes, so two nouns: the overview pages sections, a drill-in pages tools.
@@ -184,7 +211,4 @@ export const getToolPanelOp: Operation<typeof input, ToolPanelResult> = {
 
 register(getToolPanelOp as AnyOperation);
 
-// A library caller may leave the paged arguments out; run() applies the same
-// defaults the schema declares for the parsed surface path.
-export const getToolPanel = (i: In, ctx: GalaxyContext) =>
-  runOperation(getToolPanelOp, i as InputOf<typeof input>, ctx);
+export const getToolPanel = (i: In, ctx: GalaxyContext) => runOperation(getToolPanelOp, i, ctx);

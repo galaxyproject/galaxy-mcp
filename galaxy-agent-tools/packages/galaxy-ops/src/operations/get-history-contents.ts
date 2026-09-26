@@ -4,7 +4,7 @@ import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
 import { paginate, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, InputOf, Operation } from "./types";
+import type { AnyOperation, Operation } from "./types";
 
 type ContentsIndex = GetJson<"/api/histories/{history_id}/contents">;
 type ContentItem = ContentsIndex extends readonly (infer T)[] ? T : never;
@@ -123,6 +123,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<HistoryContents> {
 export const getHistoryContentsOp: Operation<typeof input, HistoryContents> = {
   name: "get_history_contents",
   domain: "histories",
+  result: { kind: "object", fields: ["items", "pagination"], paginated: true },
   summary: "List the datasets and collections in a history, one page at a time.",
   input,
   run,
@@ -134,7 +135,4 @@ export const getHistoryContentsOp: Operation<typeof input, HistoryContents> = {
 
 register(getHistoryContentsOp as AnyOperation);
 
-// A library caller may leave the paged arguments out; run() applies the same
-// defaults the schema declares for the parsed surface path.
-export const getHistoryContents = (i: In, ctx: GalaxyContext) =>
-  runOperation(getHistoryContentsOp, i as InputOf<typeof input>, ctx);
+export const getHistoryContents = (i: In, ctx: GalaxyContext) => runOperation(getHistoryContentsOp, i, ctx);

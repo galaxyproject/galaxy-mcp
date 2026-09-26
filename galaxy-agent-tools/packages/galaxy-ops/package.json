@@ -18,8 +18,16 @@
   },
   "exports": {
     ".": {
+      "browser": {
+        "types": "./dist/index.browser.d.ts",
+        "import": "./dist/index.browser.js"
+      },
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/index.browser.d.ts",
+      "import": "./dist/index.browser.js"
     }
   },
   "files": [
@@ -40,12 +48,17 @@
     "zod": "^4.3.0"
   },
   "peerDependencies": {
-    "typescript": ">=6"
+    "typescript": ">=5.5"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "tsup": "^8.3.0",
     "typescript": "^6.0.0",
     "vitest": "^4.1.11"
+  },
+  "peerDependenciesMeta": {
+    "typescript": {
+      "optional": true
+    }
   }
 }

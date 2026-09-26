@@ -3,7 +3,7 @@ import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
 import type { PageSummary } from "./pages-common";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, InputOf, Operation } from "./types";
+import type { AnyOperation, Operation } from "./types";
 
 const DEFAULT_LIMIT = 100;
 
@@ -51,6 +51,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<PageSummary[]> {
 export const listPagesOp: Operation<typeof input, PageSummary[]> = {
   name: "list_pages",
   domain: "pages",
+  result: { kind: "list", paginated: true },
   summary:
     "List Galaxy pages (markdown notebooks and reports) the user can see. " +
     "Pass historyId to list only that history's notebooks. The history filter is what needs " +
@@ -68,7 +69,4 @@ export const listPagesOp: Operation<typeof input, PageSummary[]> = {
 
 register(listPagesOp as AnyOperation);
 
-// A library caller may leave the defaulted arguments out; run() applies the same
-// values the schema declares for the parsed surface path.
-export const listPages = (i: In, ctx: GalaxyContext) =>
-  runOperation(listPagesOp, i as InputOf<typeof input>, ctx);
+export const listPages = (i: In, ctx: GalaxyContext) => runOperation(listPagesOp, i, ctx);

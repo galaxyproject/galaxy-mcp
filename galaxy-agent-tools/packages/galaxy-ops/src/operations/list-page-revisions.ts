@@ -3,7 +3,7 @@ import type { GalaxyContext } from "../context";
 import { legacyGet } from "../legacy";
 import type { PageRevisionSummary } from "./pages-common";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, InputOf, Operation } from "./types";
+import type { AnyOperation, Operation } from "./types";
 
 const input = {
   pageId: z.string().min(1).describe("Encoded page id"),
@@ -21,6 +21,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<PageRevisionSummary[]> {
 export const listPageRevisionsOp: Operation<typeof input, PageRevisionSummary[]> = {
   name: "list_page_revisions",
   domain: "pages",
+  result: { kind: "list" },
   summary:
     "List a page's revision history. A revision carries an edit_source of " +
     '"user", "agent" or "restore" where Galaxy recorded one -- a page\'s first revision ' +
@@ -33,7 +34,4 @@ export const listPageRevisionsOp: Operation<typeof input, PageRevisionSummary[]>
 
 register(listPageRevisionsOp as AnyOperation);
 
-// A library caller may leave the defaulted arguments out; run() applies the same
-// values the schema declares for the parsed surface path.
-export const listPageRevisions = (i: In, ctx: GalaxyContext) =>
-  runOperation(listPageRevisionsOp, i as InputOf<typeof input>, ctx);
+export const listPageRevisions = (i: In, ctx: GalaxyContext) => runOperation(listPageRevisionsOp, i, ctx);

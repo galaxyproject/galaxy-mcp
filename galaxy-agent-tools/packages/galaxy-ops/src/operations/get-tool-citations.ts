@@ -41,6 +41,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<ToolCitationsResult> {
 export const getToolCitationsOp: Operation<typeof input, ToolCitationsResult> = {
   name: "get_tool_citations",
   domain: "tools",
+  result: { kind: "object", fields: ["tool_name", "tool_version", "citations"] },
   summary: "Return citations for a Galaxy tool by id.",
   input,
   run,
