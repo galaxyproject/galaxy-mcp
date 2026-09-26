@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import { Command } from "commander";
-import { searchToolsByNameOp } from "@galaxyproject/galaxy-ops";
+import { getInvocationsOp, searchToolsByNameOp } from "@galaxyproject/galaxy-ops";
 import { classifyField, buildInput } from "../src/flags";
 import { applyInputs } from "../src/flags-apply";
 
@@ -30,15 +30,19 @@ describe("flags mapping", () => {
     // without this `galaxy-cli search_tools_by_name bwa --limit 5` is a usage error.
     const parsed = buildInput(searchToolsByNameOp.input, ["bwa"], { limit: "5", offset: "10" });
     expect(parsed.success && parsed.data).toMatchObject({ query: "bwa", limit: 5, offset: 10 });
+
+    const invocations = buildInput(getInvocationsOp.input, [], { limit: "5" });
+    expect(invocations.success && invocations.data).toMatchObject({ limit: 5 });
   });
 
   it("leaves a non-number alone so the schema can say what is wrong with it", () => {
     // Converting these would hand the op a 0 or a NaN and lose the reason.
     for (const bad of ["", "abc", "  "]) {
-      expect(buildInput(searchToolsByNameOp.input, ["bwa"], { limit: bad }).success).toBe(false);
+      const parsed = buildInput(getInvocationsOp.input, [], { limit: bad });
+      expect(parsed.success).toBe(false);
     }
     // A non-integer converts fine and is then refused by the schema, which is the right layer.
-    expect(buildInput(searchToolsByNameOp.input, ["bwa"], { limit: "2.5" }).success).toBe(false);
+    expect(buildInput(getInvocationsOp.input, [], { limit: "2.5" }).success).toBe(false);
   });
 
   it("reports a usage error for bad input", () => {

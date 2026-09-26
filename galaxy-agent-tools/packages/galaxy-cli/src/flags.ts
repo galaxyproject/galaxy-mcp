@@ -3,10 +3,13 @@ import { z, type ZodRawShape, type ZodTypeAny } from "zod";
 
 export type FieldKind = "positional" | "option" | "boolean" | "json";
 
+const WRAPPERS = new Set(["optional", "nullable", "default"]);
+
 function unwrap(schema: ZodTypeAny): ZodTypeAny {
-  // Zod v4 exposes the def under `.def`; optional/default wrap an innerType.
+  // Zod v4 exposes the def under `.def`; optional/nullable/default each wrap an innerType, and
+  // .nullish() stacks two of them, so this has to keep peeling rather than peel once.
   const def = (schema as unknown as { def?: { type?: string; innerType?: ZodTypeAny } }).def;
-  if (def && (def.type === "optional" || def.type === "default") && def.innerType) return unwrap(def.innerType);
+  if (def && def.type && WRAPPERS.has(def.type) && def.innerType) return unwrap(def.innerType);
   return schema;
 }
 function typeTag(schema: ZodTypeAny): string | undefined {
@@ -16,9 +19,11 @@ function isOptional(schema: ZodTypeAny): boolean {
   return schema.safeParse(undefined).success;
 }
 
+const isJsonTag = (tag: string | undefined) => tag === "record" || tag === "object";
+
 export function classifyField(schema: ZodTypeAny): FieldKind {
   const tag = typeTag(schema);
-  if (tag === "record" || tag === "object") return "json";
+  if (isJsonTag(tag)) return "json";
   if (tag === "boolean") return "boolean";
   return isOptional(schema) ? "option" : "positional";
 }

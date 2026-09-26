@@ -11,10 +11,10 @@ Every difference carries the status and the reason recorded in `galaxy-agent-too
 | Status | Differences |
 | --- | --- |
 | `intentional` | `1` |
-| `pending-port` | `14` |
+| `pending-port` | `8` |
 | `pending-decision` | `0` |
 | `unreviewed-gap` | `17` |
-| **total** | `32` |
+| **total** | `26` |
 
 `unreviewed-gap` is the status nobody has ruled on yet. The check holds the registry to the 17 it declares, so the count cannot drift from the number; raising that number is an edit somebody has to make in the diff, and it is meant to come down, never up.
 
@@ -42,12 +42,6 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `get_history_contents` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_history_details` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_invocations` |  | `read (tag)` | `read (hint)` |  |  |  |
-| `get_invocations` | `history_id` | `type=string required=false default=none` | -- | `missing-ts-param` | `pending-port` | The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version. |
-| `get_invocations` | `invocation_id` | `type=string required=false default=none` | `type=string required=true default=none` | `required-mismatch` | `pending-port` | The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version. |
-| `get_invocations` | `limit` | `type=integer required=false default=none` | -- | `missing-ts-param` | `pending-port` | The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version. |
-| `get_invocations` | `step_details` | `type=boolean required=false default=false` | -- | `missing-ts-param` | `pending-port` | The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version. |
-| `get_invocations` | `view` | `type=string required=false default="collection"` | -- | `missing-ts-param` | `pending-port` | The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version. |
-| `get_invocations` | `workflow_id` | `type=string required=false default=none` | -- | `missing-ts-param` | `pending-port` | The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version. |
 | `get_iwc_workflow_details` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_iwc_workflows` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_job_details` |  | `read (tag)` | `read (hint)` |  |  |  |

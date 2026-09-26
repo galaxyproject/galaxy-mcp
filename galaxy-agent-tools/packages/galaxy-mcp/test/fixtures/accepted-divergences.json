@@ -79,54 +79,6 @@
       "reason": "The TS op's own summary defers content preview to a later phase."
     },
     {
-      "tool": "get_invocations",
-      "param": "history_id",
-      "kind": "missing-ts-param",
-      "observed": "python=type=string required=false default=none",
-      "status": "pending-port",
-      "reason": "The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version."
-    },
-    {
-      "tool": "get_invocations",
-      "param": "invocation_id",
-      "kind": "required-mismatch",
-      "observed": "python=false typescript=true",
-      "status": "pending-port",
-      "reason": "The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version."
-    },
-    {
-      "tool": "get_invocations",
-      "param": "limit",
-      "kind": "missing-ts-param",
-      "observed": "python=type=integer required=false default=none",
-      "status": "pending-port",
-      "reason": "The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version."
-    },
-    {
-      "tool": "get_invocations",
-      "param": "step_details",
-      "kind": "missing-ts-param",
-      "observed": "python=type=boolean required=false default=false",
-      "status": "pending-port",
-      "reason": "The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version."
-    },
-    {
-      "tool": "get_invocations",
-      "param": "view",
-      "kind": "missing-ts-param",
-      "observed": "python=type=string required=false default=\"collection\"",
-      "status": "pending-port",
-      "reason": "The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version."
-    },
-    {
-      "tool": "get_invocations",
-      "param": "workflow_id",
-      "kind": "missing-ts-param",
-      "observed": "python=type=string required=false default=none",
-      "status": "pending-port",
-      "reason": "The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version."
-    },
-    {
       "tool": "get_page",
       "param": "include_rendered",
       "kind": "default-mismatch",
