@@ -23,7 +23,9 @@ describe("get_tool_run_examples", () => {
     const out = await getToolRunExamples({ toolId: "fastqc" }, ctxWith(client));
     expect(out.tool_id).toBe("fastqc");
     expect(out.test_cases).toEqual(TEST_CASES);
-    expect(out.requested_version).toBeUndefined();
+    // Stated as null rather than left out: an absent key reads as "no such field".
+    expect(out.requested_version).toBeNull();
+    expect("requested_version" in out).toBe(true);
   });
 
   it("passes tool_version in query when given", async () => {
