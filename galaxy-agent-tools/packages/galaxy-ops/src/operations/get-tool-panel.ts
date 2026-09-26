@@ -4,7 +4,7 @@ import { GalaxyNotFoundError } from "../errors";
 import { legacyGet } from "../legacy";
 import { paginate, paginationInfo, validatePagination, type PaginationInfo } from "./pagination";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, InputOf, Operation } from "./types";
+import type { AnyOperation, Operation } from "./types";
 
 interface PanelNode {
   id?: string;
@@ -184,7 +184,4 @@ export const getToolPanelOp: Operation<typeof input, ToolPanelResult> = {
 
 register(getToolPanelOp as AnyOperation);
 
-// A library caller may leave the paged arguments out; run() applies the same
-// defaults the schema declares for the parsed surface path.
-export const getToolPanel = (i: In, ctx: GalaxyContext) =>
-  runOperation(getToolPanelOp, i as InputOf<typeof input>, ctx);
+export const getToolPanel = (i: In, ctx: GalaxyContext) => runOperation(getToolPanelOp, i, ctx);

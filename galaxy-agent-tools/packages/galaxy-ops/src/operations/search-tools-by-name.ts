@@ -3,7 +3,7 @@ import type { GalaxyContext } from "../context";
 import { legacyGet } from "../legacy";
 import { paginate, shrinkPaged, validatePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, InputOf, Operation } from "./types";
+import type { AnyOperation, Operation } from "./types";
 
 /** Hand-typed: Galaxy's tool list endpoint is not in the OpenAPI bindings. */
 export interface ToolListItem {
@@ -67,7 +67,4 @@ export const searchToolsByNameOp: Operation<typeof input, Paged<ToolListItem>> =
 
 register(searchToolsByNameOp as AnyOperation);
 
-// A library caller may leave the paged arguments out; run() applies the same
-// defaults the schema declares for the parsed surface path.
-export const searchToolsByName = (i: In, ctx: GalaxyContext) =>
-  runOperation(searchToolsByNameOp, i as InputOf<typeof input>, ctx);
+export const searchToolsByName = (i: In, ctx: GalaxyContext) => runOperation(searchToolsByNameOp, i, ctx);

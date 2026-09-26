@@ -3,7 +3,7 @@ import type { GalaxyContext } from "../context";
 import { legacyGet } from "../legacy";
 import { paginate, shrinkPaged, validatePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, InputOf, Operation } from "./types";
+import type { AnyOperation, Operation } from "./types";
 
 /** Hand-typed: user-defined tool record from /api/unprivileged_tools. */
 export interface UserTool {
@@ -61,7 +61,4 @@ export const listUserToolsOp: Operation<typeof input, Paged<UserTool>> = {
 
 register(listUserToolsOp as AnyOperation);
 
-// A library caller may leave the paged arguments out; run() applies the same
-// defaults the schema declares for the parsed surface path.
-export const listUserTools = (i: In, ctx: GalaxyContext) =>
-  runOperation(listUserToolsOp, i as InputOf<typeof input>, ctx);
+export const listUserTools = (i: In, ctx: GalaxyContext) => runOperation(listUserToolsOp, i, ctx);

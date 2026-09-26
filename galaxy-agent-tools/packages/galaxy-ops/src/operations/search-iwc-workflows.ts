@@ -3,7 +3,7 @@ import { fetchIwcWorkflows, enrichWorkflowResult, type EnrichedIwcWorkflow } fro
 import type { GalaxyContext } from "../context";
 import { paginate, shrinkPaged, validatePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, InputOf, Operation } from "./types";
+import type { AnyOperation, Operation } from "./types";
 
 const DEFAULT_LIMIT = 20;
 // Python's ceiling for this tool; a window one surface refuses the other refuses.
@@ -61,7 +61,4 @@ export const searchIwcWorkflowsOp: Operation<typeof input, Paged<EnrichedIwcWork
 
 register(searchIwcWorkflowsOp as AnyOperation);
 
-// A library caller may leave the paged arguments out; run() applies the same
-// defaults the schema declares for the parsed surface path.
-export const searchIwcWorkflows = (i: In, ctx: GalaxyContext) =>
-  runOperation(searchIwcWorkflowsOp, i as InputOf<typeof input>, ctx);
+export const searchIwcWorkflows = (i: In, ctx: GalaxyContext) => runOperation(searchIwcWorkflowsOp, i, ctx);

@@ -9,7 +9,7 @@ import { tokenizeForSearch, BM25Okapi } from "../bm25";
 import type { GalaxyContext } from "../context";
 import { validatePagination } from "./pagination";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, InputOf, Operation } from "./types";
+import type { AnyOperation, Operation } from "./types";
 
 const DEFAULT_LIMIT = 5;
 // Python's ceiling for this tool; a window one surface refuses the other refuses.
@@ -135,7 +135,4 @@ export const recommendIwcWorkflowsOp: Operation<typeof input, Recommendations> =
 
 register(recommendIwcWorkflowsOp as AnyOperation);
 
-// A library caller may leave the paged arguments out; run() applies the same
-// defaults the schema declares for the parsed surface path.
-export const recommendIwcWorkflows = (i: In, ctx: GalaxyContext) =>
-  runOperation(recommendIwcWorkflowsOp, i as InputOf<typeof input>, ctx);
+export const recommendIwcWorkflows = (i: In, ctx: GalaxyContext) => runOperation(recommendIwcWorkflowsOp, i, ctx);

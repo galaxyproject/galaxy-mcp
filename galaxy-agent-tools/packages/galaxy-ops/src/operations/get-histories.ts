@@ -4,7 +4,7 @@ import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
 import { paginate, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, InputOf, Operation } from "./types";
+import type { AnyOperation, Operation } from "./types";
 
 type HistoryIndex = GetJson<"/api/histories">;
 type History = HistoryIndex extends readonly (infer T)[] ? T : never;
@@ -68,7 +68,4 @@ export const getHistoriesOp: Operation<typeof input, Histories> = {
 
 register(getHistoriesOp as AnyOperation);
 
-// A library caller may leave the paged arguments out; run() applies the same
-// defaults the schema declares for the parsed surface path.
-export const getHistories = (i: In, ctx: GalaxyContext) =>
-  runOperation(getHistoriesOp, i as InputOf<typeof input>, ctx);
+export const getHistories = (i: In, ctx: GalaxyContext) => runOperation(getHistoriesOp, i, ctx);

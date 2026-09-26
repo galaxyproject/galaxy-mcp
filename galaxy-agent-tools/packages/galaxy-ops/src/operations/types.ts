@@ -15,8 +15,8 @@ export type OperationDomain =
   | "iwc"
   | "pages";
 
-/** The parsed input object derived from an op's raw Zod shape. */
-export type InputOf<Shape extends ZodRawShape> = z.infer<ZodObject<Shape>>;
+/** The input side, not the parsed side: nothing validates before run(), so a default is run()'s. */
+export type InputOf<Shape extends ZodRawShape> = z.input<ZodObject<Shape>>;
 
 export interface Pagination {
   total?: number;

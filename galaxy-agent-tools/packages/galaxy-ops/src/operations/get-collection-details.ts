@@ -3,7 +3,7 @@ import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, InputOf, Operation } from "./types";
+import type { AnyOperation, Operation } from "./types";
 
 export type CollectionDetail = GetJson<"/api/dataset_collections/{hdca_id}">;
 
@@ -43,7 +43,4 @@ export const getCollectionDetailsOp: Operation<typeof input, CollectionDetail> =
 
 register(getCollectionDetailsOp as AnyOperation);
 
-// A library caller may leave the defaulted arguments out; run() applies the same
-// values the schema declares for the parsed surface path.
-export const getCollectionDetails = (i: In, ctx: GalaxyContext) =>
-  runOperation(getCollectionDetailsOp, i as InputOf<typeof input>, ctx);
+export const getCollectionDetails = (i: In, ctx: GalaxyContext) => runOperation(getCollectionDetailsOp, i, ctx);

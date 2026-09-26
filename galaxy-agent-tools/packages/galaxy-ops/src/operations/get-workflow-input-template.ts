@@ -12,7 +12,7 @@ import {
   type WorkflowSlot,
 } from "../workflow-inputs";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, InputOf, Operation } from "./types";
+import type { AnyOperation, Operation } from "./types";
 
 // ---------------------------------------------------------------------------
 // Types for the off-schema endpoints
@@ -154,7 +154,4 @@ export const getWorkflowInputTemplateOp: Operation<typeof input, WorkflowInputTe
 
 register(getWorkflowInputTemplateOp as AnyOperation);
 
-// A library caller may leave the defaulted arguments out; run() applies the same
-// values the schema declares for the parsed surface path.
-export const getWorkflowInputTemplate = (i: In, ctx: GalaxyContext) =>
-  runOperation(getWorkflowInputTemplateOp, i as InputOf<typeof input>, ctx);
+export const getWorkflowInputTemplate = (i: In, ctx: GalaxyContext) => runOperation(getWorkflowInputTemplateOp, i, ctx);
