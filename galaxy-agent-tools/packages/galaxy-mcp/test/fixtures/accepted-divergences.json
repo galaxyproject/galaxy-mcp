@@ -55,22 +55,6 @@
       "reason": "Python can write next to the dataset's own name; TS only writes to the exact filePath it is given."
     },
     {
-      "tool": "get_dataset_details",
-      "param": "include_preview",
-      "kind": "missing-ts-param",
-      "observed": "python=type=boolean required=false default=true",
-      "status": "pending-port",
-      "reason": "The TS op's own summary defers content preview to a later phase."
-    },
-    {
-      "tool": "get_dataset_details",
-      "param": "preview_lines",
-      "kind": "missing-ts-param",
-      "observed": "python=type=integer required=false default=10",
-      "status": "pending-port",
-      "reason": "The TS op's own summary defers content preview to a later phase."
-    },
-    {
       "tool": "recommend_biocontainer",
       "param": null,
       "kind": "missing-ts-tool",

@@ -11,10 +11,10 @@ Every difference carries the status and the reason recorded in `galaxy-agent-too
 | Status | Differences |
 | --- | --- |
 | `intentional` | `1` |
-| `pending-port` | `2` |
+| `pending-port` | `0` |
 | `pending-decision` | `0` |
 | `unreviewed-gap` | `7` |
-| **total** | `10` |
+| **total** | `8` |
 
 `unreviewed-gap` is the status nobody has ruled on yet. The check holds the registry to the 7 it declares, so the count cannot drift from the number; raising that number is an edit somebody has to make in the diff, and it is meant to come down, never up.
 
@@ -35,8 +35,6 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `download_dataset` | `use_default_filename` | `type=boolean required=false default=true` | -- | `missing-ts-param` | `unreviewed-gap` | Python can write next to the dataset's own name; TS only writes to the exact filePath it is given. |
 | `get_collection_details` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_dataset_details` |  | `read (tag)` | `read (hint)` |  |  |  |
-| `get_dataset_details` | `include_preview` | `type=boolean required=false default=true` | -- | `missing-ts-param` | `pending-port` | The TS op's own summary defers content preview to a later phase. |
-| `get_dataset_details` | `preview_lines` | `type=integer required=false default=10` | -- | `missing-ts-param` | `pending-port` | The TS op's own summary defers content preview to a later phase. |
 | `get_histories` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_history_contents` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_history_details` |  | `read (tag)` | `read (hint)` |  |  |  |
