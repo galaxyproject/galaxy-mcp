@@ -4,7 +4,7 @@ import type { GalaxyContext } from "../context";
 import { httpError } from "../errors";
 import { paginate, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, InputOf, Operation } from "./types";
+import type { AnyOperation, Operation } from "./types";
 
 type ContentsIndex = GetJson<"/api/histories/{history_id}/contents">;
 type ContentItem = ContentsIndex extends readonly (infer T)[] ? T : never;
@@ -35,8 +35,8 @@ const input = {
     .string()
     .default("hid-asc")
     .describe(
-      "Sort order. 'hid-asc' (default, oldest first), 'hid-dsc', 'create_time-asc', " +
-        "'create_time-dsc', 'update_time-dsc', 'name-asc'.",
+      "Sort order: hid, create_time, update_time, name, extension or size, followed by " +
+        "'-asc' or '-dsc'. 'hid-asc' (default) is oldest first.",
     ),
 };
 type In = {
@@ -157,7 +157,4 @@ export const getHistoryContentsOp: Operation<typeof input, HistoryContents> = {
 
 register(getHistoryContentsOp as AnyOperation);
 
-// A library caller may leave the paged arguments out; run() applies the same
-// defaults the schema declares for the parsed surface path.
-export const getHistoryContents = (i: In, ctx: GalaxyContext) =>
-  runOperation(getHistoryContentsOp, i as InputOf<typeof input>, ctx);
+export const getHistoryContents = (i: In, ctx: GalaxyContext) => runOperation(getHistoryContentsOp, i, ctx);
