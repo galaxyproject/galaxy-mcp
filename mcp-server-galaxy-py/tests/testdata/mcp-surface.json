@@ -248,7 +248,7 @@
         "properties": {
           "dataset_id": {
             "type": "string",
-            "description": "Galaxy dataset ID - a hexadecimal hash string identifying the dataset\n       (e.g., 'f2db41e1fa331b3e', typically 16 characters)"
+            "description": "Galaxy dataset ID - a hexadecimal hash string identifying the dataset\n       (a 16-character hex string)"
           },
           "file_path": {
             "anyOf": [
@@ -344,7 +344,7 @@
         "properties": {
           "dataset_id": {
             "type": "string",
-            "description": "Galaxy dataset ID - a hexadecimal hash string identifying the dataset\n       (e.g., 'f2db41e1fa331b3e', typically 16 characters)"
+            "description": "Galaxy dataset ID - a hexadecimal hash string identifying the dataset\n       (a 16-character hex string)"
           },
           "include_preview": {
             "default": true,
@@ -424,7 +424,7 @@
         "properties": {
           "history_id": {
             "type": "string",
-            "description": "Galaxy history ID - a hexadecimal hash string identifying the history\n       (e.g., '1cd8e2f6b131e5aa', typically 16 characters)"
+            "description": "Galaxy history ID - a hexadecimal hash string identifying the history\n       (a 16-character hex string)"
           },
           "limit": {
             "default": 100,
@@ -479,7 +479,7 @@
         "properties": {
           "history_id": {
             "type": "string",
-            "description": "Galaxy history ID - a hexadecimal hash string identifying the history\n       (e.g., '1cd8e2f6b131e5aa', typically 16 characters)"
+            "description": "Galaxy history ID - a hexadecimal hash string identifying the history\n       (a 16-character hex string)"
           }
         },
         "required": [
@@ -517,7 +517,7 @@
               }
             ],
             "default": null,
-            "description": "Specific workflow invocation ID to view - a hexadecimal hash string\n          (e.g., 'a1b2c3d4e5f6789a', typically 16 characters, optional)"
+            "description": "Specific workflow invocation ID to view - a hexadecimal hash string\n          (a 16-character hex string, optional)"
           },
           "workflow_id": {
             "anyOf": [
@@ -529,7 +529,7 @@
               }
             ],
             "default": null,
-            "description": "Filter invocations by workflow ID - a hexadecimal hash string\n        (e.g., 'b2c3d4e5f6789abc', typically 16 characters, optional)"
+            "description": "Filter invocations by workflow ID - a hexadecimal hash string\n        (a 16-character hex string, optional)"
           },
           "history_id": {
             "anyOf": [
@@ -541,7 +541,7 @@
               }
             ],
             "default": null,
-            "description": "Filter invocations by history ID - a hexadecimal hash string\n       (e.g., '1cd8e2f6b131e5aa', typically 16 characters, optional)"
+            "description": "Filter invocations by history ID - a hexadecimal hash string\n       (a 16-character hex string, optional)"
           },
           "limit": {
             "anyOf": [
@@ -633,7 +633,7 @@
         "properties": {
           "dataset_id": {
             "type": "string",
-            "description": "Galaxy dataset ID - a hexadecimal hash string identifying the dataset\n       (e.g., 'f2db41e1fa331b3e', typically 16 characters)"
+            "description": "Galaxy dataset ID - a hexadecimal hash string identifying the dataset\n       (a 16-character hex string)"
           },
           "history_id": {
             "anyOf": [
@@ -645,7 +645,7 @@
               }
             ],
             "default": null,
-            "description": "Galaxy history ID containing the dataset - optional for performance optimization\n       (e.g., '1cd8e2f6b131e5aa', typically 16 characters)"
+            "description": "Galaxy history ID containing the dataset - optional for performance optimization\n       (a 16-character hex string)"
           }
         },
         "required": [
@@ -1424,7 +1424,7 @@
         "properties": {
           "history_id": {
             "type": "string",
-            "description": "Galaxy history ID (16-char hex string like '1cd8e2f6b131e5aa').\n        Get from create_history() or get_histories()."
+            "description": "Galaxy history ID (a 16-character hex string).\n        Get from create_history() or get_histories()."
           },
           "tool_id": {
             "type": "string",
@@ -1781,7 +1781,7 @@
               }
             ],
             "default": null,
-            "description": "Galaxy history ID where to upload the file - optional, uses current history\n       (e.g., '1cd8e2f6b131e5aa', typically 16 characters)"
+            "description": "Galaxy history ID where to upload the file - optional, uses current history\n       (a 16-character hex string)"
           },
           "file_type": {
             "default": "auto",
