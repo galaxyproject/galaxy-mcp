@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { runInNewContext } from "node:vm";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server";
@@ -137,14 +138,14 @@ describe("an integer argument, decoded the way the other surface decodes it", ()
   });
 
   it("takes null for the one integer the other surface declares as nullable", async () => {
-    const { isError, text } = await call("get_workflow_details", { workflowId: "w1", version: null });
+    const { isError, text } = await call("get_workflow_details", { workflow_id: "w1", version: null });
     expect(isError, text).toBe(false);
     const { isError: refused } = await call("list_pages", { offset: null as never });
     expect(refused).toBe(true);
   });
 
   it("takes a converted version on the wire too", async () => {
-    const { isError, text } = await call("get_workflow_details", { workflowId: "w1", version: "3" });
+    const { isError, text } = await call("get_workflow_details", { workflow_id: "w1", version: "3" });
     expect(isError, text).toBe(false);
     expect(query("/api/workflows/w1")).toContain("version=3");
   });
@@ -257,9 +258,55 @@ describe("an arguments container that is not an object", () => {
   });
 });
 
+/**
+ * And an arguments container that is an object, just not one this realm parsed.
+ *
+ * Same transport as the list above and the opposite answer. A host that runs untrusted text in a
+ * `vm` context hands over an object whose prototype is that context's `Object.prototype`, and the
+ * SDK's record parser takes it like any other -- so the decoding has to take it too, or a call the
+ * other server accepts is refused here with "expected number, received string". It was, for as
+ * long as the container was decided by this realm's prototype.
+ */
+describe("an arguments container another realm parsed", () => {
+  it("decodes like the same argument list parsed here", async () => {
+    const text = '{"limit":"5"}';
+    const elsewhere = runInNewContext("JSON.parse(text)", { text }) as Record<string, unknown>;
+    // The probe is only a probe if the object really is foreign.
+    expect(Object.getPrototypeOf(elsewhere)).not.toBe(Object.prototype);
+    for (const args of [elsewhere, JSON.parse(text) as Record<string, unknown>]) {
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      const server = buildServer({ baseUrl: "https://g.example", apiKey: "K" });
+      await server.connect(serverTransport);
+      const replies: Array<Record<string, unknown>> = [];
+      let arrived: () => void = () => {};
+      const answered = new Promise<void>((resolve) => (arrived = resolve));
+      clientTransport.onmessage = (message) => {
+        replies.push(message as Record<string, unknown>);
+        arrived();
+      };
+      await clientTransport.start();
+      await clientTransport.send({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "list_history_ids", arguments: args },
+      } as never);
+      await Promise.race([answered, new Promise((resolve) => setTimeout(resolve, 2_000))]);
+      await server.close();
+
+      const reply = replies[0] as { result?: { isError?: boolean; content?: Array<{ text?: string }> } };
+      const answer = (reply.result?.content ?? []).map((c) => c.text ?? "").join("");
+      expect(reply.result?.isError, answer).toBe(false);
+      const page = JSON.parse(answer) as { data: { items: unknown[]; pagination: { limit: number } } };
+      expect(page.data.pagination.limit).toBe(5);
+      expect(page.data.items).toHaveLength(5);
+    }
+  });
+});
+
 describe("a boolean argument, decoded the way the other surface decodes it", () => {
   it.each(BOOLEANS_ACCEPTED)("takes %j as %j on get_tool_details", async (given, want) => {
-    const { isError, text } = await call("get_tool_details", { toolId: "t1", ioDetails: given as never });
+    const { isError, text } = await call("get_tool_details", { tool_id: "t1", io_details: given as never });
     expect(isError, text).toBe(false);
     expect(query("/api/tools/t1")).toContain(`io_details=${want}`);
   });
@@ -272,7 +319,7 @@ describe("a boolean argument, decoded the way the other surface decodes it", () 
   });
 
   it.each(BOOLEANS_REFUSED)("refuses %j, as pydantic does", async (given) => {
-    const { isError, text } = await call("get_tool_details", { toolId: "t1", ioDetails: given as never });
+    const { isError, text } = await call("get_tool_details", { tool_id: "t1", io_details: given as never });
     expect(isError).toBe(true);
     expect(text).toContain("Input validation error");
   });

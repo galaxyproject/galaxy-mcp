@@ -131,6 +131,27 @@ describe("the context's Galaxy version lookup", () => {
     expect(report.error?.kind).toBe("connection");
   });
 
+  /**
+   * The same hung route, from a fetch that also ignores the cancellation -- which is the case
+   * the deadline has to survive on its own. Giving up is the probe's decision, so it cannot
+   * depend on the request coming back to report it: on a probe that waited for the abort to
+   * arrive through fetch, this test hangs until the runner's own timeout, and that is exactly
+   * the flake it was written for.
+   */
+  it("gives up on a version route that ignores the cancellation as well", async () => {
+    const ctx = createGalaxyContext({
+      baseUrl: "https://g.example",
+      apiKey: "K",
+      versionProbeTimeoutMs: 20,
+      fetchImpl: (() => new Promise(() => {})) as unknown as typeof fetch,
+    });
+    const report = await ctx.galaxyVersion!();
+    expect(report.version).toBeUndefined();
+    expect(report.source).toBe("unknown");
+    expect(report.error?.kind).toBe("connection");
+    expect(report.error?.message).toContain("gave up after 20ms");
+  });
+
   it("gives up when the caller cancels", async () => {
     const ac = new AbortController();
     const ctx = createGalaxyContext({

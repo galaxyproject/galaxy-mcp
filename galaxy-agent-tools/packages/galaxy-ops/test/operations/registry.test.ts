@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { runWithEnvelope } from "../../src/operations/registry";
+import { runWithEnvelope, spellParamNames } from "../../src/operations/registry";
 import type { Operation } from "../../src/operations/types";
 import { GalaxyNotFoundError } from "../../src/errors";
 import { createGalaxyContext } from "../../src/context";
@@ -54,5 +54,49 @@ describe("runWithEnvelope", () => {
     const r = await runWithEnvelope(failOp as any, {}, ctx); // failOp throws GalaxyNotFoundError
     expect(r.success).toBe(false);
     expect(r.errorKind).toBe("not_found");
+  });
+});
+
+/**
+ * The op's key is the one spelling written down; every surface respells it on the way out.
+ * What matters here is where the rewriting STOPS -- these sentences are full of words that
+ * are also parameter names somewhere, and a substitution that took them would be a bug.
+ */
+describe("spellParamNames", () => {
+  const input = {
+    sectionId: z.string(),
+    historyId: z.string(),
+    name: z.string(),
+    inputs: z.record(z.string(), z.unknown()),
+  };
+  const shout = (text: string) => spellParamNames(text, input, (key) => `<${key}>`);
+
+  it("respells the op's own camelCase parameters", () => {
+    expect(shout("Pass sectionId to list one section's tools.")).toBe(
+      "Pass <sectionId> to list one section's tools.",
+    );
+    expect(shout("ignored if historyId is provided")).toBe("ignored if <historyId> is provided");
+  });
+
+  it("leaves the single-word parameters alone, because they are also English", () => {
+    expect(shout("List the histories (id, name, counts) and their inputs.")).toBe(
+      "List the histories (id, name, counts) and their inputs.",
+    );
+  });
+
+  it("leaves a camelCase word that is not a parameter of this op alone", () => {
+    expect(shout("data refs as {src:'hda',id}, someNestedKey and all")).toBe(
+      "data refs as {src:'hda',id}, someNestedKey and all",
+    );
+  });
+
+  it("matches whole words only", () => {
+    expect(shout("historyIds and prehistoryId are not historyId")).toBe(
+      "historyIds and prehistoryId are not <historyId>",
+    );
+  });
+
+  it("hands back text it has nothing to do with, unchanged", () => {
+    expect(spellParamNames("nothing here", { limit: z.number() }, () => "!")).toBe("nothing here");
   });
 });

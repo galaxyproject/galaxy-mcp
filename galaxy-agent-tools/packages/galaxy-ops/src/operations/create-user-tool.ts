@@ -1,6 +1,6 @@
-import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { GalaxyConnectionError } from "../errors";
+import { jsonObject } from "../json-object";
 import { legacyPost } from "../legacy";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
@@ -17,11 +17,9 @@ export interface CreatedUserTool {
 const REQUIRED_FIELDS = ["class", "id", "version", "name", "shell_command", "container"] as const;
 
 const input = {
-  representation: z
-    .record(z.string(), z.unknown())
-    .describe(
-      "a GalaxyUserTool representation: {class:'GalaxyUserTool', id, version, name, shell_command, container:'<image>'}",
-    ),
+  representation: jsonObject().describe(
+    "a GalaxyUserTool representation: {class:'GalaxyUserTool', id, version, name, shell_command, container:'<image>'}",
+  ),
 };
 type In = { representation: Record<string, unknown> };
 

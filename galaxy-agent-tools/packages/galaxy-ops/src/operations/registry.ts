@@ -72,6 +72,32 @@ export function describeOperation(op: { summary: string; requires?: { galaxy: st
   return op.requires ? `${op.summary} ${requirementSentence(op.requires.galaxy)}` : op.summary;
 }
 
+/**
+ * Help text with the op's own parameter names spelled the way the surface asking spells them.
+ *
+ * One sentence has to be true in three dialects: the MCP wire takes `section_id`, the command
+ * line takes `--section-id`, and an op called from TypeScript takes `sectionId`. Descriptions
+ * are written in the op's own key and each surface respells them on the way out, so a tool
+ * that tells a caller what to pass names something that caller can actually pass.
+ *
+ * Only the camelCase keys are respelled. A single-word key reads the same on every surface,
+ * and half of them -- `name`, `inputs`, `version`, `content`, `path` -- are ordinary English
+ * in these sentences, where substituting them would wreck the prose rather than fix it.
+ */
+export function spellParamNames(
+  text: string,
+  input: ZodRawShape,
+  spell: (key: string) => string,
+): string {
+  // Longest first, so a key that is a prefix of another cannot claim the shorter match.
+  // The keys are TypeScript identifiers, which is why they go into the pattern unescaped.
+  const keys = Object.keys(input)
+    .filter((key) => /[A-Z]/.test(key))
+    .sort((a, b) => b.length - a.length);
+  if (keys.length === 0) return text;
+  return text.replace(new RegExp(`\\b(?:${keys.join("|")})\\b`, "g"), (key) => spell(key));
+}
+
 /** Wrap an op for a surface: catch typed errors, apply project() metadata, fit the budget. */
 export async function runWithEnvelope<Shape extends ZodRawShape, O>(
   op: Operation<Shape, O>,

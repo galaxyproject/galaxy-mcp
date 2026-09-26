@@ -3,6 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { allOperations, requirementSentence } from "@galaxyproject/galaxy-ops";
 import { buildServer, toolNames, toolAnnotations, annotationsFor, toolResult } from "../src/server";
+import { inWireNames } from "../src/wire-names";
 
 describe("MCP surface is a mechanical projection", () => {
   it("registers one tool per registered op", () => {
@@ -40,7 +41,9 @@ describe("MCP surface is a mechanical projection", () => {
       const byName = new Map(tools.map((t) => [t.name, t.description ?? ""]));
       for (const op of allOperations) {
         const described = byName.get(op.name) ?? "";
-        expect(described.startsWith(op.summary), op.name).toBe(true);
+        // The op's summary, with any parameter it names spelled the way this wire takes it,
+        // and then the bound. The spelling has tests of its own in wire-names.test.ts.
+        expect(described.startsWith(inWireNames(op.summary, op.input)), op.name).toBe(true);
         expect(described.includes("Requires Galaxy"), op.name).toBe(op.requires !== undefined);
         // The bound it names, not merely that it names one. The parity check reads this
         // side's requirement off the op, because MCP has no field for it, and that is

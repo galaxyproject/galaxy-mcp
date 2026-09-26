@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { z, type ZodRawShape, type ZodTypeAny } from "zod";
-import { laxenLikePydantic } from "@galaxyproject/galaxy-ops";
+import { isJsonObjectSchema, laxenLikePydantic, spellParamNames } from "@galaxyproject/galaxy-ops";
 
 export type FieldKind = "positional" | "option" | "boolean" | "json" | "array";
 
@@ -24,14 +24,22 @@ function isOptional(schema: ZodTypeAny): boolean {
   return schema.safeParse(undefined).success;
 }
 
-const isJsonTag = (tag: string | undefined) => tag === "record" || tag === "object";
+/**
+ * A field whose value is a JSON object, whichever way the op said so: a `z.object`, a
+ * `z.record`, or a `jsonObject()` -- which is a `z.unknown()` underneath, so its def cannot
+ * be asked and `isJsonObjectSchema` reads the object it advertises instead.
+ */
+const takesJson = (schema: ZodTypeAny): boolean => {
+  const tag = typeTag(schema);
+  return tag === "record" || tag === "object" || isJsonObjectSchema(unwrap(schema));
+};
 
 export function classifyField(schema: ZodTypeAny): FieldKind {
   const tag = typeTag(schema);
-  if (isJsonTag(tag)) return "json";
+  if (takesJson(schema)) return "json";
   // A field that takes an object OR the JSON string of one is still a JSON flag here, or
   // `--inputs @file.json` stops reading the file and hands the op the literal "@file.json".
-  if (unionMembers(schema)?.some((m) => isJsonTag(typeTag(m)))) return "json";
+  if (unionMembers(schema)?.some(takesJson)) return "json";
   if (tag === "boolean") return "boolean";
   // A list is a repeatable flag whether it is required or not. As a positional it could only
   // ever arrive as one string, which every array schema here refuses -- so an op that takes
@@ -43,6 +51,24 @@ export function classifyField(schema: ZodTypeAny): FieldKind {
 /** camelCase -> kebab-case for flag names. */
 export function flagName(key: string): string {
   return key.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase());
+}
+
+/** What a caller writes on the command line for one of an op's inputs. */
+export function cliParamName(input: ZodRawShape, key: string): string {
+  const schema = input[key] as ZodTypeAny | undefined;
+  if (schema === undefined) return key;
+  return classifyField(schema) === "positional" ? `<${key}>` : `--${flagName(key)}`;
+}
+
+/**
+ * Help text with the op's parameter names spelled the way this CLI takes them.
+ *
+ * A description that says "pass sectionId" names nothing a command line accepts; the flag is
+ * `--section-id`, and over MCP the same sentence says `section_id`. One sentence, respelled
+ * per surface -- see `spellParamNames` for why only the camelCase keys move.
+ */
+export function inCliNames(text: string, input: ZodRawShape): string {
+  return spellParamNames(text, input, (key) => cliParamName(input, key));
 }
 
 function readJsonArg(raw: string): unknown {

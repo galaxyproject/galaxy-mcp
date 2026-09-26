@@ -402,8 +402,9 @@ pnpm parity:report   # regenerate PARITY.md (see below)
 Lockstep with the Python MCP server is a check rather than a good intention:
 `pnpm -r test` compares what this package advertises against that server's
 generated surface manifest -- which tools exist, what parameters they take, their
-types, requiredness and declared defaults, whether a tool says it changes
-anything, and what it says it needs from the Galaxy it runs against. Anything the
+types, requiredness and declared defaults, whether a tool takes parameters it does
+not declare, whether it says it changes anything, and what it says it needs from
+the Galaxy it runs against. Anything the
 two disagree about has to be listed in
 `packages/galaxy-mcp/test/fixtures/accepted-divergences.json` with a status and a
 reason, and an entry the surfaces no longer support fails the check too, so the

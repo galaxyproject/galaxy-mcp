@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { type ZodTypeAny } from "zod";
 import { buildProgram } from "../src/program";
+import { classifyField, inCliNames } from "../src/flags";
 import { allOperations, createGalaxyContext } from "@galaxyproject/galaxy-ops";
 
 function ctxFactory() {
@@ -101,7 +103,10 @@ describe("buildProgram", () => {
     const described = new Map(program.commands.map((c) => [c.name(), c.description()]));
     for (const op of allOperations) {
       const text = described.get(op.name) ?? "";
-      expect(text.startsWith(op.summary), op.name).toBe(true);
+      // The op's summary, with any parameter it names spelled the way a command line takes
+      // it, and then the bound. The spelling itself is held to the two tests at the bottom
+      // of this file, which derive it rather than agreeing with the code that applies it.
+      expect(text.startsWith(inCliNames(op.summary, op.input)), op.name).toBe(true);
       expect(text.includes("Requires Galaxy"), op.name).toBe(op.requires !== undefined);
     }
     expect(described.get("list_page_revisions")).toContain("Requires Galaxy 26.1 or newer.");
@@ -281,5 +286,117 @@ describe("buildProgram", () => {
     expect(out.mock.calls.flat().join("")).toContain('"success": true');
     expect(process.exitCode === 0 || process.exitCode === undefined).toBe(true);
     out.mockRestore();
+  });
+});
+
+/**
+ * The names this surface gives an op's inputs.
+ *
+ * The MCP server advertises the same parameters under the Python spelling (see
+ * `galaxy-mcp/src/wire-names.ts`), and that rename stops there: a flag is the kebab-case of
+ * the op's own key, a positional is the key itself, and neither moved when the other surface
+ * was renamed. Derived here rather than imported from `flagName`, so a change to the
+ * derivation is a failure rather than an agreement.
+ */
+describe("the names the CLI gives an op's inputs", () => {
+  const commands = new Map(
+    buildProgram({ makeContext: ctxFactory }).commands.map((c) => [c.name(), c]),
+  );
+  const kebab = (key: string) => key.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase());
+
+  it("names every flag after the op's own key, in kebab-case", () => {
+    for (const op of allOperations) {
+      const expected = Object.entries(op.input).flatMap(([key, schema]) => {
+        const kind = classifyField(schema as ZodTypeAny);
+        if (kind === "positional") return [];
+        return kind === "boolean" ? [`--${kebab(key)}`, `--no-${kebab(key)}`] : [`--${kebab(key)}`];
+      });
+      expect(
+        (commands.get(op.name)?.options ?? []).map((o) => o.long),
+        op.name,
+      ).toEqual(expected);
+    }
+  });
+
+  it("names every positional after the op's own key", () => {
+    for (const op of allOperations) {
+      const expected = Object.entries(op.input)
+        .filter(([, schema]) => classifyField(schema as ZodTypeAny) === "positional")
+        .map(([key]) => key);
+      expect(
+        (commands.get(op.name)?.registeredArguments ?? []).map((a) => a.name()),
+        op.name,
+      ).toEqual(expected);
+    }
+  });
+
+  /**
+   * And a name it does not know is refused here too -- commander's own behaviour, pinned
+   * because it is the other half of the MCP surface closing its tool schemas: neither
+   * surface may quietly ignore an argument somebody meant.
+   *
+   * `exitOverride` is the test's, not the CLI's: commander answers a usage error by writing
+   * to stderr and exiting the process, which inside vitest would take the worker with it.
+   * What is pinned is that it is a usage error at all, and that the op never runs.
+   */
+  it("refuses a flag the op does not have, without running anything", async () => {
+    const asked: string[] = [];
+    const program = buildProgram({ makeContext: recordingContext(asked) });
+    for (const cmd of [program, ...program.commands]) {
+      cmd.exitOverride();
+      cmd.configureOutput({ writeErr: () => {}, writeOut: () => {} });
+    }
+
+    await expect(
+      program.parseAsync(["node", "galaxy-cli", "get_histories", "--history-id", "h1"]),
+    ).rejects.toMatchObject({ code: "commander.unknownOption" });
+    expect(asked).toEqual([]);
+  });
+
+  /**
+   * And the prose says the same thing the flags do. A description is written in the op's own
+   * key -- `sectionId` -- because the ops are a TypeScript library; every surface respells it
+   * on the way out, and a command line that says "pass sectionId" is naming something no
+   * command line accepts. A positional keeps the key, spelled `<historyId>` the way the usage
+   * line spells it, which is why the test looks for a BARE one.
+   */
+  it("names a parameter the way this surface takes it, in the help as well", () => {
+    const camel = [
+      ...new Set(allOperations.flatMap((op) => Object.keys(op.input).filter((k) => /[A-Z]/.test(k)))),
+    ];
+    const bare = (text: string) =>
+      camel.filter((key) => new RegExp(`(?<![<\\w-])${key}\\b`).test(text));
+    for (const op of allOperations) {
+      const cmd = commands.get(op.name)!;
+      expect(bare(cmd.description()), op.name).toEqual([]);
+      for (const option of cmd.options) expect(bare(option.description), option.long).toEqual([]);
+      for (const arg of cmd.registeredArguments) {
+        expect(bare(arg.description), `${op.name} ${arg.name()}`).toEqual([]);
+      }
+    }
+  });
+
+  it("says the flag in the sentences that used to name the key", () => {
+    // Commander wraps help to the terminal width, so the sentences are read unwrapped.
+    const help = (name: string) => commands.get(name)!.helpInformation().replace(/\s+/g, " ");
+    expect(help("get_tool_panel")).toContain("Pass --section-id to list one section");
+    expect(help("get_tool_panel")).toContain("when --section-id is absent");
+    expect(help("get_tool_panel")).toContain("to a --section-id call");
+    expect(help("list_pages")).toContain("Pass --history-id to list only");
+    expect(help("create_page")).toContain("With --history-id it is a notebook");
+    expect(help("invoke_workflow")).toContain("ignored if --history-id is provided");
+  });
+
+  it("spells a few of them out, so the whole set cannot drift together", () => {
+    const flags = (name: string) => (commands.get(name)?.options ?? []).map((o) => o.flags);
+    expect(flags("get_tool_panel")).toContain("--section-id <value>");
+    expect(flags("get_tool_details")).toContain("--io-details");
+    expect(flags("download_dataset")).toContain("--file-path <value>");
+    expect(flags("list_pages")).toContain("--show-published");
+    expect(flags("get_page")).toContain("--include-rendered");
+    expect(flags("list_page_revisions")).toContain("--sort-desc");
+    expect((commands.get("get_history_details")?.registeredArguments ?? []).map((a) => a.name())).toEqual([
+      "historyId",
+    ]);
   });
 });

@@ -47,6 +47,7 @@ const KINDS = [
   "requires-mismatch",
   "missing-builtin-tool",
   "missing-builtin-param",
+  "extra-params-mismatch",
 ];
 
 /** The switches the check itself runs with, so a test cannot prove a shape CI never compares. */
@@ -458,6 +459,55 @@ describe("missing parameter divergences", () => {
   });
 });
 
+/**
+ * Whether a tool takes parameters it does not declare. Python closes every tool; this
+ * package closes every tool as of the release that renamed them, and before that it closed
+ * none -- so the comparison has to be able to see the difference it used to leave out.
+ */
+describe("parameters a tool does not declare", () => {
+  const tool = (additionalProperties?: unknown): Record<string, ToolContract> => ({
+    example: {
+      inputSchema: {
+        type: "object",
+        properties: { title: { type: "string" } },
+        ...(additionalProperties === undefined ? {} : { additionalProperties }),
+      } as JsonSchema,
+      annotations: {},
+    },
+  });
+
+  it("reports the tool when one surface closes it and the other does not", () => {
+    expect(compare(tool(false), tool(undefined), RULES)).toEqual([
+      {
+        tool: "example",
+        param: null,
+        kind: "extra-params-mismatch",
+        observed: "python=closed typescript=open",
+      },
+    ]);
+    expect(compare(tool(undefined), tool(false), RULES)).toEqual([
+      {
+        tool: "example",
+        param: null,
+        kind: "extra-params-mismatch",
+        observed: "python=open typescript=closed",
+      },
+    ]);
+  });
+
+  it("reports nothing when the two agree, written either way", () => {
+    expect(compare(tool(false), tool(false), RULES)).toEqual([]);
+    expect(compare(tool(undefined), tool(true), RULES)).toEqual([]);
+  });
+
+  it("stops the run on one it can read as neither closed nor open", () => {
+    const shaped = tool({ type: "string" });
+    expect(() => compare(shaped, shaped, RULES)).toThrow(
+      /example \(python\).*"additionalProperties".*closed/s,
+    );
+  });
+});
+
 describe("the top of an input schema", () => {
   const composed = (): ToolContract => ({
     inputSchema: {
@@ -848,9 +898,6 @@ describe("names every JavaScript object already answers to", () => {
   });
 
   it("reports a parameter only one side declares, whatever it is called", () => {
-    // Compared under the names the surfaces write, because the snake-case rule
-    // renames most of these and what is at stake here is the lookup, not the spelling.
-    const asWritten: Normalization = { ...RULES, snakeCaseParamNames: false };
     for (const name of INHERITED) {
       // JSON.parse writes `__proto__` as an ordinary key; an object literal would
       // have set the prototype and left no parameter behind to compare.
@@ -860,17 +907,13 @@ describe("names every JavaScript object already answers to", () => {
         example: { inputSchema: { type: "object", properties: {} }, annotations: {} },
       };
 
-      expect(compare(python, typescript, asWritten), name).toEqual([
+      expect(compare(python, typescript, RULES), name).toEqual([
         {
           tool: "example",
           param: name,
           kind: "missing-ts-param",
           observed: "python=type=string required=false default=none",
         },
-      ]);
-      // And under the switches CI runs with, whichever spelling they leave.
-      expect(compare(python, typescript, RULES).map((d) => d.kind), name).toEqual([
-        "missing-ts-param",
       ]);
     }
   });
