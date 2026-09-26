@@ -1,26 +1,59 @@
+import { z } from "zod";
 import type { GalaxyContext } from "../context";
+import { paginate, shrinkPaged, validatePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
-import { getHistoriesOp } from "./get-histories";
-import type { AnyOperation, Operation } from "./types";
+import { getHistories } from "./get-histories";
+import type { AnyOperation, InputOf, Operation } from "./types";
 
 export interface HistoryRef { id: string; name: string; }
 
-const input = {};
+const DEFAULT_LIMIT = 100;
+// Python's ceiling for this tool; a window one surface refuses the other refuses.
+const MAX_LIMIT = 500;
 
-async function run(_in: Record<string, never>, ctx: GalaxyContext): Promise<HistoryRef[]> {
-  const histories = (await runOperation(getHistoriesOp, {}, ctx)) as Array<{ id?: string; name?: string }>;
-  return histories.map((h) => ({ id: h.id ?? "", name: h.name ?? "" }));
+const input = {
+  limit: z.number()
+    .int()
+    .default(DEFAULT_LIMIT)
+    .describe(`Histories to return per page (default ${DEFAULT_LIMIT}, max ${MAX_LIMIT})`),
+  offset: z.number()
+    .int()
+    .default(0)
+    .describe("Skip the first N histories. Pass pagination.nextOffset for the next page."),
+};
+type In = { limit?: number; offset?: number };
+
+async function run(i: In, ctx: GalaxyContext): Promise<Paged<HistoryRef>> {
+  const limit = i.limit ?? DEFAULT_LIMIT;
+  const offset = i.offset ?? 0;
+  validatePagination(limit, offset, { maxLimit: MAX_LIMIT });
+  // get_histories pages too, so take its whole first page: with no limit it puts
+  // everything in one, which is what this listing needs to count and slice.
+  const { items } = await getHistories({}, ctx);
+  const histories = items as Array<{ id?: string; name?: string }>;
+  const rows = histories.map((h) => ({ id: h.id ?? "", name: h.name ?? "" }));
+  return paginate(rows, { limit, offset, noun: "histories" });
 }
 
-export const listHistoryIdsOp: Operation<typeof input, HistoryRef[]> = {
+export const listHistoryIdsOp: Operation<typeof input, Paged<HistoryRef>> = {
   name: "list_history_ids",
   domain: "histories",
-  summary: "List just the id and name of each history (compact picker for agents).",
+  summary: "List just the id and name of each history (compact picker for agents), one page at a time.",
   input,
   run,
-  project: (rows) => ({ message: `${rows.length} histor${rows.length === 1 ? "y" : "ies"}` }),
+  budget: {
+    rows: (out) => out.items.length,
+    shrink: (out, keep) => shrinkPaged(out, keep, "histories"),
+  },
+  project: (out) => ({
+    message: `${out.items.length} histor${out.items.length === 1 ? "y" : "ies"}`,
+    pagination: out.pagination,
+  }),
 };
 
 register(listHistoryIdsOp as AnyOperation);
 
-export const listHistoryIds = (i: Record<string, never>, ctx: GalaxyContext) => runOperation(listHistoryIdsOp, i, ctx);
+// A library caller may leave the paged arguments out; run() applies the same
+// defaults the schema declares for the parsed surface path.
+export const listHistoryIds = (i: In, ctx: GalaxyContext) =>
+  runOperation(listHistoryIdsOp, i as InputOf<typeof input>, ctx);

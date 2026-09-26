@@ -22,6 +22,16 @@ export interface Pagination {
   total?: number;
   offset?: number;
   limit?: number;
+  /** Items on this page. Absent on ops that do not window. */
+  returned?: number;
+  hasNext?: boolean;
+  hasPrevious?: boolean;
+  nextOffset?: number;
+  previousOffset?: number;
+  /** One sentence telling an agent where it is and how to get the next page. */
+  helperText?: string;
+  /** The page was cut to fit the output budget, not because there is nothing more. */
+  trimmedForSize?: boolean;
 }
 
 /**
@@ -45,6 +55,14 @@ export interface Operation<Shape extends ZodRawShape, O> {
   /** Destructive (delete/cancel) ops set this true (drives MCP destructiveHint). */
   readonly destructive?: boolean;
   run(input: InputOf<Shape>, ctx: GalaxyContext): Promise<O>;
+  /**
+   * How to cut this op's page down, for the ops the Python server budgets.
+   *
+   * Set it and the surface measures the serialised result and trims until it fits
+   * the output budget; leave it off and the result goes out whatever size it is,
+   * which is what the two ops Python does not budget do.
+   */
+  budget?: { rows(data: O): number; shrink(data: O, keep: number): O };
   project?(output: O, input: InputOf<Shape>): { message?: string; pagination?: Pagination };
 }
 

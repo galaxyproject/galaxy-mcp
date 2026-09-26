@@ -19,7 +19,7 @@
   },
   "ratchet": {
     "$comment": "unreviewed-gap is the one status nobody has ruled on, so it is the one meant to go only down. This number is how many of them the registry is allowed to hold: the check fails when there are more, and fails asking for this number to come down when there are fewer, so the count and the number cannot drift apart. What no check can do is stop somebody raising both together -- that edit is in the diff, and refusing it is a reviewer's job. A gap found from here on wants a status somebody reviewed and a reason, not a bigger number.",
-    "unreviewedGaps": 24
+    "unreviewedGaps": 17
   },
   "divergences": [
     {
@@ -79,54 +79,6 @@
       "reason": "The TS op's own summary defers content preview to a later phase."
     },
     {
-      "tool": "get_histories",
-      "param": "offset",
-      "kind": "default-mismatch",
-      "observed": "python=0 typescript=none",
-      "status": "unreviewed-gap",
-      "reason": "TS leaves offset unset and takes Galaxy's default of 0, which is the same value Python sends; only the declaration differs."
-    },
-    {
-      "tool": "get_history_contents",
-      "param": "deleted",
-      "kind": "default-mismatch",
-      "observed": "python=false typescript=none",
-      "status": "unreviewed-gap",
-      "reason": "Python pins deleted=False; TS leaves the filter unset, so Galaxy decides and the same call can return a different set of items."
-    },
-    {
-      "tool": "get_history_contents",
-      "param": "limit",
-      "kind": "default-mismatch",
-      "observed": "python=100 typescript=none",
-      "status": "unreviewed-gap",
-      "reason": "Python caps the listing at 100 items; TS leaves limit unset, so a large history comes back unbounded."
-    },
-    {
-      "tool": "get_history_contents",
-      "param": "offset",
-      "kind": "default-mismatch",
-      "observed": "python=0 typescript=none",
-      "status": "unreviewed-gap",
-      "reason": "TS leaves offset unset and takes Galaxy's default of 0, which is the same value Python sends; only the declaration differs."
-    },
-    {
-      "tool": "get_history_contents",
-      "param": "order",
-      "kind": "missing-ts-param",
-      "observed": "python=type=string required=false default=\"hid-asc\"",
-      "status": "unreviewed-gap",
-      "reason": "Python orders by hid-asc and lets you change it; TS has no ordering control."
-    },
-    {
-      "tool": "get_history_contents",
-      "param": "visible",
-      "kind": "default-mismatch",
-      "observed": "python=true typescript=none",
-      "status": "unreviewed-gap",
-      "reason": "Python pins visible=True; TS leaves the filter unset, so Galaxy decides and the same call can return a different set of items."
-    },
-    {
       "tool": "get_invocations",
       "param": "history_id",
       "kind": "missing-ts-param",
@@ -175,22 +127,6 @@
       "reason": "The TS op is the detail-by-id read only; its own comment defers listing and filtering to a later version."
     },
     {
-      "tool": "get_iwc_workflows",
-      "param": "limit",
-      "kind": "missing-ts-param",
-      "observed": "python=type=integer required=false default=20",
-      "status": "pending-port",
-      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
-    },
-    {
-      "tool": "get_iwc_workflows",
-      "param": "offset",
-      "kind": "missing-ts-param",
-      "observed": "python=type=integer required=false default=0",
-      "status": "pending-port",
-      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
-    },
-    {
       "tool": "get_page",
       "param": "include_rendered",
       "kind": "default-mismatch",
@@ -205,30 +141,6 @@
       "observed": "python=false typescript=none",
       "status": "unreviewed-gap",
       "reason": "TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it."
-    },
-    {
-      "tool": "get_tool_panel",
-      "param": "limit",
-      "kind": "missing-ts-param",
-      "observed": "python=type=integer required=false default=100",
-      "status": "pending-port",
-      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
-    },
-    {
-      "tool": "get_tool_panel",
-      "param": "offset",
-      "kind": "missing-ts-param",
-      "observed": "python=type=integer required=false default=0",
-      "status": "pending-port",
-      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
-    },
-    {
-      "tool": "get_tool_panel",
-      "param": "section_id",
-      "kind": "missing-ts-param",
-      "observed": "python=type=string required=false default=none",
-      "status": "pending-port",
-      "reason": "The Python tool summarizes the sections and opens one on request; the TS op returns the whole panel, so it has nothing to name a section with yet."
     },
     {
       "tool": "get_workflow_input_template",
@@ -269,22 +181,6 @@
       "observed": "python=anyOf<object|string> typescript=object",
       "status": "unreviewed-gap",
       "reason": "Python also accepts a JSON string, which is what agents often send; TS accepts an object only and rejects the string form."
-    },
-    {
-      "tool": "list_history_ids",
-      "param": "limit",
-      "kind": "missing-ts-param",
-      "observed": "python=type=integer required=false default=100",
-      "status": "pending-port",
-      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
-    },
-    {
-      "tool": "list_history_ids",
-      "param": "offset",
-      "kind": "missing-ts-param",
-      "observed": "python=type=integer required=false default=0",
-      "status": "pending-port",
-      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
     },
     {
       "tool": "list_page_revisions",
@@ -335,38 +231,6 @@
       "reason": "TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it."
     },
     {
-      "tool": "list_user_tools",
-      "param": "limit",
-      "kind": "missing-ts-param",
-      "observed": "python=type=integer required=false default=25",
-      "status": "pending-port",
-      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
-    },
-    {
-      "tool": "list_user_tools",
-      "param": "offset",
-      "kind": "missing-ts-param",
-      "observed": "python=type=integer required=false default=0",
-      "status": "pending-port",
-      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
-    },
-    {
-      "tool": "list_workflows",
-      "param": "limit",
-      "kind": "missing-ts-param",
-      "observed": "python=type=integer required=false default=50",
-      "status": "pending-port",
-      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
-    },
-    {
-      "tool": "list_workflows",
-      "param": "offset",
-      "kind": "missing-ts-param",
-      "observed": "python=type=integer required=false default=0",
-      "status": "pending-port",
-      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
-    },
-    {
       "tool": "list_workflows",
       "param": "published",
       "kind": "default-mismatch",
@@ -391,68 +255,12 @@
       "reason": "Needs galaxy.tool_util's mulled recommender, which has no TS equivalent, so a port means reimplementing mulled name resolution rather than translating an op."
     },
     {
-      "tool": "recommend_iwc_workflows",
-      "param": "limit",
-      "kind": "default-mismatch",
-      "observed": "python=5 typescript=none",
-      "status": "unreviewed-gap",
-      "reason": "TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it."
-    },
-    {
       "tool": "run_tool",
       "param": "tool_version",
       "kind": "missing-py-param",
       "observed": "typescript=type=string required=false default=none",
       "status": "unreviewed-gap",
       "reason": "TS accepts toolVersion; Python's run_tool takes only history_id, tool_id and inputs, so pinning a tool version is not expressible there."
-    },
-    {
-      "tool": "search_iwc_workflows",
-      "param": "limit",
-      "kind": "missing-ts-param",
-      "observed": "python=type=integer required=false default=20",
-      "status": "pending-port",
-      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
-    },
-    {
-      "tool": "search_iwc_workflows",
-      "param": "offset",
-      "kind": "missing-ts-param",
-      "observed": "python=type=integer required=false default=0",
-      "status": "pending-port",
-      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
-    },
-    {
-      "tool": "search_tools_by_keywords",
-      "param": "limit",
-      "kind": "missing-ts-param",
-      "observed": "python=type=integer required=false default=50",
-      "status": "pending-port",
-      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
-    },
-    {
-      "tool": "search_tools_by_keywords",
-      "param": "offset",
-      "kind": "missing-ts-param",
-      "observed": "python=type=integer required=false default=0",
-      "status": "pending-port",
-      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
-    },
-    {
-      "tool": "search_tools_by_name",
-      "param": "limit",
-      "kind": "missing-ts-param",
-      "observed": "python=type=integer required=false default=25",
-      "status": "pending-port",
-      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
-    },
-    {
-      "tool": "search_tools_by_name",
-      "param": "offset",
-      "kind": "missing-ts-param",
-      "observed": "python=type=integer required=false default=0",
-      "status": "pending-port",
-      "reason": "The Python tool caps its page and the TS op still returns everything it finds; the cap is owed on the TS side and will arrive with the same parameter."
     },
     {
       "tool": "upload_file_from_url",

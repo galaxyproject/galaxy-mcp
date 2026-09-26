@@ -27,6 +27,18 @@ export function toolAnnotations(): Record<string, { readOnlyHint: boolean; destr
   return out;
 }
 
+/**
+ * The whole envelope as one text block, which is what a client decodes and a
+ * model reads. Named rather than inlined because the ops measure their page caps
+ * against exactly this shape and cannot import it; see the test that pins it.
+ */
+export function toolResult(result: { success: boolean }): {
+  content: [{ type: "text"; text: string }];
+  isError: boolean;
+} {
+  return { content: [{ type: "text", text: JSON.stringify(result) }], isError: !result.success };
+}
+
 export function buildServer(conn: { baseUrl: string; apiKey: string }): McpServer {
   const server = new McpServer({ name: "galaxy", version: "0.0.0" });
   const ctx = createGalaxyContext(conn);
@@ -39,10 +51,7 @@ export function buildServer(conn: { baseUrl: string; apiKey: string }): McpServe
         inputSchema: op.input,
         annotations: annotations[op.name],
       },
-      async (args: unknown) => {
-        const result = await runWithEnvelope(op as never, args as never, ctx);
-        return { content: [{ type: "text" as const, text: JSON.stringify(result) }], isError: !result.success };
-      },
+      async (args: unknown) => toolResult(await runWithEnvelope(op as never, args as never, ctx)),
     );
   }
   return server;

@@ -11,6 +11,7 @@ export const EX_NOPERM = 77;
 const MAP: Record<GalaxyErrorKind, number> = {
   auth: EX_NOPERM,
   not_found: EX_NOINPUT,
+  validation: EX_USAGE,
   connection: EX_UNAVAILABLE,
   // "remote error in protocol": the server we reached does not speak a new enough Galaxy.
   version: EX_PROTOCOL,

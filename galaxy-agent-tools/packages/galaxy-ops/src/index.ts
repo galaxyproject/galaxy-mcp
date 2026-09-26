@@ -18,6 +18,8 @@ export {
   runOperation,
   runWithEnvelope,
 } from "./operations/registry";
+export { validatePagination, paginate, paginationInfo, OUTPUT_BUDGET_BYTES } from "./operations/pagination";
+export type { PaginationInfo, Paged } from "./operations/pagination";
 export { getUserOp, getUser, type CurrentUser } from "./operations/get-user";
 export { runToolOp, runTool } from "./operations/run-tool";
 export type { ToolRun, ToolInputs, ImplicitCollectionRef } from "./execute-tool-request";
@@ -39,7 +41,15 @@ export { listWorkflowsOp, listWorkflows, type Workflows } from "./operations/lis
 export { getWorkflowDetailsOp, getWorkflowDetails, type WorkflowDetail } from "./operations/get-workflow-details";
 export { getToolDetailsOp, getToolDetails, type ToolDetail } from "./operations/get-tool-details";
 export { searchToolsByNameOp, searchToolsByName, type ToolListItem } from "./operations/search-tools-by-name";
-export { getToolPanelOp, getToolPanel, type ToolPanel } from "./operations/get-tool-panel";
+export {
+  getToolPanelOp,
+  getToolPanel,
+  type ToolPanelResult,
+  type ToolPanelOverview,
+  type ToolPanelSection,
+  type PanelEntry,
+  type SlimTool,
+} from "./operations/get-tool-panel";
 export { getToolCitationsOp, getToolCitations, type ToolCitationsResult } from "./operations/get-tool-citations";
 export { getToolRunExamplesOp, getToolRunExamples, type ToolRunExamples } from "./operations/get-tool-run-examples";
 export { searchToolsByKeywordsOp, searchToolsByKeywords, type ToolKeywordMatch } from "./operations/search-tools-by-keywords";
@@ -50,7 +60,7 @@ export { downloadDatasetOp, downloadDataset, type DownloadDatasetResult } from "
 export { getIwcWorkflowsOp, getIwcWorkflows } from "./operations/get-iwc-workflows";
 export { getIwcWorkflowDetailsOp, getIwcWorkflowDetails, type IwcWorkflowDetail } from "./operations/get-iwc-workflow-details";
 export { searchIwcWorkflowsOp, searchIwcWorkflows } from "./operations/search-iwc-workflows";
-export { recommendIwcWorkflowsOp, recommendIwcWorkflows } from "./operations/recommend-iwc-workflows";
+export { recommendIwcWorkflowsOp, recommendIwcWorkflows, type Recommendations } from "./operations/recommend-iwc-workflows";
 export { importWorkflowFromIwcOp, importWorkflowFromIwc, type ImportedWorkflow } from "./operations/import-workflow-from-iwc";
 export { listUserToolsOp, listUserTools, type UserTool } from "./operations/list-user-tools";
 export { createUserToolOp, createUserTool, type CreatedUserTool } from "./operations/create-user-tool";

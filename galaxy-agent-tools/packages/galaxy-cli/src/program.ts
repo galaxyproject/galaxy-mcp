@@ -9,7 +9,7 @@ import {
 import { resolveConnection, loadSources, type Connection } from "./config";
 import { applyInputs } from "./flags-apply";
 import { buildInput } from "./flags";
-import { render, type Format } from "./render";
+import { render, serializeForCli, type Format } from "./render";
 import { exitCodeFor, EX_USAGE, EX_SOFTWARE } from "./exit";
 
 export interface CliDeps {
@@ -61,7 +61,7 @@ export function buildProgram(deps: CliDeps = {}): Command {
       process.once("SIGINT", onSig);
       const ctx = (deps.makeContext ?? ((c, s) => createGalaxyContext({ ...c, signal: s, poll: globals.timeout ? { timeoutMs: Number(globals.timeout) } : undefined })))(conn, ac.signal);
       try {
-        const result = await runWithEnvelope(op as never, parsed.data as never, ctx);
+        const result = await runWithEnvelope(op as never, parsed.data as never, ctx, serializeForCli);
         render(result, { format: globals.format, quiet: globals.quiet });
         process.exitCode = exitCodeFor(result.errorKind);
       } catch (e) {

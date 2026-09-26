@@ -1,32 +1,190 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
+import { GalaxyNotFoundError } from "../errors";
 import { legacyGet } from "../legacy";
+import { paginate, paginationInfo, validatePagination, type PaginationInfo } from "./pagination";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, Operation } from "./types";
+import type { AnyOperation, InputOf, Operation } from "./types";
 
-/** Hand-typed: Galaxy's tool panel endpoint is not in the OpenAPI bindings. */
-export interface ToolPanel {
+interface PanelNode {
+  id?: string;
+  name?: string;
+  description?: string;
+  versions?: string[];
+  model_class?: string;
+  elems?: PanelNode[];
   [k: string]: unknown;
 }
 
-const input = {};
-type In = Record<string, never>;
-
-async function run(_i: In, ctx: GalaxyContext): Promise<ToolPanel> {
-  return legacyGet<ToolPanel>(ctx, "/api/tools", {
-    params: { query: { in_panel: true } },
-  });
+export interface PanelEntry {
+  id: string;
+  name: string;
+  type: "section" | "tool";
+  /** Runnable tools in the section. Absent on a bare tool. */
+  tool_count?: number;
+  /** Present on a bare tool sitting outside any section. */
+  description?: string;
 }
 
-export const getToolPanelOp: Operation<typeof input, ToolPanel> = {
+export interface SlimTool {
+  id: string;
+  name: string;
+  description: string;
+  versions: string[];
+}
+
+export type ToolPanelOverview = { entries: PanelEntry[]; pagination: PaginationInfo };
+export type ToolPanelSection = {
+  section_id: string;
+  section_name: string;
+  tools: SlimTool[];
+  pagination: PaginationInfo;
+};
+export type ToolPanelResult = ToolPanelOverview | ToolPanelSection;
+
+const DEFAULT_LIMIT = 100;
+// Python's ceiling for this tool; a window one surface refuses the other refuses.
+const MAX_LIMIT = 500;
+
+const input = {
+  // Null is the overview, as it is on the other surface: Python declares
+  // `section_id: str | None`, and null there means "no section asked for".
+  sectionId: z
+    .string()
+    .nullish()
+    .describe("List one section's tools instead of the sections. Call with no arguments for valid ids."),
+  limit: z.number()
+    .int()
+    .default(DEFAULT_LIMIT)
+    .describe(
+      `Rows per page (default ${DEFAULT_LIMIT}, max ${MAX_LIMIT}). Applies to the sections when ` +
+        "sectionId is absent, and to a section's tools when it is present.",
+    ),
+  offset: z.number()
+    .int()
+    .default(0)
+    .describe(
+      "Skip the first N rows of whichever listing this call selects. An offset from the " +
+        "overview does not carry over to a sectionId call -- start that one at 0.",
+    ),
+};
+type In = { sectionId?: string | null; limit?: number; offset?: number };
+
+/**
+ * What the panel's three kinds of node are, copied from the Python server's
+ * `_is_panel_tool` and `_summarize_panel_entry` rather than reasoned out again.
+ *
+ * A node is a section when it carries an `elems` key at all -- not when it says
+ * ToolSection, and whatever is under the key -- and a tool when it does not and
+ * Galaxy has not called it a ToolSectionLabel. There is deliberately no fallback
+ * on an id ending in `_label`: the other surface has none, and a rule only one
+ * side applies is a tool one side can run and the other cannot find.
+ */
+const isSection = (n: PanelNode): boolean => "elems" in n;
+const isPanelTool = (n: PanelNode): boolean => !isSection(n) && n.model_class !== "ToolSectionLabel";
+
+const slim = (n: PanelNode): SlimTool => ({
+  id: n.id ?? "",
+  name: n.name ?? "",
+  description: n.description ?? "",
+  versions: Array.isArray(n.versions) ? n.versions : [],
+});
+
+async function run(i: In, ctx: GalaxyContext): Promise<ToolPanelResult> {
+  const limit = i.limit ?? DEFAULT_LIMIT;
+  const offset = i.offset ?? 0;
+  validatePagination(limit, offset, { maxLimit: MAX_LIMIT });
+
+  const panel = await legacyGet<PanelNode[]>(ctx, "/api/tools", {
+    params: { query: { in_panel: true } },
+  });
+  const nodes = Array.isArray(panel) ? panel : [];
+
+  if (i.sectionId != null) {
+    const section = nodes.find((n) => isSection(n) && n.id === i.sectionId);
+    if (!section) {
+      throw new GalaxyNotFoundError(
+        `no tool panel section with id '${i.sectionId}'; ` +
+          "call get_tool_panel with no arguments and use the id of an entry whose type is " +
+          "'section' (an entry of type 'tool' is a tool, not a section)",
+      );
+    }
+    const tools = (Array.isArray(section.elems) ? section.elems : []).filter(isPanelTool).map(slim);
+    const page = paginate(tools, { limit, offset, noun: "tools" });
+    return {
+      section_id: section.id ?? "",
+      section_name: section.name ?? "",
+      tools: page.items,
+      pagination: page.pagination,
+    };
+  }
+
+  // A flat limit over a nested tree would give "the first N sections, tools and
+  // all", which is neither a usable overview nor a usable listing. Sections with
+  // their counts, and any tool that sits outside one.
+  const entries: PanelEntry[] = nodes
+    .filter((n) => isSection(n) || isPanelTool(n))
+    .map((n) =>
+      isSection(n)
+        ? {
+            id: n.id ?? "",
+            name: n.name ?? "",
+            type: "section" as const,
+            tool_count: (Array.isArray(n.elems) ? n.elems : []).filter(isPanelTool).length,
+          }
+        : { id: n.id ?? "", name: n.name ?? "", type: "tool" as const, description: n.description ?? "" },
+    );
+  const page = paginate(entries, { limit, offset, noun: "entries" });
+  return { entries: page.items, pagination: page.pagination };
+}
+
+/** The two halves of `budget.shrink`, one per shape, so neither has to know the other's key. */
+const shrinkTools = (out: ToolPanelSection, keep: number) => ({
+  tools: out.tools.slice(0, keep),
+  pagination: reshape(out.pagination, keep, "tools"),
+});
+const shrinkEntries = (out: ToolPanelOverview, keep: number) => ({
+  entries: out.entries.slice(0, keep),
+  pagination: reshape(out.pagination, keep, "entries"),
+});
+const reshape = (was: PaginationInfo, keep: number, noun: string): PaginationInfo =>
+  paginationInfo({
+    total: was.total,
+    returned: keep,
+    limit: was.limit,
+    offset: was.offset,
+    noun,
+    trimmedForSize: true,
+  });
+
+export const getToolPanelOp: Operation<typeof input, ToolPanelResult> = {
   name: "get_tool_panel",
   domain: "tools",
-  summary: "Return the full Galaxy tool panel (nested sections with tools). Legacy endpoint.",
+  summary:
+    "List the Galaxy tool panel's sections and their tool counts. Pass sectionId to list one " +
+    "section's tools instead. Legacy endpoint.",
   input,
   run,
-  project: (_out, _i) => ({ message: "Tool panel" }),
+  // Two shapes, so two nouns: the overview pages sections, a drill-in pages tools.
+  budget: {
+    rows: (out) => ("tools" in out ? out.tools.length : out.entries.length),
+    shrink: (out, keep) =>
+      "tools" in out
+        ? { ...out, ...shrinkTools(out, keep) }
+        : { ...out, ...shrinkEntries(out, keep) },
+  },
+  project: (out) =>
+    "entries" in out
+      ? { message: `${out.entries.length} of ${out.pagination.total} tool panel entries`, pagination: out.pagination }
+      : {
+          message: `${out.tools.length} of ${out.pagination.total} tools in ${out.section_name}`,
+          pagination: out.pagination,
+        },
 };
 
 register(getToolPanelOp as AnyOperation);
 
-export const getToolPanel = (i: In, ctx: GalaxyContext) => runOperation(getToolPanelOp, i, ctx);
+// A library caller may leave the paged arguments out; run() applies the same
+// defaults the schema declares for the parsed surface path.
+export const getToolPanel = (i: In, ctx: GalaxyContext) =>
+  runOperation(getToolPanelOp, i as InputOf<typeof input>, ctx);

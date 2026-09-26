@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { exitCodeFor, EX_USAGE, EX_SOFTWARE, EX_PROTOCOL } from "../src/exit";
+import { exitCodeFor, EX_USAGE, EX_SOFTWARE, EX_PROTOCOL, EX_UNAVAILABLE } from "../src/exit";
 
 describe("exitCodeFor", () => {
   it("maps error kinds to BSD sysexits", () => {
@@ -20,5 +20,12 @@ describe("exitCodeFor", () => {
   it("keeps a too-old server apart from an unreachable one", () => {
     // Both are the server's fault, but only one is worth retrying.
     expect(exitCodeFor("version")).not.toBe(exitCodeFor("connection"));
+  });
+});
+
+describe("a rejected argument is a usage error, not an outage", () => {
+  it("maps validation to EX_USAGE rather than EX_UNAVAILABLE", () => {
+    expect(exitCodeFor("validation")).toBe(EX_USAGE);
+    expect(exitCodeFor("validation")).not.toBe(EX_UNAVAILABLE);
   });
 });
