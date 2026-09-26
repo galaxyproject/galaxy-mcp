@@ -33,19 +33,41 @@ function readJsonArg(raw: string): unknown {
   return JSON.parse(text);
 }
 
+/** True when the field wants a number, so an argument off the command line needs converting. */
+export function isNumberField(schema: ZodTypeAny): boolean {
+  return typeTag(schema) === "number";
+}
+
+/**
+ * Commander hands every argument over as a string, and the op schemas want a real number --
+ * `--limit 5` is otherwise "expected number, received string". Anything that is not a number
+ * is left alone rather than mangled, so the schema gets to refuse it and say why: "" stays ""
+ * instead of becoming 0, and "abc" stays "abc" instead of becoming NaN.
+ */
+function readNumberArg(raw: unknown): unknown {
+  if (typeof raw !== "string" || raw.trim() === "") return raw;
+  const n = Number(raw);
+  return Number.isNaN(n) ? raw : n;
+}
+
 /** Reassemble the op input object from commander positionals + options, then validate. */
 export function buildInput(shape: ZodRawShape, positionals: string[], options: Record<string, unknown>) {
   const raw: Record<string, unknown> = {};
   let pi = 0;
   for (const [key, schema] of Object.entries(shape)) {
     const kind = classifyField(schema as ZodTypeAny);
+    const wantsNumber = isNumberField(schema as ZodTypeAny);
     if (kind === "positional") {
-      if (pi < positionals.length) raw[key] = positionals[pi++];
+      if (pi < positionals.length) {
+        const val = positionals[pi++];
+        raw[key] = wantsNumber ? readNumberArg(val) : val;
+      }
     } else {
       const flag = flagName(key);
       const val = options[key] ?? options[flag.replace(/-([a-z])/g, (_, c) => c.toUpperCase())];
       if (val === undefined) continue;
-      raw[key] = kind === "json" ? readJsonArg(String(val)) : val;
+      if (kind === "json") raw[key] = readJsonArg(String(val));
+      else raw[key] = wantsNumber ? readNumberArg(val) : val;
     }
   }
   return z.object(shape).safeParse(raw);

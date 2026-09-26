@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import { Command } from "commander";
+import { searchToolsByNameOp } from "@galaxyproject/galaxy-ops";
 import { classifyField, buildInput } from "../src/flags";
 import { applyInputs } from "../src/flags-apply";
 
@@ -22,6 +23,22 @@ describe("flags mapping", () => {
     const parsed = buildInput(shape, ["h1"], { inputs: '{"a":1}', limit: "5" });
     expect(parsed.success).toBe(true);
     expect(parsed.success && parsed.data).toEqual({ historyId: "h1", inputs: { a: 1 }, limit: 5 });
+  });
+
+  it("turns a numeric flag into a number for the ops that ask for one", () => {
+    // Commander only ever hands over strings, and the listing schemas want plain integers, so
+    // without this `galaxy-cli search_tools_by_name bwa --limit 5` is a usage error.
+    const parsed = buildInput(searchToolsByNameOp.input, ["bwa"], { limit: "5", offset: "10" });
+    expect(parsed.success && parsed.data).toMatchObject({ query: "bwa", limit: 5, offset: 10 });
+  });
+
+  it("leaves a non-number alone so the schema can say what is wrong with it", () => {
+    // Converting these would hand the op a 0 or a NaN and lose the reason.
+    for (const bad of ["", "abc", "  "]) {
+      expect(buildInput(searchToolsByNameOp.input, ["bwa"], { limit: bad }).success).toBe(false);
+    }
+    // A non-integer converts fine and is then refused by the schema, which is the right layer.
+    expect(buildInput(searchToolsByNameOp.input, ["bwa"], { limit: "2.5" }).success).toBe(false);
   });
 
   it("reports a usage error for bad input", () => {
