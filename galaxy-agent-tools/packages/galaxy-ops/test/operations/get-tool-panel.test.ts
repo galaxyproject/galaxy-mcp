@@ -160,3 +160,39 @@ describe("get_tool_panel node classification", () => {
     expect(out.tools.map((t) => t.id)).toEqual(["old_label", "real_tool"]);
   });
 });
+
+describe("get_tool_panel totals", () => {
+  // Nested sections and a loose tool, so a flat count and a recursive one differ.
+  const PANEL = [
+    {
+      id: "outer",
+      name: "Outer",
+      elems: [
+        { id: "t1", name: "One" },
+        { id: "inner", name: "Inner", elems: [{ id: "t2", name: "Two" }] },
+        { id: "lbl", name: "Label", model_class: "ToolSectionLabel" },
+      ],
+    },
+    { id: "loose", name: "Loose", description: "outside a section" },
+  ];
+  const ctx: any = {
+    client: mockClient({ GET: () => ({ data: PANEL, response: { status: 200 } }) }),
+    poll: DEFAULT_POLL,
+  };
+
+  it("counts every tool and section through the nesting, not the page", async () => {
+    const out: any = await getToolPanel({ limit: 1 }, ctx);
+    // Three tools counting the loose one, and the label is not one; two sections, nesting included.
+    expect(out.tool_count).toBe(3);
+    expect(out.section_count).toBe(2);
+    // The page holds one entry, which is exactly why the totals cannot come from it.
+    expect(out.entries).toHaveLength(1);
+  });
+
+  it("reports the same totals when a section is opened", async () => {
+    const out: any = await getToolPanel({ sectionId: "outer" }, ctx);
+    expect(out.tool_count).toBe(3);
+    expect(out.section_count).toBe(2);
+    expect(out.section_id).toBe("outer");
+  });
+});
