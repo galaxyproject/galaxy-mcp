@@ -122,6 +122,9 @@ Each command's arguments come from that operation's inputs:
 - **Optional values are flags.** e.g. `get_histories --limit 10 --name rnaseq`
   (camelCase inputs become kebab-case flags: `toolVersion` -> `--tool-version`)
 - **Booleans are bare flags.** e.g. `get_history_contents <historyId> --deleted`
+- **Lists are repeatable flags,** required or not. e.g.
+  `recommend_biocontainer --packages samtools=1.17 --packages bwa`, or the same
+  thing as `--packages samtools=1.17 bwa`
 - **Structured inputs take JSON** -- inline or from a file with `@`:
   `run_tool cat1 <historyId> --inputs '{"input1":{"src":"hda","id":"abc123"}}'`
   or `--inputs @inputs.json`
@@ -162,7 +165,7 @@ $CLI create_history "My new analysis"
 $CLI upload_file ./reads.fastq.gz --history-id <historyId>
 
 # Find a tool, then inspect how to call it
-$CLI search_tools_by_keywords fastqc
+$CLI search_tools_by_keywords --keywords fastqc
 $CLI get_tool_input_template toolshed.g2.bx.psu.edu/repos/devteam/fastqc/fastqc/0.74
 
 # Run a tool and wait for it to finish (10 min timeout)
@@ -275,6 +278,24 @@ and `list_page_revisions` returns every revision.
 | `get_tool_run_examples` | Test-data examples (inputs/outputs) for a tool |
 | `get_tool_input_template` | A ready-to-fill inputs skeleton for a tool (call before `run_tool`) |
 | `run_tool` *(write)* | Run a tool and wait until its jobs reach a terminal state |
+| `recommend_biocontainer` | Resolve a verified `quay.io/biocontainers` image for a set of conda packages -- how to pick the `container` for `create_user_tool` instead of guessing one |
+
+`recommend_biocontainer` asks quay.io, which is the second host besides Galaxy these operations
+reach -- the other is `iwc.galaxyproject.org`, which the IWC operations fetch their manifest
+from -- so outbound access has to allow both. It answers from a five-minute cache, failures
+included. Its budget for a silent registry is a little wider than Galaxy's Python tool, which
+allows twelve seconds to connect and then a fresh twelve for the first byte: `fetch` cannot see
+the connect phase separately, so this allows twenty-four seconds to the first byte and then
+twelve between chunks. Two edges follow. A server that connects at once and then says nothing
+fails in Python at twelve seconds and here at twenty-four. A connection that takes between
+Node's own ten-second connect limit and Python's twelve fails here and succeeds there. Both
+need a registry that is up but silent for over ten seconds, and either way the answer is a
+failed lookup rather than a wrong image -- so we take the wider budget rather than pin the
+package to one runtime's HTTP internals. Those two edges and the handful of others -- text
+decoding, where Node's codec and Unicode tables are not CPython's; the sentence a failed parse
+leaves in `notes`; and one URL escape the URL Standard normalises where `requests` does not -- are
+listed together as the accepted divergences at the top of `packages/galaxy-ops/src/mulled.ts`,
+each with the input that differs.
 
 ### User-defined tools
 | Operation | What it does |
