@@ -61,4 +61,30 @@ describe("download_dataset", () => {
     expect(out.content_available).toBe(true);
     expect(out.file_size).toBe(2);
   });
+
+  it("declares useDefaultFilename, and changes nothing either way -- as Python does", async () => {
+    // Python takes the argument and never reads it: both branches of its body pass the
+    // literal use_default_filename=False to bioblend. The name it once stood for comes back
+    // as suggested_filename instead, which is what this pins on both settings.
+    const meta = { id: "d4", name: "reads", file_ext: "fastq", state: "ok", file_size: 9 };
+    const asked: string[] = [];
+    const client = mockClient({
+      GET: (path) => {
+        asked.push(path);
+        return path.includes("/display")
+          ? { data: new Uint8Array([7]).buffer, response: { status: 200 } }
+          : { data: meta, response: { status: 200 } };
+      },
+    });
+    const on = await downloadDataset({ datasetId: "d4", useDefaultFilename: true }, ctxWith(client));
+    const off = await downloadDataset({ datasetId: "d4", useDefaultFilename: false }, ctxWith(client));
+    expect(on).toEqual(off);
+    expect(on.suggested_filename).toBe("reads.fastq");
+    expect(on.file_path).toBeUndefined();
+    expect(asked).toHaveLength(4);
+  });
+
+  it("advertises Python's default for it", () => {
+    expect(downloadDatasetOp.input.useDefaultFilename.parse(undefined)).toBe(true);
+  });
 });

@@ -37,10 +37,32 @@ interface DatasetMeta {
 const input = {
   datasetId: z.string().describe("Dataset id to download"),
   filePath: z.string().optional().describe("Local path to write; omit for in-memory"),
+  /**
+   * Declared because Python declares it, and inert because Python's is inert.
+   *
+   * Python's `download_dataset` takes the argument and never reads it: both branches of its
+   * body pass the literal `use_default_filename=False` to bioblend, so the value a caller
+   * sends changes nothing there either. What it once meant survives as `suggested_filename`,
+   * which the in-memory branch derives from the dataset's own name and extension and hands
+   * back for the caller to use -- on both surfaces. Honouring it here instead would mean
+   * writing a file into the caller's working directory that Python would not write, which is
+   * a bigger divergence than the one it closes.
+   */
+  useDefaultFilename: z
+    .boolean()
+    .default(true)
+    .describe(
+      "Deprecated - use filePath for specific locations (default: true, ignored when filePath not provided)",
+    ),
   requireOkState: z.boolean().default(true).describe("Throw if dataset state != ok (default true)"),
 };
 
-type In = { datasetId: string; filePath?: string; requireOkState?: boolean };
+type In = {
+  datasetId: string;
+  filePath?: string;
+  useDefaultFilename?: boolean;
+  requireOkState?: boolean;
+};
 
 async function run(i: In, ctx: GalaxyContext): Promise<DownloadDatasetResult> {
   // Fetch metadata
