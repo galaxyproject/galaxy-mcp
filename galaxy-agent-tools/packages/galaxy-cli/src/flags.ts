@@ -15,6 +15,10 @@ function unwrap(schema: ZodTypeAny): ZodTypeAny {
 function typeTag(schema: ZodTypeAny): string | undefined {
   return (unwrap(schema) as unknown as { def?: { type?: string } }).def?.type;
 }
+function unionMembers(schema: ZodTypeAny): ZodTypeAny[] | undefined {
+  const def = (unwrap(schema) as unknown as { def?: { type?: string; options?: ZodTypeAny[] } }).def;
+  return def?.type === "union" ? def.options : undefined;
+}
 function isOptional(schema: ZodTypeAny): boolean {
   return schema.safeParse(undefined).success;
 }
@@ -24,6 +28,9 @@ const isJsonTag = (tag: string | undefined) => tag === "record" || tag === "obje
 export function classifyField(schema: ZodTypeAny): FieldKind {
   const tag = typeTag(schema);
   if (isJsonTag(tag)) return "json";
+  // A field that takes an object OR the JSON string of one is still a JSON flag here, or
+  // `--inputs @file.json` stops reading the file and hands the op the literal "@file.json".
+  if (unionMembers(schema)?.some((m) => isJsonTag(typeTag(m)))) return "json";
   if (tag === "boolean") return "boolean";
   return isOptional(schema) ? "option" : "positional";
 }

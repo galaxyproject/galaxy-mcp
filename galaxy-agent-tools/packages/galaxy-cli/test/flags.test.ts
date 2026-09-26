@@ -1,7 +1,10 @@
+import { mkdtempSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it, expect } from "vitest";
-import { z } from "zod";
+import { z, type ZodTypeAny } from "zod";
 import { Command } from "commander";
-import { getInvocationsOp, searchToolsByNameOp } from "@galaxyproject/galaxy-ops";
+import { getInvocationsOp, invokeWorkflowOp, searchToolsByNameOp } from "@galaxyproject/galaxy-ops";
 import { classifyField, buildInput } from "../src/flags";
 import { applyInputs } from "../src/flags-apply";
 
@@ -12,6 +15,10 @@ describe("flags mapping", () => {
     expect(classifyField(z.coerce.number().optional())).toBe("option");
     expect(classifyField(z.boolean().optional())).toBe("boolean");
     expect(classifyField(z.record(z.string(), z.unknown()))).toBe("json");
+    // The real schema, not a stand-in for it: inputs became an object-or-JSON-string union and
+    // quietly stopped being a JSON flag, which a synthetic union here would not have caught.
+    expect(classifyField(invokeWorkflowOp.input.inputs as ZodTypeAny)).toBe("json");
+    expect(classifyField(invokeWorkflowOp.input.params as ZodTypeAny)).toBe("json");
   });
 
   it("buildInput reassembles positionals + options + parses --inputs json", () => {
@@ -23,6 +30,23 @@ describe("flags mapping", () => {
     const parsed = buildInput(shape, ["h1"], { inputs: '{"a":1}', limit: "5" });
     expect(parsed.success).toBe(true);
     expect(parsed.success && parsed.data).toEqual({ historyId: "h1", inputs: { a: 1 }, limit: 5 });
+  });
+
+  it("reads invoke_workflow's inputs from a file, and parses them inline", () => {
+    const shape = { inputs: invokeWorkflowOp.input.inputs as ZodTypeAny };
+    const inline = buildInput(shape, [], { inputs: '{"a":1}' });
+    expect(inline.success && inline.data).toEqual({ inputs: { a: 1 } });
+
+    const dir = mkdtempSync(join(tmpdir(), "galaxy-cli-flags-"));
+    const file = join(dir, "inputs.json");
+    try {
+      writeFileSync(file, '{"b":2}');
+      const fromFile = buildInput(shape, [], { inputs: `@${file}` });
+      expect(fromFile.success && fromFile.data).toEqual({ inputs: { b: 2 } });
+    } finally {
+      unlinkSync(file);
+      rmdirSync(dir);
+    }
   });
 
   it("turns a numeric flag into a number for the ops that ask for one", () => {
