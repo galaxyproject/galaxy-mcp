@@ -19,6 +19,26 @@ describe("flags mapping", () => {
     // quietly stopped being a JSON flag, which a synthetic union here would not have caught.
     expect(classifyField(invokeWorkflowOp.input.inputs as ZodTypeAny)).toBe("json");
     expect(classifyField(invokeWorkflowOp.input.params as ZodTypeAny)).toBe("json");
+    // Required or not, a list is a repeatable flag: as a positional it arrives as one string,
+    // which no array schema here accepts.
+    expect(classifyField(z.array(z.string()))).toBe("array");
+    expect(classifyField(z.array(z.string()).optional())).toBe("array");
+  });
+
+  it("collects a repeated list flag into an array the schema accepts", () => {
+    const command = new Command();
+    applyInputs(command, { input: { packages: z.array(z.string()) } } as any);
+    command.parse(["node", "test", "--packages", "samtools=1.17", "--packages", "bwa"]);
+    expect(command.opts()).toMatchObject({ packages: ["samtools=1.17", "bwa"] });
+    const parsed = buildInput({ packages: z.array(z.string()) }, [], command.opts());
+    expect(parsed.success && parsed.data).toEqual({ packages: ["samtools=1.17", "bwa"] });
+  });
+
+  it("takes a list flag's values space-separated too", () => {
+    const command = new Command();
+    applyInputs(command, { input: { packages: z.array(z.string()) } } as any);
+    command.parse(["node", "test", "--packages", "samtools=1.17", "bwa"]);
+    expect(command.opts()).toMatchObject({ packages: ["samtools=1.17", "bwa"] });
   });
 
   it("buildInput reassembles positionals + options + parses --inputs json", () => {

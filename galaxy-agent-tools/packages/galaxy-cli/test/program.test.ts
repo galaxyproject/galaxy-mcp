@@ -221,6 +221,32 @@ describe("buildProgram", () => {
     expect(off.stdout).not.toContain('"preview"');
   });
 
+  it("takes a list parameter as a repeatable flag rather than a positional", async () => {
+    // A required array used to be offered as `<keywords>`, which could only ever arrive as one
+    // string -- and `z.array(z.string())` refuses a string, so the command had no working form.
+    const program = buildProgram({ makeContext: ctxFactory });
+    const cmd = program.commands.find((c) => c.name() === "search_tools_by_keywords")!;
+    expect(cmd.registeredArguments.map((a) => a.name())).toEqual([]);
+    expect(cmd.options.map((o) => o.flags)).toContain("--keywords <value...>");
+  });
+
+  it("collects a repeated list flag into one array and runs the op", async () => {
+    const asked: string[] = [];
+    const panel = [
+      { id: "bwa", name: "BWA", description: "Map low-divergent sequences" },
+      { id: "cat1", name: "Concatenate", description: "datasets tail-to-head" },
+    ];
+    const run = await runCli(
+      ["search_tools_by_keywords", "--keywords", "bwa", "--keywords", "concatenate", "--format", "json"],
+      recordingContext(asked, panel),
+    );
+    expect(run.exitCode).toBe(0);
+    expect(asking(asked, "/api/tools")).toContain("in_panel=true");
+    expect(run.stdout).toContain('"success": true');
+    expect(run.stdout).toContain('"bwa"');
+    expect(run.stdout).toContain('"cat1"');
+  });
+
   it("runs an op and renders json to stdout", async () => {
     const out = vi.spyOn(console, "log").mockImplementation(() => {});
     const program = buildProgram({ makeContext: ctxFactory });
