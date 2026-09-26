@@ -10,6 +10,7 @@ import asyncio
 import json
 from copy import deepcopy
 from itertools import zip_longest
+from pathlib import Path
 
 import pytest
 from fastmcp.tools import Tool
@@ -36,6 +37,17 @@ def generated() -> dict:
 @pytest.fixture(scope="module")
 def checked_in() -> dict:
     return json.loads(MANIFEST_PATH.read_text())
+
+
+def test_no_tool_description_ships_an_example_id():
+    """An id an agent can copy reads as a real one. A 16-hex example from a description was
+    copied verbatim into three live analyses as the input dataset, in histories that did not
+    contain it, so descriptions name the shape and use a placeholder for the value."""
+    import re
+
+    source = Path(server.__file__).read_text()
+    found = sorted(set(re.findall(r"\b[0-9a-f]{16}\b", source)))
+    assert not found, f"these look like example Galaxy ids: {found}. Use a placeholder instead."
 
 
 def test_manifest_lists_exactly_the_registered_tools(generated, checked_in):
