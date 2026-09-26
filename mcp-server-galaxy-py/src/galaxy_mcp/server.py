@@ -475,32 +475,73 @@ def _refuse_error_body(action: str, payload: Any) -> None:
         )
 
 
+def _http_status(error: Exception) -> Any:
+    """The HTTP status a failure carries: an int, None when there is none, or
+    `_NO_STATUS_FIELD` when the failure says nothing either way.
+
+    Two libraries, two spellings for the same two facts. bioblend puts the status on its
+    ConnectionError as `status_code`, and its GET path substitutes an empty Response for
+    a requests ConnectionError, which leaves that field None. requests carries the reply
+    itself on `response`, and sets it to None when the request never completed. Both are
+    read here so that nothing else has to know which library raised -- `get_job_details`
+    calls the jobs API with requests directly, and the rest go through bioblend.
+
+    The three answers are deliberately distinct. An int is a status somebody can act on.
+    None is "there was no reply to take a status from", which is true of a connection
+    never made and equally of a reply whose body failed partway through, so nothing can
+    be concluded from it. The sentinel is an exception that carries no such field at all,
+    which is not the same as one that says there is no status.
+
+    Anything in either field that is not an int and not None is not a status this
+    understands, and is treated as saying nothing.
+    """
+    status = getattr(error, "status_code", _NO_STATUS_FIELD)
+    if status is _NO_STATUS_FIELD:
+        response = getattr(error, "response", _NO_STATUS_FIELD)
+        if response is _NO_STATUS_FIELD:
+            return _NO_STATUS_FIELD
+        if response is None:
+            return None
+        status = getattr(response, "status_code", _NO_STATUS_FIELD)
+    if status is None or isinstance(status, int):
+        return status
+    return _NO_STATUS_FIELD
+
+
+def _is_not_found(error: Exception) -> bool:
+    """Whether the failure really was a 404.
+
+    The question five tools used to answer with `"404" in str(e)`, which is true of a
+    dataset id with 404 in it as readily as of a missing one: requests quotes the URL it
+    could not reach, so a connection failure was being reported to the caller as a
+    resource that does not exist. This asks the status instead, and a failure that
+    carries no status is not a 404.
+    """
+    return _http_status(error) == 404
+
+
 def format_error(action: str, error: Exception, context: dict | None = None) -> str:
     """Format error messages consistently.
 
-    The hints are the same ones; where they come from is not. bioblend's ConnectionError
-    carries the status as a field, so when that field holds one the hint is read from it
-    and never from the text -- the text is requests' own whenever the request did not
-    complete, and requests quotes the URL in it, so an identifier with "404" in it was
+    The hints are the same ones; where they come from is not. The status is read off the
+    failure by `_http_status` -- from bioblend's field or from the reply requests kept --
+    and never from the text, because the text is requests' own whenever the request did
+    not complete and requests quotes the URL in it, so an identifier with "404" in it was
     being reported as a missing resource.
 
-    A field set to None means the failure has no HTTP status. bioblend's GET path
-    substitutes an empty Response for a requests ConnectionError, which covers a
-    connection that was never made and equally a reply Galaxy did send whose body failed
-    partway through (SSLError is a ConnectionError), so there is nothing true to say
-    about a status that is not there -- and nothing is said. The exception's own text is
-    the whole answer in that case. Other bioblend paths let requests' own exceptions
-    through with no field at all, and those keep the text search.
+    A status of None means the failure has no HTTP status at all: there is nothing true
+    to say about one that is not there, and nothing is said. The exception's own text is
+    the whole answer in that case.
 
-    Anything else in the field is not a status this understands, so it falls back to the
-    text like an error carrying no such field at all.
+    An exception carrying no status field of either kind is the one case left to the text
+    search, because there is nothing else to go on.
     """
     if context is None:
         context = {}
     error_str = str(error)
     msg = f"{action} failed: {error_str}"
 
-    status = getattr(error, "status_code", _NO_STATUS_FIELD)
+    status = _http_status(error)
     if isinstance(status, int):
         if status in _STATUS_HINTS:
             msg += f" ({_STATUS_HINTS[status]})"
