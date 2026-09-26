@@ -4,6 +4,7 @@ Test history-related operations
 
 from unittest.mock import patch
 
+import bioblend
 import pytest
 
 from .test_helpers import (
@@ -73,7 +74,13 @@ class TestHistoryOperations:
 
     def test_get_history_details_with_dict_string(self, mock_galaxy_instance):
         """Test get_history_details treats dict string as regular ID (should fail)"""
-        mock_galaxy_instance.histories.show_history.side_effect = Exception("404 Not Found")
+        # What Galaxy really raises for an id it does not have: bioblend's ConnectionError
+        # with the status on it. It used to be a bare Exception whose text said "404", which
+        # the tool read as a missing history -- and would have read the same way for a
+        # connection failure quoting a URL. The status is what says it now.
+        mock_galaxy_instance.histories.show_history.side_effect = bioblend.ConnectionError(
+            "GET: error 404: No route for /api/histories/x", status_code=404
+        )
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             # User passes string representation of dict - should be treated as invalid ID
@@ -91,8 +98,11 @@ class TestHistoryOperations:
             with pytest.raises(ValueError) as exc_info:
                 get_history_details_fn("invalid_id")
 
-            # Either validation error or API error is acceptable
-            assert "Failed to get history details" in str(exc_info.value)
+            # Either validation error or API error is acceptable. The API one now goes
+            # through format_error like the rest of the server, so it reads "Get history
+            # details failed: ..." and carries the context.
+            assert "Get history details failed" in str(exc_info.value)
+            assert "history_id=invalid_id" in str(exc_info.value)
 
     def test_not_connected_errors(self):
         """Test operations fail when not connected"""
