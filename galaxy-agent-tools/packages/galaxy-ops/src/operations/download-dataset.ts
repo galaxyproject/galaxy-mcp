@@ -7,7 +7,7 @@ import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { classifyHttp, GalaxyConnectionError } from "../errors";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, Operation } from "./types";
+import type { AnyOperation, InputOf, Operation } from "./types";
 
 export interface DownloadDatasetResult {
   dataset_id: string;
@@ -37,7 +37,7 @@ interface DatasetMeta {
 const input = {
   datasetId: z.string().describe("Dataset id to download"),
   filePath: z.string().optional().describe("Local path to write; omit for in-memory"),
-  requireOkState: z.boolean().optional().describe("Throw if dataset state != ok (default true)"),
+  requireOkState: z.boolean().default(true).describe("Throw if dataset state != ok (default true)"),
 };
 
 type In = { datasetId: string; filePath?: string; requireOkState?: boolean };
@@ -114,4 +114,4 @@ export const downloadDatasetOp: Operation<typeof input, DownloadDatasetResult> =
 
 register(downloadDatasetOp as AnyOperation);
 
-export const downloadDataset = (i: In, ctx: GalaxyContext) => runOperation(downloadDatasetOp, i, ctx);
+export const downloadDataset = (i: In, ctx: GalaxyContext) => runOperation(downloadDatasetOp, i as InputOf<typeof input>, ctx);

@@ -13,10 +13,10 @@ Every difference carries the status and the reason recorded in `galaxy-agent-too
 | `intentional` | `1` |
 | `pending-port` | `2` |
 | `pending-decision` | `0` |
-| `unreviewed-gap` | `6` |
-| **total** | `9` |
+| `unreviewed-gap` | `3` |
+| **total** | `6` |
 
-`unreviewed-gap` is the status nobody has ruled on yet. The check holds the registry to the 6 it declares, so the count cannot drift from the number; raising that number is an edit somebody has to make in the diff, and it is meant to come down, never up.
+`unreviewed-gap` is the status nobody has ruled on yet. The check holds the registry to the 3 it declares, so the count cannot drift from the number; raising that number is an edit somebody has to make in the diff, and it is meant to come down, never up.
 
 ## Tools
 
@@ -31,7 +31,6 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `create_user_tool` |  | `write (tag)` | `write (hint)` |  |  |  |
 | `delete_user_tool` |  | `write (tag)` | `write (hint)` |  |  |  |
 | `download_dataset` |  | `read (tag)` | `write (hint)` | `mutability-mismatch` | `unreviewed-gap` | Python tags the tool read; the TS op advertises readOnlyHint false because it can write the bytes to a local path. One of the two is wrong about what read-only means for a tool that touches the caller's disk, and MCP clients gate approval on that hint. |
-| `download_dataset` | `require_ok_state` | `type=boolean required=false default=true` | `type=boolean required=false default=none` | `default-mismatch` | `unreviewed-gap` | TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it. |
 | `download_dataset` | `use_default_filename` | `type=boolean required=false default=true` | -- | `missing-ts-param` | `unreviewed-gap` | Python can write next to the dataset's own name; TS only writes to the exact filePath it is given. |
 | `get_collection_details` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `get_dataset_details` |  | `read (tag)` | `read (hint)` |  |  |  |
@@ -74,5 +73,3 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `update_page` |  | `write (tag), requires >=26.1` | `write (hint), requires >=26.1` |  |  |  |
 | `upload_file` |  | `write (tag)` | `write (hint)` |  |  |  |
 | `upload_file_from_url` |  | `write (tag)` | `write (hint)` |  |  |  |
-| `upload_file_from_url` | `dbkey` | `type=string required=false default="?"` | `type=string required=false default=none` | `default-mismatch` | `unreviewed-gap` | TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it. |
-| `upload_file_from_url` | `file_type` | `type=string required=false default="auto"` | `type=string required=false default=none` | `default-mismatch` | `unreviewed-gap` | TS applies the same default in run() but does not declare it in the advertised schema, so an agent reading the tool cannot see it. |
