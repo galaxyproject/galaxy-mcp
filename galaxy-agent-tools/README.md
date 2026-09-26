@@ -254,7 +254,7 @@ and `list_page_revisions` returns every revision.
 ### Datasets & collections
 | Operation | What it does |
 | --- | --- |
-| `get_dataset_details` | Dataset metadata by id (state, extension, name) |
+| `get_dataset_details` | Dataset metadata by id (state, extension, name), with an optional content preview from Galaxy's bounded text route |
 | `get_collection_details` | A dataset collection by id, with its elements |
 | `get_job_details` | Job that produced a given dataset |
 | `download_dataset` *(write)* | Download a dataset's content, optionally to a local file |

@@ -185,6 +185,42 @@ describe("buildProgram", () => {
     expect(asked.some((url) => url.includes("/api/pages"))).toBe(false);
   });
 
+  it("previews a dataset through the flags the op really declares", async () => {
+    const asked: string[] = [];
+    const context = () =>
+      createGalaxyContext({
+        baseUrl: "https://g.example",
+        apiKey: "K",
+        fetchImpl: (async (input: RequestInfo | URL) => {
+          const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+          asked.push(url);
+          const body = url.includes("get_content_as_text")
+            ? { item_data: "l1\nl2\nl3\n", truncated: false, item_url: "/datasets/d1/display" }
+            : { id: "d1", name: "reads.txt", state: "ok", file_ext: "txt" };
+          return new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }) as typeof fetch,
+      });
+
+    const run = await runCli(["get_dataset_details", "d1", "--preview-lines", "2", "--format", "json"], context);
+    expect(run.exitCode).toBe(0);
+    expect(asking(asked, "get_content_as_text")).toContain("/api/datasets/d1/get_content_as_text");
+    expect(run.stdout).toContain('"preview_lines": 2');
+    expect(run.stdout).toContain('"truncated": true');
+
+    // --no-include-preview is the other half of the boolean flag, and it must stop the fetch.
+    asked.length = 0;
+    const off = await runCli(
+      ["get_dataset_details", "d1", "--no-include-preview", "--format", "json"],
+      context,
+    );
+    expect(off.exitCode).toBe(0);
+    expect(asked.some((url) => url.includes("get_content_as_text"))).toBe(false);
+    expect(off.stdout).not.toContain('"preview"');
+  });
+
   it("runs an op and renders json to stdout", async () => {
     const out = vi.spyOn(console, "log").mockImplementation(() => {});
     const program = buildProgram({ makeContext: ctxFactory });
