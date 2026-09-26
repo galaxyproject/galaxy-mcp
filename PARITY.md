@@ -13,10 +13,10 @@ Every difference carries the status and the reason recorded in `galaxy-agent-too
 | `intentional` | `1` |
 | `pending-port` | `2` |
 | `pending-decision` | `0` |
-| `unreviewed-gap` | `7` |
-| **total** | `10` |
+| `unreviewed-gap` | `6` |
+| **total** | `9` |
 
-`unreviewed-gap` is the status nobody has ruled on yet. The check holds the registry to the 7 it declares, so the count cannot drift from the number; raising that number is an edit somebody has to make in the diff, and it is meant to come down, never up.
+`unreviewed-gap` is the status nobody has ruled on yet. The check holds the registry to the 6 it declares, so the count cannot drift from the number; raising that number is an edit somebody has to make in the diff, and it is meant to come down, never up.
 
 ## Tools
 
@@ -66,7 +66,6 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `recommend_iwc_workflows` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `revert_page_revision` |  | `write (tag), requires >=26.1` | `write (hint), requires >=26.1` |  |  |  |
 | `run_tool` |  | `write (tag)` | `write (hint)` |  |  |  |
-| `run_tool` | `tool_version` | -- | `type=string required=false default=none` | `missing-py-param` | `unreviewed-gap` | TS accepts toolVersion; Python's run_tool takes only history_id, tool_id and inputs, so pinning a tool version is not expressible there. |
 | `run_user_tool` |  | `write (tag)` | `write (hint)` |  |  |  |
 | `search_iwc_workflows` |  | `read (tag)` | `read (hint)` |  |  |  |
 | `search_tools_by_keywords` |  | `read (tag)` | `read (hint)` |  |  |  |
