@@ -15,7 +15,12 @@ import {
   type ToolContract,
 } from "./parity/compare";
 import {
+  BUILTIN_RULES,
+  builtinRegistry,
+  builtinSide,
+  builtinSurface,
   DIVERGENCE_STATUSES,
+  loadBuiltinSnapshot,
   loadManifest,
   loadRegistry,
   normalizationFrom,
@@ -24,6 +29,8 @@ import {
   RATCHETED_STATUS,
   typescriptSurface,
   type AcceptedDivergence,
+  type BuiltinRegistry,
+  type BuiltinSnapshot,
   type Manifest,
   type Registry,
 } from "./parity/surfaces";
@@ -38,6 +45,8 @@ const KINDS = [
   "default-mismatch",
   "mutability-mismatch",
   "requires-mismatch",
+  "missing-builtin-tool",
+  "missing-builtin-param",
 ];
 
 /** The switches the check itself runs with, so a test cannot prove a shape CI never compares. */
@@ -106,6 +115,138 @@ describe("contract parity with the Python MCP server", () => {
       moved,
       "one side of these divergences changed; re-review the entry and update `observed`",
     ).toEqual([]);
+  });
+});
+
+/**
+ * The third surface, compared the same way and recorded in its own section.
+ *
+ * Galaxy serves an MCP server of its own, in process over its operations manager where
+ * the tools here go through REST. It is not a surface this repository releases, so its differences are a to-do list for a conversation
+ * with galaxyproject/galaxy rather than a promise about a release -- which is why they are
+ * counted apart from the rows above and against a ratchet of their own.
+ */
+describe("contract parity with Galaxy's own MCP server", () => {
+  let snapshot: BuiltinSnapshot;
+  let section: BuiltinRegistry;
+  let builtin: Surface;
+  let builtinFound: Divergence[];
+
+  beforeAll(() => {
+    snapshot = loadBuiltinSnapshot();
+    section = builtinRegistry(registry);
+    builtin = builtinSurface(snapshot, section);
+    builtinFound = compareSurfaces(
+      pythonSurface(manifest),
+      builtin,
+      normalizationFrom(registry),
+      builtinSide(section),
+    );
+  });
+
+  it("says which Galaxy it describes", () => {
+    // A column nobody can date is a column nobody can act on: the snapshot is refreshed by
+    // hand, so what it is a snapshot OF has to travel with it.
+    expect(snapshot.galaxy.commit, "the snapshot must name the Galaxy commit").toMatch(
+      /^[0-9a-f]{40}$/,
+    );
+    expect(snapshot.galaxy.moduleBlob).toMatch(/^[0-9a-f]{40}$/);
+    expect(snapshot.galaxy.version.length).toBeGreaterThan(0);
+    expect(snapshot.galaxy.branch.length).toBeGreaterThan(0);
+    expect(snapshot.galaxy.commitDate).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(snapshot.toolCount).toBe(snapshot.tools.length);
+  });
+
+  it("declares every rule the built-in loader applies", () => {
+    const written = new Map(Object.entries(section.normalization));
+    expect([...written.keys()].sort()).toEqual([...BUILTIN_RULES].sort());
+    for (const name of BUILTIN_RULES) {
+      const rule = written.get(name);
+      expect(typeof rule?.enabled, `${name}.enabled`).toBe("boolean");
+      expect(DIVERGENCE_STATUSES, `${name}.status`).toContain(rule?.status);
+      expect(rule?.reason.trim().length, `${name}.reason`).toBeGreaterThan(0);
+    }
+  });
+
+  it("aliases only onto tools this repository actually has", () => {
+    // An alias is a claim that two names are one tool. Landing on a name nobody here has
+    // would turn one missing-tool row into two and read as agreement about neither.
+    const ours = new Set(toolNames());
+    for (const [from, to] of Object.entries(section.aliases)) {
+      expect(ours.has(to), `${from} is aliased to ${to}, which no tool here is called`).toBe(true);
+    }
+    expect(section.aliasReason?.trim().length ?? 0).toBeGreaterThan(0);
+  });
+
+  it("drops the per-call credential from every built-in tool, and nothing else", () => {
+    // The rule's own promise, read off the surface it produced rather than off the rule.
+    for (const [tool, contract] of builtin) {
+      const schema = contract.inputSchema as { properties?: Record<string, unknown> };
+      expect(Object.keys(schema.properties ?? {}), tool).not.toContain("api_key");
+    }
+    const raw = new Map(snapshot.tools.map((t) => [t.name, t]));
+    for (const [name, tool] of raw) {
+      const properties = (tool.inputSchema as { properties?: Record<string, unknown> }).properties;
+      expect(Object.keys(properties ?? {}), `${name} (snapshot)`).toContain("api_key");
+    }
+  });
+
+  it("has no divergence that is missing from the registry's built-in section", () => {
+    const accepted = new Set(section.divergences.map(divergenceKey));
+    const unregistered = builtinFound.filter((d) => !accepted.has(divergenceKey(d)));
+    expect(
+      unregistered.map(formatDivergence),
+      `${unregistered.length} unregistered difference(s) between this server and Galaxy's own. ` +
+        "Add each to the `builtin` section of test/fixtures/accepted-divergences.json, or close " +
+        "the gap.",
+    ).toEqual([]);
+  });
+
+  it("has no built-in entry the two surfaces no longer disagree about", () => {
+    const current = new Set(builtinFound.map(divergenceKey));
+    const stale = section.divergences.filter((d) => !current.has(divergenceKey(d)));
+    expect(
+      stale.map(where),
+      "these built-in entries no longer describe a real difference -- delete them",
+    ).toEqual([]);
+  });
+
+  it("has built-in entries that still describe what each side says", () => {
+    const byKey = new Map(builtinFound.map((d) => [divergenceKey(d), d]));
+    const moved = section.divergences
+      .map((entry) => ({ entry, actual: byKey.get(divergenceKey(entry)) }))
+      .filter(({ entry, actual }) => actual && actual.observed !== entry.observed)
+      .map(
+        ({ entry, actual }) =>
+          `${where(entry)}: registry says "${entry.observed}", surfaces say "${actual?.observed}"`,
+      );
+    expect(moved, "one side of these changed; re-read the entry and update `observed`").toEqual([]);
+  });
+
+  it("is a well-formed section", () => {
+    const problems: string[] = [];
+    const seen = new Set<string>();
+    for (const entry of section.divergences) {
+      if (!KINDS.includes(entry.kind)) problems.push(`${where(entry)}: unknown kind`);
+      if (!DIVERGENCE_STATUSES.includes(entry.status)) problems.push(`${where(entry)}: unknown status`);
+      if (!entry.reason?.trim()) problems.push(`${where(entry)}: needs a reason`);
+      if (WHOLE_TOOL_KINDS.includes(entry.kind) !== (entry.param === null)) {
+        problems.push(`${where(entry)}: param must be null for whole-tool kinds and set otherwise`);
+      }
+      const key = divergenceKey(entry);
+      if (seen.has(key)) problems.push(`${where(entry)}: duplicate entry`);
+      seen.add(key);
+    }
+    expect(problems).toEqual([]);
+  });
+
+  it("holds its own ratchet, counted over its own rows", () => {
+    // The same arithmetic as the ratchet above, over this section: the number and the count
+    // cannot drift apart, and it is meant to come down.
+    const held = section.divergences.filter((d) => d.status === RATCHETED_STATUS).length;
+    expect(section.ratchet.unreviewedGaps, "the built-in ratchet must equal its own count").toBe(
+      held,
+    );
   });
 });
 
