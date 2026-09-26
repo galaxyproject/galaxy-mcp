@@ -6,7 +6,7 @@
  * show_workflow via a Galaxy client, op registration) lives in
  * operations/get-workflow-input-template.ts and operations/invoke-workflow.ts.
  *
- * Faithful port of Python workflow_inputs.py.
+ * Faithful port of mcp-server-galaxy-py/src/galaxy_mcp/ops/workflow_inputs.py.
  */
 
 import { cleanReadmeSummary } from "./iwc-manifest";

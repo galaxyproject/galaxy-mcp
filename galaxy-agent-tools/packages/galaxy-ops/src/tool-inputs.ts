@@ -2,7 +2,7 @@
  * Pure helpers for diagnosing and scaffolding Galaxy tool inputs.
  *
  * No network, no Galaxy client, no global state. Faithful port of
- * mcp-server-galaxy-py/src/galaxy_mcp/tool_inputs.py -- the Python is
+ * mcp-server-galaxy-py/src/galaxy_mcp/ops/tool_inputs.py -- the Python is
  * authoritative for key formats and placeholder literals.
  */
 
