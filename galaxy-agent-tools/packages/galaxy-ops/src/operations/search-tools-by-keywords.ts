@@ -164,6 +164,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<ToolKeywordMatch>> 
 export const searchToolsByKeywordsOp: Operation<typeof input, Paged<ToolKeywordMatch>> = {
   name: "search_tools_by_keywords",
   domain: "tools",
+  result: { kind: "list", paginated: true },
   summary: "Search Galaxy tools by keywords matched against name, description, and input file extensions.",
   input,
   run,

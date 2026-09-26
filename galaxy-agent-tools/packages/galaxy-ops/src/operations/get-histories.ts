@@ -60,6 +60,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<Histories> {
 export const getHistoriesOp: Operation<typeof input, Histories> = {
   name: "get_histories",
   domain: "histories",
+  result: { kind: "list" },
   summary: "List the current user's histories (id, name, counts). Optional exact-name filter.",
   input,
   run,

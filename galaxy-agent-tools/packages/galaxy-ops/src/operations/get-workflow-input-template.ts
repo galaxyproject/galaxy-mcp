@@ -156,6 +156,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<WorkflowInputTemplate> {
 export const getWorkflowInputTemplateOp: Operation<typeof input, WorkflowInputTemplate> = {
   name: "get_workflow_input_template",
   domain: "workflows",
+  result: { kind: "object", fields: ["inputs_template", "inputs_by", "slots", "guide", "warnings"] },
   summary:
     "Return a ready-to-fill input template plus a run guide for a workflow. Call this before invoke_workflow. Each slot lists its label, expected src (hda/hdca), accepted datatypes, collection type, and -- for parameters -- selectable options.",
   input,

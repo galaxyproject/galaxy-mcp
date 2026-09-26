@@ -134,6 +134,10 @@ async function run(i: In, ctx: GalaxyContext): Promise<DownloadDatasetResult> {
 export const downloadDatasetOp: Operation<typeof input, DownloadDatasetResult> = {
   name: "download_dataset",
   domain: "datasets",
+  result: {
+    kind: "object",
+    fields: ["dataset_id", "dataset_info", "suggested_filename", "content_available"],
+  },
   /**
    * Not read-only, because `readOnlyHint` is about the environment, not about Galaxy.
    *

@@ -58,6 +58,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<ToolListItem>> {
 export const searchToolsByNameOp: Operation<typeof input, Paged<ToolListItem>> = {
   name: "search_tools_by_name",
   domain: "tools",
+  result: { kind: "list", paginated: true },
   summary:
     "Search Galaxy tools by name, id, or description substring (case-insensitive), a page at a time.",
   input,
