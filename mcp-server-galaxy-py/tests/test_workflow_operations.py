@@ -2,9 +2,11 @@
 Test workflow-related operations
 """
 
+import inspect
 from unittest.mock import Mock, patch
 
 import pytest
+from bioblend.galaxy import GalaxyInstance
 
 from galaxy_mcp.server import (
     _DATATYPES_MAPPING_CACHE,
@@ -183,7 +185,7 @@ class TestWorkflowOperations:
 
             # Verify function was called with correct parameters
             mock_galaxy_instance.workflows.get_workflows.assert_called_with(
-                workflow_id=None, name=None, published=False
+                name=None, published=False
             )
 
     def test_list_workflows_fn_with_filters(self, mock_galaxy_instance):
@@ -208,8 +210,29 @@ class TestWorkflowOperations:
 
             # Verify function was called with filters
             mock_galaxy_instance.workflows.get_workflows.assert_called_with(
-                workflow_id=None, name="RNA-seq", published=True
+                name="RNA-seq", published=True
             )
+
+    def test_list_workflows_fn_takes_no_workflow_id(self, mock_galaxy_instance):
+        """The parameter is gone because it could never have worked.
+
+        bioblend's get_workflows has raised for any non-None workflow_id since 1.1.1 --
+        it tells the caller to use show_workflow instead -- so passing one through this
+        tool only ever produced that error. get_workflow_details is the way to one
+        workflow, and the docstring already said so.
+        """
+        params = inspect.signature(list_workflows_fn).parameters
+        assert "workflow_id" not in params
+        assert set(params) == {"name", "published", "limit", "offset"}
+
+        with pytest.raises(TypeError):
+            list_workflows_fn(workflow_id="wf1")  # type: ignore[call-arg]
+
+    def test_bioblend_still_refuses_a_workflow_id(self, mock_galaxy_instance):
+        """Pins the reason above: if bioblend ever takes it again, this fails."""
+        real = GalaxyInstance(url="http://galaxy.invalid", key="notakey")
+        with pytest.raises(ValueError, match="workflow_id parameter has been removed"):
+            real.workflows.get_workflows(workflow_id="wf1")
 
     def test_get_workflow_details_fn(self, mock_galaxy_instance):
         """Test getting workflow details"""

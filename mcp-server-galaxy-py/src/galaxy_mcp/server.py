@@ -3679,7 +3679,6 @@ def import_workflow_from_iwc(trs_id: str) -> GalaxyResult:
 
 @mcp.tool(tags={"workflows", "read", "extended"})
 def list_workflows(
-    workflow_id: str | None = None,
     name: str | None = None,
     published: bool = False,
     limit: int = 50,
@@ -3689,7 +3688,6 @@ def list_workflows(
     List workflows available in the Galaxy instance, one page at a time
 
     Args:
-        workflow_id: Specific workflow ID to get (optional) - a hexadecimal hash string
         name: Filter workflows by name (optional)
         published: Include published workflows (default: False, shows only user workflows)
         limit: Maximum workflows to return per page (default 50, max 200). A page
@@ -3710,9 +3708,7 @@ def list_workflows(
 
     try:
         gi: GalaxyInstance = state["gi"]
-        workflows = gi.workflows.get_workflows(
-            workflow_id=workflow_id, name=name, published=published
-        )
+        workflows = gi.workflows.get_workflows(name=name, published=published)
         # bioblend's get_workflows takes no limit/offset and filters name client-side,
         # so the window is applied here too.
         return _budgeted_page(
@@ -3730,11 +3726,7 @@ def list_workflows(
         )
     except Exception as e:
         raise ValueError(
-            format_error(
-                "List workflows",
-                e,
-                {"workflow_id": workflow_id, "name": name, "published": published},
-            )
+            format_error("List workflows", e, {"name": name, "published": published})
         ) from e
 
 

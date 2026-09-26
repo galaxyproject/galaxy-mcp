@@ -1143,18 +1143,6 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "workflow_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Specific workflow ID to get (optional) - a hexadecimal hash string"
-          },
           "name": {
             "anyOf": [
               {
