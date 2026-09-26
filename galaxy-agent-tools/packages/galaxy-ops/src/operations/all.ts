@@ -1,47 +1,5 @@
-// The single import-for-side-effect list. Importing this guarantees every op is
-// registered, regardless of whether index.ts happens to re-export it. New ops MUST
-// add a line here.
-import "./get-user";
-import "./run-tool";
-import "./get-invocations";
-import "./get-server-info";
-import "./get-histories";
-import "./list-history-ids";
-import "./get-history-details";
-import "./create-history";
-import "./get-dataset-details";
-import "./get-collection-details";
-import "./get-history-contents";
-import "./list-workflows";
-import "./get-workflow-details";
-import "./get-tool-details";
-import "./search-tools-by-name";
-import "./get-tool-panel";
-import "./get-tool-citations";
-import "./get-tool-run-examples";
-import "./search-tools-by-keywords";
-import "./get-job-details";
-import "./update-history";
-import "./cancel-workflow-invocation";
+// Every op, for a Node host: all-browser plus the two that touch a local filesystem.
+import "./all-browser";
+
 import "./download-dataset";
-import "./get-iwc-workflows";
-import "./get-iwc-workflow-details";
-import "./search-iwc-workflows";
-import "./recommend-iwc-workflows";
-import "./import-workflow-from-iwc";
-import "./list-user-tools";
-import "./create-user-tool";
-import "./delete-user-tool";
-import "./run-user-tool";
-import "./get-tool-input-template";
-import "./get-workflow-input-template";
-import "./invoke-workflow";
 import "./upload-file";
-import "./upload-file-from-url";
-import "./list-pages";
-import "./get-page";
-import "./create-page";
-import "./update-page";
-import "./list-page-revisions";
-import "./get-page-revision";
-import "./revert-page-revision";
