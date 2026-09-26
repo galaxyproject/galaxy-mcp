@@ -21,6 +21,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<PageRevisionSummary[]> {
 export const listPageRevisionsOp: Operation<typeof input, PageRevisionSummary[]> = {
   name: "list_page_revisions",
   domain: "pages",
+  result: { kind: "list" },
   summary:
     "List a page's revision history. A revision carries an edit_source of " +
     '"user", "agent" or "restore" where Galaxy recorded one -- a page\'s first revision ' +

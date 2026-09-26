@@ -142,6 +142,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetJobDetailsResult> {
 export const getJobDetailsOp: Operation<typeof input, GetJobDetailsResult> = {
   name: "get_job_details",
   domain: "jobs",
+  result: { kind: "object", fields: ["job", "dataset_id", "job_id"] },
   // server.py's docstring, so the two surfaces describe the read in one voice: what the
   // record carries, and that the logs are get_job_logs' question rather than this one's.
   // That pointer names no parameter on purpose: spellParamNames respells every key of THIS

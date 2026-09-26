@@ -24,6 +24,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<DeletedUserTool> {
 export const deleteUserToolOp: Operation<typeof input, DeletedUserTool> = {
   name: "delete_user_tool",
   domain: "userTools",
+  result: { kind: "object", fields: ["uuid", "deactivated"] },
   summary: "Deactivate a user-defined tool by uuid (soft delete).",
   input,
   readOnly: false,

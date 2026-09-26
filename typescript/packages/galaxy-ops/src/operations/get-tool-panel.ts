@@ -160,6 +160,7 @@ const reshape = (was: PaginationInfo, keep: number, noun: string): PaginationInf
 export const getToolPanelOp: Operation<typeof input, ToolPanelResult> = {
   name: "get_tool_panel",
   domain: "tools",
+  result: { kind: "object", paginated: true },
   summary:
     "List the Galaxy tool panel's sections and their tool counts. Pass sectionId to list one " +
     "section's tools instead. Legacy endpoint.",

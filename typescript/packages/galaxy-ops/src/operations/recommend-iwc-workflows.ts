@@ -143,6 +143,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<Recommendations> {
 export const recommendIwcWorkflowsOp: Operation<typeof input, Recommendations> = {
   name: "recommend_iwc_workflows",
   domain: "iwc",
+  result: { kind: "list" },
   summary: "Rank IWC curated workflows by relevance to a free-text intent using BM25.",
   input,
   run,

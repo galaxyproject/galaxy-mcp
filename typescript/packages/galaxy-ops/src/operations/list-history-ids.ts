@@ -54,6 +54,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<HistoryRef>> {
 export const listHistoryIdsOp: Operation<typeof input, Paged<HistoryRef>> = {
   name: "list_history_ids",
   domain: "histories",
+  result: { kind: "list", paginated: true },
   summary: "List just the id and name of each history (compact picker for agents), one page at a time.",
   input,
   run,
