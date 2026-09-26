@@ -6,7 +6,7 @@ import type { AnyOperation, Operation } from "./types";
 
 export interface ToolRunExamples {
   tool_id: string;
-  requested_version?: string;
+  requested_version: string | null;
   test_cases: unknown[];
 }
 
@@ -25,7 +25,8 @@ async function run(i: In, ctx: GalaxyContext): Promise<ToolRunExamples> {
   });
   return {
     tool_id: i.toolId,
-    ...(i.toolVersion != null ? { requested_version: i.toolVersion } : {}),
+    // Always stated: an absent key reads as "no such field", null as "no version pinned".
+    requested_version: i.toolVersion ?? null,
     test_cases: testCases,
   };
 }
