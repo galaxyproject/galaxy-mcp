@@ -482,7 +482,7 @@
               }
             ],
             "default": null,
-            "description": "Maximum number of invocations to return (optional, default: no limit)"
+            "description": "Maximum number of invocations to return. Leave it unset and none is\n   sent, so Galaxy applies its own default of 20 -- not \"no limit\". Raise\n   it to see more."
           },
           "view": {
             "default": "collection",

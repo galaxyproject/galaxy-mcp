@@ -453,6 +453,28 @@ _STATUS_HINTS = {
 _NO_STATUS_FIELD = object()
 
 
+def _refuse_error_body(action: str, payload: Any) -> None:
+    """Raise when a 200 carries an error message instead of the thing asked for.
+
+    Galaxy's MessageExceptionModel is {err_msg, err_code}, and some endpoints answer
+    with it under a 200 rather than a 4xx. bioblend hands that dict back as the result,
+    so anything that measures the reply -- len() on a list of invocations, say -- reads
+    an error as content and reports it as success.
+
+    What is refused is any reply carrying err_msg, rather than exactly those two keys:
+    err_code may be absent, and nothing this is used on has an err_msg of its own, so
+    the one key is what says this is an error. Everything else is left alone.
+    """
+    if isinstance(payload, dict) and "err_msg" in payload:
+        raise ValueError(
+            format_error(
+                action,
+                Exception(str(payload.get("err_msg"))),
+                {"err_code": payload.get("err_code")},
+            )
+        )
+
+
 def format_error(action: str, error: Exception, context: dict | None = None) -> str:
     """Format error messages consistently.
 
@@ -3165,7 +3187,9 @@ def get_invocations(
                     (e.g., 'b2c3d4e5f6789abc', typically 16 characters, optional)
         history_id: Filter invocations by history ID - a hexadecimal hash string
                    (e.g., '1cd8e2f6b131e5aa', typically 16 characters, optional)
-        limit: Maximum number of invocations to return (optional, default: no limit)
+        limit: Maximum number of invocations to return. Leave it unset and none is
+               sent, so Galaxy applies its own default of 20 -- not "no limit". Raise
+               it to see more.
         view: Level of detail to return - 'element' for detailed or 'collection' for summary
              (default: 'collection')
         step_details: Include details on individual workflow steps
@@ -3181,6 +3205,7 @@ def get_invocations(
         # If invocation_id is provided, get details of a specific invocation
         if invocation_id:
             invocation = gi.invocations.show_invocation(invocation_id)
+            _refuse_error_body("Get workflow invocations", invocation)
             return GalaxyResult(
                 data=invocation,
                 success=True,
@@ -3195,12 +3220,16 @@ def get_invocations(
             view=view,
             step_details=step_details,
         )
+        _refuse_error_body("Get workflow invocations", invocations)
         return GalaxyResult(
             data=invocations,
             success=True,
             message=f"Retrieved {len(invocations)} workflow invocations",
             count=len(invocations),
         )
+    except ValueError:
+        # Already the refusal above, which says more than the wrapper below would.
+        raise
     except Exception as e:
         raise ValueError(f"Failed to get workflow invocations: {str(e)}") from e
 
