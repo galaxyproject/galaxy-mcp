@@ -2,9 +2,11 @@
 Test workflow-related operations
 """
 
+import inspect
 from unittest.mock import Mock, patch
 
 import pytest
+from bioblend.galaxy import GalaxyInstance
 
 from galaxy_mcp.server import (
     _DATATYPES_MAPPING_CACHE,
@@ -25,6 +27,81 @@ from .test_helpers import (
     list_workflows_fn,
     search_iwc_workflows_fn,
 )
+
+
+class TestGetInvocationsRefusesAnErrorBody:
+    """Galaxy can answer 200 with {err_msg, err_code} instead of the thing asked for.
+
+    bioblend hands that dict straight back, so the list path used to measure it with
+    len() and report the error as a success: success=True, the error itself as the
+    data, and a count of however many keys that error dict happened to have.
+
+    Any reply carrying err_msg is refused, not only the two-key shape.
+    """
+
+    ERROR_BODY = {"err_msg": "Invocation not accessible", "err_code": 403002}
+
+    def test_a_200_error_body_is_refused_not_counted(self, mock_galaxy_instance):
+        mock_galaxy_instance.invocations.get_invocations.return_value = self.ERROR_BODY
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError) as exc:
+                get_invocations_fn()
+
+        message = str(exc.value)
+        assert "Invocation not accessible" in message
+        assert "err_code=403002" in message
+
+    def test_the_same_body_from_the_single_invocation_path(self, mock_galaxy_instance):
+        mock_galaxy_instance.invocations.show_invocation.return_value = self.ERROR_BODY
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError, match="Invocation not accessible"):
+                get_invocations_fn(invocation_id="a1b2c3d4e5f6789a")
+
+    def test_err_msg_on_its_own_is_enough(self, mock_galaxy_instance):
+        """err_code is not always there, and the message is the part worth raising."""
+        mock_galaxy_instance.invocations.get_invocations.return_value = {
+            "err_msg": "History is not accessible"
+        }
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError, match="History is not accessible"):
+                get_invocations_fn()
+
+    def test_an_ordinary_list_is_untouched(self, mock_galaxy_instance):
+        invocations = [{"id": "inv1", "state": "scheduled"}, {"id": "inv2", "state": "new"}]
+        mock_galaxy_instance.invocations.get_invocations.return_value = invocations
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_invocations_fn()
+
+        assert result.success is True
+        assert result.count == 2
+        assert result.data == invocations
+
+    def test_a_dict_that_is_not_an_error_is_untouched(self, mock_galaxy_instance):
+        """Only the err_msg shape is refused, not every dict."""
+        mock_galaxy_instance.invocations.show_invocation.return_value = {
+            "id": "a1b2c3d4e5f6789a",
+            "state": "scheduled",
+        }
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_invocations_fn(invocation_id="a1b2c3d4e5f6789a")
+
+        assert result.success is True
+        assert result.data["state"] == "scheduled"
+
+    def test_the_limit_default_is_galaxys_not_unlimited(self, mock_galaxy_instance):
+        """No limit is sent, so Galaxy's index applies its own default of 20."""
+        mock_galaxy_instance.invocations.get_invocations.return_value = []
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            get_invocations_fn()
+
+        assert mock_galaxy_instance.invocations.get_invocations.call_args.kwargs["limit"] is None
+        assert "default of 20" in (get_invocations_fn.__doc__ or "")
 
 
 class TestWorkflowOperations:
@@ -183,7 +260,7 @@ class TestWorkflowOperations:
 
             # Verify function was called with correct parameters
             mock_galaxy_instance.workflows.get_workflows.assert_called_with(
-                workflow_id=None, name=None, published=False
+                name=None, published=False
             )
 
     def test_list_workflows_fn_with_filters(self, mock_galaxy_instance):
@@ -208,8 +285,29 @@ class TestWorkflowOperations:
 
             # Verify function was called with filters
             mock_galaxy_instance.workflows.get_workflows.assert_called_with(
-                workflow_id=None, name="RNA-seq", published=True
+                name="RNA-seq", published=True
             )
+
+    def test_list_workflows_fn_takes_no_workflow_id(self, mock_galaxy_instance):
+        """The parameter is gone because it could never have worked.
+
+        bioblend's get_workflows has raised for any non-None workflow_id since 1.1.1 --
+        it tells the caller to use show_workflow instead -- so passing one through this
+        tool only ever produced that error. get_workflow_details is the way to one
+        workflow, and the docstring already said so.
+        """
+        params = inspect.signature(list_workflows_fn).parameters
+        assert "workflow_id" not in params
+        assert set(params) == {"name", "published", "limit", "offset"}
+
+        with pytest.raises(TypeError):
+            list_workflows_fn(workflow_id="wf1")  # type: ignore[call-arg]
+
+    def test_bioblend_still_refuses_a_workflow_id(self, mock_galaxy_instance):
+        """Pins the reason above: if bioblend ever takes it again, this fails."""
+        real = GalaxyInstance(url="http://galaxy.invalid", key="notakey")
+        with pytest.raises(ValueError, match="workflow_id parameter has been removed"):
+            real.workflows.get_workflows(workflow_id="wf1")
 
     def test_get_workflow_details_fn(self, mock_galaxy_instance):
         """Test getting workflow details"""

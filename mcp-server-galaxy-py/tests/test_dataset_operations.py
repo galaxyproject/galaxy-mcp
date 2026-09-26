@@ -16,6 +16,20 @@ from .test_helpers import (
 )
 
 
+def _serves_text(gi, item_data, truncated=False):
+    """Galaxy's GET /api/datasets/{id}/get_content_as_text answer."""
+    response = Mock()
+    response.status_code = 200
+    response.raise_for_status.return_value = None
+    response.json.return_value = {
+        "item_data": item_data,
+        "truncated": truncated,
+        "item_url": "/datasets/x/display",
+    }
+    gi.make_get_request.return_value = response
+    return response
+
+
 class TestDatasetOperations:
     """Test dataset operations"""
 
@@ -54,11 +68,8 @@ class TestDatasetOperations:
             "file_size": 1024,
         }
 
-        # Mock dataset content for preview
-        mock_content = b"line1\nline2\nline3\nline4\nline5\n"
-
         mock_galaxy_instance.datasets.show_dataset.return_value = mock_dataset_info
-        mock_galaxy_instance.datasets.download_dataset.return_value = mock_content
+        _serves_text(mock_galaxy_instance, "line1\nline2\nline3\nline4\nline5\n")
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = get_dataset_details_fn(dataset_id, include_preview=True, preview_lines=3)
@@ -67,10 +78,81 @@ class TestDatasetOperations:
             assert result.data["dataset_id"] == dataset_id
             assert result.data["dataset"]["name"] == "test_data.txt"
             assert result.data["preview"]["lines"] == "line1\nline2\nline3"
-            assert result.data["preview"]["total_lines"] == 6  # 5 lines + empty line at end
+            assert result.data["preview"]["preview_lines"] == 3
             assert result.data["preview"]["truncated"] is True
+            assert result.data["preview"]["content_truncated_by_galaxy"] is False
+            # No total: what came back is a peek, and a line count taken from it
+            # reads as a count of the dataset.
+            assert set(result.data["preview"]) == {
+                "lines",
+                "preview_lines",
+                "truncated",
+                "content_truncated_by_galaxy",
+            }
 
             mock_galaxy_instance.datasets.show_dataset.assert_called_once_with(dataset_id)
+            # The whole dataset is never fetched for a preview any more.
+            mock_galaxy_instance.datasets.download_dataset.assert_not_called()
+
+    def test_get_dataset_details_preview_asks_the_text_route(self, mock_galaxy_instance):
+        """The URL matters: this is the route that stops at 1 MB."""
+        mock_galaxy_instance.datasets.show_dataset.return_value = {
+            "id": "dataset123",
+            "name": "test_data.txt",
+            "state": "ok",
+        }
+        _serves_text(mock_galaxy_instance, "a\nb\n")
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            get_dataset_details_fn("dataset123", include_preview=True)
+
+        mock_galaxy_instance.make_get_request.assert_called_once_with(
+            "http://localhost:8080/api/datasets/dataset123/get_content_as_text"
+        )
+
+    def test_get_dataset_details_passes_galaxys_own_truncation_flag_through(
+        self, mock_galaxy_instance
+    ):
+        """truncated is our line slice; content_truncated_by_galaxy is Galaxy's flag.
+
+        The two are different facts and both are reported. Galaxy's own flag is no
+        guarantee either: it comes from the stored byte size while the read counts
+        decoded characters, so compressed text can be clipped with it false and
+        multibyte text can be complete with it true. That is why the preview reports
+        no totals of its own.
+        """
+        mock_galaxy_instance.datasets.show_dataset.return_value = {
+            "id": "dataset123",
+            "name": "big.txt",
+            "state": "ok",
+        }
+        _serves_text(mock_galaxy_instance, "a\nb\n", truncated=True)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_dataset_details_fn("dataset123", include_preview=True, preview_lines=10)
+
+        preview = result.data["preview"]
+        assert preview["content_truncated_by_galaxy"] is True
+        # Our own line slice did not cut anything; Galaxy's byte cap did.
+        assert preview["truncated"] is False
+        assert preview["lines"] == "a\nb\n"
+
+    def test_get_dataset_details_preview_failure_is_not_fatal(self, mock_galaxy_instance):
+        """A preview that cannot be fetched still leaves the metadata usable."""
+        mock_galaxy_instance.datasets.show_dataset.return_value = {
+            "id": "dataset123",
+            "name": "test_data.txt",
+            "state": "ok",
+        }
+        mock_galaxy_instance.make_get_request.side_effect = Exception("boom")
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_dataset_details_fn("dataset123", include_preview=True)
+
+        assert result.success is True
+        assert result.data["dataset"]["name"] == "test_data.txt"
+        assert "Preview unavailable" in result.data["preview"]["error"]
+        assert result.data["preview"]["lines"] is None
 
     def test_get_dataset_details_no_preview(self, mock_galaxy_instance):
         """Test getting dataset details without preview"""
@@ -107,19 +189,18 @@ class TestDatasetOperations:
             "extension": "bin",
         }
 
-        # Binary content that can't be decoded as UTF-8
-        mock_content = b"\x89PNG\r\n\x1a\n\x00\x00\x00"
-
         mock_galaxy_instance.datasets.show_dataset.return_value = mock_dataset_info
-        mock_galaxy_instance.datasets.download_dataset.return_value = mock_content
+        # hda_manager.text_data returns nothing at all for a datatype that is not text,
+        # so Galaxy answers with item_data null rather than bytes to guess at.
+        _serves_text(mock_galaxy_instance, None)
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = get_dataset_details_fn(dataset_id, include_preview=True)
 
             assert result.success is True
             assert result.data["dataset_id"] == dataset_id
-            assert "[Binary content" in result.data["preview"]["lines"]
-            assert "hex:" in result.data["preview"]["lines"]
+            assert result.data["preview"]["lines"] is None
+            assert "text datatypes only" in result.data["preview"]["error"]
 
     def test_download_dataset_with_file_path(self, mock_galaxy_instance):
         """Test dataset download to specific file path"""
