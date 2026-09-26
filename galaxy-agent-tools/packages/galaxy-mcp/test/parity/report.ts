@@ -30,12 +30,18 @@ import {
 import {
   DIVERGENCE_STATUSES,
   RATCHETED_STATUS,
+  builtinRegistry,
+  builtinSide,
+  builtinSurface,
+  loadBuiltinSnapshot,
   loadManifest,
   loadRegistry,
   normalizationFrom,
   pythonSurface,
   ratchetCeiling,
   typescriptSurface,
+  type AcceptedDivergence,
+  type BuiltinProvenance,
   type Registry,
 } from "./surfaces";
 
@@ -62,12 +68,30 @@ export interface ReportSurface {
   surface: Surface;
 }
 
+/**
+ * The second pair: this repository's Python surface against the one Galaxy serves.
+ *
+ * Optional, because the snapshot it reads needs a Galaxy checkout and a report without it
+ * is still a true report of the two surfaces here. Kept beside the first pair rather than
+ * merged into it because the two say different things: the pair above is a promise about
+ * what this repository releases, and this one is a list of questions for Galaxy.
+ */
+export interface ReportBuiltin {
+  /** Which Galaxy the third column describes, printed so a reader can date it. */
+  galaxy: BuiltinProvenance;
+  divergences: readonly Divergence[];
+  accepted: readonly AcceptedDivergence[];
+  /** How many unreviewed gaps this pair's own ratchet allows. */
+  ratchet: number;
+}
+
 export interface ReportInput {
   surfaces: readonly ReportSurface[];
   divergences: readonly Divergence[];
   registry: Registry;
   /** The switches the comparison ran with, so the report shows the shapes it compared. */
   rules: Normalization;
+  builtin?: ReportBuiltin;
 }
 
 /**
@@ -194,9 +218,22 @@ function toolCell(column: ReportSurface, tool: string): string {
 }
 
 export function renderReport(input: ReportInput): string {
-  const { surfaces, divergences, registry, rules } = input;
+  const { surfaces, divergences, registry, rules, builtin } = input;
   const tools = [...new Set(surfaces.flatMap((s) => [...s.surface.keys()]))].sort(byText);
-  const accepted = new Map(registry.divergences.map((d) => [divergenceKey(d), d]));
+  /**
+   * The pairs this report covers, each with the rows it found and the entries somebody
+   * wrote about them. A built-in row says so in its `Difference` cell: the kinds name two
+   * sides and a cell holding rows from both pairs would otherwise read as one comparison.
+   */
+  const pairs = [
+    { prefix: "", divergences, accepted: registry.divergences },
+    ...(builtin
+      ? [{ prefix: "vs built-in: ", divergences: builtin.divergences, accepted: builtin.accepted }]
+      : []),
+  ].map((pair) => ({
+    ...pair,
+    entries: new Map(pair.accepted.map((d) => [divergenceKey(d), d])),
+  }));
 
   /**
    * What the registry says about a divergence, and what to say when what it says is
@@ -210,8 +247,11 @@ export function renderReport(input: ReportInput): string {
    * opposite of what happened. Such a row says `stale` and shows the reading it came
    * from beside the values the surfaces give now.
    */
-  const verdict = (d: Divergence): { status: string; reason: string } => {
-    const entry = accepted.get(divergenceKey(d));
+  const verdict = (
+    d: Divergence,
+    entries: Map<string, AcceptedDivergence>,
+  ): { status: string; reason: string } => {
+    const entry = entries.get(divergenceKey(d));
     if (!entry) {
       return {
         status: UNREGISTERED,
@@ -251,8 +291,17 @@ export function renderReport(input: ReportInput): string {
     return params;
   };
 
-  const found = new Map<string, Divergence[]>();
-  for (const d of divergences) found.set(at(d), [...(found.get(at(d)) ?? []), d]);
+  /** Every row either pair found, in pair order, by the place it is about. */
+  const found = new Map<string, { kind: string; status: string; reason: string }[]>();
+  for (const pair of pairs) {
+    for (const d of pair.divergences) {
+      const { status, reason } = verdict(d, pair.entries);
+      found.set(at(d), [
+        ...(found.get(at(d)) ?? []),
+        { kind: `${pair.prefix}${d.kind}`, status, reason },
+      ]);
+    }
+  }
   /**
    * The last three cells of a row: what differs, what somebody called it, and why.
    * The first two are the comparison's own words and go in as code; the reason is
@@ -262,10 +311,28 @@ export function renderReport(input: ReportInput): string {
     const here = found.get(where) ?? [];
     return [
       stacked(here.map((d) => code(d.kind))),
-      stacked(here.map((d) => code(verdict(d).status))),
-      stacked(here.map((d) => verdict(d).reason)),
+      stacked(here.map((d) => code(d.status))),
+      stacked(here.map((d) => d.reason)),
     ];
   };
+
+  /**
+   * Which parameters of a tool get a row: the ones EITHER pair found a difference
+   * about, not just the first pair's.
+   *
+   * Read off every pair for the same reason the rows are: a row is how a difference
+   * reaches a reader, and a difference the summary counts and the table leaves out is
+   * worse than one nobody had found -- the count says it was looked at. The test that
+   * holds the parameter rows to the comparator's own list is what keeps this honest.
+   */
+  const diverging = new Map<string, Set<string>>();
+  for (const pair of pairs) {
+    for (const d of pair.divergences) {
+      if (d.param === null) continue;
+      const already = diverging.get(d.tool) ?? new Set<string>();
+      diverging.set(d.tool, already.add(d.param));
+    }
+  }
 
   // A row per tool, then a row per parameter the surfaces disagree about. A whole-tool
   // divergence has no parameter of its own, so it is reported on the tool's own row.
@@ -277,11 +344,7 @@ export function renderReport(input: ReportInput): string {
       ...surfaces.map((column) => toolCell(column, tool)),
       ...verdicts(`${tool} :: `),
     ]);
-    const parameters = [
-      ...new Set(
-        divergences.filter((d) => d.tool === tool && d.param !== null).map((d) => d.param as string),
-      ),
-    ].sort(byText);
+    const parameters = [...(diverging.get(tool) ?? [])].sort(byText);
     for (const param of parameters) {
       rows.push([
         code(tool),
@@ -295,12 +358,27 @@ export function renderReport(input: ReportInput): string {
     }
   }
 
-  const held = (status: string): number =>
-    divergences.filter((d) => verdict(d).status === status).length;
-  // The two statuses nobody chose are only worth a row when there is one to count.
-  const statuses = [...DIVERGENCE_STATUSES, UNREGISTERED, STALE].filter(
-    (status) => ![UNREGISTERED, STALE].includes(status) || held(status) > 0,
-  );
+  /** One pair's count of a status, and the statuses worth a row for that pair. */
+  const counter = (pair: (typeof pairs)[number]) => {
+    const held = (status: string): number =>
+      pair.divergences.filter((d) => verdict(d, pair.entries).status === status).length;
+    // The two statuses nobody chose are only worth a row when there is one to count.
+    const statuses = [...DIVERGENCE_STATUSES, UNREGISTERED, STALE].filter(
+      (status) => ![UNREGISTERED, STALE].includes(status) || held(status) > 0,
+    );
+    return { held, statuses, total: pair.divergences.length };
+  };
+  const statusTable = (pair: (typeof pairs)[number]): string[] => {
+    const { held, statuses, total } = counter(pair);
+    return table(
+      ["Status", "Differences"],
+      [
+        ...statuses.map((status) => [code(status), code(String(held(status)))]),
+        ["**total**", code(String(total))],
+      ],
+    );
+  };
+  const [first, second] = pairs;
 
   return [
     "# Surface parity",
@@ -308,10 +386,16 @@ export function renderReport(input: ReportInput): string {
     `Generated -- do not edit by hand. Regenerate with \`${REGENERATE_COMMAND}\` from ` +
       "`galaxy-agent-tools/`, which is also what CI checks this file against.",
     "",
-    "Two surfaces expose the same Galaxy operations, and this is every way they disagree. " +
+    "Three surfaces expose the same Galaxy operations, and this is every way they disagree. " +
       "The Python column is the checked-in surface manifest " +
       "(`mcp-server-galaxy-py/tests/testdata/mcp-surface.json`); the TypeScript column is what " +
-      "a client is really advertised by `@galaxyproject/galaxy-mcp`. Compared: which tools " +
+      "a client is really advertised by `@galaxyproject/galaxy-mcp`" +
+      (builtin
+        ? "; the Built-in column is the MCP server Galaxy itself serves " +
+          "(`lib/galaxy/webapps/galaxy/api/mcp.py`, behind `enable_mcp_server`), read from a " +
+          "snapshot of that module"
+        : "") +
+      ". Compared: which tools " +
       "exist, what parameters they take, their types, requiredness and declared defaults, " +
       "whether a tool says it changes anything, and what it says it needs from the server. " +
       "Not compared: result shapes, wording, value constraints, what is inside an object, and " +
@@ -322,43 +406,113 @@ export function renderReport(input: ReportInput): string {
       "is also where the statuses themselves are explained. A status says how well a difference " +
       "is understood, not that it is acceptable.",
     "",
+    ...(builtin
+      ? [
+          `The third column describes Galaxy \`${builtin.galaxy.describe}\` ` +
+            `(\`${builtin.galaxy.commit.slice(0, 11)}\` on \`${builtin.galaxy.branch}\`, ` +
+            `committed ${builtin.galaxy.commitDate.slice(0, 10)}, captured ` +
+            `${builtin.galaxy.capturedOn}). That column is a snapshot taken by hand, because ` +
+            "reading it needs a Galaxy checkout and CI has none: it is as current as the commit " +
+            "it names and no more. Refresh it with `builtin_surface.py`, which says how.",
+          "",
+          "Two differences with that server are recorded once here rather than as a row per " +
+            "tool, because they are true of all of them: every built-in tool takes the API key " +
+            "as an argument, where both surfaces here take the credential once per session; and " +
+            "every built-in tool is registered without tags or a read-only hint, so a client is " +
+            "told nothing about which of them change state and MCP's own default is to assume " +
+            "they all might. That is why the Built-in column reads `write (mcp default)` " +
+            "throughout.",
+          "",
+        ]
+      : []),
     "## Differences by status",
     "",
-    ...table(["Status", "Differences"], [
-      ...statuses.map((status) => [code(status), code(String(held(status)))]),
-      ["**total**", code(String(divergences.length))],
-    ]),
+    ...(second ? ["### Python and TypeScript", ""] : []),
+    ...statusTable(first!),
     "",
     `\`${RATCHETED_STATUS}\` is the status nobody has ruled on yet. The check holds the registry ` +
       `to the ${ratchetCeiling(registry)} it declares, so the count cannot drift from the number; ` +
       "raising that number is an edit somebody has to make in the diff, and it is meant to come " +
       "down, never up.",
     "",
+    ...(second && builtin
+      ? [
+          "### Python and Galaxy's built-in server",
+          "",
+          ...statusTable(second),
+          "",
+          "These are counted apart and ratcheted apart -- at " +
+            `${builtin.ratchet} -- because they are not this repository's to close on its own: ` +
+            "each one is a rename, an addition or a removal somebody has to agree with " +
+            "galaxyproject/galaxy. Nothing here has been ruled on yet.",
+          "",
+        ]
+      : []),
+    ...(surfaces.length > 1
+      ? [
+          "## What each surface is missing",
+          "",
+          "Every tool any surface has, against the surfaces that do not have it. A name here " +
+            "is either a tool somebody has not written yet or the same tool under another " +
+            "name; the rows further down say which, one tool at a time.",
+          "",
+          ...surfaces.flatMap((column) => {
+            const absent = tools.filter((tool) => !column.surface.has(tool));
+            return [
+              `**Missing from ${column.title}** (${absent.length}): ` +
+                (absent.length ? absent.map((tool) => code(tool)).join(", ") : "nothing"),
+              "",
+            ];
+          }),
+        ]
+      : []),
     "## Tools",
     "",
     `A row per tool, then a row per parameter the surfaces disagree about. \`${ABSENT}\` means ` +
       "that surface does not have it. A tool's own row says what it advertises about changing " +
       "things and about the Galaxy it needs; a parameter's row says what each surface declares " +
-      "it to be, in the terms the comparison compares.",
+      "it to be, in the terms the comparison compares." +
+      (second ? " A difference found against the built-in server says so in its kind." : ""),
     "",
     ...table(["Tool", "Parameter", ...surfaces.map((s) => s.title), "Difference", "Status", "Why"], rows),
     "",
   ].join("\n");
 }
 
-/** The report for the surfaces as they stand, which is what the checked-in file has to match. */
-export async function currentReport(): Promise<string> {
+/**
+ * The three surfaces and both pairs as they stand.
+ *
+ * Separate from the rendering so a test can hold the rendered table to the same
+ * comparison the file was written from, rather than to a second wiring of the loaders
+ * that could drift away from this one.
+ */
+export async function currentInput(): Promise<ReportInput> {
   const registry = loadRegistry();
   const rules = normalizationFrom(registry);
   const python = pythonSurface(loadManifest());
   const typescript = await typescriptSurface();
-  return renderReport({
+  const snapshot = loadBuiltinSnapshot();
+  const section = builtinRegistry(registry);
+  const builtin = builtinSurface(snapshot, section);
+  return {
     surfaces: [
       { title: "Python", surface: python },
       { title: "TypeScript", surface: typescript },
+      { title: "Built-in", surface: builtin },
     ],
     divergences: compareSurfaces(python, typescript, rules),
     registry,
     rules,
-  });
+    builtin: {
+      galaxy: snapshot.galaxy,
+      divergences: compareSurfaces(python, builtin, rules, builtinSide(section)),
+      accepted: section.divergences,
+      ratchet: section.ratchet.unreviewedGaps,
+    },
+  };
+}
+
+/** The report for the surfaces as they stand, which is what the checked-in file has to match. */
+export async function currentReport(): Promise<string> {
+  return renderReport(await currentInput());
 }
