@@ -397,7 +397,8 @@ export function renderReport(input: ReportInput): string {
         : "") +
       ". Compared: which tools " +
       "exist, what parameters they take, their types, requiredness and declared defaults, " +
-      "whether a tool says it changes anything, and what it says it needs from the server. " +
+      "whether a tool takes parameters it does not declare, whether it says it changes " +
+      "anything, and what it says it needs from the server. " +
       "Not compared: result shapes, wording, value constraints, what is inside an object, and " +
       "everything else -- so a difference can be real and have no row here.",
     "",

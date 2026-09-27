@@ -19,7 +19,9 @@ lockstep with it, so a tool called `get_histories` here behaves like
 
 > The packages are published on npm under the
 > [`@galaxyproject`](https://www.npmjs.com/org/galaxyproject) scope -- install
-> them (below), or build from source to develop.
+> them (below), or build from source to develop. All three share a version and
+> are released together; [CHANGELOG.md](CHANGELOG.md) is what changed, including
+> what breaks.
 
 ## Layout
 
@@ -189,6 +191,30 @@ $CLI download_dataset <datasetId> --file-path ./result.txt
 environment. It registers every operation as an MCP tool (read-only operations
 are flagged with `readOnlyHint`).
 
+Tool parameters are spelled the way the Python MCP server spells them, so one
+`tools/call` payload works against either server:
+
+```json
+{
+  "method": "tools/call",
+  "params": {
+    "name": "get_history_details",
+    "arguments": { "history_id": "f2db41e1fa331b3e" }
+  }
+}
+```
+
+Keys inside an object-valued argument -- a workflow's `inputs`, a tool's
+parameters, a user tool's `representation` -- are your own data and go to Galaxy
+as written. Every tool is closed to names it does not declare, so an argument
+nobody asked for is refused rather than ignored, and a camelCase one is answered
+with the name to use instead. The camelCase names `galaxy-ops` uses in TypeScript
+are therefore not parameters of the MCP server (they were until 0.2.0); the CLI's
+flags come off those TypeScript names and are unchanged. A tool's own help names
+a parameter the way the surface you are reading it from takes it -- `section_id`
+over MCP, `--section-id` from the CLI -- so a tool's advice about itself is
+advice you can follow.
+
 Run it directly to sanity-check:
 
 ```bash
@@ -323,7 +349,7 @@ sides under different names.
 ### IWC (Intergalactic Workflow Commission) catalog
 | Operation | What it does |
 | --- | --- |
-| `get_iwc_workflows` | Fetch all workflows from the IWC manifest (raw) |
+| `get_iwc_workflows` | Browse curated IWC workflows, a page of summaries at a time (full record: `get_iwc_workflow_details`) |
 | `get_iwc_workflow_details` | Full details (inputs, outputs, readme) for an IWC workflow by TRS id |
 | `search_iwc_workflows` | Search curated IWC workflows by substring |
 | `recommend_iwc_workflows` | Rank IWC workflows by relevance to a free-text intent (BM25) |
@@ -402,8 +428,9 @@ pnpm parity:report   # regenerate PARITY.md (see below)
 Lockstep with the Python MCP server is a check rather than a good intention:
 `pnpm -r test` compares what this package advertises against that server's
 generated surface manifest -- which tools exist, what parameters they take, their
-types, requiredness and declared defaults, whether a tool says it changes
-anything, and what it says it needs from the Galaxy it runs against. Anything the
+types, requiredness and declared defaults, whether a tool takes parameters it does
+not declare, whether it says it changes anything, and what it says it needs from
+the Galaxy it runs against. Anything the
 two disagree about has to be listed in
 `packages/galaxy-mcp/test/fixtures/accepted-divergences.json` with a status and a
 reason, and an entry the surfaces no longer support fails the check too, so the

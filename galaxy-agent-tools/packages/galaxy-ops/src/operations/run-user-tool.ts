@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { GalaxyNotFoundError } from "../errors";
+import { jsonObject } from "../json-object";
 import { legacyGet, legacyPost } from "../legacy";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
@@ -15,9 +16,7 @@ export interface UserToolRun {
 const input = {
   historyId: z.string().describe("Galaxy history id where outputs will be placed"),
   toolUuid: z.string().describe("The UUID of the user-defined tool"),
-  inputs: z
-    .record(z.string(), z.unknown())
-    .describe("tool inputs; dataset refs as {src:'hda',id}"),
+  inputs: jsonObject().describe("tool inputs; dataset refs as {src:'hda',id}"),
 };
 type In = { historyId: string; toolUuid: string; inputs: Record<string, unknown> };
 

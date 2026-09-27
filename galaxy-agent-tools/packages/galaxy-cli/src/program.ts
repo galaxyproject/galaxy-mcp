@@ -8,7 +8,7 @@ import {
 } from "@galaxyproject/galaxy-ops";
 import { resolveConnection, loadSources, type Connection } from "./config";
 import { applyInputs } from "./flags-apply";
-import { buildInput } from "./flags";
+import { buildInput, inCliNames } from "./flags";
 import { render, serializeForCli, type Format } from "./render";
 import { exitCodeFor, EX_USAGE, EX_SOFTWARE } from "./exit";
 
@@ -29,7 +29,7 @@ export function buildProgram(deps: CliDeps = {}): Command {
     .option("--timeout <ms>", "poll timeout for blocking ops");
 
   for (const op of allOperations) {
-    const cmd = program.command(op.name).description(describeOperation(op));
+    const cmd = program.command(op.name).description(inCliNames(describeOperation(op), op.input));
     applyInputs(cmd, op);
     cmd.action(async (...args: unknown[]) => {
       // commander passes positionals..., the command's own options, then the Command.

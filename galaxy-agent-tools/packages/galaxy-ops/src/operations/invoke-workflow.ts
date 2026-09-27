@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { GalaxyConnectionError, GalaxyValidationError } from "../errors";
+import { jsonObject } from "../json-object";
 import { legacyGet } from "../legacy";
 import { validateInputs, buildWorkflowInputTemplate, type DatatypesMapping } from "../workflow-inputs";
 import { resolveWorkflowSlots } from "./get-workflow-input-template";
@@ -46,10 +47,14 @@ async function enrichSuppliedInputs(
   ctx: GalaxyContext,
   inputs: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const enriched: Record<string, unknown> = {};
+  // Collected and built at the end rather than assigned into as it goes: `inputs` is the
+  // caller's own document, where a key called `__proto__` is a key like any other (see
+  // `jsonObject`), and assigning one would set this object's prototype instead of writing a
+  // property -- leaving that input missing from what the validator is shown.
+  const enriched: Array<[string, unknown]> = [];
   for (const [key, value] of Object.entries(inputs)) {
     if (typeof value !== "object" || value === null || !("src" in (value as Record<string, unknown>))) {
-      enriched[key] = value;
+      enriched.push([key, value]);
       continue;
     }
     const entry: Record<string, unknown> = { ...(value as Record<string, unknown>) };
@@ -83,9 +88,9 @@ async function enrichSuppliedInputs(
     } catch {
       // best-effort -- unknown metadata keeps the validator permissive
     }
-    enriched[key] = entry;
+    enriched.push([key, entry]);
   }
-  return enriched;
+  return Object.fromEntries(enriched);
 }
 
 // ---------------------------------------------------------------------------
@@ -106,7 +111,7 @@ const DEFAULT_INPUTS_BY = "step_index";
 const DEFAULT_PARAMETERS_NORMALIZED = false;
 
 /** An object argument, or the JSON string some MCP clients send instead. */
-const jsonObjectArg = z.union([z.record(z.string(), z.unknown()), z.string()]);
+const jsonObjectArg = z.union([jsonObject(), z.string()]);
 
 const input = {
   workflowId: z.string().describe("Encoded stored-workflow id (hexadecimal hash)"),

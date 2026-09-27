@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { executeToolRequest, type ToolRun } from "../execute-tool-request";
+import { jsonObject } from "../json-object";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
@@ -9,9 +10,9 @@ import type { AnyOperation, Operation } from "./types";
 const input = {
   toolId: z.string().describe("Tool id, e.g. 'fastqc/0.74'"),
   historyId: z.string().describe("Encoded history id to run in"),
-  inputs: z
-    .record(z.string(), z.unknown())
-    .describe("Nested tool inputs: data refs as {src:'hda',id}, batches as {__class__:'Batch',values:[...]}"),
+  inputs: jsonObject().describe(
+    "Nested tool inputs: data refs as {src:'hda',id}, batches as {__class__:'Batch',values:[...]}",
+  ),
   toolVersion: z.string().optional().describe("Optional explicit tool version"),
 };
 

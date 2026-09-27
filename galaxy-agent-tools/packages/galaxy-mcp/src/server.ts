@@ -3,6 +3,10 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { ZodRawShape } from "zod";
 import { allOperations, createGalaxyContext, describeOperation, runWithEnvelope } from "@galaxyproject/galaxy-ops";
 import { LaxArgumentsTransport } from "./lax-transport.js";
+import { inWireNames, toOperationInput, wireShape } from "./wire-names.js";
+// The version a client is told, read from the package rather than written twice. tsup
+// inlines it into dist/, so nothing looks for a package.json at run time.
+import { version } from "../package.json";
 
 export function toolNames(): string[] {
   return allOperations.map((op) => op.name);
@@ -38,24 +42,30 @@ export function toolResult(result: { success: boolean }): {
 }
 
 export function buildServer(conn: { baseUrl: string; apiKey: string }): McpServer {
-  const server = new McpServer({ name: "galaxy", version: "0.0.0" });
+  const server = new McpServer({ name: "galaxy", version });
   const ctx = createGalaxyContext(conn);
   const annotations = toolAnnotations();
   const shapes = new Map<string, ZodRawShape>();
   for (const op of allOperations) {
-    shapes.set(op.name, op.input as ZodRawShape);
+    // Advertised, validated and decoded under the Python parameter names; the op is handed
+    // back its own. See wire-names.ts for why the rename stops at the top level.
+    const { shape, object, toInput } = wireShape(op);
+    shapes.set(op.name, shape);
     server.registerTool(
       op.name,
       {
-        description: describeOperation(op),
-        inputSchema: op.input,
+        description: inWireNames(describeOperation(op), op.input),
+        inputSchema: object,
         annotations: annotations[op.name],
       },
-      async (args: unknown) => toolResult(await runWithEnvelope(op as never, args as never, ctx)),
+      async (args: unknown) => {
+        const input = toOperationInput(args as Record<string, unknown>, toInput);
+        return toolResult(await runWithEnvelope(op as never, input as never, ctx));
+      },
     );
   }
-  // Arguments are decoded as a call arrives; see LaxArgumentsTransport for why it is here
-  // and not in the handlers above.
+  // Arguments are decoded as a call arrives, under the same wire names they are validated
+  // against; see LaxArgumentsTransport for why it is here and not in the handlers above.
   const connect = server.connect.bind(server);
   server.connect = (transport: Transport) => connect(new LaxArgumentsTransport(transport, shapes));
   return server;

@@ -27,7 +27,8 @@ export type DivergenceKind =
   | "required-mismatch"
   | "default-mismatch"
   | "mutability-mismatch"
-  | "requires-mismatch";
+  | "requires-mismatch"
+  | "extra-params-mismatch";
 
 /** Kinds that are about a whole tool rather than one of its parameters. */
 export const WHOLE_TOOL_KINDS: readonly DivergenceKind[] = [
@@ -36,6 +37,7 @@ export const WHOLE_TOOL_KINDS: readonly DivergenceKind[] = [
   "missing-builtin-tool",
   "mutability-mismatch",
   "requires-mismatch",
+  "extra-params-mismatch",
 ];
 
 /**
@@ -225,15 +227,36 @@ export function requirement(contract: ToolContract, where: string): string | und
 }
 
 /**
+ * Whether a tool accepts parameters it does not declare.
+ *
+ * Both surfaces say this the same way, at the top of the input schema: FastMCP writes
+ * `additionalProperties: false` on every tool, and this package registers each tool as a
+ * closed object, which is what zod writes there too. A schema that says nothing is open,
+ * which is what JSON Schema means by leaving it out -- and what this surface used to be,
+ * so the divergence this reads for is one that really existed.
+ *
+ * `additionalProperties` as a SCHEMA -- extra parameters allowed, but only of that shape --
+ * is more than closed or open, so it stops the run rather than being rounded to either.
+ */
+export function openness(contract: ToolContract, where: string): "closed" | "open" {
+  const node = contract.inputSchema as unknown as Record<string, unknown>;
+  if (!Object.hasOwn(node, "additionalProperties")) return "open";
+  const declared = node["additionalProperties"];
+  if (declared === false) return "closed";
+  if (declared === true) return "open";
+  throw new Error(
+    `${where}: ${quoted("additionalProperties")} is ${describe(declared)}, and the comparison ` +
+      "reads only whether a tool is closed to the parameters it does not declare; teach it " +
+      "that shape before a surface writes one",
+  );
+}
+
+/**
  * Whole-surface differences that would otherwise produce a divergence per
  * parameter. Every rule is a single switch, flipped from the registry, and adding
  * one here forces it to be declared there.
  */
-export const NORMALIZATION_RULES = [
-  "snakeCaseParamNames",
-  "pythonNullDefaults",
-  "optionalNullUnions",
-] as const;
+export const NORMALIZATION_RULES = ["pythonNullDefaults", "optionalNullUnions"] as const;
 
 export type NormalizationRuleName = (typeof NORMALIZATION_RULES)[number];
 export type Normalization = Record<NormalizationRuleName, boolean>;
@@ -243,10 +266,6 @@ export interface NormalParam {
   required: boolean;
   hasDefault: boolean;
   default?: unknown;
-}
-
-export function toSnakeCase(name: string): string {
-  return name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
 }
 
 function isNullable(schema: JsonSchema): boolean {
@@ -521,11 +540,9 @@ function assertComparable(node: unknown, where: string, depth: number): void {
  *
  * Their values are checked to the extent the comparison reads them. `type`,
  * `properties` and `required` say what the tool takes, so each has to be what it
- * claims to be. `additionalProperties` is never compared -- whether a tool
- * accepts parameters it does not declare is outside what this check says -- so a
- * wrong-typed one cannot hide anything in scope, though when it is a schema it is
- * walked like any other. `$schema`, `title` and `description` are never read at
- * all.
+ * claims to be, and `additionalProperties` says whether the tool takes anything
+ * else, which `openness` reads and compares. `$schema`, `title` and `description`
+ * are never read at all.
  */
 const ROOT_KEYS = new Set([
   "$schema",
@@ -706,23 +723,16 @@ export function normalizeParams(
   const required = new Set((read(root, "required", "names", where) ?? []) as string[]);
   const out = new Map<string, NormalParam>();
   const declared = (read(root, "properties", "object", where) ?? {}) as Record<string, JsonSchema>;
-  for (const [rawName, prop] of Object.entries(declared)) {
-    assertIsAName(rawName, "parameter", where);
-    assertComparable(prop, `${where} ${quoted(rawName)}`, 0);
-    assertNumbersAreExact(prop, `${where} ${quoted(rawName)}`);
-    const isRequired = required.has(rawName);
+  for (const [name, prop] of Object.entries(declared)) {
+    assertIsAName(name, "parameter", where);
+    assertComparable(prop, `${where} ${quoted(name)}`, 0);
+    assertNumbersAreExact(prop, `${where} ${quoted(name)}`);
+    const isRequired = required.has(name);
     const optionalNull = !isRequired && isNullable(prop);
     const typeSchema = rules.optionalNullUnions && optionalNull ? withoutNull(prop) : prop;
     const hasDefault =
       Object.hasOwn(prop, "default") &&
       !(rules.pythonNullDefaults && optionalNull && prop.default === null);
-    const name = rules.snakeCaseParamNames ? toSnakeCase(rawName) : rawName;
-    if (out.has(name)) {
-      throw new Error(
-        `${where}: "${rawName}" normalizes to "${name}", which another parameter already ` +
-          "uses, so the comparison would silently drop one of them",
-      );
-    }
     out.set(name, {
       type: typeToken(typeSchema),
       required: isRequired,
@@ -786,6 +796,18 @@ function compareTool(
         observed: `python=${pyNeeds ?? "none"} ${side.label}=${otherNeeds ?? "none"}`,
       });
     }
+  }
+  const [pyTakes, tsTakes] = [
+    openness(python, `${tool} (python)`),
+    openness(other, there),
+  ];
+  if (pyTakes !== tsTakes) {
+    found.push({
+      tool,
+      param: null,
+      kind: "extra-params-mismatch",
+      observed: `python=${pyTakes} ${side.label}=${tsTakes}`,
+    });
   }
   const py = normalizeParams(python.inputSchema, rules, `${tool} (python)`);
   const ts = normalizeParams(other.inputSchema, rules, there);

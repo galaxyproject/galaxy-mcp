@@ -1,8 +1,11 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { allOperations, requirementSentence } from "@galaxyproject/galaxy-ops";
 import { buildServer, toolNames, toolAnnotations, annotationsFor, toolResult } from "../src/server";
+import { inWireNames } from "../src/wire-names";
 
 describe("MCP surface is a mechanical projection", () => {
   it("registers one tool per registered op", () => {
@@ -40,7 +43,9 @@ describe("MCP surface is a mechanical projection", () => {
       const byName = new Map(tools.map((t) => [t.name, t.description ?? ""]));
       for (const op of allOperations) {
         const described = byName.get(op.name) ?? "";
-        expect(described.startsWith(op.summary), op.name).toBe(true);
+        // The op's summary, with any parameter it names spelled the way this wire takes it,
+        // and then the bound. The spelling has tests of its own in wire-names.test.ts.
+        expect(described.startsWith(inWireNames(op.summary, op.input)), op.name).toBe(true);
         expect(described.includes("Requires Galaxy"), op.name).toBe(op.requires !== undefined);
         // The bound it names, not merely that it names one. The parity check reads this
         // side's requirement off the op, because MCP has no field for it, and that is
@@ -52,6 +57,28 @@ describe("MCP surface is a mechanical projection", () => {
       expect(byName.get("list_page_revisions")).toContain("Requires Galaxy 26.1 or newer.");
       // get_page works on 26.0, so it must not pick the sentence up.
       expect(byName.get("get_page")).not.toContain("Requires Galaxy");
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  /**
+   * What the server calls itself. Read from package.json here rather than from the same
+   * import the server uses, so the two cannot agree on a stale number: a client asks the
+   * server for its version to decide what it can rely on, and 0.0.0 told it nothing.
+   */
+  it("tells a client the version this package was published as", async () => {
+    const declared = JSON.parse(
+      readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8"),
+    ) as { version: string };
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = buildServer({ baseUrl: "https://g.example", apiKey: "K" });
+    const client = new Client({ name: "surface-check", version: "0" });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      expect(declared.version).toMatch(/^\d+\.\d+\.\d+/);
+      expect(client.getServerVersion()).toEqual({ name: "galaxy", version: declared.version });
     } finally {
       await client.close();
       await server.close();

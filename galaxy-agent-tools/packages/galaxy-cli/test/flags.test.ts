@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 import { z, type ZodTypeAny } from "zod";
 import { Command } from "commander";
-import { getInvocationsOp, invokeWorkflowOp, searchToolsByNameOp } from "@galaxyproject/galaxy-ops";
+import { getInvocationsOp, invokeWorkflowOp, runToolOp, searchToolsByNameOp } from "@galaxyproject/galaxy-ops";
 import { classifyField, buildInput } from "../src/flags";
 import { applyInputs } from "../src/flags-apply";
 
@@ -19,6 +19,9 @@ describe("flags mapping", () => {
     // quietly stopped being a JSON flag, which a synthetic union here would not have caught.
     expect(classifyField(invokeWorkflowOp.input.inputs as ZodTypeAny)).toBe("json");
     expect(classifyField(invokeWorkflowOp.input.params as ZodTypeAny)).toBe("json");
+    // And the plain one beside the union: `jsonObject()` is a `z.unknown()` underneath, so a
+    // classifier that reads the def alone makes `--inputs` a positional argument.
+    expect(classifyField(runToolOp.input.inputs as ZodTypeAny)).toBe("json");
     // Required or not, a list is a repeatable flag: as a positional it arrives as one string,
     // which no array schema here accepts.
     expect(classifyField(z.array(z.string()))).toBe("array");
@@ -67,6 +70,26 @@ describe("flags mapping", () => {
       unlinkSync(file);
       rmdirSync(dir);
     }
+  });
+
+  /**
+   * The CLI is the other surface that parses an op's schema, so the key a record dropped was
+   * dropped here too -- `run_tool --inputs '{"__proto__":{...},...}'` posted a document the
+   * caller had not written, exactly as the MCP server did. Measured on the shape the CLI really
+   * uses, since that is the claim the changelog makes about this surface.
+   */
+  it("keeps a __proto__ key a --inputs document was written with", () => {
+    const text = '{"__proto__":{"direct":1},"input_file":{"src":"hda","id":"d1"}}';
+    const parsed = buildInput(runToolOp.input, ["fastqc/0.74", "h1"], { inputs: text });
+    expect(parsed.success).toBe(true);
+    const inputs = (parsed.success ? parsed.data["inputs"] : undefined) as Record<string, unknown>;
+    expect(Object.hasOwn(inputs, "__proto__")).toBe(true);
+    expect(JSON.stringify(inputs)).toBe(text);
+    // What the same document did through a record, which is what this field was.
+    const asRecord = buildInput({ inputs: z.record(z.string(), z.unknown()) }, [], { inputs: text });
+    expect(JSON.stringify(asRecord.success ? asRecord.data["inputs"] : undefined)).toBe(
+      '{"input_file":{"src":"hda","id":"d1"}}',
+    );
   });
 
   it("turns a numeric flag into a number for the ops that ask for one", () => {

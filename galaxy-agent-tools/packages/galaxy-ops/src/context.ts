@@ -73,6 +73,22 @@ export interface CreateContextOptions {
 export const VERSION_PROBE_TIMEOUT_MS = 3_000;
 
 /**
+ * A promise that rejects when a signal aborts, and otherwise never settles.
+ *
+ * Raced against the request below, rather than trusting the request to come back. The signal
+ * cancels the fetch, which is what frees the socket, but whether that cancellation arrives as a
+ * rejected promise is the fetch implementation's business -- and it is the probe settling that
+ * every gated op is waiting on. So giving up is decided here, where the deadline is, and does
+ * not depend on anything downstream noticing it.
+ */
+function rejectWhenAborted(signal: AbortSignal): Promise<never> {
+  return new Promise((_resolve, reject) => {
+    if (signal.aborted) return reject(signal.reason);
+    signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+  });
+}
+
+/**
  * Ask the server what version it is and hand every later caller the same answer.
  *
  * Lazy rather than eager because createGalaxyContext is synchronous and because a context
@@ -103,15 +119,25 @@ function versionLookup(
     // A supplied version answers for the server, so there is nothing to fetch and no payload.
     if (said) return Promise.resolve({ version: said, source: "supplied" as const });
     pending ??= (async (): Promise<GalaxyVersionReport> => {
+      // Our own timer, held and cleared here, rather than AbortSignal.timeout, whose timer is
+      // unref'd and belongs to a signal nothing here has a name for -- too much of somebody
+      // else's bookkeeping for the one deadline every gated op waits behind. Cleared in the
+      // `finally` below, so a context that gets its answer straight away leaves nothing pending.
+      const deadline = new AbortController();
+      const timer = setTimeout(
+        () => deadline.abort(new Error(`the Galaxy version probe gave up after ${timeoutMs}ms`)),
+        timeoutMs,
+      );
       try {
         // The caller's cancellation and our own deadline both end the probe. Without them a
         // version route that never answers pins every gated op behind this one promise.
         const signal = AbortSignal.any(
-          callerSignal
-            ? [callerSignal, AbortSignal.timeout(timeoutMs)]
-            : [AbortSignal.timeout(timeoutMs)],
+          callerSignal ? [callerSignal, deadline.signal] : [deadline.signal],
         );
-        const { data, error, response } = await client.GET("/api/version", { signal });
+        const { data, error, response } = await Promise.race([
+          client.GET("/api/version", { signal }),
+          rejectWhenAborted(signal),
+        ]);
         if (error || !data) {
           return { error: classifyHttp(response.status, error), source: "unknown" };
         }
@@ -126,6 +152,8 @@ function versionLookup(
           error: new GalaxyConnectionError((err as Error).message, undefined, err),
           source: "unknown",
         };
+      } finally {
+        clearTimeout(timer);
       }
     })().then((report) => {
       // Dropped the moment it settles, so one aborted probe cannot leave later calls answering
