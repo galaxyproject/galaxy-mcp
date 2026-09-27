@@ -23,10 +23,10 @@
  *
  * Everything else here is held to the interpreter case by case. These are the inputs where this
  * answers differently on purpose, because matching would mean carrying Python's codec registry,
- * `charset_normalizer`, a pinned copy of CPython's Unicode tables, or one runtime's HTTP
- * internals. Each names the input, what each side answers, and what closing it would take. The
- * reference is CPython 3.12.9 (Unicode 15.0) with `requests` 2.34.2, against Node 22.23 (ICU
- * 78.2, Unicode 17.0).
+ * `charset_normalizer`, a pinned copy of CPython's Unicode tables, its JSON decoder, or one
+ * runtime's HTTP internals. Each names the input, what each side answers, and what closing it
+ * would take. The reference is CPython 3.12.9 (Unicode 15.0) with `requests` 2.34.2, against
+ * Node 22.23 (ICU 78.2, Unicode 17.0).
  *
  *  1. A `charset` naming a codec the Encoding Standard does not have. `charset=utf-7` over
  *     `{"tags":{"+ADE-.17":{}}}` is the tag `1.17` in Python -- so `samtools=1.17` is an exact
@@ -54,8 +54,14 @@
  *     here, because the Standard's windows-1252 index maps that byte to U+0081 -- two different
  *     images for one body. `charset=iso-8859-1:1987` over byte 0xE9 is `1.0--café` in Python,
  *     whose alias table spells that latin-1, and `1.0--caf\uFFFD` here, because `TextDecoder`
- *     does not know the label and the replacing utf-8 fallback runs instead. Same class as 1, 2
- *     and 4, and the same answer: the registry, its tables and its aliases, not one more name.
+ *     does not know the label and the replacing utf-8 fallback runs instead. And two tables
+ *     both sides have and fill differently, over a tag `1.0--X` whose X is the bytes named:
+ *     `charset=shift_jis` over `81 60` is `1.0--\u301C` in Python, whose shift_jis carries the
+ *     JIS mapping and reads WAVE DASH, and `1.0--\uFF5E` here, because the Standard's
+ *     shift_jis index is the Microsoft one and reads FULLWIDTH TILDE; `charset=big5` over
+ *     `A1 45` is `1.0--\u2022` there, BULLET, and `1.0--\u2027` here, HYPHENATION POINT. Same
+ *     class as 1, 2 and 4, and the same answer: the registry, its tables and its aliases, not
+ *     one more name.
  *  6. A code point assigned after Unicode 15.0, where Node's tables have an answer and
  *     CPython's do not. Three places it changes a result: `\p{Nd}` in `BUILD_NUMBER`, where
  *     tags `["1.0--a_\u{10D42}", "1.0--b_1"]` put the first newest here and the second there;
@@ -90,6 +96,66 @@
  *     in a failed lookup rather than a wrong image, and the only hook that would close them is
  *     an undici-specific dispatcher -- one runtime's internals for two cases at the edge of a
  *     twelve-second timeout.
+ * 11. Headers that keep arriving and finish late: a header line at 0s, 10s and 20s, with the
+ *     headers and the body complete at 30s. Python's 12s is a budget per read -- urllib3 sets
+ *     it on the socket once and each `readline` over the header lines gets it whole -- so every
+ *     line renews it and `samtools=1.17` resolves there at 30s. The doubled window here is one
+ *     deadline: the timer armed before the request is re-armed only once `fetch` resolves,
+ *     which is when the headers are complete, so this aborts at 24s and caches the failure.
+ *     Third edge of the same design as 9 and 10 -- one timer where `requests` has two phases
+ *     and then a budget per read -- and the same undici dispatcher is the only hook.
+ * 12. A malformed number literal of more than 4,300 digits, where the two disagree about which
+ *     error the body earns. Python's decoder is one left-to-right pass and the conversion
+ *     happens inside it: `NUMBER_RE` in `json/scanner.py` is
+ *     `(-?(?:0|[1-9][0-9]*))(\.[0-9]+)?([eE][-+]?[0-9]+)?`, and `_scan_once` hands the integer
+ *     group to `parse_int` before `JSONObject` in `json/decoder.py` gets back control to look
+ *     for a `,` or a `}` -- so `int()`'s digit limit fires during the scan and reports ahead of
+ *     the syntax error sitting after it. Both directions follow. `{"tags":{"1.17":N.}}` where N
+ *     is 4,301 nines offers nothing for `(\.[0-9]+)` to take, so the integer group is all 4,301
+ *     digits and Python raises the uncaught `ValueError` from the limit; here `JSON_NUMBER`
+ *     takes the trailing `.` into the literal, which leaves no integer to count, so the body
+ *     reaches `JSON.parse`, fails there, and is a failed lookup cached for five minutes (`Ne`
+ *     and `Ne+` the same). `{"tags":{"1.17":Z}}` where Z is 4,301 zeroes, with or without a
+ *     leading `-`, is one `0` to that alternation and then `Expecting ',' delimiter: line 1
+ *     column 18 (char 17)` -- column 19 (char 18) with the sign -- a cached failed lookup in
+ *     Python, where `JSON_NUMBER` takes the
+ *     whole run as an integer and `pyJsonLoads` refuses it with the uncaught digit-limit error.
+ *     Closing it means porting the decoder's scan order, which is where each error is raised,
+ *     and not a check.
+ * 13. A body nested 10,000 deep around a value. `{"tags":{"1.17--h0_0":` + 10,000 `[` + `0` +
+ *     10,000 `]` + `}}` is an uncaught `RecursionError` in Python (`maximum recursion depth
+ *     exceeded while decoding a JSON array from a unicode string`) and `samtools:1.17--h0_0`,
+ *     `exact_version`, here. The limit that fires is the C scanner's own, not the interpreter's:
+ *     `json.loads` installs `_json`, which raises at a depth of 9,996 whether
+ *     `sys.setrecursionlimit` is 100 or 100,000, where `sys.getrecursionlimit()` drives only the
+ *     pure-Python fallback scanner and stops it at 496 under the default 1,000. V8's parser has
+ *     no depth of its own to reach -- two million deep still parses -- so matching the limit
+ *     means counting depth inside a parser that is not ours.
+ * 14. An empty tag name in a package repository, which is the one item here where the
+ *     difference is Galaxy's own rather than a runtime's. For the packages `["a", "b"]`, with
+ *     `{"tags":{"abc-0":{}}}` for their mulled-v2 repository and `{"tags":{"":{}}}` for each
+ *     package's own, the empty tag becomes a candidate version, `build_target` keeps it as
+ *     `""`, and `v2_image_name` writes no version hash when no target has a version, so the
+ *     image name that gets hashed has no `:` in it: Galaxy raises `IndexError:
+ *     list index out of range` at `mulled/recommend.py:411`, which is
+ *     `version_hash = v2_image_name(targets).split(":")[1]`. This skips the combination and
+ *     answers a found, name_only
+ *     `mulled-v2-fcd127ffa1016069006ad91f3f361248f9bdf272:abc-0`. Galaxy's crash on a
+ *     degenerate response is not reproduced as a crash; skipping is what the recommender does
+ *     for every other tag whose version hash it cannot read.
+ *
+ * Four places a difference can come from, said once so the list stops growing by one per
+ * reading. Only UTF-8, UTF-16, UTF-32 and latin-1 answer here as Python's codecs answer; every
+ * other codec's mapping table, alias and error behaviour is Node's `TextDecoder`. The JSON
+ * decoder underneath is V8's -- `pyJsonLoads` puts Python's accept/reject decisions on top of
+ * it, but the words, the positions, the depth limit and the order a failed or degenerate parse
+ * raises them in are V8's. The HTTP read loop is `fetch`'s, so the timing at the edge of a
+ * twelve-second budget is `fetch`'s. And where Galaxy's own recommender raises on a degenerate
+ * response, this does not promise the same exception: item 14 skips where Galaxy indexes past
+ * the end, while a body whose `tags` is not an object raises on both sides under different
+ * names (`AttributeError` there, `QuayMalformedResponseError` here). A difference in one of these
+ * four places on an input a real registry does not send is on this list by decision, not by
+ * oversight.
  *
  * What is NOT on this list, because the two agree: a malformed UTF-32 body under
  * `errors="replace"`. `{"tags":{"1.0--X":{}}}` in UTF-32LE with X's four bytes replaced by
@@ -424,15 +490,17 @@ export interface QuayResponse {
  * followed by 7s of silence is a healthy response there and was an aborted, cached failure
  * here. `fetch` cannot observe the connect phase separately, so one timer covers both halves
  * at the most Python permits between them, and the per-chunk timer below is the read budget
- * proper. A server that spends over 24s answering at all is a failed lookup in both.
+ * proper. A server that goes quiet for over 24s before its headers are complete is a failed
+ * lookup in both; one that keeps sending header lines can take longer than that and still
+ * answer in Python, whose budget is per read rather than per exchange -- divergence 11.
  *
  * Python could raise either ConnectTimeout or ReadTimeout inside that first window; the
  * message is `requests`' read wording throughout, because the read budget is the one this
  * timer stands in for.
  *
- * The two boundaries that doubled window leaves are accepted divergences 9 and 10 in the module
- * header. Either way the lookup fails, and `recommendContainer` caches the failure for five
- * minutes, so the two surfaces can disagree about one package for that long -- the direction
+ * The three boundaries that doubled window leaves are accepted divergences 9, 10 and 11 in the
+ * module header. Either way the lookup fails, and `recommendContainer` caches the failure for
+ * five minutes, so the two surfaces can disagree about one package for that long -- the direction
  * that matters, turning a healthy response into a cached failure, is the one the doubled budget
  * removes.
  *

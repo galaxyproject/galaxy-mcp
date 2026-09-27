@@ -286,16 +286,21 @@ from -- so outbound access has to allow both. It answers from a five-minute cach
 included. Its budget for a silent registry is a little wider than Galaxy's Python tool, which
 allows twelve seconds to connect and then a fresh twelve for the first byte: `fetch` cannot see
 the connect phase separately, so this allows twenty-four seconds to the first byte and then
-twelve between chunks. Two edges follow. A server that connects at once and then says nothing
+twelve between chunks. Three edges follow. A server that connects at once and then says nothing
 fails in Python at twelve seconds and here at twenty-four. A connection that takes between
-Node's own ten-second connect limit and Python's twelve fails here and succeeds there. Both
-need a registry that is up but silent for over ten seconds, and either way the answer is a
-failed lookup rather than a wrong image -- so we take the wider budget rather than pin the
-package to one runtime's HTTP internals. Those two edges and the handful of others -- text
-decoding, where Node's codec and Unicode tables are not CPython's; the sentence a failed parse
-leaves in `notes`; and one URL escape the URL Standard normalises where `requests` does not -- are
-listed together as the accepted divergences at the top of `packages/galaxy-ops/src/mulled.ts`,
-each with the input that differs.
+Node's own ten-second connect limit and Python's twelve fails here and succeeds there. And a
+server whose header lines keep arriving past the doubled window answers in Python, whose budget
+is renewed by every read, and is abandoned here. All three need a registry that is up but silent
+or dawdling for over ten seconds, and either way the answer is a failed lookup rather than a
+wrong image -- so we take the wider budget rather than pin the package to one runtime's HTTP
+internals. Those three edges and the rest are listed together as the accepted divergences at the
+top of `packages/galaxy-ops/src/mulled.ts`, each with the input that differs. They come from four
+places and stay there by decision rather than by oversight: the codec tables, where only UTF-8,
+UTF-16, UTF-32 and latin-1 answer as Python's codecs do; the JSON decoder, whose wording,
+positions, depth limit and error ordering on a body that will not parse are V8's; the HTTP
+timing above; and the degenerate responses on which Galaxy's own recommender raises, where this
+does not promise the same exception -- one such response is skipped here, another raises on both
+sides under different names.
 
 ### User-defined tools
 | Operation | What it does |
