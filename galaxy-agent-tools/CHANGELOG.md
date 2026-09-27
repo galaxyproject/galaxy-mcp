@@ -71,21 +71,66 @@ key for key, on the MCP text block and on `galaxy-cli --format json` alike.
   total off a response header, a count from a second request. Optional at both
   ends: a context built by hand carries none and an existing projection compiles
   unchanged.
-- **Breaking:** `get_history_contents` refuses a `limit` below 1 and a negative
-  `offset`, with the same two sentences every other paged op refuses them with
-  ("limit must be at least 1 (got 0)", "offset must be 0 or greater (got -1)").
-  It was the one listing that validated nothing on either surface, and neither
-  input had a page to describe: `limit: 0` reported more to come with a next
-  offset equal to the one asked for, so a walk sat where it was for ever, and a
-  negative offset sliced from the end of the list and then claimed a next page
-  back inside what it had just returned. There is still no ceiling on the limit,
-  because neither server caps this tool. The Python server refuses them from this
-  release too, so the two agree on which windows exist.
-- **Unchanged:** every operation's `run()` result for a window it accepts,
+- **Breaking:** `get_history_contents` checks its window before it asks Galaxy
+  anything, where it used to check nothing at all. The whole rule, which is
+  `validatePagination`'s and which most of the other listings were already under
+  (the list is below): the `limit` must be a whole number ("limit must be a whole number (got
+  1.5)") and at least 1 ("limit must be at least 1 (got 0)"), and the `offset`
+  must be a whole number and 0 or greater, both refused with the one sentence
+  ("offset must be 0 or greater (got -1)", "offset must be 0 or greater (got
+  0.5)"). None of those windows had a page to describe: `limit: 0` reported more
+  to come with a next offset equal to the one asked for, so a walk sat where it
+  was for ever; a negative offset sliced from the end of the list and then
+  claimed a next page back inside what it had just returned; and a fractional one
+  is not a row count. There is still no ceiling on the limit, because neither
+  server caps this tool.
+
+  A fraction is where the two servers agree by different means, and it is worth
+  knowing which: `_validate_pagination` over there never sees one, because the
+  tool is typed `int` and pydantic refuses `1.5` at the boundary with "Input
+  should be a valid integer, got a number with a fractional part". These surfaces
+  declare `z.number().int()` for the same parameters, so a fractional window
+  never reached the operation from the MCP or CLI wire either -- what is new is
+  the library path, where `getHistoryContents({ historyId, limit: 1.5 })` used to
+  return a page and now throws. Both sides refuse the same windows; only the
+  sentence and the shape of the refusal differ, which is the failure envelope
+  named at the end of this entry.
+
+  Not every listing is under that rule, and the earlier claim that they all were
+  was too broad. Ten check the window themselves, the same ten on both servers:
+  `get_history_contents`, `get_iwc_workflows`, `get_tool_panel`,
+  `list_history_ids`, `list_user_tools`, `list_workflows`,
+  `recommend_iwc_workflows` (a limit and no offset -- a ranking has no window to
+  walk), `search_iwc_workflows`, `search_tools_by_keywords` and
+  `search_tools_by_name`. `list_pages` hands its `limit` and `offset` to Galaxy
+  instead of slicing a page itself, so the window is Galaxy's to judge, and
+  `get_invocations` likewise passes its limit along and takes no offset at all.
+  And `get_histories` still validates nothing on either side: `limit: null` there
+  means "every history" rather than a page size, so the floor is not its rule,
+  and on that no-limit branch a negative offset is read differently by each
+  server -- a divergence older than this entry, left alone deliberately rather
+  than settled by a rule nobody has chosen yet.
+- **Unchanged, with three exceptions:** every operation's `run()` result,
   `Paged<T>` and its camelCase `PaginationInfo`. A TypeScript caller importing an
-  op directly, and code mode with it, sees exactly what it saw before, apart from
-  the two `get_history_contents` windows above that are now refused. The same
-  wire-versus-library split as the parameter-name change above.
+  op directly, and code mode with it, sees exactly what it saw before -- the same
+  wire-versus-library split as the parameter-name change above -- except for the
+  three places where the library was not doing what the Python server does and so
+  had to move with it:
+  - `getHistoryContents` throws for the windows above instead of returning a page.
+  - `recommendIwcWorkflows` tokenises intents and readmes by Unicode word
+    boundaries, as `re` does and as JavaScript's `\b` does not. An intent of
+    "café" has no searchable term in it rather than the term `caf`, a readme
+    saying "protéomique" no longer indexes `prot`, and a ranking over text that is
+    not plain ASCII can come back in a different order or not at all. Plain ASCII
+    text, which is nearly all of the IWC manifest, ranks exactly as before.
+  - `cleanReadmeSummary` is `_clean_readme_summary`'s output now, which moves
+    `readme_summary` on the four operations that enrich a manifest entry
+    (`get_iwc_workflows`, `get_iwc_workflow_details`, `recommend_iwc_workflows`,
+    `search_iwc_workflows`) and the summary line of a workflow guide. Whitespace
+    is Python's set -- a leading byte order mark no longer hides a markdown
+    heading, a next-line character now does -- and the 300-character cut is
+    measured and taken in code points, so a summary carrying an emoji keeps it
+    whole rather than ending in half of one.
 - The `message` of the nine listings the output budget can cut --
   `get_iwc_workflows`, `get_tool_panel`, `list_history_ids`, `list_user_tools`,
   `list_workflows`, `recommend_iwc_workflows`, `search_iwc_workflows`,
@@ -109,7 +154,7 @@ key for key, on the MCP text block and on `galaxy-cli --format json` alike.
 Backed by golden fixtures rather than by reading both sides: the Python suite
 generates what its tools emit for a set of calls, with the Galaxy replies they
 were answered with (`uv run python -m tests.envelope_fixtures`), and the MCP
-server and the CLI each replay all 65 of those cases against those replies and
+server and the CLI each replay all 66 of those cases against those replies and
 compare keys, `data`, `count` and `pagination` exactly, plus `message` for the
 nine listings above. Nothing is skipped on either surface, the pages the budget
 cut included -- which is also why `galaxy-cli` measures the budget against the
