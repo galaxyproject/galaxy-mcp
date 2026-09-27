@@ -1,0 +1,775 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "https://iwc.galaxyproject.org/workflow_manifest.json",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": [
+        {
+          "repo": "repo0",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf0/main",
+              "definition": {
+                "name": "Workflow 0",
+                "annotation": "rnaseq analysis number 0",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 0 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo1",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf1/main",
+              "definition": {
+                "name": "Workflow 1",
+                "annotation": "proteomics run 1",
+                "tags": [
+                  "proteomics",
+                  "maxquant"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 1 quantifies proteins.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo2",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf2/main",
+              "definition": {
+                "name": "Workflow 2",
+                "annotation": "proteomics run 2",
+                "tags": [
+                  "proteomics",
+                  "maxquant"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 2 quantifies proteins.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo3",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf3/main",
+              "definition": {
+                "name": "Workflow 3",
+                "annotation": "proteomics run 3",
+                "tags": [
+                  "proteomics",
+                  "maxquant"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 3 quantifies proteins.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo4",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf4/main",
+              "definition": {
+                "name": "Workflow 4",
+                "annotation": "rnaseq analysis number 4",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 4 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo5",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf5/main",
+              "definition": {
+                "name": "Workflow 5",
+                "annotation": "proteomics run 5",
+                "tags": [
+                  "proteomics",
+                  "maxquant"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 5 quantifies proteins.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo6",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf6/main",
+              "definition": {
+                "name": "Workflow 6",
+                "annotation": "proteomics run 6",
+                "tags": [
+                  "proteomics",
+                  "maxquant"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 6 quantifies proteins.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo7",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf7/main",
+              "definition": {
+                "name": "Workflow 7",
+                "annotation": "proteomics run 7",
+                "tags": [
+                  "proteomics",
+                  "maxquant"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 7 quantifies proteins.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo8",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf8/main",
+              "definition": {
+                "name": "Workflow 8",
+                "annotation": "rnaseq analysis number 8",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 8 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo9",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf9/main",
+              "definition": {
+                "name": "Workflow 9",
+                "annotation": "proteomics run 9",
+                "tags": [
+                  "proteomics",
+                  "maxquant"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 9 quantifies proteins.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo10",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf10/main",
+              "definition": {
+                "name": "Workflow 10",
+                "annotation": "proteomics run 10",
+                "tags": [
+                  "proteomics",
+                  "maxquant"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 10 quantifies proteins.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo11",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf11/main",
+              "definition": {
+                "name": "Workflow 11",
+                "annotation": "proteomics run 11",
+                "tags": [
+                  "proteomics",
+                  "maxquant"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 11 quantifies proteins.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo12",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf12/main",
+              "definition": {
+                "name": "Workflow 12",
+                "annotation": "rnaseq analysis number 12",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 12 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo13",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf13/main",
+              "definition": {
+                "name": "Workflow 13",
+                "annotation": "proteomics run 13",
+                "tags": [
+                  "proteomics",
+                  "maxquant"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 13 quantifies proteins.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo14",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf14/main",
+              "definition": {
+                "name": "Workflow 14",
+                "annotation": "proteomics run 14",
+                "tags": [
+                  "proteomics",
+                  "maxquant"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 14 quantifies proteins.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo15",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf15/main",
+              "definition": {
+                "name": "Workflow 15",
+                "annotation": "proteomics run 15",
+                "tags": [
+                  "proteomics",
+                  "maxquant"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 15 quantifies proteins.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo16",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf16/main",
+              "definition": {
+                "name": "Workflow 16",
+                "annotation": "rnaseq analysis number 16",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 16 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo17",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf17/main",
+              "definition": {
+                "name": "Workflow 17",
+                "annotation": "proteomics run 17",
+                "tags": [
+                  "proteomics",
+                  "maxquant"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 17 quantifies proteins.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo18",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf18/main",
+              "definition": {
+                "name": "Workflow 18",
+                "annotation": "proteomics run 18",
+                "tags": [
+                  "proteomics",
+                  "maxquant"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 18 quantifies proteins.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo19",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf19/main",
+              "definition": {
+                "name": "Workflow 19",
+                "annotation": "proteomics run 19",
+                "tags": [
+                  "proteomics",
+                  "maxquant"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 19 quantifies proteins.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

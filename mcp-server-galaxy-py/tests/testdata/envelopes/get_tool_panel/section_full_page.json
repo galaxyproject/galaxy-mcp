@@ -1,0 +1,46 @@
+{
+  "data": {
+    "section_id": "section3",
+    "section_name": "Section 3",
+    "tools": [
+      {
+        "id": "sec3_tool0",
+        "name": "Section 3 Tool 0",
+        "description": "tool 0 of section 3",
+        "versions": [
+          "1.0.0"
+        ]
+      },
+      {
+        "id": "sec3_tool1",
+        "name": "Section 3 Tool 1",
+        "description": "tool 1 of section 3",
+        "versions": [
+          "1.0.0"
+        ]
+      },
+      {
+        "id": "sec3_tool2",
+        "name": "Section 3 Tool 2",
+        "description": "tool 2 of section 3",
+        "versions": [
+          "1.0.0"
+        ]
+      }
+    ]
+  },
+  "success": true,
+  "message": "Retrieved 3 of 4 tools in section 'section3'",
+  "count": 3,
+  "pagination": {
+    "total_items": 4,
+    "returned_items": 3,
+    "limit": 3,
+    "offset": 0,
+    "has_next": true,
+    "has_previous": false,
+    "next_offset": 3,
+    "previous_offset": null,
+    "helper_text": "Showing 3 of 4 tools (offset 0). Use offset=3 for the next page."
+  }
+}

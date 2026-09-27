@@ -1,0 +1,50 @@
+{
+  "data": {
+    "entries": [
+      {
+        "id": "section0",
+        "name": "Section 0",
+        "type": "section",
+        "tool_count": 4
+      },
+      {
+        "id": "section1",
+        "name": "Section 1",
+        "type": "section",
+        "tool_count": 4
+      },
+      {
+        "id": "section2",
+        "name": "Section 2",
+        "type": "section",
+        "tool_count": 4
+      },
+      {
+        "id": "section3",
+        "name": "Section 3",
+        "type": "section",
+        "tool_count": 4
+      },
+      {
+        "id": "section4",
+        "name": "Section 4",
+        "type": "section",
+        "tool_count": 4
+      }
+    ]
+  },
+  "success": true,
+  "message": "Retrieved 5 of 12 tool panel entries; pass section_id to list a section's tools",
+  "count": 5,
+  "pagination": {
+    "total_items": 12,
+    "returned_items": 5,
+    "limit": 5,
+    "offset": 0,
+    "has_next": true,
+    "has_previous": false,
+    "next_offset": 5,
+    "previous_offset": null,
+    "helper_text": "Showing 5 of 12 entries (offset 0). Use offset=5 for the next page."
+  }
+}

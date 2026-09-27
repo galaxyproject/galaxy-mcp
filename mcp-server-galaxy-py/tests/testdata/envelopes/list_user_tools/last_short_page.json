@@ -1,0 +1,68 @@
+{
+  "data": [
+    {
+      "id": "ut0015",
+      "uuid": "0000-0015",
+      "tool_id": "user_tool_15",
+      "active": true,
+      "representation": {
+        "name": "User Tool 15",
+        "version": "1.0"
+      }
+    },
+    {
+      "id": "ut0016",
+      "uuid": "0000-0016",
+      "tool_id": "user_tool_16",
+      "active": true,
+      "representation": {
+        "name": "User Tool 16",
+        "version": "1.0"
+      }
+    },
+    {
+      "id": "ut0017",
+      "uuid": "0000-0017",
+      "tool_id": "user_tool_17",
+      "active": true,
+      "representation": {
+        "name": "User Tool 17",
+        "version": "1.0"
+      }
+    },
+    {
+      "id": "ut0018",
+      "uuid": "0000-0018",
+      "tool_id": "user_tool_18",
+      "active": true,
+      "representation": {
+        "name": "User Tool 18",
+        "version": "1.0"
+      }
+    },
+    {
+      "id": "ut0019",
+      "uuid": "0000-0019",
+      "tool_id": "user_tool_19",
+      "active": true,
+      "representation": {
+        "name": "User Tool 19",
+        "version": "1.0"
+      }
+    }
+  ],
+  "success": true,
+  "message": "Found 20 user-defined tool(s), returning 5",
+  "count": 5,
+  "pagination": {
+    "total_items": 20,
+    "returned_items": 5,
+    "limit": 15,
+    "offset": 15,
+    "has_next": false,
+    "has_previous": true,
+    "next_offset": null,
+    "previous_offset": 0,
+    "helper_text": "Showing 5 of 20 user tools (offset 15). This is the last page."
+  }
+}

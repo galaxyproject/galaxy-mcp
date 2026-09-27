@@ -1,0 +1,32 @@
+{
+  "data": {
+    "entries": [
+      {
+        "id": "section10",
+        "name": "Section 10",
+        "type": "section",
+        "tool_count": 4
+      },
+      {
+        "id": "section11",
+        "name": "Section 11",
+        "type": "section",
+        "tool_count": 4
+      }
+    ]
+  },
+  "success": true,
+  "message": "Retrieved 2 of 12 tool panel entries; pass section_id to list a section's tools",
+  "count": 2,
+  "pagination": {
+    "total_items": 12,
+    "returned_items": 2,
+    "limit": 5,
+    "offset": 10,
+    "has_next": false,
+    "has_previous": true,
+    "next_offset": null,
+    "previous_offset": 5,
+    "helper_text": "Showing 2 of 12 entries (offset 10). This is the last page."
+  }
+}

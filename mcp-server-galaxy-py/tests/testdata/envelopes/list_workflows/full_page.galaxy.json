@@ -1,0 +1,255 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/workflows",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": [
+        {
+          "id": "w0000",
+          "name": "Workflow 0",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0001",
+          "name": "Workflow 1",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0002",
+          "name": "Workflow 2",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0003",
+          "name": "Workflow 3",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0004",
+          "name": "Workflow 4",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0005",
+          "name": "Workflow 5",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0006",
+          "name": "Workflow 6",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0007",
+          "name": "Workflow 7",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0008",
+          "name": "Workflow 8",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0009",
+          "name": "Workflow 9",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0010",
+          "name": "Workflow 10",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0011",
+          "name": "Workflow 11",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0012",
+          "name": "Workflow 12",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0013",
+          "name": "Workflow 13",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0014",
+          "name": "Workflow 14",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0015",
+          "name": "Workflow 15",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0016",
+          "name": "Workflow 16",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0017",
+          "name": "Workflow 17",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0018",
+          "name": "Workflow 18",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0019",
+          "name": "Workflow 19",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0020",
+          "name": "Workflow 20",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0021",
+          "name": "Workflow 21",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0022",
+          "name": "Workflow 22",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0023",
+          "name": "Workflow 23",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0024",
+          "name": "Workflow 24",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0025",
+          "name": "Workflow 25",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0026",
+          "name": "Workflow 26",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0027",
+          "name": "Workflow 27",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0028",
+          "name": "Workflow 28",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        },
+        {
+          "id": "w0029",
+          "name": "Workflow 29",
+          "owner": "tester",
+          "published": false,
+          "deleted": false,
+          "tags": []
+        }
+      ]
+    }
+  ]
+}

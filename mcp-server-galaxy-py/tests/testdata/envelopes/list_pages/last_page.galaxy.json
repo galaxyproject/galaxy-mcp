@@ -1,0 +1,68 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/version",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "version_major": "26.1",
+        "version_minor": "1"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/pages",
+      "query": {},
+      "status": 200,
+      "headers": {
+        "total_matches": "12"
+      },
+      "body": [
+        {
+          "id": "p0000",
+          "title": "Page 0",
+          "slug": "page-0",
+          "history_id": "h0000",
+          "latest_revision_id": "r0000",
+          "revision_ids": [
+            "r0000"
+          ],
+          "model_class": "Page",
+          "username": "tester",
+          "email_hash": "00000000000000000000000000000000",
+          "author_deleted": false,
+          "deleted": false,
+          "importable": false,
+          "published": false,
+          "tags": [],
+          "create_time": "2026-01-01T00:00:00",
+          "update_time": "2026-01-02T00:00:00"
+        },
+        {
+          "id": "p0001",
+          "title": "Page 1",
+          "slug": "page-1",
+          "history_id": "h0000",
+          "latest_revision_id": "r0001",
+          "revision_ids": [
+            "r0001"
+          ],
+          "model_class": "Page",
+          "username": "tester",
+          "email_hash": "00000000000000000000000000000000",
+          "author_deleted": false,
+          "deleted": false,
+          "importable": false,
+          "published": false,
+          "tags": [],
+          "create_time": "2026-01-01T00:00:00",
+          "update_time": "2026-01-02T00:00:00"
+        }
+      ]
+    }
+  ]
+}

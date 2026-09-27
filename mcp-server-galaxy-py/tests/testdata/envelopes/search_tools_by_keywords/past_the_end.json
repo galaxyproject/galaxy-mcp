@@ -1,0 +1,17 @@
+{
+  "data": [],
+  "success": true,
+  "message": "Found 30 tools matching keywords: section 0 tool, returning 0",
+  "count": 0,
+  "pagination": {
+    "total_items": 30,
+    "returned_items": 0,
+    "limit": 10,
+    "offset": 300,
+    "has_next": false,
+    "has_previous": true,
+    "next_offset": null,
+    "previous_offset": 290,
+    "helper_text": "offset 300 is past the end of 30 tools; use a smaller offset"
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "data": [
+    {
+      "id": "w0020",
+      "name": "Workflow 20",
+      "owner": "tester",
+      "published": false,
+      "deleted": false,
+      "tags": []
+    },
+    {
+      "id": "w0021",
+      "name": "Workflow 21",
+      "owner": "tester",
+      "published": false,
+      "deleted": false,
+      "tags": []
+    },
+    {
+      "id": "w0022",
+      "name": "Workflow 22",
+      "owner": "tester",
+      "published": false,
+      "deleted": false,
+      "tags": []
+    },
+    {
+      "id": "w0023",
+      "name": "Workflow 23",
+      "owner": "tester",
+      "published": false,
+      "deleted": false,
+      "tags": []
+    },
+    {
+      "id": "w0024",
+      "name": "Workflow 24",
+      "owner": "tester",
+      "published": false,
+      "deleted": false,
+      "tags": []
+    },
+    {
+      "id": "w0025",
+      "name": "Workflow 25",
+      "owner": "tester",
+      "published": false,
+      "deleted": false,
+      "tags": []
+    },
+    {
+      "id": "w0026",
+      "name": "Workflow 26",
+      "owner": "tester",
+      "published": false,
+      "deleted": false,
+      "tags": []
+    },
+    {
+      "id": "w0027",
+      "name": "Workflow 27",
+      "owner": "tester",
+      "published": false,
+      "deleted": false,
+      "tags": []
+    },
+    {
+      "id": "w0028",
+      "name": "Workflow 28",
+      "owner": "tester",
+      "published": false,
+      "deleted": false,
+      "tags": []
+    },
+    {
+      "id": "w0029",
+      "name": "Workflow 29",
+      "owner": "tester",
+      "published": false,
+      "deleted": false,
+      "tags": []
+    }
+  ],
+  "success": true,
+  "message": "Found 30 workflows, returning 10",
+  "count": 10,
+  "pagination": {
+    "total_items": 30,
+    "returned_items": 10,
+    "limit": 20,
+    "offset": 20,
+    "has_next": false,
+    "has_previous": true,
+    "next_offset": null,
+    "previous_offset": 0,
+    "helper_text": "Showing 10 of 30 workflows (offset 20). This is the last page."
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "data": {
+    "tool_id": "cat1",
+    "requested_version": "1.0.0",
+    "test_cases": []
+  },
+  "success": true,
+  "message": "Retrieved 0 test cases for tool 'cat1'",
+  "count": 0,
+  "pagination": null
+}

@@ -1,0 +1,29 @@
+{
+  "data": [
+    {
+      "id": "r0000",
+      "page_id": "p0000",
+      "edit_source": "user",
+      "create_time": "2026-01-01T00:00:00",
+      "update_time": "2026-01-01T00:00:00"
+    },
+    {
+      "id": "r0001",
+      "page_id": "p0000",
+      "edit_source": "agent",
+      "create_time": "2026-01-01T00:00:00",
+      "update_time": "2026-01-01T00:00:00"
+    },
+    {
+      "id": "r0002",
+      "page_id": "p0000",
+      "edit_source": "agent",
+      "create_time": "2026-01-01T00:00:00",
+      "update_time": "2026-01-01T00:00:00"
+    }
+  ],
+  "success": true,
+  "message": "Retrieved 3 revisions for page 'p0000'",
+  "count": 3,
+  "pagination": null
+}

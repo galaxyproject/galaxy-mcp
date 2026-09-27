@@ -1,0 +1,17 @@
+{
+  "data": [],
+  "success": true,
+  "message": "Found 0 of 40 histories",
+  "count": 0,
+  "pagination": {
+    "total_items": 40,
+    "returned_items": 0,
+    "limit": 10,
+    "offset": 400,
+    "has_next": false,
+    "has_previous": true,
+    "next_offset": null,
+    "previous_offset": 390,
+    "helper_text": "offset 400 is past the end of 40 histories; use a smaller offset"
+  }
+}

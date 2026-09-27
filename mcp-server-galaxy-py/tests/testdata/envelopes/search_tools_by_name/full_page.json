@@ -1,0 +1,98 @@
+{
+  "data": [
+    {
+      "id": "tool10",
+      "name": "Matchable Tool 10",
+      "description": "matchable tool number 10",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "tool11",
+      "name": "Matchable Tool 11",
+      "description": "matchable tool number 11",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "tool12",
+      "name": "Matchable Tool 12",
+      "description": "matchable tool number 12",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "tool13",
+      "name": "Matchable Tool 13",
+      "description": "matchable tool number 13",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "tool14",
+      "name": "Matchable Tool 14",
+      "description": "matchable tool number 14",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "tool15",
+      "name": "Matchable Tool 15",
+      "description": "matchable tool number 15",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "tool16",
+      "name": "Matchable Tool 16",
+      "description": "matchable tool number 16",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "tool17",
+      "name": "Matchable Tool 17",
+      "description": "matchable tool number 17",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "tool18",
+      "name": "Matchable Tool 18",
+      "description": "matchable tool number 18",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "tool19",
+      "name": "Matchable Tool 19",
+      "description": "matchable tool number 19",
+      "versions": [
+        "1.0.0"
+      ]
+    }
+  ],
+  "success": true,
+  "message": "Found 40 tools matching 'matchable', returning 10",
+  "count": 10,
+  "pagination": {
+    "total_items": 40,
+    "returned_items": 10,
+    "limit": 10,
+    "offset": 10,
+    "has_next": true,
+    "has_previous": true,
+    "next_offset": 20,
+    "previous_offset": 0,
+    "helper_text": "Showing 10 of 40 tools (offset 10). Use offset=20 for the next page."
+  }
+}

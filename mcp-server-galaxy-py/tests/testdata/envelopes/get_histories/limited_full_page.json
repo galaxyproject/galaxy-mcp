@@ -1,0 +1,78 @@
+{
+  "data": [
+    {
+      "id": "h0010",
+      "name": "History 10",
+      "state": "ok",
+      "update_time": "2026-01-02T00:00:00"
+    },
+    {
+      "id": "h0011",
+      "name": "History 11",
+      "state": "ok",
+      "update_time": "2026-01-03T00:00:00"
+    },
+    {
+      "id": "h0012",
+      "name": "History 12",
+      "state": "ok",
+      "update_time": "2026-01-04T00:00:00"
+    },
+    {
+      "id": "h0013",
+      "name": "History 13",
+      "state": "ok",
+      "update_time": "2026-01-05T00:00:00"
+    },
+    {
+      "id": "h0014",
+      "name": "History 14",
+      "state": "ok",
+      "update_time": "2026-01-06T00:00:00"
+    },
+    {
+      "id": "h0015",
+      "name": "History 15",
+      "state": "ok",
+      "update_time": "2026-01-07T00:00:00"
+    },
+    {
+      "id": "h0016",
+      "name": "History 16",
+      "state": "ok",
+      "update_time": "2026-01-08T00:00:00"
+    },
+    {
+      "id": "h0017",
+      "name": "History 17",
+      "state": "ok",
+      "update_time": "2026-01-09T00:00:00"
+    },
+    {
+      "id": "h0018",
+      "name": "History 18",
+      "state": "ok",
+      "update_time": "2026-01-01T00:00:00"
+    },
+    {
+      "id": "h0019",
+      "name": "History 19",
+      "state": "ok",
+      "update_time": "2026-01-02T00:00:00"
+    }
+  ],
+  "success": true,
+  "message": "Retrieved 10 of 40 histories",
+  "count": 10,
+  "pagination": {
+    "total_items": 40,
+    "returned_items": 10,
+    "limit": 10,
+    "offset": 10,
+    "has_next": true,
+    "has_previous": true,
+    "next_offset": 20,
+    "previous_offset": 0,
+    "helper_text": "Showing 10 of 40 histories (offset 10). Use offset=20 for the next page."
+  }
+}

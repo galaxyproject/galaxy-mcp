@@ -1,0 +1,20 @@
+{
+  "data": {
+    "tool_name": "Concatenate",
+    "tool_version": "1.0.0",
+    "citations": [
+      {
+        "type": "bibtex",
+        "content": "@article{one, title={One}}"
+      },
+      {
+        "type": "doi",
+        "content": "10.1000/two"
+      }
+    ]
+  },
+  "success": true,
+  "message": "Retrieved 2 citations for tool 'cat1'",
+  "count": 2,
+  "pagination": null
+}

@@ -1,0 +1,58 @@
+{
+  "data": [
+    {
+      "id": "h0010",
+      "name": "History 10"
+    },
+    {
+      "id": "h0011",
+      "name": "History 11"
+    },
+    {
+      "id": "h0012",
+      "name": "History 12"
+    },
+    {
+      "id": "h0013",
+      "name": "History 13"
+    },
+    {
+      "id": "h0014",
+      "name": "History 14"
+    },
+    {
+      "id": "h0015",
+      "name": "History 15"
+    },
+    {
+      "id": "h0016",
+      "name": "History 16"
+    },
+    {
+      "id": "h0017",
+      "name": "History 17"
+    },
+    {
+      "id": "h0018",
+      "name": "History 18"
+    },
+    {
+      "id": "h0019",
+      "name": "History 19"
+    }
+  ],
+  "success": true,
+  "message": "Found 10 of 40 histories",
+  "count": 10,
+  "pagination": {
+    "total_items": 40,
+    "returned_items": 10,
+    "limit": 10,
+    "offset": 10,
+    "has_next": true,
+    "has_previous": true,
+    "next_offset": 20,
+    "previous_offset": 0,
+    "helper_text": "Showing 10 of 40 histories (offset 10). Use offset=20 for the next page."
+  }
+}

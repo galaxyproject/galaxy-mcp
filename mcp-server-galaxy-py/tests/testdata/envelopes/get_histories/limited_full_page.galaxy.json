@@ -1,0 +1,327 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/histories",
+      "query": {
+        "limit": "10",
+        "offset": "10"
+      },
+      "status": 200,
+      "headers": {},
+      "body": [
+        {
+          "id": "h0010",
+          "name": "History 10",
+          "state": "ok",
+          "update_time": "2026-01-02T00:00:00"
+        },
+        {
+          "id": "h0011",
+          "name": "History 11",
+          "state": "ok",
+          "update_time": "2026-01-03T00:00:00"
+        },
+        {
+          "id": "h0012",
+          "name": "History 12",
+          "state": "ok",
+          "update_time": "2026-01-04T00:00:00"
+        },
+        {
+          "id": "h0013",
+          "name": "History 13",
+          "state": "ok",
+          "update_time": "2026-01-05T00:00:00"
+        },
+        {
+          "id": "h0014",
+          "name": "History 14",
+          "state": "ok",
+          "update_time": "2026-01-06T00:00:00"
+        },
+        {
+          "id": "h0015",
+          "name": "History 15",
+          "state": "ok",
+          "update_time": "2026-01-07T00:00:00"
+        },
+        {
+          "id": "h0016",
+          "name": "History 16",
+          "state": "ok",
+          "update_time": "2026-01-08T00:00:00"
+        },
+        {
+          "id": "h0017",
+          "name": "History 17",
+          "state": "ok",
+          "update_time": "2026-01-09T00:00:00"
+        },
+        {
+          "id": "h0018",
+          "name": "History 18",
+          "state": "ok",
+          "update_time": "2026-01-01T00:00:00"
+        },
+        {
+          "id": "h0019",
+          "name": "History 19",
+          "state": "ok",
+          "update_time": "2026-01-02T00:00:00"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/histories",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": [
+        {
+          "id": "h0000",
+          "name": "History 0",
+          "state": "ok",
+          "update_time": "2026-01-01T00:00:00"
+        },
+        {
+          "id": "h0001",
+          "name": "History 1",
+          "state": "ok",
+          "update_time": "2026-01-02T00:00:00"
+        },
+        {
+          "id": "h0002",
+          "name": "History 2",
+          "state": "ok",
+          "update_time": "2026-01-03T00:00:00"
+        },
+        {
+          "id": "h0003",
+          "name": "History 3",
+          "state": "ok",
+          "update_time": "2026-01-04T00:00:00"
+        },
+        {
+          "id": "h0004",
+          "name": "History 4",
+          "state": "ok",
+          "update_time": "2026-01-05T00:00:00"
+        },
+        {
+          "id": "h0005",
+          "name": "History 5",
+          "state": "ok",
+          "update_time": "2026-01-06T00:00:00"
+        },
+        {
+          "id": "h0006",
+          "name": "History 6",
+          "state": "ok",
+          "update_time": "2026-01-07T00:00:00"
+        },
+        {
+          "id": "h0007",
+          "name": "History 7",
+          "state": "ok",
+          "update_time": "2026-01-08T00:00:00"
+        },
+        {
+          "id": "h0008",
+          "name": "History 8",
+          "state": "ok",
+          "update_time": "2026-01-09T00:00:00"
+        },
+        {
+          "id": "h0009",
+          "name": "History 9",
+          "state": "ok",
+          "update_time": "2026-01-01T00:00:00"
+        },
+        {
+          "id": "h0010",
+          "name": "History 10",
+          "state": "ok",
+          "update_time": "2026-01-02T00:00:00"
+        },
+        {
+          "id": "h0011",
+          "name": "History 11",
+          "state": "ok",
+          "update_time": "2026-01-03T00:00:00"
+        },
+        {
+          "id": "h0012",
+          "name": "History 12",
+          "state": "ok",
+          "update_time": "2026-01-04T00:00:00"
+        },
+        {
+          "id": "h0013",
+          "name": "History 13",
+          "state": "ok",
+          "update_time": "2026-01-05T00:00:00"
+        },
+        {
+          "id": "h0014",
+          "name": "History 14",
+          "state": "ok",
+          "update_time": "2026-01-06T00:00:00"
+        },
+        {
+          "id": "h0015",
+          "name": "History 15",
+          "state": "ok",
+          "update_time": "2026-01-07T00:00:00"
+        },
+        {
+          "id": "h0016",
+          "name": "History 16",
+          "state": "ok",
+          "update_time": "2026-01-08T00:00:00"
+        },
+        {
+          "id": "h0017",
+          "name": "History 17",
+          "state": "ok",
+          "update_time": "2026-01-09T00:00:00"
+        },
+        {
+          "id": "h0018",
+          "name": "History 18",
+          "state": "ok",
+          "update_time": "2026-01-01T00:00:00"
+        },
+        {
+          "id": "h0019",
+          "name": "History 19",
+          "state": "ok",
+          "update_time": "2026-01-02T00:00:00"
+        },
+        {
+          "id": "h0020",
+          "name": "History 20",
+          "state": "ok",
+          "update_time": "2026-01-03T00:00:00"
+        },
+        {
+          "id": "h0021",
+          "name": "History 21",
+          "state": "ok",
+          "update_time": "2026-01-04T00:00:00"
+        },
+        {
+          "id": "h0022",
+          "name": "History 22",
+          "state": "ok",
+          "update_time": "2026-01-05T00:00:00"
+        },
+        {
+          "id": "h0023",
+          "name": "History 23",
+          "state": "ok",
+          "update_time": "2026-01-06T00:00:00"
+        },
+        {
+          "id": "h0024",
+          "name": "History 24",
+          "state": "ok",
+          "update_time": "2026-01-07T00:00:00"
+        },
+        {
+          "id": "h0025",
+          "name": "History 25",
+          "state": "ok",
+          "update_time": "2026-01-08T00:00:00"
+        },
+        {
+          "id": "h0026",
+          "name": "History 26",
+          "state": "ok",
+          "update_time": "2026-01-09T00:00:00"
+        },
+        {
+          "id": "h0027",
+          "name": "History 27",
+          "state": "ok",
+          "update_time": "2026-01-01T00:00:00"
+        },
+        {
+          "id": "h0028",
+          "name": "History 28",
+          "state": "ok",
+          "update_time": "2026-01-02T00:00:00"
+        },
+        {
+          "id": "h0029",
+          "name": "History 29",
+          "state": "ok",
+          "update_time": "2026-01-03T00:00:00"
+        },
+        {
+          "id": "h0030",
+          "name": "History 30",
+          "state": "ok",
+          "update_time": "2026-01-04T00:00:00"
+        },
+        {
+          "id": "h0031",
+          "name": "History 31",
+          "state": "ok",
+          "update_time": "2026-01-05T00:00:00"
+        },
+        {
+          "id": "h0032",
+          "name": "History 32",
+          "state": "ok",
+          "update_time": "2026-01-06T00:00:00"
+        },
+        {
+          "id": "h0033",
+          "name": "History 33",
+          "state": "ok",
+          "update_time": "2026-01-07T00:00:00"
+        },
+        {
+          "id": "h0034",
+          "name": "History 34",
+          "state": "ok",
+          "update_time": "2026-01-08T00:00:00"
+        },
+        {
+          "id": "h0035",
+          "name": "History 35",
+          "state": "ok",
+          "update_time": "2026-01-09T00:00:00"
+        },
+        {
+          "id": "h0036",
+          "name": "History 36",
+          "state": "ok",
+          "update_time": "2026-01-01T00:00:00"
+        },
+        {
+          "id": "h0037",
+          "name": "History 37",
+          "state": "ok",
+          "update_time": "2026-01-02T00:00:00"
+        },
+        {
+          "id": "h0038",
+          "name": "History 38",
+          "state": "ok",
+          "update_time": "2026-01-03T00:00:00"
+        },
+        {
+          "id": "h0039",
+          "name": "History 39",
+          "state": "ok",
+          "update_time": "2026-01-04T00:00:00"
+        }
+      ]
+    }
+  ]
+}
