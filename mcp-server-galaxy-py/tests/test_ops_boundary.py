@@ -50,6 +50,49 @@ def test_the_check_refuses_a_reach_back_out_of_the_layer(tmp_path):
     (layer / "dynamic_computed.py").write_text(
         "from importlib import import_module\n\n\ndef load(name):\n    return import_module(name)\n"
     )
+    # An import written as a call is read the way the interpreter reads it, which means the
+    # anchor a relative name is measured against and the name the function is called by.
+    # Pointed at this same tree, the checker as it stood before these cases were written
+    # admitted seven of them -- both package= spellings (it measured '.server' against the
+    # layer itself and got its own sibling), the computed anchor, both aliased importers,
+    # the assigned one, the getattr one and the rebound builtin. It caught only the three
+    # spellings that happen to say 'import_module' or '__import__' in the call itself.
+    (layer / "package_anchor.py").write_text(
+        "import importlib\n\nmcp = importlib.import_module('.server', package='galaxy_mcp').mcp\n"
+    )
+    (layer / "package_anchor_positional.py").write_text(
+        "import importlib\n\nauth = importlib.import_module('.auth', 'galaxy_mcp')\n"
+    )
+    (layer / "computed_anchor.py").write_text(
+        "import importlib\n\nanchor = 'galaxy' + '_mcp'\n"
+        "mcp = importlib.import_module('.server', package=anchor).mcp\n"
+    )
+    (layer / "aliased_call.py").write_text(
+        "from importlib import import_module as load\n\nserver = load('galaxy_mcp.server')\n"
+    )
+    (layer / "aliased_module.py").write_text(
+        "import importlib as il\n\nserver = il.import_module('galaxy_mcp.server')\n"
+    )
+    (layer / "assigned_importer.py").write_text(
+        "import importlib\n\nload = importlib.import_module\nauth = load('galaxy_mcp.auth')\n"
+    )
+    (layer / "rebound_builtin.py").write_text(
+        "from importlib import __import__ as bring\n\nclient = bring('bioblend')\n"
+    )
+    (layer / "builtin_fromlist.py").write_text(
+        "mcp = __import__('galaxy_mcp.server', fromlist=['mcp']).mcp\n"
+    )
+    (layer / "getattr_importer.py").write_text(
+        "import importlib\n\nload = getattr(importlib, 'import_module')\n"
+        "server = load('galaxy_mcp.server')\n"
+    )
+    (layer / "passed_through.py").write_text(
+        "def load(importer):\n    return importer.import_module('galaxy_mcp.server')\n"
+    )
+    (layer / "computed_string.py").write_text(
+        "from importlib import import_module\n\n"
+        "server = import_module('GALAXY_MCP.SERVER'.upper().lower())\n"
+    )
     # Written relatively from the top of the layer, ``..tool_inputs`` is outside it; the
     # same line one package down means the layer's own module. Each file is judged by what
     # its own dots resolve to.
@@ -69,6 +112,7 @@ def test_the_check_refuses_a_reach_back_out_of_the_layer(tmp_path):
         "from . import plain_import\n\n"
         "loaded = import_module('json')\n"
         "sibling = import_module('.plain_import')\n"
+        "anchored = import_module('.tool_inputs', package='galaxy_mcp.ops')\n"
     )
 
     assert forbidden_imports(layer, OPS_PACKAGE) == {
@@ -82,6 +126,17 @@ def test_the_check_refuses_a_reach_back_out_of_the_layer(tmp_path):
         "dynamic_literal.py": ["galaxy_mcp.server"],
         "dynamic_builtin.py": ["bioblend"],
         "dynamic_computed.py": [COMPUTED_IMPORT],
+        "package_anchor.py": ["galaxy_mcp.server"],
+        "package_anchor_positional.py": ["galaxy_mcp.auth"],
+        "computed_anchor.py": [COMPUTED_IMPORT],
+        "aliased_call.py": ["galaxy_mcp.server"],
+        "aliased_module.py": ["galaxy_mcp.server"],
+        "assigned_importer.py": ["galaxy_mcp.auth"],
+        "rebound_builtin.py": ["bioblend"],
+        "builtin_fromlist.py": ["galaxy_mcp.server"],
+        "getattr_importer.py": [COMPUTED_IMPORT],
+        "passed_through.py": [COMPUTED_IMPORT],
+        "computed_string.py": [COMPUTED_IMPORT],
         "climbing_out.py": ["galaxy_mcp.tool_inputs"],
         "nested/helper.py": ["galaxy_mcp.server"],
         "nested/climbing_out.py": ["galaxy_mcp.server"],
