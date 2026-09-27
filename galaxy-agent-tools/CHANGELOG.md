@@ -211,6 +211,32 @@ schemas advertise.
 - `upload_file_from_url` declares the `file_type` (`"auto"`) and `dbkey` (`"?"`)
   defaults it was already applying.
 
+### `recommend_biocontainer`, and a command line for list parameters (#136)
+
+- `recommend_biocontainer` resolves a verified `quay.io/biocontainers` image for
+  a list of conda packages (`samtools=1.17`, `bwa`), the way the Python server's
+  tool of the same name does, and is the container to give `create_user_tool`
+  instead of a guessed tag. It is a port of Galaxy's mulled recommender:
+  the mulled-v2 name and version hashes, PEP 440 ordering with the legacy
+  fallback, exact-or-newest selection, a five-minute cache, and Python's error
+  model reply for reply -- which quay.io answers mean "no container", which
+  become a failed lookup with the reason in `notes`, which fall back to the
+  newest build along the way, and which are an error -- pinned by tests against
+  Galaxy's own cases rather than restated here. It reaches quay.io directly,
+  which is the second host besides Galaxy
+  these packages talk to (the IWC manifest is the other). Where Node's runtime
+  answers differently from CPython's on inputs a registry does not send --
+  codec tables beyond UTF-8/16/32 and Latin-1, the JSON decoder's own error
+  text and limits, socket timing at the edge of the twelve-second budget -- the
+  difference is listed at the top of `galaxy-ops/src/mulled.ts` rather than
+  ported.
+- **Breaking (`galaxy-cli`):** a list-typed parameter is a repeatable flag.
+  `search_tools_by_keywords` took its keywords as a positional that could only
+  ever arrive as one string, which its schema refused, so the command had no
+  working form; it takes `--keywords bwa concatenate` (or `--keywords bwa
+  --keywords concatenate`) now, `update_history --tags` works the same way, and
+  `recommend_biocontainer --packages samtools=1.17 bwa` runs end to end.
+
 ### Also since 0.1.0
 
 - Pages: `list_pages`, `get_page`, `create_page`, `update_page`,
