@@ -135,8 +135,37 @@ def test_the_root_lists_the_names_it_resolves_lazily():
     import galaxy_mcp
 
     listed = dir(galaxy_mcp)
-    assert {"mcp", "galaxy_state", "tool_inputs", "workflow_inputs", "__version__"} <= set(listed)
+    expected = {
+        "mcp",
+        "galaxy_state",
+        "tool_inputs",
+        "workflow_inputs",
+        "is_reference",
+        "__version__",
+    }
+    assert expected <= set(listed)
     assert listed == sorted(listed)
+
+
+def test_a_name_the_server_stopped_importing_still_answers_at_the_root():
+    """is_reference was a root name on main because server imported it; now ops answers."""
+    assert (
+        _run(
+            """
+        import sys
+
+        from galaxy_mcp import is_reference
+        from galaxy_mcp.ops.tool_inputs import is_reference as moved
+
+        print(
+            is_reference is moved
+            and "galaxy_mcp.server" not in sys.modules
+            and "fastmcp" not in sys.modules
+        )
+        """
+        )
+        == "True"
+    )
 
 
 @pytest.mark.parametrize("name", ["tool_inputs", "workflow_inputs"])

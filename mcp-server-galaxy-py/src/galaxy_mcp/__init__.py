@@ -11,6 +11,10 @@ __email__ = "dannon.baker@gmail.com"
 # the import paths stayed, and reaching for one of them has no business building a server.
 _MOVED_TO_OPS = ("tool_inputs", "workflow_inputs")
 
+# Root names that ``from .server import *`` used to carry because the server imported them,
+# and no longer does. They answer from the layer they moved to, which costs no server.
+_OPS_ALIASES = {"is_reference": "galaxy_mcp.ops.tool_inputs"}
+
 
 def __getattr__(name: str) -> Any:
     """Resolve on first use what ``from .server import *`` used to bind at import time.
@@ -26,6 +30,8 @@ def __getattr__(name: str) -> Any:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     if name in _MOVED_TO_OPS:
         return import_module(f".{name}", __name__)
+    if name in _OPS_ALIASES:
+        return getattr(import_module(_OPS_ALIASES[name]), name)
     server = import_module(".server", __name__)
     try:
         return getattr(server, name)
@@ -40,5 +46,8 @@ def __getattr__(name: str) -> Any:
 def __dir__() -> list[str]:
     server = import_module(".server", __name__)
     return sorted(
-        set(globals()) | set(_MOVED_TO_OPS) | {n for n in dir(server) if not n.startswith("_")}
+        set(globals())
+        | set(_MOVED_TO_OPS)
+        | set(_OPS_ALIASES)
+        | {n for n in dir(server) if not n.startswith("_")}
     )
