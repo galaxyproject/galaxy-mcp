@@ -36,6 +36,15 @@ export interface GalaxyVersionReport {
   readonly source: GalaxyVersionSource;
 }
 
+/**
+ * Where one call's ops leave facts its envelope needs and `run()` does not return.
+ *
+ * Written through the typed helpers in operations/envelope-facts.ts and read by
+ * the projection of the same call. Absent on a context a library caller built,
+ * which is what makes recording a no-op for them.
+ */
+export type EnvelopeFacts = Map<symbol, unknown>;
+
 export interface GalaxyContext {
   readonly client: GalaxyClient;
   readonly baseUrl?: string;
@@ -50,6 +59,12 @@ export interface GalaxyContext {
   readonly galaxyVersion?: () => Promise<GalaxyVersionReport>;
   readonly poll: PollPolicy;
   readonly signal?: AbortSignal;
+  /**
+   * This call's envelope-fact collector, put here by `runWithEnvelope` and by
+   * nothing else. One per call, never shared: two calls in flight at once must
+   * not be able to read each other's numbers.
+   */
+  readonly envelopeFacts?: EnvelopeFacts;
 }
 
 export interface CreateContextOptions {

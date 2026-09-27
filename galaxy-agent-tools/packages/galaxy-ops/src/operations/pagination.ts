@@ -169,6 +169,27 @@ export function paginationInfo(opts: {
   };
 }
 
+/**
+ * The same window, described with a different noun.
+ *
+ * One op needs this: list_user_tools. The other server calls these rows "user
+ * tools" in its helper text and this library has always called them "tools", and
+ * a wire that has to match one must not change what `run()` hands a direct
+ * caller. So the noun the library uses stays on `Paged`, and the projection
+ * re-words the sentence on its way out. Numbers in, same numbers out -- only the
+ * sentence is rebuilt.
+ */
+export function withNoun(info: PaginationInfo, noun: string): PaginationInfo {
+  return paginationInfo({
+    total: info.total,
+    returned: info.returned,
+    limit: info.limit,
+    offset: info.offset,
+    noun,
+    trimmedForSize: info.trimmedForSize,
+  });
+}
+
 /** Slice `items` client-side and describe the window. */
 export function paginate<T>(
   items: readonly T[],

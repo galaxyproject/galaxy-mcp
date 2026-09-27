@@ -39,6 +39,43 @@ describe("get_history_details", () => {
     expect(r.pagination).toBeNull();
   });
 
+  /**
+   * Two calls in flight at once, each counting its own history.
+   *
+   * The count cannot travel in what run() returns without changing what every
+   * library caller gets, and it used to be parked in a module-level WeakMap keyed
+   * by the history record. A client that answers both calls with the SAME frozen
+   * record -- one cached object for one id -- then gave both of them whichever
+   * count was written last. The channel is per call now.
+   */
+  it("keeps two concurrent calls' counts apart, even sharing one history record", async () => {
+    const shared = Object.freeze({ id: "h1", name: "alpha", state: "ok" });
+    const sizes = [3, 9];
+    let arrived = 0;
+    let release!: () => void;
+    const both = new Promise<void>((resolve) => (release = resolve));
+    const client = mockClient({
+      GET: async (path: string, init: any) => {
+        if (path === "/api/histories/{history_id}") {
+          return { data: shared, response: { status: 200 } };
+        }
+        const size = sizes[Number(init.params.path.history_id === "second")] ?? 0;
+        arrived += 1;
+        if (arrived === sizes.length) release();
+        // Neither call comes back until both have asked, so the two runs really
+        // are interleaved rather than one after the other.
+        await both;
+        return { data: Array.from({ length: size }, (_, k) => ({ id: `d${k}` })), response: { status: 200 } };
+      },
+    });
+
+    const [first, second] = await Promise.all([
+      runWithEnvelope(getHistoryDetailsOp as never, { historyId: "first" } as never, ctxWith(client)),
+      runWithEnvelope(getHistoryDetailsOp as never, { historyId: "second" } as never, ctxWith(client)),
+    ]);
+    expect([first.count, second.count]).toEqual([3, 9]);
+  });
+
   it("throws NotFound on 404", async () => {
     const client = mockClient({ GET: () => ({ error: { err_msg: "no" }, response: { status: 404 } }) });
     await expect(getHistoryDetails({ historyId: "x" }, ctxWith(client))).rejects.toBeInstanceOf(GalaxyNotFoundError);

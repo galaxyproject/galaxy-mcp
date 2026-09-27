@@ -96,6 +96,43 @@ describe("list_pages", () => {
     expect(r.pagination).toMatchObject({ total_items: 1, returned_items: 1, has_next: false });
   });
 
+  /**
+   * Two calls in flight at once, each with its own total.
+   *
+   * The fact the envelope needs -- how many pages matched -- arrives on a response
+   * header and cannot travel in what run() returns without changing what every
+   * library caller gets. It used to be parked in a module-level WeakMap keyed by
+   * the array run() returned, and a client that answers two calls with the SAME
+   * array (a cache handing out one frozen page) gave both of them whichever total
+   * was written last. The channel is per call now, so it cannot be.
+   */
+  it("keeps two concurrent calls' totals apart, even sharing one page array", async () => {
+    // One array, frozen, handed to both calls: object identity cannot tell them
+    // apart, which is the whole point.
+    const shared = Object.freeze([{ id: "page1", title: "Shared" }]);
+    let arrived = 0;
+    let release!: () => void;
+    const both = new Promise<void>((resolve) => (release = resolve));
+    const totals = [10, 20];
+    const client = mockClient({
+      GET: async () => {
+        const total = totals[arrived] ?? 0;
+        arrived += 1;
+        if (arrived === totals.length) release();
+        // Neither call comes back until both have been made, so the two runs
+        // really are interleaved rather than one after the other.
+        await both;
+        return ok(shared, total);
+      },
+    });
+
+    const [first, second] = await Promise.all([
+      runWithEnvelope(listPagesOp as any, { limit: 1, offset: 0 }, ctxWith(client)),
+      runWithEnvelope(listPagesOp as any, { limit: 1, offset: 0 }, ctxWith(client)),
+    ]);
+    expect([first.pagination?.total_items, second.pagination?.total_items]).toEqual([10, 20]);
+  });
+
   it("envelopes an auth failure instead of throwing", async () => {
     const client = mockClient({ GET: () => ({ error: { err_msg: "nope" }, response: { status: 403 } }) });
     const r = await runWithEnvelope(listPagesOp as any, {}, ctxWith(client));

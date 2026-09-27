@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
+import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import type { PageSummary } from "./pages-common";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
@@ -30,11 +31,9 @@ type In = {
  * Galaxy reports the total on a `total_matches` RESPONSE HEADER rather than in the
  * body, and run() returns the body -- an array of pages, which is what every
  * library caller has always got and what it goes on returning. So the header is
- * recorded here, against the array it came with, and the surface projection looks
- * it up moments later. A WeakMap because the entry should not outlive the page it
- * describes.
+ * recorded beside the call and the projection of that same call reads it back.
  */
-const totalMatches = new WeakMap<object, number>();
+const totalMatches = envelopeFact<number>("list_pages.total_matches");
 
 async function run(i: In, ctx: GalaxyContext): Promise<PageSummary[]> {
   const { data, error, response } = await ctx.client.GET("/api/pages", {
@@ -63,7 +62,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<PageSummary[]> {
   // page is all we know about, which is the fallback the Python tool takes too.
   const header = response.headers.get("total_matches");
   const total = header === null ? Number.NaN : Number(header);
-  totalMatches.set(pages, Number.isInteger(total) ? total : pages.length);
+  recordFact(ctx, totalMatches, Number.isInteger(total) ? total : pages.length);
   return pages;
 }
 
@@ -77,10 +76,10 @@ export const listPagesOp: Operation<typeof input, PageSummary[]> = {
   input,
   requires: { galaxy: ">=26.1" },
   run,
-  project: (pages, i) => {
+  project: (pages, i, facts) => {
     const offset = i.offset ?? 0;
     const limit = i.limit ?? DEFAULT_LIMIT;
-    const total = totalMatches.get(pages) ?? pages.length;
+    const total = readFact(facts, totalMatches) ?? pages.length;
     const hasNext = offset + pages.length < total;
     const hasPrevious = offset > 0;
     return {

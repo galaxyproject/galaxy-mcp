@@ -1,5 +1,5 @@
 import type { ZodRawShape } from "zod";
-import type { GalaxyContext } from "../context";
+import type { EnvelopeFacts, GalaxyContext } from "../context";
 import { GalaxyError, GalaxyVersionError } from "../errors";
 import { parseRequirement, requirementSentence, satisfiesRequirement } from "../version";
 import { trimToBudget } from "./pagination";
@@ -125,9 +125,16 @@ export async function runWithEnvelope<Shape extends ZodRawShape, O>(
   serialize: (result: GalaxyResult<unknown>) => string = (result) => JSON.stringify(result),
 ): Promise<GalaxyResult<unknown>> {
   try {
-    const data = await runOperation(op, input, ctx);
+    // One collector, belonging to this call and passed down with the context, for
+    // the facts an op learns while it runs that its return value has no room for
+    // -- a total off a response header, a count from a second request. Keying
+    // them on the object run() returned is the same idea and is wrong: a client
+    // that answers two calls with one frozen array makes the two calls
+    // indistinguishable, and the second one's numbers won.
+    const facts: EnvelopeFacts = new Map();
+    const data = await runOperation(op, input, { ...ctx, envelopeFacts: facts });
     const envelope = (d: O): GalaxyResult<unknown> => {
-      const projected = op.project?.(d, input) ?? {};
+      const projected = op.project?.(d, input, facts) ?? {};
       return {
         data: "data" in projected ? projected.data : d,
         success: true,

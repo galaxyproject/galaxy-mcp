@@ -1,5 +1,5 @@
 import type { z, ZodRawShape, ZodObject } from "zod";
-import type { GalaxyContext } from "../context";
+import type { EnvelopeFacts, GalaxyContext } from "../context";
 import type { GalaxyErrorKind } from "../errors";
 
 export type OperationDomain =
@@ -88,8 +88,11 @@ export interface Operation<Shape extends ZodRawShape, O> {
    *
    * Called before the output budget is measured, and again on every trimming
    * pass, so what is weighed is the bytes the surface actually sends.
+   *
+   * `facts` is what this call's `run` left behind for it -- see
+   * envelope-facts.ts -- and is absent when a caller projects a value by hand.
    */
-  project?(output: O, input: InputOf<Shape>): Projection;
+  project?(output: O, input: InputOf<Shape>, facts?: EnvelopeFacts): Projection;
 }
 
 /** What `project` contributes to the envelope. */

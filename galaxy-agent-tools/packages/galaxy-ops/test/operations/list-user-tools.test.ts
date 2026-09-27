@@ -43,6 +43,24 @@ describe("list_user_tools", () => {
     expect(listUserToolsOp.project!(paged, {} as never).message).toBe("2 of 2 user-defined tool(s)");
   });
 
+  /**
+   * The library's own sentence did not move, and must not.
+   *
+   * The wire says "user tools" because the Python tool's noun is "user tools",
+   * but that belongs in the projection: a direct run() caller -- code mode, a
+   * TypeScript importer -- gets the helperText it has always got. The release
+   * notes promise run() results are unchanged, and this is the line that has to
+   * be true for that promise to be.
+   */
+  it("hands a direct caller the helper text it had before the wire moved", async () => {
+    const out = await listUserTools({ limit: 1, offset: 0 }, ctxWith(mockClient({
+      GET: () => ({ data: TOOLS, response: { status: 200 } }),
+    })));
+    expect(out.pagination.helperText).toBe(
+      "Showing 1 of 2 tools (offset 0). Use offset=1 for the next page.",
+    );
+  });
+
   it("throws on HTTP error", async () => {
     const client = mockClient({
       GET: () => ({ error: "server error", response: { status: 500 } }),

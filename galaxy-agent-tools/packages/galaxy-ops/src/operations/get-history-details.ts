@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
+import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
@@ -17,10 +18,10 @@ type In = { historyId: string };
  * which it gets by asking for the contents and measuring them -- the metadata
  * carries no number that means the same thing, because the contents index
  * includes the deleted and the hidden. So the second request happens here too,
- * and the number is recorded against the record it belongs to rather than
- * returned: run() goes on returning the history exactly as Galaxy sent it.
+ * and the number is recorded beside the call rather than returned: run() goes on
+ * returning the history exactly as Galaxy sent it.
  */
-const contentsCount = new WeakMap<object, number>();
+const contentsCount = envelopeFact<number>("get_history_details.contents_count");
 
 async function run(i: In, ctx: GalaxyContext): Promise<HistoryDetail> {
   const { data, error, response } = await ctx.client.GET("/api/histories/{history_id}", {
@@ -34,9 +35,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<HistoryDetail> {
   if (contents.error || !contents.data) {
     throw classifyHttp(contents.response.status, contents.error);
   }
-  if (typeof history === "object" && history !== null) {
-    contentsCount.set(history, Array.isArray(contents.data) ? contents.data.length : 0);
-  }
+  recordFact(ctx, contentsCount, Array.isArray(contents.data) ? contents.data.length : 0);
   return history;
 }
 
@@ -46,9 +45,9 @@ export const getHistoryDetailsOp: Operation<typeof input, HistoryDetail> = {
   summary: "Show a single history's details by id (name, state, counts).",
   input,
   run,
-  project: (h) => ({
+  project: (h, _i, facts) => ({
     message: `History ${(h as { id?: string }).id} state=${(h as { state?: string }).state}`,
-    count: contentsCount.get(h as object) ?? null,
+    count: readFact(facts, contentsCount) ?? null,
   }),
 };
 
