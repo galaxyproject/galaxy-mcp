@@ -3,10 +3,16 @@
 The rule is narrow on purpose -- the standard library, and each other. A helper that needs a
 client, a session or the toolbox is not this layer, whatever else it is. The check itself
 lives in tests/ops_boundary.py; here is what it is pointed at, and the proof that it bites
-when a module reaches back out however the import is written.
+when a module reaches back out however the import is written and wherever it is hiding.
 """
 
-from tests.ops_boundary import OPS_DIR, OPS_PACKAGE, forbidden_imports, modules_in
+from tests.ops_boundary import (
+    COMPUTED_IMPORT,
+    OPS_DIR,
+    OPS_PACKAGE,
+    forbidden_imports,
+    modules_in,
+)
 
 
 def test_there_is_something_to_check():
@@ -37,10 +43,32 @@ def test_the_check_refuses_a_reach_back_out_of_the_layer(tmp_path):
     (layer / "escaping.py").write_text("from ... import anything\n")
     (layer / "third_party.py").write_text("import bioblend\nfrom fastmcp import FastMCP\n")
     (layer / "unanticipated.py").write_text("def fetch():\n    import httpx\n")
+    (layer / "dynamic_literal.py").write_text(
+        "import importlib\n\nmcp = importlib.import_module('galaxy_mcp.server').mcp\n"
+    )
+    (layer / "dynamic_builtin.py").write_text("client = __import__('bioblend')\n")
+    (layer / "dynamic_computed.py").write_text(
+        "from importlib import import_module\n\n\ndef load(name):\n    return import_module(name)\n"
+    )
+    # Written relatively from the top of the layer, ``..tool_inputs`` is outside it; the
+    # same line one package down means the layer's own module. Each file is judged by what
+    # its own dots resolve to.
+    (layer / "climbing_out.py").write_text("from ..tool_inputs import is_reference\n")
+    nested = layer / "nested"
+    nested.mkdir()
+    (nested / "__init__.py").write_text("")
+    (nested / "helper.py").write_text("import galaxy_mcp.server\n")
+    (nested / "climbing_out.py").write_text("from ...server import mcp\n")
+    (nested / "allowed.py").write_text(
+        "from ..tool_inputs import is_reference\nfrom . import helper\n"
+    )
     (layer / "allowed.py").write_text(
         "import json\nfrom typing import Any\n"
+        "from importlib import import_module\n"
         "from galaxy_mcp.ops.tool_inputs import is_reference\n"
-        "from . import plain_import\n"
+        "from . import plain_import\n\n"
+        "loaded = import_module('json')\n"
+        "sibling = import_module('.plain_import')\n"
     )
 
     assert forbidden_imports(layer, OPS_PACKAGE) == {
@@ -51,4 +79,10 @@ def test_the_check_refuses_a_reach_back_out_of_the_layer(tmp_path):
         "escaping.py": ["..."],
         "third_party.py": ["bioblend", "fastmcp"],
         "unanticipated.py": ["httpx"],
+        "dynamic_literal.py": ["galaxy_mcp.server"],
+        "dynamic_builtin.py": ["bioblend"],
+        "dynamic_computed.py": [COMPUTED_IMPORT],
+        "climbing_out.py": ["galaxy_mcp.tool_inputs"],
+        "nested/helper.py": ["galaxy_mcp.server"],
+        "nested/climbing_out.py": ["galaxy_mcp.server"],
     }
