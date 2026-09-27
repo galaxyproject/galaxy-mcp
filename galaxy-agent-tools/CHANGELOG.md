@@ -30,7 +30,11 @@ the Python spelling for every parameter of every tool.
   reason. The argument list is read once, where the call arrives, and the keys
   counted there are counted off the same copy the SDK goes on to parse -- so a
   caller that hands over a live object rather than JSON text cannot answer one
-  thing to the count and another to the parser.
+  thing to the count and another to the parser. What is counted is the own
+  string keys that parser drops: `__proto__`, and any property that is not
+  enumerable. A symbol key is not one a caller can write as JSON text and is not
+  in that count, so an enumerable one is refused by the parser itself as an
+  invalid key and a hidden one is dropped as it always was.
 - A `tools/call` that sends no `arguments` field at all is accepted for a tool
   whose parameters are all optional, which is what the Python server does;
   `get_user` was refused before.
@@ -49,8 +53,18 @@ the Python spelling for every parameter of every tool.
   the CLI alike. An op imported straight from `@galaxyproject/galaxy-ops` runs
   without its schema being parsed at all and never lost the key. Those five are
   copied the way a record copies now, with that key carried across instead of
-  dropped, which is what the Python server's `dict[str, Any]` does with it. The
-  schema each of them advertises has not changed by a byte.
+  dropped, which is what the Python server's `dict[str, Any]` does with it. That
+  one key is the whole of it: everything else a record does with a key still
+  holds -- an own property that is not enumerable is dropped, a symbol key is
+  refused, a getter is read once and what it returned is what is stored -- and
+  the object itself is read once, where it arrives, so what Galaxy is posted is
+  what that one read found. One thing those five refuse where `0.1.0` took it: a
+  value that presents itself as a record without being one -- a Proxy around a
+  class instance that answers `Object` when it is asked for its `constructor` --
+  is refused with `expected record, received <Name>`, because the question is
+  asked of the copy this surface took and that copy is built on the prototype
+  the value really had (a class instance plain and simple was refused before and
+  is refused now). The schema each of them advertises has not changed by a byte.
 - `@galaxyproject/galaxy-ops` still takes camelCase: an op imported from
   TypeScript is called exactly as it was. `galaxy-cli`'s flags are kebab-cased
   from those same TypeScript names and have not moved (`--tool-version`,
@@ -167,9 +181,12 @@ schemas advertise.
   it is a call this decodes and inspects -- and every field of it is read once,
   at the transport, so what is inspected is what runs. A caller sending JSON text
   is unaffected by any of this, while an in-process caller handing live objects
-  over an `InMemoryTransport` has each field read exactly once, at the boundary,
-  and what was read is what runs -- an object that answers differently when asked
-  again has nothing further to say to this server.
+  over an `InMemoryTransport` has each of the fields those schemas declare, and
+  each own enumerable key of the containers holding them, read exactly once, at
+  the boundary, and what was read is what runs -- an object that answers
+  differently when asked again has nothing further to say about those. What sits
+  inside `_meta` or `task`, or on a prototype, is passed on rather than copied
+  and is read by the SDK and by zod as often as they read it.
 
 ### Also since 0.1.0
 

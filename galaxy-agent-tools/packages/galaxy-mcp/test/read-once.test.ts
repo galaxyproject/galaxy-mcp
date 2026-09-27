@@ -656,3 +656,63 @@ describe("an arguments container, whatever it is made of", () => {
     },
   );
 });
+
+/**
+ * The edges of that rule, pinned as edges.
+ *
+ * Read once is a promise about the eight fields the SDK's schemas declare and the own enumerable
+ * keys of the containers they arrive in. It is not a promise about everything an in-process peer
+ * can build, and this is the three places it stops -- here so that the contract written down in
+ * `materializeOnce` and in the changelog says what the code does, and so that widening any of
+ * them is a test failure rather than a discovery.
+ *
+ * A key JSON text cannot write gets no promise either way: the dropped-key count reads
+ * `getOwnPropertyNames`, which does not see a symbol, so a hidden one goes the way the SDK's
+ * record takes it and the call runs. A value INSIDE `_meta` is handed to the SDK as it came,
+ * because nothing here parses it, so a getter in there answers as often as the SDK asks -- how
+ * often is the SDK's business, and the assertion says only that this is not read-once ground.
+ * And the masquerade stays refused: the record question is asked of the copy, the copy is built
+ * on the prototype the value really had, and a class instance is not a record however it answers
+ * when it is asked for its `constructor`.
+ */
+describe("what the boundary does not promise", () => {
+  it("drops a hidden symbol key, rereads inside `_meta`, and refuses a masquerading record", async () => {
+    const args: Record<string, unknown> = {};
+    Object.defineProperty(args, Symbol("hidden"), { value: 1 });
+
+    const hidden = await rawCall({ name: "get_user", arguments: args });
+
+    expect(hidden?.result?.isError, rawText(hidden)).toBe(false);
+    expect(asked("/api/users/current")).toBe(true);
+
+    sent = [];
+    let metaReads = 0;
+    const meta = {
+      get progressToken(): string {
+        metaReads += 1;
+        return "p1";
+      },
+    };
+
+    const withMeta = await rawCall({ name: "get_user", arguments: {}, _meta: meta });
+
+    expect(withMeta?.result?.isError, rawText(withMeta)).toBe(false);
+    expect(metaReads).toBeGreaterThanOrEqual(1);
+
+    sent = [];
+    class Rep {
+      constructor(fields: Record<string, unknown>) {
+        Object.assign(this, fields);
+      }
+    }
+    const masked = new Proxy(new Rep(JSON.parse(REPRESENTATION) as Record<string, unknown>), {
+      get: (target, key, receiver) =>
+        key === "constructor" ? Object : (Reflect.get(target, key, receiver) as unknown),
+    });
+
+    const masquerade = await rawCall({ name: "create_user_tool", arguments: { representation: masked } });
+
+    expect(rawText(masquerade)).toContain("expected record, received Rep");
+    expect(asked("/api/unprivileged_tools")).toBe(false);
+  });
+});

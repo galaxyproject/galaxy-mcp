@@ -61,21 +61,36 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
  * plainness check and the copy taken after it. pydantic reads a dict once. So this reads once, at
  * the boundary, and everything after it reads the copy.
  *
- * The contract that follows, in one place: a caller sending JSON TEXT -- stdio, HTTP, every
- * ordinary client -- is unaffected by any of this, because text parses into an object that says
- * the same thing however often it is asked. An IN-PROCESS caller handing live objects over an
- * `InMemoryTransport` has each field read exactly once, at the boundary, and what was read is what
- * runs -- an object that answers differently when asked again has nothing further to say to this
- * server.
+ * The contract, in one place, and no wider than the code. A caller sending JSON TEXT -- stdio,
+ * HTTP, every ordinary client -- is unaffected by any of this, because text parses into an object
+ * that says the same thing however often it is asked. An IN-PROCESS caller handing live objects
+ * over an `InMemoryTransport` is promised this much: the eight fields the SDK's schemas declare
+ * (`jsonrpc`, `id`, `method`, `params`; `name`, `arguments`, `_meta`, `task`), and every own
+ * enumerable key of the message, of `params`, of an argument list and of each object-valued
+ * parameter, are read exactly once, at the boundary, and what was read is what runs. A field that
+ * came back `undefined` is asked `in` once besides, which separates absent from written as
+ * undefined and runs no getter.
+ *
+ * And nothing wider. What this hands on rather than copies -- the value INSIDE one of those
+ * fields, a property on a PROTOTYPE, a key JSON text cannot write -- belongs to whoever reads it
+ * next, and is read as often as they read it: a getter on `_meta` runs three times for the SDK
+ * on a call that succeeds, and one on `task` twice on a call it refuses. An object that answers
+ * differently when asked again is answering them, not this.
  *
  * The copy keeps the ORIGINAL'S PROTOTYPE, because "is this a record?" is a question about the
  * prototype and it has to have the same answer before and after. zod's `isPlainObject` asks a
  * value for its `constructor`, and copying into a fresh `{}` answered that `Object` for a Date, a
  * Map and every class instance -- so the question had to be asked of the caller's object first,
  * which was a second read, and a `constructor` getter answering `Object` and then `Date` walked
- * through the gap between the two. With the prototype carried across, the question is asked once
- * and of the copy: a Date is still not a record, an object another realm parsed still is, and an
- * own `constructor` is read once like any other key.
+ * through the gap between the two. With the prototype carried across, the question is the copy's
+ * to answer: a Date is still not a record, an object another realm parsed still is, and an own
+ * `constructor` is read once like any other key. What answers it is the prototype the value
+ * really had and the own keys copied across with it, and not a trap's answer about either -- so a
+ * Proxy around a class instance that says `Object` when it is asked for its `constructor` is
+ * refused as `expected record, received Rep`, while an object whose PROTOTYPE says `Object` is
+ * taken, because that is the prototype it has. Asked of the copy, the question can be asked more
+ * than once at no risk, and is: the container gate and the decoding each ask it, so an inherited
+ * `constructor` getter runs twice on a call this decodes.
  *
  * What it does not do is decide anything. An own enumerable key is copied with whatever it holds
  * -- a getter runs, once, and what it returned is stored as data, which is what zod's record does
@@ -84,10 +99,17 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
  * reading it here would run a getter neither parser would. `__proto__` is copied like any other
  * key, with `defineProperty` rather than assignment so that it stays a property instead of
  * becoming a prototype -- it is still the record's to drop by name and this surface's to refuse. A
- * symbol key is copied too, so the record can go on refusing it as an `invalid_key`.
+ * symbol key is copied too, so the record can go on refusing an enumerable one as an
+ * `invalid_key`; a non-enumerable symbol is carried by name like any other hidden key and then
+ * seen by nobody, since the dropped-key count reads `getOwnPropertyNames` and the record skips
+ * what is not enumerable. At the top of an argument list that is the one kind of key that can
+ * arrive and disappear without a word; deeper in, where the refusal does not reach, a hidden key
+ * of either sort goes the way the record has always taken it. JSON text can write neither.
  *
  * Only the top level. A nested value is handed on as it came, because that is what the record did
- * with one, and whatever parses that value reads it once at its own level.
+ * with one, and whatever parses that value reads it once at its own level if it comes back here
+ * to do it -- `jsonObject()` does. `_meta` and `task` do not: what is inside those two is read by
+ * the SDK's own schemas, as often as they ask for it.
  *
  * `except` names the keys the caller reads for itself -- `params.name` is read by property access,
  * since the SDK reads it that way and a peer may have put it on a prototype -- so that they are
