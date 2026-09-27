@@ -15,6 +15,7 @@ nothing is.
 
 import bioblend
 import pytest
+import requests
 
 from galaxy_mcp.server import format_error
 
@@ -88,6 +89,40 @@ class TestWhenTheFieldHoldsNoStatus:
         expected = f"Get dataset details failed: {error}. Context: dataset_id={DATASET_ID}"
         assert message == expected
         assert "Max retries exceeded" in message
+
+
+class TestWhenRequestsKeptTheReply:
+    """The other spelling of the same fact, for the calls that do not go through bioblend.
+
+    `get_job_details` asks the jobs API with requests directly, so what reaches here is a
+    requests exception: no `status_code` field at all, the reply on `response` instead, and
+    `response` set to None when the request never completed. Both are the same two facts
+    bioblend spells with one field, and both are read off the failure rather than its text.
+    """
+
+    @pytest.mark.parametrize(
+        ("status", "hint"),
+        [(401, "Authentication failed"), (404, "Resource not found"), (500, "Server error")],
+    )
+    def test_the_hint_comes_from_the_reply(self, status, hint):
+        # The text says nothing about a status on purpose: requests usually repeats it there,
+        # and a test whose text repeats it would pass just as well against the search this
+        # replaced. The reply is the only place the status is written down here.
+        reply = requests.Response()
+        reply.status_code = status
+        error = requests.HTTPError("Error for url: /api/jobs/x", response=reply)
+
+        assert hint in format_error("Do a thing", error)
+
+    def test_a_request_that_never_completed_claims_nothing(self):
+        """`response` is None, which says there was no reply -- not that there was a 404."""
+        error = requests.ConnectionError(UNREACHED)
+
+        message = format_error("Get job details", error, {"dataset_id": DATASET_ID})
+
+        assert "Resource not found" not in message
+        expected = f"Get job details failed: {error}. Context: dataset_id={DATASET_ID}"
+        assert message == expected
 
 
 class TestWhenThereIsNoStatusToRead:

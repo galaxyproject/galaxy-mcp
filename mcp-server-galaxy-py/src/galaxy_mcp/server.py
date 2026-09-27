@@ -475,32 +475,73 @@ def _refuse_error_body(action: str, payload: Any) -> None:
         )
 
 
+def _http_status(error: Exception) -> Any:
+    """The HTTP status a failure carries: an int, None when there is none, or
+    `_NO_STATUS_FIELD` when the failure says nothing either way.
+
+    Two libraries, two spellings for the same two facts. bioblend puts the status on its
+    ConnectionError as `status_code`, and its GET path substitutes an empty Response for
+    a requests ConnectionError, which leaves that field None. requests carries the reply
+    itself on `response`, and sets it to None when the request never completed. Both are
+    read here so that nothing else has to know which library raised -- `get_job_details`
+    calls the jobs API with requests directly, and the rest go through bioblend.
+
+    The three answers are deliberately distinct. An int is a status somebody can act on.
+    None is "there was no reply to take a status from", which is true of a connection
+    never made and equally of a reply whose body failed partway through, so nothing can
+    be concluded from it. The sentinel is an exception that carries no such field at all,
+    which is not the same as one that says there is no status.
+
+    Anything in either field that is not an int and not None is not a status this
+    understands, and is treated as saying nothing.
+    """
+    status = getattr(error, "status_code", _NO_STATUS_FIELD)
+    if status is _NO_STATUS_FIELD:
+        response = getattr(error, "response", _NO_STATUS_FIELD)
+        if response is _NO_STATUS_FIELD:
+            return _NO_STATUS_FIELD
+        if response is None:
+            return None
+        status = getattr(response, "status_code", _NO_STATUS_FIELD)
+    if status is None or isinstance(status, int):
+        return status
+    return _NO_STATUS_FIELD
+
+
+def _is_not_found(error: Exception) -> bool:
+    """Whether the failure really was a 404.
+
+    The question five tools used to answer with `"404" in str(e)`, which is true of a
+    dataset id with 404 in it as readily as of a missing one: requests quotes the URL it
+    could not reach, so a connection failure was being reported to the caller as a
+    resource that does not exist. This asks the status instead, and a failure that
+    carries no status is not a 404.
+    """
+    return _http_status(error) == 404
+
+
 def format_error(action: str, error: Exception, context: dict | None = None) -> str:
     """Format error messages consistently.
 
-    The hints are the same ones; where they come from is not. bioblend's ConnectionError
-    carries the status as a field, so when that field holds one the hint is read from it
-    and never from the text -- the text is requests' own whenever the request did not
-    complete, and requests quotes the URL in it, so an identifier with "404" in it was
+    The hints are the same ones; where they come from is not. The status is read off the
+    failure by `_http_status` -- from bioblend's field or from the reply requests kept --
+    and never from the text, because the text is requests' own whenever the request did
+    not complete and requests quotes the URL in it, so an identifier with "404" in it was
     being reported as a missing resource.
 
-    A field set to None means the failure has no HTTP status. bioblend's GET path
-    substitutes an empty Response for a requests ConnectionError, which covers a
-    connection that was never made and equally a reply Galaxy did send whose body failed
-    partway through (SSLError is a ConnectionError), so there is nothing true to say
-    about a status that is not there -- and nothing is said. The exception's own text is
-    the whole answer in that case. Other bioblend paths let requests' own exceptions
-    through with no field at all, and those keep the text search.
+    A status of None means the failure has no HTTP status at all: there is nothing true
+    to say about one that is not there, and nothing is said. The exception's own text is
+    the whole answer in that case.
 
-    Anything else in the field is not a status this understands, so it falls back to the
-    text like an error carrying no such field at all.
+    An exception carrying no status field of either kind is the one case left to the text
+    search, because there is nothing else to go on.
     """
     if context is None:
         context = {}
     error_str = str(error)
     msg = f"{action} failed: {error_str}"
 
-    status = getattr(error, "status_code", _NO_STATUS_FIELD)
+    status = _http_status(error)
     if isinstance(status, int):
         if status in _STATUS_HINTS:
             msg += f" ({_STATUS_HINTS[status]})"
@@ -2487,11 +2528,14 @@ def get_history_details(history_id: str) -> GalaxyResult:
         )
     except Exception as e:
         logger.error(f"Failed to get history details for ID '{history_id}': {str(e)}")
-        if "404" in str(e) or "No route" in str(e):
+        # The tool's own sentence, kept because it says something the generic hint cannot:
+        # which id was not found, and that this argument is a string rather than a history
+        # object -- passing the repr of one is the mistake that brings people here.
+        if _is_not_found(e):
             raise ValueError(
                 f"History ID '{history_id}' not found. Make sure to pass a valid history ID string."
             ) from e
-        raise ValueError(f"Failed to get history details for ID '{history_id}': {str(e)}") from e
+        raise ValueError(format_error("Get history details", e, {"history_id": history_id})) from e
 
 
 @mcp.tool(tags={"histories", "read", "core"})
@@ -2624,11 +2668,39 @@ def get_history_contents(
         )
     except Exception as e:
         logger.error(f"Failed to get history contents for ID '{history_id}': {str(e)}")
-        if "404" in str(e) or "No route" in str(e):
+        if _is_not_found(e):
             raise ValueError(
                 f"History ID '{history_id}' not found. Make sure to pass a valid history ID string."
             ) from e
-        raise ValueError(f"Failed to get history contents for ID '{history_id}': {str(e)}") from e
+        raise ValueError(format_error("Get history contents", e, {"history_id": history_id})) from e
+
+
+def _job_details_failed(dataset_id: str, error: Exception) -> str:
+    """What to tell the caller when the job behind a dataset could not be read.
+
+    Every failure here is described from the exception that actually failed, never from a
+    ValueError quoting one: a sentence wrapping another carries no status, and the text
+    left over for the fallback search has a dataset id in it -- which is how the id
+    `401aaaaaaaaaaaaa` came to be reported as a rejected API key.
+
+    A 404 keeps the tool's own sentence, because a 404 from the jobs API is as likely to be
+    a permission problem as a missing dataset, and the generic hint would send the caller
+    looking for the wrong one. Any other status goes through format_error, which reads it
+    off this exception like the rest of the server.
+
+    A failure carrying no status field of either spelling never reached HTTP at all --
+    bioblend and requests both always carry one -- so it is one of ours: a dataset record
+    that is not a mapping, a key that is not there. There is no status to diagnose and none
+    is claimed.
+    """
+    if _is_not_found(error):
+        return (
+            f"Dataset ID '{dataset_id}' not found or job not accessible. "
+            "Make sure the dataset exists and you have permission to view it."
+        )
+    if _http_status(error) is _NO_STATUS_FIELD:
+        return f"Failed to get job information for dataset '{dataset_id}': {error}"
+    return format_error("Get job details", error, {"dataset_id": dataset_id})
 
 
 @mcp.tool(tags={"jobs", "read", "core"})
@@ -2652,63 +2724,66 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> GalaxyRes
     if not base_url or not api_key:
         raise ValueError("Galaxy connection is missing URL or API key information.")
 
+    # Two lookups and a read, each answering for its own failure while that failure is
+    # still in hand. One handler around all three could only see whatever the first one
+    # wrapped, and a wrapper carries no status.
+    job_id: str | None = None
+    provenance_error: Exception | None = None
+    if history_id:
+        try:
+            provenance = gi.histories.show_dataset_provenance(
+                history_id=history_id, dataset_id=dataset_id
+            )
+
+            # Extract job ID from provenance
+            job_id = provenance.get("job_id")
+        except Exception as exc:
+            provenance_error = exc
+
+    if not job_id:
+        # If provenance fails, try getting dataset details which might contain job info
+        try:
+            dataset_details = gi.datasets.show_dataset(dataset_id)
+            job_id = dataset_details.get("creating_job")
+        except Exception as dataset_error:
+            # The provenance failure when there was one -- that is the lookup the caller
+            # asked for. Either way it is the original exception, not a paraphrase of it.
+            source = provenance_error or dataset_error
+            raise ValueError(_job_details_failed(dataset_id, source)) from source
+
+    if not job_id:
+        if provenance_error is not None:
+            # The fallback answered, and answered that it knows of no job. That says nothing
+            # about why provenance failed, and provenance is the lookup the caller asked
+            # for -- so the failure still in hand is the one to report. Telling them the
+            # dataset was not made by a job would bury a 500, a permission problem or a
+            # request that never completed under a sentence about something else.
+            raise ValueError(
+                _job_details_failed(dataset_id, provenance_error)
+            ) from provenance_error
+        # The dataset is there and nothing says a job made it. Nothing failed over HTTP, so
+        # there is no status here to read and none is guessed at from the text.
+        raise ValueError(
+            f"No job information found for dataset '{dataset_id}'. "
+            "The dataset may not have been created by a job."
+        )
+
+    # Get job details using the Galaxy API directly
+    # (Bioblend doesn't have a direct method for this)
+    url = f"{base_url}api/jobs/{job_id}"
+    headers = {"x-api-key": api_key}
     try:
-        # Get dataset provenance to find the creating job
-        job_id: str | None = None
-        provenance_error: Exception | None = None
-        if history_id:
-            try:
-                provenance = gi.histories.show_dataset_provenance(
-                    history_id=history_id, dataset_id=dataset_id
-                )
-
-                # Extract job ID from provenance
-                job_id = provenance.get("job_id")
-                if not job_id:
-                    raise ValueError(
-                        f"No job information found for dataset '{dataset_id}'. "
-                        "The dataset may not have been created by a job."
-                    )
-
-            except Exception as exc:
-                provenance_error = exc
-
-        if not job_id:
-            # If provenance fails, try getting dataset details which might contain job info
-            try:
-                dataset_details = gi.datasets.show_dataset(dataset_id)
-                job_id = dataset_details.get("creating_job")
-                if not job_id:
-                    raise ValueError(
-                        f"No job information found for dataset '{dataset_id}'. "
-                        "The dataset may not have been created by a job."
-                    )
-            except Exception as dataset_error:
-                error_detail = str(provenance_error) if provenance_error else str(dataset_error)
-                raise ValueError(
-                    f"Failed to get job information for dataset '{dataset_id}': {error_detail}"
-                ) from (provenance_error or dataset_error)
-
-        # Get job details using the Galaxy API directly
-        # (Bioblend doesn't have a direct method for this)
-        url = f"{base_url}api/jobs/{job_id}"
-        headers = {"x-api-key": api_key}
         response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         job_info = response.json()
-
-        return GalaxyResult(
-            data={"job": job_info, "dataset_id": dataset_id, "job_id": job_id},
-            success=True,
-            message=f"Retrieved job details for dataset '{dataset_id}'",
-        )
     except Exception as e:
-        if "404" in str(e):
-            raise ValueError(
-                f"Dataset ID '{dataset_id}' not found or job not accessible. "
-                "Make sure the dataset exists and you have permission to view it."
-            ) from e
-        raise ValueError(f"Failed to get job details for dataset '{dataset_id}': {str(e)}") from e
+        raise ValueError(_job_details_failed(dataset_id, e)) from e
+
+    return GalaxyResult(
+        data={"job": job_info, "dataset_id": dataset_id, "job_id": job_id},
+        success=True,
+        message=f"Retrieved job details for dataset '{dataset_id}'",
+    )
 
 
 @mcp.tool(tags={"datasets", "read", "core"})
@@ -2834,12 +2909,12 @@ def get_dataset_details(
             pass
 
         # Original error - not a collection
-        if "404" in str(e):
+        if _is_not_found(e):
             raise ValueError(
                 f"Dataset ID '{dataset_id}' not found. "
                 "Make sure the dataset exists and you have permission to view it."
             ) from e
-        raise ValueError(f"Failed to get dataset details for '{dataset_id}': {str(e)}") from e
+        raise ValueError(format_error("Get dataset details", e, {"dataset_id": dataset_id})) from e
 
 
 @mcp.tool(tags={"datasets", "read", "extended"})
@@ -2920,12 +2995,14 @@ def get_collection_details(collection_id: str, max_elements: int = 100) -> Galax
         )
 
     except Exception as e:
-        if "404" in str(e):
+        if _is_not_found(e):
             raise ValueError(
                 f"Collection ID '{collection_id}' not found. "
                 "Make sure the collection exists and you have permission to view it."
             ) from e
-        raise ValueError(f"Failed to get collection details for '{collection_id}': {str(e)}") from e
+        raise ValueError(
+            format_error("Get collection details", e, {"collection_id": collection_id})
+        ) from e
 
 
 @mcp.tool(tags={"datasets", "read", "core"})
