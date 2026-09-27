@@ -270,3 +270,28 @@ export function pyUtf8EncodeError(value: string): string | null {
       : `characters in position ${start}-${end}`;
   return `'utf-8' codec can't encode ${where}: surrogates not allowed`;
 }
+
+/**
+ * The character class Python's `\w` is, on a `str` -- spelled out, because JavaScript's is not.
+ *
+ * `re` on a `str` matches `\w` against a letter, a number or an underscore in any script, and
+ * that set is exactly Unicode's general categories L and N plus U+005F: the installed
+ * interpreter was asked about every code point in the space and it disagreed with
+ * `[\p{L}\p{N}_]` on none of them, in either direction. JavaScript's `\w` is `[A-Za-z0-9_]` and
+ * nothing else, so a port that leaves it alone reads a Greek or accented letter as a separator.
+ *
+ * The class matters most where the pattern never mentions it: `\b`. A boundary is a place where
+ * one side is a word character and the other is not, so `\b` inherits whichever `\w` the engine
+ * has -- which is why `re.findall(r"\b[a-zA-Z]{2,}\b", "café")` finds nothing (the `é`
+ * continues the word) while the same pattern in JavaScript finds `caf`. JavaScript has no
+ * Unicode `\b` to switch on, so a boundary has to be built out of this class with lookaround,
+ * and the pattern needs the `u` flag or the class stops at a lone surrogate.
+ *
+ * One residue that no spelling fixes: this is a Unicode *data* question, and the two runtimes
+ * carry different editions of the data. Node 22's is 17.0 and the interpreter here reports
+ * 15.0.0, which knows 9,661 fewer code points as letters or numbers -- U+A7CB and the Garay
+ * block among them. Those are word characters here and separators there until the interpreter
+ * updates, at which point the two agree again; everything assigned before Unicode 15.0.0, which
+ * is every character a Galaxy name or an IWC readme has carried so far, matches today.
+ */
+export const PY_WORD_CHAR = "[\\p{L}\\p{N}_]";

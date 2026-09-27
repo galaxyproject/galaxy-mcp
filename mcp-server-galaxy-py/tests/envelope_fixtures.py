@@ -843,6 +843,19 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         lambda: recommend_iwc_workflows_fn("the and for with", limit=5),
         [route(IWC_MANIFEST_URL, ranked_manifest)],
     )
+    # The tokeniser's word boundaries are Unicode's: the accent continues the word,
+    # so there is no run of ASCII letters standing alone and nothing to search for.
+    # An engine whose boundaries are ASCII pulls "caf" out of this and reports a
+    # ranking that matched nothing, which is a different answer to a different
+    # question -- hence a case rather than a unit test.
+    add(
+        "recommend_iwc_workflows",
+        "accented_intent",
+        "an intent of one accented word, which tokenises to nothing at all",
+        {"intent": "café", "limit": 5},
+        lambda: recommend_iwc_workflows_fn("café", limit=5),
+        [route(IWC_MANIFEST_URL, ranked_manifest)],
+    )
 
     # -- get_invocations -----------------------------------------------------
     add(

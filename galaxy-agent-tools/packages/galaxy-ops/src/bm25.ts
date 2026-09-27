@@ -1,14 +1,40 @@
+import { PY_WORD_CHAR } from "./python-str";
+
+/** The other server's `stop_words`, word for word. */
 const STOPWORDS = new Set([
   "the", "and", "for", "with", "from", "have", "want",
   "data", "this", "that", "are", "was", "will",
 ]);
 
 /**
- * Tokenize text for BM25 search: extract alpha words >=2 chars, lowercase, drop stopwords.
+ * `_tokenize_for_search`: runs of two or more ASCII letters standing alone as a word,
+ * lowercased, minus thirteen stop words.
+ *
+ * The other server writes it as `re.findall(r"\b[a-zA-Z]{2,}\b", text)`, and the two halves of
+ * that pattern do not travel the same way. `[a-zA-Z]{2,}` is ASCII and means the same thing in
+ * both languages -- a token is Latin letters, so "RNA" is a term and so is "seq", while
+ * "bwa2", "2bwa" and a CJK word are not terms at all. `\b` is not: it is a change of side
+ * across whatever the engine calls a word character, `re` calls every letter and digit in
+ * Unicode one, and JavaScript calls only `[A-Za-z0-9_]` one. Left as `\b`, an intent of "café"
+ * tokenises to nothing there and to `caf` here, and the difference is not a ranking detail --
+ * nothing to tokenise is one of that tool's early returns, so one surface says "No searchable
+ * terms in query" and the other says it found no matches, which sends an agent to rewrite a
+ * query that was never the problem.
+ *
+ * So the boundaries are spelled out instead, as lookaround over `PY_WORD_CHAR`: a token may not
+ * be preceded or followed by a letter, a number or an underscore. Both assertions are negative
+ * and both are satisfied at the ends of the string, which is what `\b` does on either side of
+ * a letter. The `u` flag is load-bearing twice -- `\p{...}` needs it, and without it the
+ * lookaround would inspect half of an astral letter and see a lone surrogate, which is in no
+ * class at all.
+ *
+ * The corpus is tokenised with this too, so the change moves both sides of the match together:
+ * a readme saying "café" indexes no `caf` term any more, and an intent that asked for one
+ * stops matching it. That is the other server's ranking, which is the point.
  */
 export function tokenizeForSearch(text: string): string[] {
   const tokens: string[] = [];
-  const regex = /\b[a-zA-Z]{2,}\b/g;
+  const regex = new RegExp(`(?<!${PY_WORD_CHAR})[a-zA-Z]{2,}(?!${PY_WORD_CHAR})`, "gu");
   let match: RegExpExecArray | null;
   while ((match = regex.exec(text)) !== null) {
     const tok = match[0].toLowerCase();
