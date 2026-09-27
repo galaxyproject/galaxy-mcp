@@ -1,6 +1,9 @@
 """Galaxy MCP - Model Context Protocol server for Galaxy bioinformatics platform."""
 
-from importlib import import_module
+# Imported as a module rather than ``from importlib import import_module`` because
+# whatever this file leaves in its own namespace ends up in ``__all__``, and
+# ``importlib`` is a name the old star import already carried out of the server.
+import importlib
 from typing import Any
 
 __version__ = "1.11.0.dev0"
@@ -24,15 +27,22 @@ def __getattr__(name: str) -> Any:
     but nobody reaching for ``galaxy_mcp.mcp`` should have to know it: the name still works,
     and the server is imported when something actually asks for it.
     """
+    if name == "__all__":
+        # The one lookup that has to build the server, and the only one that should. A star
+        # import asks for everything by definition, so there is nothing left to defer: PEP
+        # 562 routes ``__all__`` through here when ``from galaxy_mcp import *`` looks for
+        # it, and what this answers is exactly what that binds. Without it the star import
+        # falls back to the module dict and carries none of the names below.
+        return [n for n in __dir__() if not n.startswith("_")]
     if name.startswith("_"):
         # The star import never bound private names, and refusing them here keeps a stray
         # dunder probe from dragging the server in behind everyone's back.
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     if name in _MOVED_TO_OPS:
-        return import_module(f".{name}", __name__)
+        return importlib.import_module(f".{name}", __name__)
     if name in _OPS_ALIASES:
-        return getattr(import_module(_OPS_ALIASES[name]), name)
-    server = import_module(".server", __name__)
+        return getattr(importlib.import_module(_OPS_ALIASES[name]), name)
+    server = importlib.import_module(".server", __name__)
     try:
         return getattr(server, name)
     except AttributeError:
@@ -44,7 +54,7 @@ def __getattr__(name: str) -> Any:
 
 
 def __dir__() -> list[str]:
-    server = import_module(".server", __name__)
+    server = importlib.import_module(".server", __name__)
     return sorted(
         set(globals())
         | set(_MOVED_TO_OPS)

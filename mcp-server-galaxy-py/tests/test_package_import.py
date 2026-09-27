@@ -9,7 +9,8 @@ asserted, and a sibling test that has already imported the server would decide t
 Not building it is only half the story. The package used to export everything ``from .server
 import *`` bound, and the two input helper modules used to sit directly under ``galaxy_mcp``.
 Both are names a caller outside this repository may already import, so they are checked here
-too: the root names resolve on first use, and the old module paths still answer.
+too: the root names resolve on first use, a star import still carries the lot, and the old
+module paths still answer.
 """
 
 import importlib
@@ -145,6 +146,36 @@ def test_the_root_lists_the_names_it_resolves_lazily():
     }
     assert expected <= set(listed)
     assert listed == sorted(listed)
+
+
+def test_a_star_import_still_binds_the_server_and_its_tools():
+    """``from galaxy_mcp import *`` is the other half of what the eager import used to do."""
+    assert (
+        _run(
+            """
+        from galaxy_mcp import *  # noqa: F403
+
+        print(bool(mcp) and callable(get_histories))  # noqa: F405
+        """
+        )
+        == "True"
+    )
+
+
+def test_the_star_import_binds_exactly_what_the_root_advertises():
+    """A star import reads __all__, so what it binds is whatever __all__ answers."""
+    assert (
+        _run(
+            """
+        import galaxy_mcp
+
+        bound = {}
+        exec("from galaxy_mcp import *", bound)
+        print(sorted(n for n in bound if n != "__builtins__") == sorted(galaxy_mcp.__all__))
+        """
+        )
+        == "True"
+    )
 
 
 def test_a_name_the_server_stopped_importing_still_answers_at_the_root():
