@@ -41,7 +41,13 @@ export { getHistoriesOp, getHistories, type Histories } from "./operations/get-h
 export { listHistoryIdsOp, listHistoryIds, type HistoryRef } from "./operations/list-history-ids";
 export { getHistoryDetailsOp, getHistoryDetails, type HistoryDetail } from "./operations/get-history-details";
 export { createHistoryOp, createHistory, type CreatedHistory } from "./operations/create-history";
-export { getDatasetDetailsOp, getDatasetDetails, type DatasetDetail } from "./operations/get-dataset-details";
+export {
+  getDatasetDetailsOp,
+  getDatasetDetails,
+  type DatasetDetail,
+  type DatasetDetailsResult,
+  type DatasetPreview,
+} from "./operations/get-dataset-details";
 export { getCollectionDetailsOp, getCollectionDetails, type CollectionDetail } from "./operations/get-collection-details";
 export { getHistoryContentsOp, getHistoryContents, type HistoryContents } from "./operations/get-history-contents";
 export { listWorkflowsOp, listWorkflows, type Workflows } from "./operations/list-workflows";

@@ -9,7 +9,7 @@ import type { GalaxyContext } from "../../src/context";
 const ctxWith = (client: any): GalaxyContext => ({ client, poll: DEFAULT_POLL });
 
 describe("download_dataset", () => {
-  it("(a) state ok, no filePath: returns content in memory", async () => {
+  it("(a) state ok, no filePath: reports the size and the metadata, and no content", async () => {
     const client = mockClient({
       GET: (path, _init) => {
         if (path.includes("/display")) {
@@ -31,6 +31,15 @@ describe("download_dataset", () => {
     expect(out.file_size).toBe(3);
     expect(out.dataset_info.state).toBe("ok");
     expect(out.dataset_id).toBe("d1");
+    // content_available is about the fetch, not about this object: the three bytes were
+    // measured and dropped, and no key here carries them.
+    expect(Object.keys(out).sort()).toEqual([
+      "content_available",
+      "dataset_id",
+      "dataset_info",
+      "file_size",
+      "suggested_filename",
+    ]);
   });
 
   it("(b) state running -> throws with 'not ready' message", async () => {
@@ -60,5 +69,51 @@ describe("download_dataset", () => {
     const out = await downloadDataset({ datasetId: "d3", requireOkState: false }, ctxWith(client));
     expect(out.content_available).toBe(true);
     expect(out.file_size).toBe(2);
+  });
+
+  it("declares useDefaultFilename, and changes nothing either way -- as Python does", async () => {
+    // Python takes the argument and never reads it: both branches of its body pass the
+    // literal use_default_filename=False to bioblend. The name it once stood for comes back
+    // as suggested_filename instead, which is what this pins on both settings.
+    const meta = { id: "d4", name: "reads", file_ext: "fastq", state: "ok", file_size: 9 };
+    const asked: string[] = [];
+    const client = mockClient({
+      GET: (path) => {
+        asked.push(path);
+        return path.includes("/display")
+          ? { data: new Uint8Array([7]).buffer, response: { status: 200 } }
+          : { data: meta, response: { status: 200 } };
+      },
+    });
+    const on = await downloadDataset({ datasetId: "d4", useDefaultFilename: true }, ctxWith(client));
+    const off = await downloadDataset({ datasetId: "d4", useDefaultFilename: false }, ctxWith(client));
+    expect(on).toEqual(off);
+    expect(on.suggested_filename).toBe("reads.fastq");
+    expect(on.file_path).toBeUndefined();
+    expect(asked).toHaveLength(4);
+  });
+
+  it("advertises Python's default for it", () => {
+    expect(downloadDatasetOp.input.useDefaultFilename.parse(undefined)).toBe(true);
+  });
+
+  it("is not read-only, because filePath overwrites a local file, and says where the bytes go", () => {
+    // readOnlyHint means "does not modify its environment", and the filePath branch modifies
+    // it. Python's read tag is about the server only, which the summary also states, so the
+    // two surfaces disagree on purpose -- see the intentional row in the parity registry.
+    expect(downloadDatasetOp.readOnly).toBe(false);
+    expect(downloadDatasetOp.summary).toContain("written to that local path");
+    expect(downloadDatasetOp.summary).toContain("overwriting what is there");
+    expect(downloadDatasetOp.summary).toContain("Nothing on the Galaxy server is changed");
+  });
+
+  it("promises no bytes it does not hand back", () => {
+    // The no-filePath result is metadata and a byte count, so the summary has to say that
+    // filePath is the way to the content and must not offer it any other way.
+    expect(downloadDatasetOp.summary).toContain("the only way to get them");
+    expect(downloadDatasetOp.summary).toContain("fetched and discarded");
+    expect(downloadDatasetOp.summary).not.toMatch(/in memory|in-memory/);
+    expect(downloadDatasetOp.input.filePath.description).toContain("no content");
+    expect(downloadDatasetOp.input.filePath.description).not.toMatch(/in memory|in-memory/);
   });
 });

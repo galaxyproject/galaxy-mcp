@@ -9,7 +9,7 @@ import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { legacyPost } from "../legacy";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, Operation } from "./types";
+import type { AnyOperation, InputOf, Operation } from "./types";
 
 export interface UploadFileFromUrlResult {
   outputs?: unknown[];
@@ -20,8 +20,8 @@ export interface UploadFileFromUrlResult {
 const input = {
   url: z.string().describe("URL of the file to upload"),
   historyId: z.string().optional().describe("Target history id; omit to use Galaxy's default"),
-  fileType: z.string().optional().describe("Galaxy file type, e.g. 'fasta', 'fastq', 'bam' (default: 'auto')"),
-  dbkey: z.string().optional().describe("Genome build / database key (default: '?')"),
+  fileType: z.string().default("auto").describe("Galaxy file type, e.g. 'fasta', 'fastq', 'bam' (default: 'auto')"),
+  dbkey: z.string().default("?").describe("Genome build / database key (default: '?')"),
   fileName: z.string().optional().describe("Name for the uploaded dataset in Galaxy (inferred from URL if omitted)"),
 };
 
@@ -64,4 +64,4 @@ export const uploadFileFromUrlOp: Operation<typeof input, UploadFileFromUrlResul
 
 register(uploadFileFromUrlOp as AnyOperation);
 
-export const uploadFileFromUrl = (i: In, ctx: GalaxyContext) => runOperation(uploadFileFromUrlOp, i, ctx);
+export const uploadFileFromUrl = (i: In, ctx: GalaxyContext) => runOperation(uploadFileFromUrlOp, i as InputOf<typeof input>, ctx);

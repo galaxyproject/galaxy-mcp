@@ -215,8 +215,11 @@ More usefully, register it with an MCP client. For example, in Claude Desktop's
 ## Available operations
 
 Both surfaces expose the same set -- CLI command names and MCP tool names are
-identical. Operations marked *(write)* create or change state on the server;
-the rest are read-only.
+identical. Operations marked *(write)* change state -- on the server, or, for
+`download_dataset` with a `filePath`, on the disk of the machine the caller runs
+on; the rest are read-only. The MCP `readOnlyHint` follows this marker, because
+the hint is about whether a tool modifies its environment rather than about
+Galaxy alone.
 
 The history, tool, workflow and IWC listings return one page at a time. `limit`
 and `offset` default to a page sized for what a model can actually read, each
@@ -254,10 +257,10 @@ and `list_page_revisions` returns every revision.
 ### Datasets & collections
 | Operation | What it does |
 | --- | --- |
-| `get_dataset_details` | Dataset metadata by id (state, extension, name) |
+| `get_dataset_details` | Dataset metadata by id (state, extension, name), with an optional content preview from Galaxy's bounded text route |
 | `get_collection_details` | A dataset collection by id, with its elements |
 | `get_job_details` | Job that produced a given dataset |
-| `download_dataset` *(write)* | Download a dataset's content, optionally to a local file |
+| `download_dataset` *(write)* | Download a dataset's content; with `--file-path` it writes the bytes to that local path, overwriting what is there -- the caller's disk, not the server, which is why the write marker is here while Python's tag says read. Without `--file-path` you get the metadata and the byte count and no content, so `--file-path` is the only way to the bytes |
 | `upload_file` *(write)* | Upload a local file via the tus resumable-upload protocol |
 | `upload_file_from_url` *(write)* | Upload a file from a URL via the classic upload tool |
 
