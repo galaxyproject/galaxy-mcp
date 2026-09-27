@@ -1,64 +1,54 @@
 """galaxy_mcp.ops is the layer that owes nothing to the caller it serves.
 
-Read statically rather than by importing: what matters is what the module declares, and a
-runtime check would pass simply because something else had already pulled bioblend in. The
-rule is narrow on purpose -- the standard library, and each other. A helper that needs a
-client, a session or the toolbox is not this layer, whatever else it is.
+The rule is narrow on purpose -- the standard library, and each other. A helper that needs a
+client, a session or the toolbox is not this layer, whatever else it is. The check itself
+lives in tests/ops_boundary.py; here is what it is pointed at, and the proof that it bites
+when a module reaches back out however the import is written.
 """
 
-import ast
-import pathlib
-import sys
-
-OPS = pathlib.Path(__file__).resolve().parents[1] / "src" / "galaxy_mcp" / "ops"
-
-
-def _imported_roots(path):
-    """Every top-level package this module reaches for, relative imports excluded."""
-    roots = set()
-    for node in ast.walk(ast.parse(path.read_text())):
-        if isinstance(node, ast.Import):
-            roots |= {a.name.split(".")[0] for a in node.names}
-        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-            roots.add(node.module.split(".")[0])
-    return roots
-
-
-def _modules():
-    return sorted(OPS.glob("*.py"))
+from tests.ops_boundary import OPS_DIR, OPS_PACKAGE, forbidden_imports, modules_in
 
 
 def test_there_is_something_to_check():
-    assert [p.name for p in _modules()] != ["__init__.py"], "no ops modules found"
+    """A check that finds no modules passes everything it is asked."""
+    found = {path.name for path in modules_in(OPS_DIR)}
+    assert found, f"no modules found under {OPS_DIR}"
+    assert {"tool_inputs.py", "workflow_inputs.py"} <= found
 
 
-def test_ops_imports_only_the_standard_library():
-    outside = {}
-    for path in _modules():
-        beyond = _imported_roots(path) - set(sys.stdlib_module_names) - {"galaxy_mcp"}
-        if beyond:
-            outside[path.name] = sorted(beyond)
-    assert not outside, (
-        f"galaxy_mcp.ops reaches outside the standard library: {outside}. "
-        "Logic that needs a third-party package belongs outside the pure operation layer."
+def test_ops_imports_only_what_the_layer_is_allowed():
+    refused = forbidden_imports(OPS_DIR)
+    assert not refused, (
+        f"galaxy_mcp.ops reaches for what the layer may not import: {refused}. "
+        "Logic that needs the server, a client or a third-party package belongs outside "
+        "the pure operation layer."
     )
 
 
-def _is_ops(module):
-    return module == "galaxy_mcp.ops" or module.startswith("galaxy_mcp.ops.")
-
-
-def test_ops_does_not_reach_back_out_of_the_layer():
+def test_the_check_refuses_a_reach_back_out_of_the_layer(tmp_path):
     """The dependency runs one way: a caller imports ops, never the reverse."""
-    reaching = {}
-    for path in _modules():
-        for node in ast.walk(ast.parse(path.read_text())):
-            if not isinstance(node, ast.ImportFrom) or node.level:
-                continue
-            module = node.module or ""
-            if module.startswith("galaxy_mcp") and not _is_ops(module):
-                reaching.setdefault(path.name, []).append(module)
-    assert not reaching, (
-        f"ops imports from outside the layer: {reaching}. "
-        "The operation logic is what callers depend on, not the other way round."
+    layer = tmp_path / "ops"
+    layer.mkdir()
+    (layer / "__init__.py").write_text("")
+    (layer / "absolute_from.py").write_text("from galaxy_mcp.server import mcp\n")
+    (layer / "plain_import.py").write_text("import galaxy_mcp.server\n")
+    (layer / "relative_from.py").write_text("from ..server import mcp\n")
+    (layer / "relative_sibling.py").write_text("from .. import auth\n")
+    (layer / "escaping.py").write_text("from ... import anything\n")
+    (layer / "third_party.py").write_text("import bioblend\nfrom fastmcp import FastMCP\n")
+    (layer / "unanticipated.py").write_text("def fetch():\n    import httpx\n")
+    (layer / "allowed.py").write_text(
+        "import json\nfrom typing import Any\n"
+        "from galaxy_mcp.ops.tool_inputs import is_reference\n"
+        "from . import plain_import\n"
     )
+
+    assert forbidden_imports(layer, OPS_PACKAGE) == {
+        "absolute_from.py": ["galaxy_mcp.server"],
+        "plain_import.py": ["galaxy_mcp.server"],
+        "relative_from.py": ["galaxy_mcp.server"],
+        "relative_sibling.py": ["galaxy_mcp.auth"],
+        "escaping.py": ["..."],
+        "third_party.py": ["bioblend", "fastmcp"],
+        "unanticipated.py": ["httpx"],
+    }
