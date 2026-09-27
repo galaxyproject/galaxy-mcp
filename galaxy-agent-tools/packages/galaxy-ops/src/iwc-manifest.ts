@@ -5,6 +5,7 @@
  * helpers used by the IWC ops.  This is NOT an op -- it carries no
  * registration and is not exported from index.ts.
  */
+import { pySplitWhitespace, pyStrip } from "./python-str";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -126,8 +127,21 @@ export function extractToolNamesFromSteps(steps: Record<string, unknown> | unkno
 }
 
 /**
- * Strip markdown headers and collapse whitespace into a ~300-char plain summary.
- * Mirrors Python `_clean_readme_summary`.
+ * Strip markdown headers and collapse whitespace into a ~300-character plain summary.
+ *
+ * `_clean_readme_summary`, line for line, and the lines that look like plain JavaScript are
+ * the ones that were not:
+ *
+ *  - `trim`/`trimStart` is not `str.strip()`. A readme that opens with a byte order mark is
+ *    the everyday case -- `trimStart` eats the U+FEFF and reads `# Title` as a heading to
+ *    drop, while `strip` leaves it and the other server keeps the line, mark and all. The
+ *    C0 information separators go the other way. `pyStrip` is that set.
+ *  - `split(/\s+/)` is not `str.split()`: same disagreement about which characters separate,
+ *    plus the empty pieces a regex split leaves at the ends.
+ *  - `length` is UTF-16 code units and `len()` is code points, so a summary carrying one
+ *    emoji is a character longer here than there and the cut lands in a different place --
+ *    and a slice by code unit can cut a surrogate pair in half, which puts half a character
+ *    on the wire. Both the measurement and the cut are by code point.
  */
 export function cleanReadmeSummary(readme: string | undefined, maxLength = 300): string {
   if (!readme) return "";
@@ -136,19 +150,21 @@ export function cleanReadmeSummary(readme: string | undefined, maxLength = 300):
   const cleanLines: string[] = [];
 
   for (const line of lines) {
-    if (line.trimStart().startsWith("#")) continue;
-    if (cleanLines.length === 0 && !line.trim()) continue;
+    const stripped = pyStrip(line);
+    if (stripped.startsWith("#")) continue;
+    if (cleanLines.length === 0 && stripped === "") continue;
     cleanLines.push(line);
   }
 
-  // Collapse runs of whitespace (join with space then normalize)
-  let text = cleanLines.join(" ");
-  text = text.split(/\s+/).join(" ").trim();
+  let text = pySplitWhitespace(cleanLines.join(" ")).join(" ");
 
-  if (text.length > maxLength) {
-    const truncated = text.slice(0, maxLength - 3);
+  const chars = Array.from(text);
+  if (chars.length > maxLength) {
+    const truncated = chars.slice(0, maxLength - 3).join("");
+    // `rsplit(" ", 1)[0]`: everything before the last space, or the whole of it when there
+    // is no space to split on -- including the empty string when the only space is first.
     const lastSpace = truncated.lastIndexOf(" ");
-    text = (lastSpace > 0 ? truncated.slice(0, lastSpace) : truncated) + "...";
+    text = (lastSpace >= 0 ? truncated.slice(0, lastSpace) : truncated) + "...";
   }
 
   return text;

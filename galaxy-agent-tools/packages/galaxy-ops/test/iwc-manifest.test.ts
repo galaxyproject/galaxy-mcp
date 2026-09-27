@@ -98,6 +98,62 @@ describe("cleanReadmeSummary", () => {
   });
 });
 
+/**
+ * The same readmes, summarised by the other server.
+ *
+ * `readme_summary` is a field of `data` for three of the budgeted IWC listings, so a
+ * summary that differs is an envelope that differs -- and it is decided entirely by
+ * three JavaScript built-ins whose Python namesakes draw their lines elsewhere:
+ * `trim` and `split(/\s+/)` disagree with `strip()` and `split()` about U+FEFF and the
+ * C0 information separators, and `length` counts UTF-16 code units where `len()` counts
+ * code points.
+ *
+ * Each expectation below came off the installed interpreter, from this script:
+ *
+ *   from galaxy_mcp.workflow_inputs import _clean_readme_summary as c
+ *   c("﻿# Title\n\nBody text here.")   ->  '﻿# Title Body text here.'
+ *   c("# Title\nBody text here.")     ->  'Body text here.'
+ *   c("# Title\nBody text here.")     ->  'Body text here.'
+ *   c("alpha﻿beta gamma")              ->  'alpha﻿beta gamma'
+ *   c("alpha beta gamma")              ->  'alpha beta gamma'
+ *   c(("word " * 55) + "\U0001F9EC gene " + ("tail " * 20))
+ *                                           ->  299 code points, ending 'tail tail tail...'
+ */
+describe("cleanReadmeSummary reads whitespace and length the way the other server does", () => {
+  it("keeps a heading that a byte order mark pushed off the margin", () => {
+    // `strip()` does not remove U+FEFF, so the line never looks like a heading there and
+    // the summary opens with it. `trimStart` does remove it, and dropped the line.
+    expect(cleanReadmeSummary("﻿# Title\n\nBody text here.")).toBe(
+      "﻿# Title Body text here.",
+    );
+  });
+
+  it("drops a heading behind a next-line character", () => {
+    expect(cleanReadmeSummary("# Title\nBody text here.")).toBe("Body text here.");
+  });
+
+  it("drops a heading behind a unit separator", () => {
+    expect(cleanReadmeSummary("# Title\nBody text here.")).toBe("Body text here.");
+  });
+
+  it("leaves a byte order mark inside a word alone rather than collapsing it", () => {
+    expect(cleanReadmeSummary("alpha﻿beta gamma")).toBe("alpha﻿beta gamma");
+  });
+
+  it("still collapses a no-break space, which both call whitespace", () => {
+    expect(cleanReadmeSummary("alpha beta gamma")).toBe("alpha beta gamma");
+  });
+
+  it("measures and cuts the summary in code points, not UTF-16 units", () => {
+    const readme = "word ".repeat(55) + "\u{1F9EC} gene " + "tail ".repeat(20);
+    const summary = cleanReadmeSummary(readme);
+    expect(summary).toBe("word ".repeat(55) + "\u{1F9EC} gene tail tail tail...");
+    expect(Array.from(summary)).toHaveLength(299);
+    // The emoji survives whole: a cut by code unit can leave half of one behind.
+    expect(summary).toContain("\u{1F9EC}");
+  });
+});
+
 // ---------------------------------------------------------------------------
 // extractToolNamesFromSteps
 // ---------------------------------------------------------------------------

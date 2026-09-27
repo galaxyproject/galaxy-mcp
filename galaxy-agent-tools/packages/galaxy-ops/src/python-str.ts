@@ -61,6 +61,35 @@ export function pyStrip(value: string): string {
 }
 
 /**
+ * Python's `str.split()` with no separator: runs of whitespace, and no empty pieces.
+ *
+ * Not `split(/\s+/)`, twice over. The whitespace is `isPySpace`'s, which is not JavaScript's
+ * `\s` -- U+FEFF is a separator to one and an ordinary character to the other, and the four C0
+ * information separators are the reverse -- and the argument-less form also drops the leading
+ * and trailing empty pieces a regex split leaves behind, which is why `" ".join(text.split())`
+ * is Python's idiom for collapsing whitespace and `text.split(/\s+/).join(" ")` is not quite
+ * its translation.
+ */
+export function pySplitWhitespace(value: string): string[] {
+  const parts: string[] = [];
+  let start = -1;
+  for (let i = 0; i < value.length; i += 1) {
+    // Every code point Python calls whitespace is in the BMP, so a code unit is enough
+    // here and a surrogate half is never mistaken for one.
+    if (isPySpace(value.charCodeAt(i))) {
+      if (start >= 0) {
+        parts.push(value.slice(start, i));
+        start = -1;
+      }
+    } else if (start < 0) {
+      start = i;
+    }
+  }
+  if (start >= 0) parts.push(value.slice(start));
+  return parts;
+}
+
+/**
  * Python's `<` on two `str`s: code point by code point, then the shorter string first.
  *
  * JavaScript's `<` compares UTF-16 code units, and the two orders disagree for every pair
