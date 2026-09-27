@@ -390,6 +390,45 @@ with `pnpm parity:report` when a change moves parity. CI holds the checked-in co
 to the generator and prints the same table into the job summary, so the movement
 arrives in the diff instead of waiting for somebody to go looking.
 
+### The third column: Galaxy's own MCP server
+
+Galaxy ships an MCP server of its own -- `lib/galaxy/webapps/galaxy/api/mcp.py`,
+served when `enable_mcp_server` is set -- its own implementation, in process over
+Galaxy's operations manager, where these tools go through the REST API. `PARITY.md`
+has it as a third column, compared against the Python
+surface the same way, with its differences recorded in the `builtin` section of the
+registry and ratcheted apart from the two above: they are not this repository's to
+close, they are a list to take to galaxyproject/galaxy.
+
+That column comes from a snapshot rather than a live read, because reading it needs
+a Galaxy checkout and CI has none. It is refreshed by hand, and it says which Galaxy
+commit it describes:
+
+```bash
+export GALAXY_ROOT=/path/to/galaxy         # a Galaxy checkout; only ever read
+cd /path/to/galaxy-mcp                     # this repository's root, not this package
+"$GALAXY_ROOT/.venv/bin/python" -B mcp-server-galaxy-py/tests/builtin_surface.py
+cd galaxy-agent-tools
+pnpm parity:report                         # then regenerate the table
+```
+
+Four things that one-liner would have got wrong. The assignment is its own line
+because a `VAR=x cmd` prefix does not reach the `$VAR` in its own arguments -- the
+shell expands those first, so the one-liner runs `/.venv/bin/python`. The two
+commands want different directories, and only the second one wants this package's.
+The interpreter is named rather than found: it has to be one that can import Galaxy,
+which in a checkout set up by `run.sh` or `make setup` is the `.venv` under the
+checkout, and anywhere else is whatever environment has Galaxy installed -- nothing
+goes looking, so a checkout without a `.venv` fails with "no such file" before the
+generator starts. And `-B` keeps the run from leaving `__pycache__` in the checkout,
+which importing Galaxy otherwise does; the generator also sets
+`sys.dont_write_bytecode`, and the flag is the half that holds whatever else is on
+the way in.
+
+The generator needs no Galaxy server, no database and no credentials: it imports
+the module, hands it a stub app and reads what the tools declare. The Galaxy
+checkout is only ever read.
+
 ## License
 
 See [LICENSE](../LICENSE) in the repository root.

@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   compareSurfaces,
+  type Divergence,
   type JsonSchema,
   type Normalization,
   type ToolContract,
@@ -13,6 +14,7 @@ import {
   cell,
   code,
   REPORT_URL,
+  currentInput,
   currentReport,
   renderReport,
   type ReportSurface,
@@ -21,6 +23,7 @@ import {
   loadRegistry,
   normalizationFrom,
   type AcceptedDivergence,
+  type BuiltinProvenance,
   type Registry,
 } from "./parity/surfaces";
 
@@ -114,6 +117,22 @@ const misshapenRows = (text: string): string[] =>
 const toolTable = (text: string): string[] =>
   tablesIn(text).find((rows) => rows[0]?.startsWith("| Tool |")) ?? [];
 
+/**
+ * Which tool and parameter a rendered row is about, in the same `tool :: param` form
+ * the renderer keys its divergences by. A tool's own row has no parameter, so it ends
+ * at the separator.
+ */
+const placeOfRow = (line: string): string => {
+  const cells = line.split(" | ");
+  const tool = unfenced(unescaped((cells[0] as string).replace(/^\| /, "")));
+  const param = cells[1] === "" ? "" : unfenced(unescaped(cells[1] as string));
+  return `${tool} :: ${param}`;
+};
+
+/** Where a divergence sits, the renderer's own key for it. */
+const placeOf = (d: { tool: string; param: string | null }): string =>
+  `${d.tool} :: ${d.param ?? ""}`;
+
 /** The switches the check itself runs with, so a rendered shape is one CI compares. */
 const RULES: Normalization = normalizationFrom(loadRegistry());
 
@@ -138,6 +157,32 @@ const render = (surfaces: ReportSurface[], registry: Registry): string => {
       : [];
   return renderReport({ surfaces, divergences, registry, rules: RULES });
 };
+
+/** A stand-in for the snapshot's provenance, which the header prints and nothing reads. */
+const GALAXY: BuiltinProvenance = {
+  version: "26.2.dev0",
+  branch: "dev",
+  commit: "0".repeat(40),
+  describe: "v26.1.1-1-g0000000000",
+  commitDate: "2026-09-01T00:00:00-04:00",
+  moduleBlob: "1".repeat(40),
+  fastmcp: "3.3.1",
+  capturedOn: "2026-09-26",
+};
+
+/** A report with the second pair in it: the built-in rows come from their own list. */
+const renderWithBuiltin = (
+  surfaces: ReportSurface[],
+  divergences: Divergence[],
+  accepted: AcceptedDivergence[],
+): string =>
+  renderReport({
+    surfaces,
+    divergences: [],
+    registry: registryOf(),
+    rules: RULES,
+    builtin: { galaxy: GALAXY, divergences, accepted, ratchet: accepted.length },
+  });
 
 describe("the checked-in parity report", () => {
   it("says what the generator says", async () => {
@@ -348,6 +393,51 @@ describe("the report's tool table", () => {
       "| Tool | Parameter | Python | TypeScript | Galaxy | Difference | Status | Why |",
     );
     expect(text).toContain("| `get_page` |  | `read (hint)` | `read (hint)` | -- |  |  |  |");
+  });
+
+  it("gives a parameter only the second pair diverges about a row of its own", () => {
+    // The parameter rows used to be chosen from the first pair's divergences alone, so a
+    // difference only the built-in comparison found was counted in the summary and left
+    // out of the table -- the worst of the two, because the count says it was looked at.
+    const divergence: Divergence = {
+      tool: "get_histories",
+      param: "limit",
+      kind: "missing-py-param",
+      observed: "builtin=type=integer required=false default=50",
+    };
+    const text = renderWithBuiltin(
+      columns(
+        ["Python", { get_histories: tool() }],
+        ["TypeScript", { get_histories: tool() }],
+        ["Built-in", { get_histories: tool({ limit: { type: "integer", default: 50 } }) }],
+      ),
+      [divergence],
+      [{ ...divergence, status: "unreviewed-gap", reason: "Galaxy pages it and we do not" }],
+    );
+
+    expect(text).toContain(
+      "| `get_histories` | `limit` | -- | -- | `type=integer required=false default=50` | " +
+        "`vs built-in: missing-py-param` | `unreviewed-gap` | Galaxy pages it and we do not |",
+    );
+  });
+
+  it("has one row for every difference either pair found, and none it did not", async () => {
+    // Counted against the comparison the file was written from rather than against a
+    // number somebody typed: the table and the totals above it come from one list, and
+    // a row the renderer drops is a difference the summary claims to have shown.
+    const input = await currentInput();
+    const pairs = [...input.divergences, ...(input.builtin?.divergences ?? [])];
+    expect(pairs.length, "no divergences to check the rows against").toBeGreaterThan(0);
+    const wanted = new Set(pairs.filter((d) => d.param !== null).map(placeOf));
+    const tools = new Set(input.surfaces.flatMap((s) => [...s.surface.keys()]));
+
+    const rows = toolTable(renderReport(input)).slice(2).map(placeOfRow);
+    const parameterRows = rows.filter((place) => !place.endsWith(" :: "));
+    expect(new Set(parameterRows)).toEqual(wanted);
+    expect(parameterRows.length, "a parameter has more than one row").toBe(wanted.size);
+    expect(rows.length, "the table is not a row per tool plus a row per difference").toBe(
+      tools.size + wanted.size,
+    );
   });
 
   it("says what each surface declares a diverging parameter to be", () => {

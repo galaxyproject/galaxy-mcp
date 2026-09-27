@@ -9,6 +9,10 @@ on:
       # The TS parity check reads the Python server's generated surface manifest, so a
       # change to it has to run this workflow or a new gap lands unnoticed.
       - "mcp-server-galaxy-py/tests/testdata/mcp-surface.json"
+      # And the snapshot of the surface Galaxy itself serves, for the same reason: it is
+      # the third column's only source, and refreshing it alone moves the comparator, the
+      # registry, the ratchet and the report.
+      - "mcp-server-galaxy-py/tests/testdata/galaxy-builtin-surface.json"
       # The report is generated from both surfaces, so an edit to it alone is still
       # something the check has to have an opinion about.
       - "PARITY.md"
@@ -20,6 +24,10 @@ on:
       # The TS parity check reads the Python server's generated surface manifest, so a
       # change to it has to run this workflow or a new gap lands unnoticed.
       - "mcp-server-galaxy-py/tests/testdata/mcp-surface.json"
+      # And the snapshot of the surface Galaxy itself serves, for the same reason: it is
+      # the third column's only source, and refreshing it alone moves the comparator, the
+      # registry, the ratchet and the report.
+      - "mcp-server-galaxy-py/tests/testdata/galaxy-builtin-surface.json"
       # The report is generated from both surfaces, so an edit to it alone is still
       # something the check has to have an opinion about.
       - "PARITY.md"

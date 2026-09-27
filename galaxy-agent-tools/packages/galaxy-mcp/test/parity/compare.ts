@@ -19,8 +19,10 @@
 export type DivergenceKind =
   | "missing-ts-tool"
   | "missing-py-tool"
+  | "missing-builtin-tool"
   | "missing-ts-param"
   | "missing-py-param"
+  | "missing-builtin-param"
   | "type-mismatch"
   | "required-mismatch"
   | "default-mismatch"
@@ -31,9 +33,47 @@ export type DivergenceKind =
 export const WHOLE_TOOL_KINDS: readonly DivergenceKind[] = [
   "missing-ts-tool",
   "missing-py-tool",
+  "missing-builtin-tool",
   "mutability-mismatch",
   "requires-mismatch",
 ];
+
+/**
+ * The surface Python is being compared against, in the words its divergences use.
+ *
+ * The comparison is pairwise and Python is always one side of it -- it is the contract the
+ * TypeScript ops follow and the surface Galaxy's own server is measured against, so it is
+ * the one both others have something to say about. What changes is who the other side is, which is what a kind naming a missing
+ * thing and an `observed` string naming a value have to get right: `missing-ts-param` on a
+ * built-in comparison would be a sentence about the wrong server.
+ *
+ * `missing-py-tool` and `missing-py-param` are NOT here: they say Python lacks something,
+ * which means the same thing whoever found it.
+ */
+export interface OtherSide {
+  /** What this surface is called in an observed string and in an error. */
+  label: string;
+  /** The kinds for a tool and a parameter this surface does not have. */
+  missingTool: DivergenceKind;
+  missingParam: DivergenceKind;
+  /**
+   * Whether this surface says anything about a tool changing state, and about the Galaxy
+   * a tool needs. A surface that declares neither is not disagreeing about them, and a
+   * comparison that read its silence as a claim would report one difference per tool
+   * instead of the one fact that it says nothing. Where that is the case the surface's
+   * loader is what checks it stays the case.
+   */
+  comparesMutability: boolean;
+  comparesRequirements: boolean;
+}
+
+export const TYPESCRIPT_SIDE: OtherSide = {
+  label: "typescript",
+  missingTool: "missing-ts-tool",
+  missingParam: "missing-ts-param",
+  comparesMutability: true,
+  comparesRequirements: true,
+};
 
 export interface Divergence {
   tool: string;
@@ -719,42 +759,42 @@ function showTool(contract: ToolContract, rules: Normalization, where: string): 
 function compareTool(
   tool: string,
   python: ToolContract,
-  typescript: ToolContract,
+  other: ToolContract,
   rules: Normalization,
+  side: OtherSide,
 ): Divergence[] {
   const found: Divergence[] = [];
-  const [pySays, tsSays] = [
-    mutability(python, `${tool} (python)`),
-    mutability(typescript, `${tool} (typescript)`),
-  ];
-  if (pySays.mutating !== tsSays.mutating) {
-    found.push({
-      tool,
-      param: null,
-      kind: "mutability-mismatch",
-      observed: `python=${showMutability(pySays)} typescript=${showMutability(tsSays)}`,
-    });
+  const there = `${tool} (${side.label})`;
+  if (side.comparesMutability) {
+    const [pySays, otherSays] = [mutability(python, `${tool} (python)`), mutability(other, there)];
+    if (pySays.mutating !== otherSays.mutating) {
+      found.push({
+        tool,
+        param: null,
+        kind: "mutability-mismatch",
+        observed: `python=${showMutability(pySays)} ${side.label}=${showMutability(otherSays)}`,
+      });
+    }
   }
-  const [pyNeeds, tsNeeds] = [
-    requirement(python, `${tool} (python)`),
-    requirement(typescript, `${tool} (typescript)`),
-  ];
-  if (pyNeeds !== tsNeeds) {
-    found.push({
-      tool,
-      param: null,
-      kind: "requires-mismatch",
-      observed: `python=${pyNeeds ?? "none"} typescript=${tsNeeds ?? "none"}`,
-    });
+  if (side.comparesRequirements) {
+    const [pyNeeds, otherNeeds] = [requirement(python, `${tool} (python)`), requirement(other, there)];
+    if (pyNeeds !== otherNeeds) {
+      found.push({
+        tool,
+        param: null,
+        kind: "requires-mismatch",
+        observed: `python=${pyNeeds ?? "none"} ${side.label}=${otherNeeds ?? "none"}`,
+      });
+    }
   }
   const py = normalizeParams(python.inputSchema, rules, `${tool} (python)`);
-  const ts = normalizeParams(typescript.inputSchema, rules, `${tool} (typescript)`);
+  const ts = normalizeParams(other.inputSchema, rules, there);
   for (const [param, p] of py) {
     if (!ts.has(param)) {
       found.push({
         tool,
         param,
-        kind: "missing-ts-param",
+        kind: side.missingParam,
         observed: `python=${showContract(p)}`,
       });
     }
@@ -765,7 +805,7 @@ function compareTool(
         tool,
         param,
         kind: "missing-py-param",
-        observed: `typescript=${showContract(t)}`,
+        observed: `${side.label}=${showContract(t)}`,
       });
     }
   }
@@ -777,7 +817,7 @@ function compareTool(
         tool,
         param,
         kind: "type-mismatch",
-        observed: `python=${p.type} typescript=${t.type}`,
+        observed: `python=${p.type} ${side.label}=${t.type}`,
       });
     }
     if (p.required !== t.required) {
@@ -785,7 +825,7 @@ function compareTool(
         tool,
         param,
         kind: "required-mismatch",
-        observed: `python=${p.required} typescript=${t.required}`,
+        observed: `python=${p.required} ${side.label}=${t.required}`,
       });
     }
     if (p.hasDefault !== t.hasDefault || JSON.stringify(p.default) !== JSON.stringify(t.default)) {
@@ -793,7 +833,7 @@ function compareTool(
         tool,
         param,
         kind: "default-mismatch",
-        observed: `python=${show(p)} typescript=${show(t)}`,
+        observed: `python=${show(p)} ${side.label}=${show(t)}`,
       });
     }
   }
@@ -803,26 +843,28 @@ function compareTool(
 /** Every way the two surfaces disagree, in a stable order. */
 export function compareSurfaces(
   python: Surface,
-  typescript: Surface,
+  other: Surface,
   rules: Normalization,
+  side: OtherSide = TYPESCRIPT_SIDE,
 ): Divergence[] {
   const found: Divergence[] = [];
-  for (const tool of [...python.keys(), ...typescript.keys()]) {
+  for (const tool of [...python.keys(), ...other.keys()]) {
     assertIsAName(tool, "tool", "the surfaces");
   }
   for (const [tool, contract] of python) {
-    if (typescript.has(tool)) continue;
+    if (other.has(tool)) continue;
     const observed = `python=${showTool(contract, rules, `${tool} (python)`)}`;
-    found.push({ tool, param: null, kind: "missing-ts-tool", observed });
+    found.push({ tool, param: null, kind: side.missingTool, observed });
   }
-  for (const [tool, contract] of typescript) {
+  for (const [tool, contract] of other) {
     if (python.has(tool)) continue;
-    const observed = `typescript=${showTool(contract, rules, `${tool} (typescript)`)}`;
+    const where = `${tool} (${side.label})`;
+    const observed = `${side.label}=${showTool(contract, rules, where)}`;
     found.push({ tool, param: null, kind: "missing-py-tool", observed });
   }
   for (const [tool, contract] of python) {
-    const other = typescript.get(tool);
-    if (other) found.push(...compareTool(tool, contract, other, rules));
+    const there = other.get(tool);
+    if (there) found.push(...compareTool(tool, contract, there, rules, side));
   }
   return found.sort((a, b) => {
     const [x, y] = [divergenceKey(a), divergenceKey(b)];

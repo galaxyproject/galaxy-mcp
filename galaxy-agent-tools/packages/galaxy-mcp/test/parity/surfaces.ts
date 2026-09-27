@@ -13,6 +13,7 @@ import {
   surfaceByName,
   NORMALIZATION_RULES,
   type DivergenceKind,
+  type OtherSide,
   type JsonSchema,
   type Normalization,
   type NormalizationRuleName,
@@ -273,4 +274,186 @@ export async function typescriptSurface(): Promise<Surface> {
     await client.close();
     await server.close();
   }
+}
+
+/**
+ * The third surface: the MCP server Galaxy itself serves.
+ *
+ * `lib/galaxy/webapps/galaxy/api/mcp.py` calls Galaxy's `AgentOperationsManager` in
+ * process; this package's Python tools go through bioblend and REST, and the ops here
+ * through REST. Three implementations over one Galaxy, so a difference between them is
+ * one somebody wrote, on whichever side wrote it. It is read from a snapshot
+ * rather than from a running Galaxy: the generator needs a Galaxy checkout, CI has none,
+ * and a column that could only be produced on one laptop is no use to a reader. The
+ * snapshot says which Galaxy commit it came from, and `builtin_surface.py` says how to
+ * refresh it.
+ */
+
+/** Which Galaxy the snapshot describes, written by the generator. */
+export interface BuiltinProvenance {
+  version: string;
+  branch: string;
+  commit: string;
+  describe: string;
+  commitDate: string;
+  moduleBlob: string;
+  fastmcp: string;
+  capturedOn: string;
+}
+
+export interface BuiltinSnapshot extends Manifest {
+  galaxy: BuiltinProvenance;
+}
+
+/**
+ * What the comparison is told to overlook about the built-in server, each a single
+ * switch the registry flips, exactly like the whole-surface rules above.
+ *
+ * All three describe the same kind of thing: something the built-in says everywhere or
+ * nowhere, which would otherwise arrive as one divergence per tool and say the same
+ * sentence forty times. Each is checked where it is applied, so a rule that stops being
+ * true stops the run instead of quietly hiding a real difference.
+ */
+export const BUILTIN_RULES = ["builtinApiKey", "builtinMutability", "builtinRequirements"] as const;
+
+export type BuiltinRuleName = (typeof BUILTIN_RULES)[number];
+
+export interface BuiltinRegistry {
+  /** Where the snapshot came from, so the registry names the file it is about. */
+  source: string;
+  /** Built-in tool name -> the name the other two surfaces use for the same tool. */
+  aliases: Record<string, string>;
+  /** Why each alias is one tool under two names, since nothing else can say it. */
+  aliasReason: string;
+  normalization: Record<BuiltinRuleName, NormalizationRule>;
+  ratchet: Ratchet;
+  divergences: AcceptedDivergence[];
+}
+
+const BUILTIN_SNAPSHOT_URL = new URL("./galaxy-builtin-surface.json", MANIFEST_URL);
+
+/** What to call the registry's built-in section when something in it cannot be read. */
+const BUILTIN_SECTION = 'the registry\'s "builtin" section';
+
+export function loadBuiltinSnapshot(): BuiltinSnapshot {
+  return readJson<BuiltinSnapshot>(BUILTIN_SNAPSHOT_URL, "Galaxy built-in surface snapshot");
+}
+
+/** The registry's built-in section, read as its own registry. */
+export function builtinRegistry(registry: Registry): BuiltinRegistry {
+  const node = registry as unknown as Record<string, unknown>;
+  const section = read(node, "builtin", "object", "the registry") as BuiltinRegistry | undefined;
+  if (!section) {
+    throw new Error(
+      'the registry has no "builtin" section, and the third surface has nowhere to record ' +
+        "what it found",
+    );
+  }
+  const where = BUILTIN_SECTION;
+  const declared = new Map(Object.entries(section.normalization ?? {}));
+  for (const name of BUILTIN_RULES) {
+    const rule = declared.get(name);
+    if (!rule) throw new Error(`${where} does not declare the "${name}" rule`);
+    if (read(rule as unknown as Record<string, unknown>, "enabled", "boolean", where) === undefined) {
+      throw new Error(`${where} does not say whether "${name}" is enabled`);
+    }
+  }
+  return section;
+}
+
+const enabled = (section: BuiltinRegistry, rule: BuiltinRuleName): boolean =>
+  section.normalization[rule].enabled;
+
+/** How a built-in divergence names its side, and what it is allowed to compare. */
+export function builtinSide(section: BuiltinRegistry): OtherSide {
+  return {
+    label: "builtin",
+    missingTool: "missing-builtin-tool",
+    missingParam: "missing-builtin-param",
+    comparesMutability: !enabled(section, "builtinMutability"),
+    comparesRequirements: !enabled(section, "builtinRequirements"),
+  };
+}
+
+/** The credential every built-in tool takes, which the other two take once per session. */
+const API_KEY = "api_key";
+
+function withoutApiKey(tool: ManifestTool, where: string): ManifestTool {
+  const schema = tool.inputSchema as unknown as Record<string, unknown>;
+  const properties = (read(schema, "properties", "object", where) ?? {}) as Record<string, JsonSchema>;
+  const required = (read(schema, "required", "names", where) ?? []) as string[];
+  const declared = properties[API_KEY];
+  // Checked rather than assumed: the rule is "every built-in tool takes the key as an
+  // argument", and the day one stops -- or starts taking it optionally -- somebody has to
+  // decide what that means rather than have this quietly drop nothing.
+  if (!declared || declared.type !== "string" || !required.includes(API_KEY)) {
+    throw new Error(
+      `${where}: the "${API_KEY}" rule says every built-in tool takes a required string ` +
+        `${JSON.stringify(API_KEY)}, and this one does not; re-read the rule before the ` +
+        "comparison drops a parameter it has not understood",
+    );
+  }
+  const rest = { ...properties };
+  delete rest[API_KEY];
+  return {
+    ...tool,
+    inputSchema: {
+      ...(tool.inputSchema as JsonSchema),
+      properties: rest,
+      required: required.filter((name) => name !== API_KEY),
+    } as JsonSchema,
+  };
+}
+
+/**
+ * The built-in surface as the comparison reads it: aliased to the names the other two
+ * surfaces use, without the per-call credential, and without the empty tag list.
+ *
+ * The empty list is dropped rather than carried because it is not a declaration: every
+ * tool is registered with a bare `@mcp.tool()`, so the built-in tells a client nothing
+ * about which tools write, and `[]` read as tags would say "this tool is read-only" about
+ * all 44. With it gone the surface reads as what a client would have to assume.
+ */
+export function builtinSurface(snapshot: BuiltinSnapshot, section: BuiltinRegistry): Surface {
+  const names = new Set(snapshot.tools.map((tool) => tool.name));
+  for (const [from, to] of Object.entries(section.aliases)) {
+    if (!names.has(from)) {
+      throw new Error(
+        `${BUILTIN_SECTION}: "${from}" is aliased to "${to}", and the built-in server has no ` +
+          "such tool; an alias nobody can reach hides a rename rather than recording one",
+      );
+    }
+    if (names.has(to)) {
+      throw new Error(
+        `${BUILTIN_SECTION}: "${from}" is aliased to "${to}", which the built-in server also ` +
+          "has, so the two would land on one name and the comparison would lose one of them",
+      );
+    }
+  }
+  const tools = snapshot.tools.map((tool) => {
+    const at = `${tool.name} (builtin)`;
+    if (enabled(section, "builtinMutability") && (tool.tags.length || Object.keys(tool.annotations).length)) {
+      throw new Error(
+        `${at}: the "builtinMutability" rule says the built-in advertises no tags and no ` +
+          "annotations, so the comparison leaves read-versus-write out of it; this tool " +
+          "advertises some, and somebody has to decide what the rule means now",
+      );
+    }
+    if (enabled(section, "builtinRequirements") && tool.requires) {
+      throw new Error(
+        `${at}: the "builtinRequirements" rule says the built-in declares no Galaxy ` +
+          "requirement -- it is served BY the Galaxy in question -- and this tool declares one",
+      );
+    }
+    const named = { ...tool, name: section.aliases[tool.name] ?? tool.name };
+    return enabled(section, "builtinApiKey") ? withoutApiKey(named, at) : named;
+  });
+  const surface = pythonSurface({ ...snapshot, tools });
+  return new Map(
+    [...surface].map(([name, contract]) => {
+      if (contract.tags?.length) return [name, contract];
+      const { tags: _dropped, ...rest } = contract;
+      return [name, rest];
+    }),
+  );
 }
