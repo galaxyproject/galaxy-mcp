@@ -131,12 +131,15 @@ export const recommendIwcWorkflowsOp: Operation<typeof input, Recommendations> =
   // truthful to put in a pagination block and the Python tool sends none -- which
   // leaves the message as the only place a cut can be reported, and it is reported
   // there rather than dropped.
-  project: (out, i) => ({
+  project: (out) => ({
     data: out.items,
+    // The other server's sentence, word for word; the budget is measured on it
+    // too, and this is the one listing whose cut is explained in the message
+    // rather than in a pagination block it does not send.
     message:
-      `${out.items.length} of ${out.pagination.total} recommended workflow(s) for "${i.intent}"` +
+      `Found ${out.items.length} workflows matching your intent` +
       (out.pagination.trimmedForSize
-        ? "; matches below these were dropped to fit the output budget"
+        ? "; additional matches were dropped to fit the output budget"
         : ""),
     count: out.items.length,
     pagination: null,

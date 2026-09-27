@@ -47,7 +47,10 @@ export const listHistoryIdsOp: Operation<typeof input, Paged<HistoryRef>> = {
   },
   project: (out) => ({
     data: out.items,
-    message: `${out.items.length} histor${out.items.length === 1 ? "y" : "ies"}`,
+    // The other server's sentence, word for word; the budget is measured on it too.
+    message: out.pagination.total
+      ? `Found ${out.items.length} of ${out.pagination.total} histories`
+      : "No histories found",
     count: out.items.length,
     pagination: wirePagination(out.pagination),
   }),

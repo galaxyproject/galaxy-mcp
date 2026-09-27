@@ -64,7 +64,8 @@ export const listWorkflowsOp: Operation<typeof input, Paged<WorkflowItem>> = {
   },
   project: (out) => ({
     data: out.items,
-    message: `${out.items.length} of ${out.pagination.total} workflow(s)`,
+    // The other server's sentence, word for word; the budget is measured on it too.
+    message: `Found ${out.pagination.total} workflows, returning ${out.items.length}`,
     count: out.items.length,
     pagination: wirePagination(out.pagination),
   }),

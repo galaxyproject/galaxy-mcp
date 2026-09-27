@@ -65,7 +65,8 @@ export const listUserToolsOp: Operation<typeof input, Paged<UserTool>> = {
   },
   project: (out) => ({
     data: out.items,
-    message: `${out.items.length} of ${out.pagination.total} user-defined tool(s)`,
+    // The other server's sentence, word for word; the budget is measured on it too.
+    message: `Found ${out.pagination.total} user-defined tool(s), returning ${out.items.length}`,
     count: out.items.length,
     // The other server's noun, on the wire only.
     pagination: wirePagination(withNoun(out.pagination, "user tools")),

@@ -496,6 +496,20 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         lambda: list_history_ids_fn(limit=10, offset=400),
         histories_index,
     )
+    # Right on the boundary. Two names of 24,835 characters put a full page of two
+    # within eleven bytes of the 50,000 byte budget, and the budget is measured on
+    # the whole envelope -- message included -- so a sentence eleven bytes shorter
+    # on one surface keeps a row the other cuts. That is not a hypothetical: it is
+    # what the two surfaces did here while their messages were still their own.
+    boundary_histories = [{"id": f"h{i}", "name": "n" * 24_835} for i in range(2)]
+    add(
+        "list_history_ids",
+        "budget_boundary",
+        "two histories whose full page lands within a few bytes of the output budget",
+        {"limit": 2, "offset": 0},
+        lambda: list_history_ids_fn(limit=2, offset=0),
+        [route("/api/histories", boundary_histories)],
+    )
 
     # -- get_histories -------------------------------------------------------
     # One unpaged fetch on both sides now: this server filters by name before it

@@ -94,7 +94,7 @@ describe("search_iwc_workflows", () => {
     __setIwcCacheForTest([WF_RNA]);
     const out = await searchIwcWorkflows({ query: "rna" }, ctxWith(mockClient({})));
     const meta = searchIwcWorkflowsOp.project!(out, { query: "rna" });
-    expect(meta.message).toBe(`1 of 1 IWC workflows matching "rna"`);
+    expect(meta.message).toBe("Found 1 IWC workflows matching 'rna', returning 1");
   });
 });
 

@@ -61,7 +61,10 @@ export const searchToolsByNameOp: Operation<typeof input, Paged<ToolListItem>> =
   },
   project: (out, i) => ({
     data: out.items,
-    message: `${out.items.length} of ${out.pagination.total} tool(s) matching "${i.query}"`,
+    // The other server's sentence, word for word: the budget is measured on the
+    // whole envelope, message included, so a different sentence cuts the page at
+    // a different row. See the note on `message` in registry.ts.
+    message: `Found ${out.pagination.total} tools matching '${i.query}', returning ${out.items.length}`,
     count: out.items.length,
     pagination: wirePagination(out.pagination),
   }),

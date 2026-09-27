@@ -9,13 +9,17 @@
  * parse to the same envelope.
  *
  * Compared: the keys, and `data`, `success`, `count` and `pagination` exactly.
- * Not compared: `message`, whose prose the two servers still word differently.
- * Key order is not part of the contract.
+ * `message` too for the nine tools whose page the output budget cuts --
+ * get_iwc_workflows, get_tool_panel, list_history_ids, list_user_tools,
+ * list_workflows, recommend_iwc_workflows, search_iwc_workflows,
+ * search_tools_by_keywords and search_tools_by_name -- because the budget is
+ * measured on the whole envelope and a longer sentence cuts a row. For every
+ * other tool `message` only has to be a non-empty string; the rest of the prose
+ * is still its own piece of work. Key order is not part of the contract.
  *
- * Skipped: the cases whose page the output budget cut. This surface measures the
- * budget against the indented JSON it prints rather than the single line MCP
- * sends -- deliberately, and there is a test for it -- so it cuts a page a few
- * rows shorter than the other two. Every other case is identical.
+ * Nothing is skipped, the cut cases included. This surface measures the budget
+ * on the compact line the other two measure and prints indented afterwards, so
+ * a page is cut at the same row wherever it is read.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -51,7 +55,20 @@ const readJson = <T>(name: string): T =>
   JSON.parse(readFileSync(fileURLToPath(new URL(name, FIXTURES)), "utf8")) as T;
 
 const index = readJson<{ cases: CaseEntry[] }>("index.json");
-const replayable = index.cases.filter((c) => !c.case.includes("cut_by_the_budget"));
+const replayable = index.cases;
+
+/** The tools whose message is part of the contract, because their budget is. */
+const MESSAGE_PARITY = new Set([
+  "get_iwc_workflows",
+  "get_tool_panel",
+  "list_history_ids",
+  "list_user_tools",
+  "list_workflows",
+  "recommend_iwc_workflows",
+  "search_iwc_workflows",
+  "search_tools_by_keywords",
+  "search_tools_by_name",
+]);
 
 /** The canned replies, matched the way the generator registered them. */
 function replier(baseUrl: string, routes: Route[]): typeof fetch {
@@ -171,6 +188,9 @@ describe("the CLI's json envelope is the Python server's", () => {
       expect(printed.count, "count").toEqual(expected.count);
       expect(printed.pagination, "pagination").toEqual(expected.pagination);
       expect(typeof printed.message, "message").toBe("string");
+      if (MESSAGE_PARITY.has(entry.tool)) {
+        expect(printed.message, "message").toEqual(expected.message);
+      }
     },
   );
 });

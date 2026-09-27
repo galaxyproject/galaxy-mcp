@@ -55,7 +55,10 @@ export const searchIwcWorkflowsOp: Operation<typeof input, Paged<EnrichedIwcWork
   },
   project: (out, i) => ({
     data: out.items,
-    message: `${out.items.length} of ${out.pagination.total} IWC workflows matching "${i.query}"`,
+    // The other server's sentence, word for word; the budget is measured on it too.
+    message:
+      `Found ${out.pagination.total} IWC workflows matching '${i.query}', ` +
+      `returning ${out.items.length}`,
     count: out.items.length,
     pagination: wirePagination(out.pagination),
   }),

@@ -164,9 +164,12 @@ export const searchToolsByKeywordsOp: Operation<typeof input, Paged<ToolKeywordM
     rows: (out) => out.items.length,
     shrink: (out, keep) => shrinkPaged(out, keep, "tools"),
   },
-  project: (out) => ({
+  project: (out, i) => ({
     data: out.items,
-    message: `${out.items.length} of ${out.pagination.total} tool(s) matching keywords`,
+    // The other server's sentence, word for word; the budget is measured on it too.
+    message:
+      `Found ${out.pagination.total} tools matching keywords: ` +
+      `${i.keywords.join(", ")}, returning ${out.items.length}`,
     count: out.items.length,
     pagination: wirePagination(out.pagination),
   }),

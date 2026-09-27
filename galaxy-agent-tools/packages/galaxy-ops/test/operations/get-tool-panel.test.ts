@@ -44,7 +44,9 @@ describe("get_tool_panel", () => {
   it("project counts the page against the total", async () => {
     const client = mockClient({ GET: () => ({ data: PANEL, response: { status: 200 } }) });
     const out = await getToolPanel({}, ctxWith(client));
-    expect(getToolPanelOp.project!(out, {} as never).message).toBe("2 of 2 tool panel entries");
+    expect(getToolPanelOp.project!(out, {} as never).message).toBe(
+      "Retrieved 2 of 2 tool panel entries; pass section_id to list a section's tools",
+    );
   });
 });
 

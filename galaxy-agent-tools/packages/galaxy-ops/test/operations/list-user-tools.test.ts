@@ -40,7 +40,9 @@ describe("list_user_tools", () => {
 
   it("projects the count message", () => {
     const paged = paginate(TOOLS, { limit: 25, offset: 0, noun: "tools" });
-    expect(listUserToolsOp.project!(paged, {} as never).message).toBe("2 of 2 user-defined tool(s)");
+    expect(listUserToolsOp.project!(paged, {} as never).message).toBe(
+      "Found 2 user-defined tool(s), returning 2",
+    );
   });
 
   /**

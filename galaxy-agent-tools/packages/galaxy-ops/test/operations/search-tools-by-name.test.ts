@@ -69,7 +69,7 @@ describe("search_tools_by_name", () => {
   it("project returns message with count and query", () => {
     const paged = paginate([{ id: "t1", name: "Tool" }], { limit: 25, offset: 0, noun: "tools" });
     const msg = searchToolsByNameOp.project!(paged, { query: "tool" } as never);
-    expect(msg.message).toBe('1 of 1 tool(s) matching "tool"');
+    expect(msg.message).toBe("Found 1 tools matching 'tool', returning 1");
   });
 });
 

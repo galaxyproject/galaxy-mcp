@@ -175,17 +175,23 @@ export const getToolPanelOp: Operation<typeof input, ToolPanelResult> = {
   },
   // Two shapes on the wire as well, and neither carries its own pagination: the
   // window travels beside the data, once, as it does for every other listing.
-  project: (out) =>
+  // Both sentences are the other server's, word for word; the budget is measured
+  // on them too, so a page cut at the boundary is cut at the same row there.
+  project: (out, i) =>
     "entries" in out
       ? {
           data: { entries: out.entries },
-          message: `${out.entries.length} of ${out.pagination.total} tool panel entries`,
+          message:
+            `Retrieved ${out.entries.length} of ${out.pagination.total} tool panel entries; ` +
+            "pass section_id to list a section's tools",
           count: out.entries.length,
           pagination: wirePagination(out.pagination),
         }
       : {
           data: { section_id: out.section_id, section_name: out.section_name, tools: out.tools },
-          message: `${out.tools.length} of ${out.pagination.total} tools in ${out.section_name}`,
+          message:
+            `Retrieved ${out.tools.length} of ${out.pagination.total} tools in ` +
+            `section '${i.sectionId}'`,
           count: out.tools.length,
           pagination: wirePagination(out.pagination),
         },

@@ -4,15 +4,21 @@ export type Format = "table" | "json" | "text";
 export interface RenderOpts { format: Format; quiet: boolean; }
 
 /**
- * How this surface serialises a result, and therefore what the output budget has
- * to be measured against: the indented JSON below is the largest thing render can
- * print, so a page that fits this fits the table and text formats too.
+ * How this surface PRINTS a result. Not how it measures one.
+ *
+ * The output budget is measured on the compact single line -- the same bytes the
+ * MCP text block carries and the same bytes the Python server counts -- and only
+ * then is the page printed indented. Measuring the indentation instead cut the
+ * page a few rows shorter here than on the other two surfaces, which made the
+ * budget a property of who was reading rather than of what a model reads. The
+ * indented output can therefore run past 50,000 bytes, deliberately: whitespace
+ * added for a human is not a reason to hand back a shorter page.
  */
-export const serializeForCli = (result: GalaxyResult<unknown>): string => JSON.stringify(result, null, 2);
+export const printJson = (result: GalaxyResult<unknown>): string => JSON.stringify(result, null, 2);
 
 export function render(result: GalaxyResult<unknown>, opts: RenderOpts): void {
   if (opts.format === "json") {
-    console.log(serializeForCli(result));
+    console.log(printJson(result));
     return;
   }
   if (result.success) console.log(renderData(result.data));

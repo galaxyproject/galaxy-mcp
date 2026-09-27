@@ -46,7 +46,8 @@ export const getIwcWorkflowsOp: Operation<typeof input, Paged<EnrichedIwcWorkflo
   },
   project: (out) => ({
     data: out.items,
-    message: `${out.items.length} of ${out.pagination.total} IWC workflows`,
+    // The other server's sentence, word for word; the budget is measured on it too.
+    message: `Retrieved ${out.items.length} of ${out.pagination.total} workflows from IWC`,
     count: out.items.length,
     pagination: wirePagination(out.pagination),
   }),

@@ -35,7 +35,7 @@ describe("get_iwc_workflows", () => {
     __setIwcCacheForTest([WF_A, WF_B]);
     const out = await getIwcWorkflows({}, ctxWith(mockClient({})));
     const meta = getIwcWorkflowsOp.project!(out, {} as never);
-    expect(meta.message).toBe("2 of 2 IWC workflows");
+    expect(meta.message).toBe("Retrieved 2 of 2 workflows from IWC");
   });
 });
 
