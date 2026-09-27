@@ -319,6 +319,20 @@ uv run pytest tests/test_real_integration.py
 
 ## Development
 
+### The `galaxy_mcp.ops` layer
+
+`src/galaxy_mcp/ops/` holds Galaxy logic that is a pure function of its arguments -- the
+input contracts (`tool_inputs`, `workflow_inputs`) today, and whatever else turns out to be
+reusable logic rather than transport or orchestration. Nothing in there may reach back for
+the server, a client, a session or a third-party package: `tests/test_ops_boundary.py`
+reads the imports out of the source and refuses anything outside the standard library and
+the layer's own modules, whichever way the import is written, including from a nested
+package and including `importlib.import_module`. The dependency runs one way, so a caller
+imports ops and never the reverse. The two modules used to sit directly under `galaxy_mcp`,
+and both old paths still answer, as does every name `from galaxy_mcp import *` used to
+bind; importing the package still does not build the server, so `--discovery-mode` keeps
+working.
+
 ### Code Style Guidelines
 
 - Use Python 3.10+ features
