@@ -331,7 +331,9 @@ package and including `importlib.import_module`. The dependency runs one way, so
 imports ops and never the reverse. The two modules used to sit directly under `galaxy_mcp`,
 and both old paths still answer, as does every name `from galaxy_mcp import *` used to
 bind; importing the package still does not build the server, so `--discovery-mode` keeps
-working.
+working. Those root names are answered at runtime, so a type checker will not see names
+through `from galaxy_mcp import *`; import them by name or from `galaxy_mcp.server` where
+one has to follow them.
 
 ### Code Style Guidelines
 

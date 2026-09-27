@@ -1,4 +1,13 @@
-"""Galaxy MCP - Model Context Protocol server for Galaxy bioinformatics platform."""
+"""Galaxy MCP - Model Context Protocol server for Galaxy bioinformatics platform.
+
+The server's names are resolved on first use rather than bound when this package is
+imported, so that importing galaxy_mcp does not build the server -- see ``__getattr__``
+below. They all still answer, ``from galaxy_mcp import *`` included, but they answer at
+runtime: a type checker reading ``from galaxy_mcp import *`` in a consumer will not see
+them, so import them by name or from ``galaxy_mcp.server`` where a checker has to follow
+them. ``__dir__`` lists the same names, which is also why ``help(galaxy_mcp)`` now
+documents the server's names along with this package's own.
+"""
 
 # Imported as a module rather than ``from importlib import import_module`` because
 # whatever this file leaves in its own namespace ends up in ``__all__``, and
