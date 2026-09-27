@@ -5,8 +5,9 @@ import type { ZodRawShape } from "zod";
  * What the model actually sees for one tool call, before the surface trims it.
  *
  * `galaxy-mcp`'s `toolResult` sends `content[0].text = JSON.stringify(result)`,
- * so the text is the whole envelope -- `data` plus `success`, `message` and
- * `pagination` -- and measuring `run()`'s bare return value understates it.
+ * so the text is the whole envelope -- the projected `data` plus `success`,
+ * `message`, `count` and `pagination` -- and measuring `run()`'s bare return
+ * value understates it.
  * galaxy-ops cannot import that function, so the shape is rebuilt here and
  * `galaxy-mcp/test/surface.test.ts` pins the real one against this description:
  * one text block, nothing else.
@@ -26,10 +27,13 @@ export function mcpPayloadBytes<Shape extends ZodRawShape, O>(
   data: O,
   input: unknown,
 ): number {
-  const envelope: GalaxyResult<O> = {
-    data,
+  const projected = op.project?.(data, input as never) ?? {};
+  const envelope: GalaxyResult<unknown> = {
+    data: "data" in projected ? projected.data : data,
     success: true,
-    ...(op.project?.(data, input as never) ?? {}),
+    ...(projected.message === undefined ? {} : { message: projected.message }),
+    count: projected.count ?? null,
+    pagination: projected.pagination ?? null,
   };
   return new TextEncoder().encode(JSON.stringify(envelope)).length;
 }

@@ -149,6 +149,7 @@ export const getWorkflowInputTemplateOp: Operation<typeof input, WorkflowInputTe
   run,
   project: (out, i) => ({
     message: `${(out.slots as unknown[]).length} input slot(s) for workflow ${i.workflowId}`,
+    count: (out.slots as unknown[]).length,
   }),
 };
 

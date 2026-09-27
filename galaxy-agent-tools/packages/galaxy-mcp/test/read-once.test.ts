@@ -651,8 +651,8 @@ describe("an arguments container, whatever it is made of", () => {
         return;
       }
       expect(reply?.result?.isError, rawText(reply)).toBe(false);
-      const page = JSON.parse(rawText(reply)) as { data: { items: unknown[] } };
-      expect(page.data.items).toHaveLength(items);
+      const page = JSON.parse(rawText(reply)) as { data: unknown[] };
+      expect(page.data).toHaveLength(items);
     },
   );
 });

@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
-import { paginate, type Paged } from "./pagination";
+import { paginate, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
 
@@ -126,9 +126,14 @@ export const getHistoryContentsOp: Operation<typeof input, HistoryContents> = {
   summary: "List the datasets and collections in a history, one page at a time.",
   input,
   run,
-  project: (out) => ({
+  // This tool's data is an object rather than the bare page: the Python tool names
+  // the history the contents came from beside them, and a caller holding one page
+  // of several should not have to remember which history it asked about.
+  project: (out, i) => ({
+    data: { history_id: i.historyId, contents: out.items },
     message: `${out.items.length} of ${out.pagination.total} item(s)`,
-    pagination: out.pagination,
+    count: out.items.length,
+    pagination: wirePagination(out.pagination),
   }),
 };
 

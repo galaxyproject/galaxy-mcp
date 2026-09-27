@@ -209,8 +209,8 @@ describe("get_history_contents", () => {
     const out = await getHistoryContents(input, ctxWith(serving(500)));
     const result = await runWithEnvelope(getHistoryContentsOp as never, input as never, ctxWith(serving(500)));
     expect(out.items).toHaveLength(100);
-    expect((result.data as { items: unknown[] }).items).toHaveLength(100);
-    expect(result.pagination?.trimmedForSize).toBeUndefined();
+    expect((result.data as { contents: unknown[] }).contents).toHaveLength(100);
+    expect(result.pagination?.helper_text).not.toContain("cut short");
     expect(mcpPayloadBytes(getHistoryContentsOp, out, input)).toBeGreaterThan(OUTPUT_BUDGET_BYTES);
   });
 });

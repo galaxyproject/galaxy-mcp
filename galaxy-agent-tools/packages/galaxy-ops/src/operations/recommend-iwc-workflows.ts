@@ -127,9 +127,19 @@ export const recommendIwcWorkflowsOp: Operation<typeof input, Recommendations> =
       pagination: recommendationSummary(out.pagination.total, keep, out.pagination.limit, true),
     }),
   },
+  // A ranking is not a page. There is no offset to walk, so there is nothing
+  // truthful to put in a pagination block and the Python tool sends none -- which
+  // leaves the message as the only place a cut can be reported, and it is reported
+  // there rather than dropped.
   project: (out, i) => ({
-    message: `${out.items.length} of ${out.pagination.total} recommended workflow(s) for "${i.intent}"`,
-    pagination: out.pagination,
+    data: out.items,
+    message:
+      `${out.items.length} of ${out.pagination.total} recommended workflow(s) for "${i.intent}"` +
+      (out.pagination.trimmedForSize
+        ? "; matches below these were dropped to fit the output budget"
+        : ""),
+    count: out.items.length,
+    pagination: null,
   }),
 };
 

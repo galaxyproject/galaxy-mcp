@@ -69,7 +69,17 @@ describe("render a paged list op", () => {
 
   it("says (empty) for a page with no rows", () => {
     const out = vi.spyOn(console, "log").mockImplementation(() => {});
-    render({ data: { items: [], pagination: { total: 0 } }, success: true } as never, { format: "table", quiet: true });
+    render({ data: [], success: true } as never, { format: "table", quiet: true });
+    expect(out.mock.calls.flat().join("\n")).toBe("(empty)");
+    vi.restoreAllMocks();
+  });
+
+  it("says (empty) for a history whose page of contents is empty", () => {
+    const out = vi.spyOn(console, "log").mockImplementation(() => {});
+    render({ data: { history_id: "h1", contents: [] }, success: true } as never, {
+      format: "table",
+      quiet: true,
+    });
     expect(out.mock.calls.flat().join("\n")).toBe("(empty)");
     vi.restoreAllMocks();
   });
@@ -91,7 +101,6 @@ describe("render a paged list op", () => {
           section_id: "s1",
           section_name: "Mapping",
           tools: [{ id: "bwa", name: "BWA", description: "map reads", versions: ["1.0"] }],
-          pagination: { total: 1 },
         },
         success: true,
       } as never,
@@ -132,6 +141,6 @@ describe("a paged op through the CLI's own serializer", () => {
     const printed = serializeForCli(result as never);
     expect(new TextEncoder().encode(printed).length).toBeLessThanOrEqual(OUTPUT_BUDGET_BYTES);
     // And it really did have to cut something, or this proves nothing.
-    expect((result.data as { items: unknown[] }).items.length).toBeLessThan(500);
+    expect((result.data as unknown[]).length).toBeLessThan(500);
   });
 });

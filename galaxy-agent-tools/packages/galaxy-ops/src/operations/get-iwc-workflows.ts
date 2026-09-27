@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { fetchIwcWorkflows, enrichWorkflowResult, type EnrichedIwcWorkflow } from "../iwc-manifest";
 import type { GalaxyContext } from "../context";
-import { paginate, shrinkPaged, validatePagination, type Paged } from "./pagination";
+import { paginate, shrinkPaged, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
 
@@ -45,8 +45,10 @@ export const getIwcWorkflowsOp: Operation<typeof input, Paged<EnrichedIwcWorkflo
     shrink: (out, keep) => shrinkPaged(out, keep, "workflows"),
   },
   project: (out) => ({
+    data: out.items,
     message: `${out.items.length} of ${out.pagination.total} IWC workflows`,
-    pagination: out.pagination,
+    count: out.items.length,
+    pagination: wirePagination(out.pagination),
   }),
 };
 

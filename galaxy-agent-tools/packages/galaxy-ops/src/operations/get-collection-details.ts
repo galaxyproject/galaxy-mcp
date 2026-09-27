@@ -38,7 +38,12 @@ export const getCollectionDetailsOp: Operation<typeof input, CollectionDetail> =
   summary: "Show a dataset collection by id, with its elements (optionally truncated).",
   input,
   run,
-  project: (c) => ({ message: `Collection ${(c as { id?: string }).id} (${((c as { elements?: unknown[] }).elements ?? []).length} elements)` }),
+  // The count is the elements actually returned -- after the truncation above --
+  // which is what the other surface counts too.
+  project: (c) => ({
+    message: `Collection ${(c as { id?: string }).id} (${((c as { elements?: unknown[] }).elements ?? []).length} elements)`,
+    count: ((c as { elements?: unknown[] }).elements ?? []).length,
+  }),
 };
 
 register(getCollectionDetailsOp as AnyOperation);

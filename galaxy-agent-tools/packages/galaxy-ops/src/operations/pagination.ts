@@ -17,8 +17,17 @@
 import { GalaxyValidationError } from "../errors";
 import type { Pagination } from "./types";
 
-/** A fully described page window. */
-export interface PaginationInfo extends Pagination {
+/**
+ * A fully described page window, as the LIBRARY carries it.
+ *
+ * camelCase, with the fields it has nothing to say about simply absent, which is
+ * what a TypeScript caller destructuring `Paged<T>` has always got. The wire
+ * spells the same facts the other server's way -- see `Pagination` in types.ts
+ * and `wirePagination` below -- and the two are deliberately separate: an op's
+ * `run` is a library call, and changing what it returns to suit a serialisation
+ * would break every direct caller for no gain.
+ */
+export interface PaginationInfo {
   /** How many items exist in total, across every page. */
   total: number;
   /** How many items this page actually carries. */
@@ -30,6 +39,30 @@ export interface PaginationInfo extends Pagination {
   nextOffset?: number;
   previousOffset?: number;
   helperText: string;
+  /** The page was cut to fit the output budget, not because there is nothing more. */
+  trimmedForSize?: boolean;
+}
+
+/**
+ * The same window, spelled for the wire.
+ *
+ * Every field present and null where there is nothing to say, because the Python
+ * model serialises that way and a surface that omits a key answers a different
+ * question. `trimmedForSize` does not cross: the sentence helperText already
+ * carries says it, and that is the only form the other server has.
+ */
+export function wirePagination(info: PaginationInfo): Pagination {
+  return {
+    total_items: info.total,
+    returned_items: info.returned,
+    limit: info.limit,
+    offset: info.offset,
+    has_next: info.hasNext,
+    has_previous: info.hasPrevious,
+    next_offset: info.nextOffset ?? null,
+    previous_offset: info.previousOffset ?? null,
+    helper_text: info.helperText,
+  };
 }
 
 /** What an op's `run` returns once it pages: the page, and where the page sits. */

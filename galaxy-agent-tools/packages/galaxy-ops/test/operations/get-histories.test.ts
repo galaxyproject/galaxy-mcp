@@ -127,8 +127,9 @@ describe("get_histories", () => {
     const input = { limit: 300, offset: 0 };
     const out = await getHistories(input, ctxWith(serving(rows)));
     const result = await runWithEnvelope(getHistoriesOp as never, input as never, ctxWith(serving(rows)));
-    expect((result.data as { items: unknown[] }).items).toHaveLength(300);
-    expect(result.pagination?.trimmedForSize).toBeUndefined();
+    expect(result.data as unknown[]).toHaveLength(300);
+    expect(result.count).toBe(300);
+    expect(result.pagination?.helper_text).not.toContain("cut short");
     expect(mcpPayloadBytes(getHistoriesOp, out, input)).toBeGreaterThan(OUTPUT_BUDGET_BYTES);
   });
 });

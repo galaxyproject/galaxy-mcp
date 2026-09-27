@@ -28,7 +28,10 @@ import type { GalaxyContext } from "../../src/context";
 
 const ctxWith = (client: unknown): GalaxyContext => ({ client, poll: DEFAULT_POLL } as GalaxyContext);
 const serving = (rows: unknown[]) => mockClient({ GET: () => ({ data: rows, response: { status: 200 } }) });
-const items = (data: unknown) => (data as { items: unknown[] }).items;
+// What the wire carries for a plain listing is the page itself; what run() hands
+// back is a Paged, with the page under `items`.
+const rows = (data: unknown) => data as unknown[];
+const pagedItems = (out: unknown) => (out as { items: unknown[] }).items;
 const byId = (row: unknown) => (row as { id: string }).id;
 
 /**
@@ -50,7 +53,8 @@ describe("every page fits the output budget", () => {
       op: searchToolsByNameOp as never,
       ctx: ctxWith(serving(corpus)),
       input: (limit, offset) => ({ query: "ゲノム", limit, offset }),
-      rows: items,
+      rows,
+      uncutRows: pagedItems,
       id: byId,
       limit: 100,
       label: "search_tools_by_name",
@@ -64,7 +68,8 @@ describe("every page fits the output budget", () => {
       op: searchToolsByKeywordsOp as never,
       ctx: ctxWith(serving(panel)),
       input: (limit, offset) => ({ keywords: ["ゲノム"], limit, offset }),
-      rows: items,
+      rows,
+      uncutRows: pagedItems,
       id: byId,
       limit: 200,
       label: "search_tools_by_keywords",
@@ -79,6 +84,7 @@ describe("every page fits the output budget", () => {
       ctx: ctxWith(serving(panel)),
       input: (limit, offset) => ({ limit, offset }),
       rows: (data) => (data as { entries: unknown[] }).entries,
+      uncutRows: (out) => (out as { entries: unknown[] }).entries,
       id: byId,
       limit: 500,
       label: "get_tool_panel sections",
@@ -94,6 +100,7 @@ describe("every page fits the output budget", () => {
       ctx: ctxWith(serving(panel)),
       input: (limit, offset) => ({ sectionId: "sec", limit, offset }),
       rows: (data) => (data as { tools: unknown[] }).tools,
+      uncutRows: (out) => (out as { tools: unknown[] }).tools,
       id: byId,
       limit: 500,
       label: "get_tool_panel section",
@@ -107,7 +114,8 @@ describe("every page fits the output budget", () => {
       op: listWorkflowsOp as never,
       ctx: ctxWith(serving(corpus)),
       input: (limit, offset) => ({ limit, offset }),
-      rows: items,
+      rows,
+      uncutRows: pagedItems,
       id: byId,
       limit: 200,
       label: "list_workflows",
@@ -121,7 +129,8 @@ describe("every page fits the output budget", () => {
       op: listUserToolsOp as never,
       ctx: ctxWith(serving(corpus)),
       input: (limit, offset) => ({ limit, offset }),
-      rows: items,
+      rows,
+      uncutRows: pagedItems,
       id: byId,
       limit: 100,
       label: "list_user_tools",
@@ -141,7 +150,8 @@ describe("every page fits the output budget", () => {
       op: listHistoryIdsOp as never,
       ctx: ctxWith(serving(corpus)),
       input: (limit, offset) => ({ limit, offset }),
-      rows: items,
+      rows,
+      uncutRows: pagedItems,
       id: byId,
       limit: 500,
       label: "list_history_ids",
@@ -155,7 +165,8 @@ describe("every page fits the output budget", () => {
       op: getIwcWorkflowsOp as never,
       ctx: ctxWith(mockClient({})),
       input: (limit, offset) => ({ limit, offset }),
-      rows: items,
+      rows,
+      uncutRows: pagedItems,
       id: (row) => (row as { trsID: string }).trsID,
       limit: 100,
       label: "get_iwc_workflows",
@@ -169,7 +180,8 @@ describe("every page fits the output budget", () => {
       op: searchIwcWorkflowsOp as never,
       ctx: ctxWith(mockClient({})),
       input: (limit, offset) => ({ query: "rnaseq", limit, offset }),
-      rows: items,
+      rows,
+      uncutRows: pagedItems,
       id: (row) => (row as { trsID: string }).trsID,
       limit: 100,
       label: "search_iwc_workflows",
@@ -201,10 +213,13 @@ describe("every page fits the output budget", () => {
     expect(uncut.items).toHaveLength(onTopic);
 
     const result = await runWithEnvelope(recommendIwcWorkflowsOp as never, input as never, ctx);
-    const page = result.data as { items: unknown[]; pagination: { trimmedForSize?: boolean; helperText: string } };
+    const ranked = result.data as unknown[];
     expect(wireBytes(result)).toBeLessThanOrEqual(OUTPUT_BUDGET_BYTES);
-    expect(page.items.length).toBeLessThan(onTopic);
-    expect(page.pagination.trimmedForSize).toBe(true);
-    expect(page.pagination.helperText).toContain("output budget");
+    expect(ranked.length).toBeLessThan(onTopic);
+    expect(result.count).toBe(ranked.length);
+    // No pagination block on a ranking -- there is no offset to walk -- so the cut
+    // is reported in the message, which is where the Python tool reports it too.
+    expect(result.pagination).toBeNull();
+    expect(result.message).toContain("output budget");
   });
 });

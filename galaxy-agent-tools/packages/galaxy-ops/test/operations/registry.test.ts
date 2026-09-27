@@ -39,7 +39,16 @@ const bugOp: Operation<Record<string, never>, never> = {
 describe("runWithEnvelope", () => {
   it("wraps success and applies project()", async () => {
     const r = await runWithEnvelope(okOp as any, { id: "abc" }, ctx);
-    expect(r).toEqual({ data: { value: "abc" }, success: true, message: "got abc" });
+    // count and pagination are always sent, null where the op reports neither:
+    // that is what the Python model serialises to, and a missing key is a
+    // different answer from "this tool has no count".
+    expect(r).toEqual({
+      data: { value: "abc" },
+      success: true,
+      message: "got abc",
+      count: null,
+      pagination: null,
+    });
   });
   it("catches a typed error into success=false + message", async () => {
     const r = await runWithEnvelope(failOp as any, {}, ctx);

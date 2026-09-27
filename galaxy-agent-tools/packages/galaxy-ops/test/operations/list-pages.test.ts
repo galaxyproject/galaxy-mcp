@@ -6,7 +6,15 @@ import { DEFAULT_POLL } from "../../src/context";
 import type { GalaxyContext } from "../../src/context";
 
 const ctxWith = (client: any): GalaxyContext => ({ client, poll: DEFAULT_POLL });
-const ok = (data: unknown) => ({ data, response: { status: 200 } });
+const ok = (data: unknown, totalMatches?: number) => ({
+  data,
+  response: {
+    status: 200,
+    // Galaxy reports how many pages matched on a header rather than in the body,
+    // which is where the envelope's total comes from.
+    headers: new Headers(totalMatches === undefined ? {} : { total_matches: String(totalMatches) }),
+  },
+});
 
 describe("list_pages", () => {
   it("is read-only, so the MCP surface annotates it as one", () => {
@@ -61,12 +69,31 @@ describe("list_pages", () => {
     expect(await listPages({ showShared: true }, ctxWith(client))).toEqual([]);
   });
 
-  it("reports the requested window as pagination", async () => {
-    const client = mockClient({ GET: () => ok([{ id: "page3" }]) });
+  it("reports the window, and the total the response header carried", async () => {
+    const client = mockClient({ GET: () => ok([{ id: "page3" }], 12) });
     const r = await runWithEnvelope(listPagesOp as any, { limit: 1, offset: 2 }, ctxWith(client));
     expect(r.success).toBe(true);
-    expect(r.pagination).toEqual({ offset: 2, limit: 1 });
+    expect(r.count).toBe(1);
+    // The Python tool builds this block by hand: it advances by the limit rather
+    // than by what came back, and sends no helper text at all.
+    expect(r.pagination).toEqual({
+      total_items: 12,
+      returned_items: 1,
+      limit: 1,
+      offset: 2,
+      has_next: true,
+      has_previous: true,
+      next_offset: 3,
+      previous_offset: 1,
+      helper_text: null,
+    });
     expect(r.message).toBe("1 page(s)");
+  });
+
+  it("falls back to the page it was handed when no total came back", async () => {
+    const client = mockClient({ GET: () => ok([{ id: "page3" }]) });
+    const r = await runWithEnvelope(listPagesOp as any, { limit: 5, offset: 0 }, ctxWith(client));
+    expect(r.pagination).toMatchObject({ total_items: 1, returned_items: 1, has_next: false });
   });
 
   it("envelopes an auth failure instead of throwing", async () => {

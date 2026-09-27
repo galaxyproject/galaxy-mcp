@@ -46,6 +46,7 @@ export const getToolCitationsOp: Operation<typeof input, ToolCitationsResult> = 
   run,
   project: (out, i) => ({
     message: `${out.citations.length} citation(s) for ${out.tool_name ?? i.toolId}`,
+    count: out.citations.length,
   }),
 };
 

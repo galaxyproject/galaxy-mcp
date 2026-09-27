@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { legacyGet } from "../legacy";
-import { paginate, shrinkPaged, validatePagination, type Paged } from "./pagination";
+import { paginate, shrinkPaged, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
 
@@ -40,7 +40,9 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<UserTool>> {
   });
   // A 200 carrying something other than a list is Galaxy breaking its contract;
   // an empty page says so without crashing the whole MCP handler.
-  return paginate(Array.isArray(tools) ? tools : [], { limit, offset, noun: "tools" });
+  // "user tools", the noun the Python tool uses, because the noun lands in the
+  // helper text an agent reads.
+  return paginate(Array.isArray(tools) ? tools : [], { limit, offset, noun: "user tools" });
 }
 
 export const listUserToolsOp: Operation<typeof input, Paged<UserTool>> = {
@@ -51,11 +53,13 @@ export const listUserToolsOp: Operation<typeof input, Paged<UserTool>> = {
   run,
   budget: {
     rows: (out) => out.items.length,
-    shrink: (out, keep) => shrinkPaged(out, keep, "tools"),
+    shrink: (out, keep) => shrinkPaged(out, keep, "user tools"),
   },
   project: (out) => ({
+    data: out.items,
     message: `${out.items.length} of ${out.pagination.total} user-defined tool(s)`,
-    pagination: out.pagination,
+    count: out.items.length,
+    pagination: wirePagination(out.pagination),
   }),
 };
 

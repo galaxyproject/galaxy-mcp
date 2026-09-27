@@ -17,21 +17,21 @@ export function render(result: GalaxyResult<unknown>, opts: RenderOpts): void {
   }
   if (result.success) console.log(renderData(result.data));
   if (!opts.quiet && result.message) console.error(result.message);
-  if (!opts.quiet && result.pagination?.helperText) console.error(result.pagination.helperText);
+  if (!opts.quiet && result.pagination?.helper_text) console.error(result.pagination.helper_text);
 }
 
 /**
- * The rows of a paged op's result, if that is what this is.
+ * The rows of a listing whose data is an object rather than a bare array.
  *
- * A bounded list op returns its page under `items`, and get_tool_panel under
- * `entries` or `tools`, alongside a `pagination` object. Keyed-value rendering
- * would print that as `items [100]`, which is the shape of the result rather
- * than the result, so unwrap to the rows and let `pagination` go to the
- * message line instead of becoming a column.
+ * Most listings now put the page straight in `data`, which renders as a table
+ * without any help. Three do not: get_tool_panel names its rows `entries` or
+ * `tools` beside the section it opened, and get_history_contents names them
+ * `contents` beside the history they came from. Keyed-value rendering would
+ * print those as `entries [100]`, which is the shape of the answer rather than
+ * the answer, so unwrap to the rows -- the window is on the message line.
  */
 function pageRows(data: Record<string, unknown>): unknown[] | null {
-  if (!("pagination" in data)) return null;
-  for (const key of ["items", "entries", "tools"]) {
+  for (const key of ["entries", "tools", "contents"]) {
     const rows = data[key];
     if (Array.isArray(rows)) return rows;
   }

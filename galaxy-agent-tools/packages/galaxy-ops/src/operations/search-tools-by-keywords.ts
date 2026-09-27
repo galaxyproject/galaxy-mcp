@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { legacyGet } from "../legacy";
-import { paginate, shrinkPaged, validatePagination, type Paged } from "./pagination";
+import { paginate, shrinkPaged, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
 
@@ -165,8 +165,10 @@ export const searchToolsByKeywordsOp: Operation<typeof input, Paged<ToolKeywordM
     shrink: (out, keep) => shrinkPaged(out, keep, "tools"),
   },
   project: (out) => ({
+    data: out.items,
     message: `${out.items.length} of ${out.pagination.total} tool(s) matching keywords`,
-    pagination: out.pagination,
+    count: out.items.length,
+    pagination: wirePagination(out.pagination),
   }),
 };
 

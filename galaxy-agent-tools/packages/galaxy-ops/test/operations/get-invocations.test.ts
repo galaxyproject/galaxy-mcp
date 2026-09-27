@@ -227,17 +227,23 @@ describe("get_invocations", () => {
     await expect(getInvocations({ workflowId: "wf1" }, ctxWith(broken))).rejects.toThrow(/boom/);
   });
 
-  it("projects a count for the list and the state for a single invocation", () => {
+  it("counts the list and reports the state for a single invocation", () => {
     const listMeta = getInvocationsOp.project!(page(2) as any, {} as any);
     expect(listMeta.message).toBe("Retrieved 2 workflow invocations");
+    expect(listMeta.count).toBe(2);
+    // Galaxy windows this index itself and reports no total, so there is no
+    // window to describe -- the Python tool sends no pagination here either,
+    // with or without a limit.
     expect(listMeta.pagination).toBeUndefined();
 
     const oneMeta = getInvocationsOp.project!(page(1) as any, { limit: 5 } as any);
     expect(oneMeta.message).toBe("Retrieved 1 workflow invocation");
-    expect(oneMeta.pagination).toEqual({ limit: 5 });
+    expect(oneMeta.count).toBe(1);
+    expect(oneMeta.pagination).toBeUndefined();
 
     const detailMeta = getInvocationsOp.project!({ id: "inv1", state: "ok" } as any, {} as any);
     expect(detailMeta.message).toBe("Invocation inv1 state=ok");
+    expect(detailMeta.count).toBeUndefined();
     expect(detailMeta.pagination).toBeUndefined();
   });
 });

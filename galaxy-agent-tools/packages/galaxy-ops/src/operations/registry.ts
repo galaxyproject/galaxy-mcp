@@ -98,7 +98,19 @@ export function spellParamNames(
   return text.replace(new RegExp(`\\b(?:${keys.join("|")})\\b`, "g"), (key) => spell(key));
 }
 
-/** Wrap an op for a surface: catch typed errors, apply project() metadata, fit the budget. */
+/**
+ * Wrap an op for a surface: catch typed errors, project it into the envelope, fit
+ * the budget.
+ *
+ * The envelope is the Python server's, key for key. `data` is whatever the op's
+ * projection says it is -- for a paged op the bare page, with the window lifted
+ * beside it rather than travelling twice -- and `count` and `pagination` are
+ * always sent, null where the tool has none, because that is what a pydantic
+ * model puts on the wire.
+ *
+ * The result type is `unknown` rather than the op's own: a projection is free to
+ * emit something other than what `run` returned, and it usually does.
+ */
 export async function runWithEnvelope<Shape extends ZodRawShape, O>(
   op: Operation<Shape, O>,
   input: InputOf<Shape>,
@@ -110,17 +122,29 @@ export async function runWithEnvelope<Shape extends ZodRawShape, O>(
    * budget measured against a shorter rendering than the one printed is not a
    * budget.
    */
-  serialize: (result: GalaxyResult<O>) => string = (result) => JSON.stringify(result),
-): Promise<GalaxyResult<O>> {
+  serialize: (result: GalaxyResult<unknown>) => string = (result) => JSON.stringify(result),
+): Promise<GalaxyResult<unknown>> {
   try {
     const data = await runOperation(op, input, ctx);
-    const envelope = (d: O): GalaxyResult<O> => ({ data: d, success: true, ...(op.project?.(d, input) ?? {}) });
-    // The budget is measured on the envelope rather than on the page, because the
-    // envelope is what gets serialised -- message and pagination included.
-    // Trimming re-projects, so a cut page's message is its own.
+    const envelope = (d: O): GalaxyResult<unknown> => {
+      const projected = op.project?.(d, input) ?? {};
+      return {
+        data: "data" in projected ? projected.data : d,
+        success: true,
+        ...(projected.message === undefined ? {} : { message: projected.message }),
+        count: projected.count ?? null,
+        pagination: projected.pagination ?? null,
+      };
+    };
+    // The budget is measured on the projected envelope rather than on the page,
+    // because the projection is what gets serialised -- a page that fits before
+    // the window is lifted out of it is not a page that fits. Trimming
+    // re-projects, so a cut page's message, count and pagination are its own.
     return envelope(op.budget ? trimToBudget(data, op.budget, (d) => serialize(envelope(d))) : data);
   } catch (err) {
     if (err instanceof GalaxyError) {
+      // The failure envelope is this surface's own and is not touched here; the two
+      // servers still report a failure differently.
       return { data: undefined as unknown as O, success: false, message: err.message, errorKind: err.kind };
     }
     throw err; // non-Galaxy errors are bugs -- let them surface
