@@ -71,10 +71,21 @@ key for key, on the MCP text block and on `galaxy-cli --format json` alike.
   total off a response header, a count from a second request. Optional at both
   ends: a context built by hand carries none and an existing projection compiles
   unchanged.
-- **Unchanged:** every operation's `run()` result, `Paged<T>` and its camelCase
-  `PaginationInfo`. A TypeScript caller importing an op directly, and code mode
-  with it, sees exactly what it saw before. The same wire-versus-library split as
-  the parameter-name change above.
+- **Breaking:** `get_history_contents` refuses a `limit` below 1 and a negative
+  `offset`, with the same two sentences every other paged op refuses them with
+  ("limit must be at least 1 (got 0)", "offset must be 0 or greater (got -1)").
+  It was the one listing that validated nothing on either surface, and neither
+  input had a page to describe: `limit: 0` reported more to come with a next
+  offset equal to the one asked for, so a walk sat where it was for ever, and a
+  negative offset sliced from the end of the list and then claimed a next page
+  back inside what it had just returned. There is still no ceiling on the limit,
+  because neither server caps this tool. The Python server refuses them from this
+  release too, so the two agree on which windows exist.
+- **Unchanged:** every operation's `run()` result for a window it accepts,
+  `Paged<T>` and its camelCase `PaginationInfo`. A TypeScript caller importing an
+  op directly, and code mode with it, sees exactly what it saw before, apart from
+  the two `get_history_contents` windows above that are now refused. The same
+  wire-versus-library split as the parameter-name change above.
 - The `message` of the nine listings the output budget can cut --
   `get_iwc_workflows`, `get_tool_panel`, `list_history_ids`, `list_user_tools`,
   `list_workflows`, `recommend_iwc_workflows`, `search_iwc_workflows`,

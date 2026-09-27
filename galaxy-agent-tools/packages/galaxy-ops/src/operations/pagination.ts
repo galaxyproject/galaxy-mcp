@@ -94,10 +94,12 @@ export const overCapMessage = (maxLimit: number, got: number, pageable = true): 
 /**
  * Reject a window nobody should be asking for.
  *
- * `maxLimit` is left out for the ops Python does not validate, which then take
- * any positive limit, as they do there. Thrown before any network call so a bad
- * window fails the same way every time rather than depending on whether Galaxy is
- * reachable.
+ * `maxLimit` is left out for the ops Python does not cap, which then take any
+ * positive limit, as they do there. The floor and the non-negative offset apply
+ * either way: the pagination a listing reports is only arithmetic for a window
+ * that starts at or after zero and asks for at least one row. Thrown before any
+ * network call so a bad window fails the same way every time rather than
+ * depending on whether Galaxy is reachable.
  */
 export function validatePagination(
   limit: number,

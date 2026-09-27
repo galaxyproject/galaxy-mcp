@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
-import { paginate, wirePagination, type Paged } from "./pagination";
+import { paginate, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
 
@@ -95,6 +95,12 @@ async function run(i: In, ctx: GalaxyContext): Promise<HistoryContents> {
   const limit = i.limit ?? DEFAULT_LIMIT;
   const offset = i.offset ?? 0;
   const order = i.order ?? "hid-asc";
+  // No ceiling, because neither server caps this one -- but a window still has to
+  // be one. A limit of zero asks for a page of nothing and gets a walk that
+  // reports more to come and never moves; a negative offset slices from the end
+  // and is then described by arithmetic that only holds from zero upwards. Both
+  // surfaces refuse them, in the same words.
+  validatePagination(limit, offset);
   // The whole contents index, unfiltered and unwindowed, which is what
   // show_history(contents=True) fetches on the other surface: no query parameters
   // at all. Everything below happens here, so both surfaces answer the same way

@@ -10,6 +10,7 @@ import pytest
 from .test_helpers import (
     galaxy_state,
     get_histories_fn,
+    get_history_contents_fn,
     get_history_details_fn,
     list_history_ids_fn,
     update_history_fn,
@@ -574,6 +575,64 @@ class TestTheNoLimitBranchStillSkips:
         assert result.count == 2
 
 
+class TestGetHistoryContentsRefusesAWindowThatIsNotOne:
+    """A page of nothing, or one starting before the beginning, is not a page.
+
+    This was the last listing here that validated nothing. ``limit=0`` returned an
+    empty page that reported more to come and a next offset equal to the one asked
+    for, so a walk sat on the same offset for ever; ``offset=-1`` sliced from the
+    end of the list and then described itself with arithmetic that only holds from
+    zero upwards -- five items, ``limit=10, offset=-1`` said has_next with a next
+    offset of 0, sending the caller back through what it had just been handed.
+    Both are refused now, in the words every other listing here uses, which are
+    also the words the TypeScript surfaces use.
+    """
+
+    @staticmethod
+    def _five(mock_galaxy_instance):
+        mock_galaxy_instance.histories.show_history.return_value = [
+            {"id": f"d{i}", "hid": i, "visible": True, "deleted": False} for i in range(5)
+        ]
+
+    def test_a_negative_offset_is_refused(self, mock_galaxy_instance):
+        self._five(mock_galaxy_instance)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError) as caught:
+                get_history_contents_fn("test_history_1", limit=10, offset=-1)
+
+        assert str(caught.value) == "offset must be 0 or greater (got -1)"
+
+    def test_a_zero_limit_is_refused(self, mock_galaxy_instance):
+        self._five(mock_galaxy_instance)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError) as caught:
+                get_history_contents_fn("test_history_1", limit=0)
+
+        assert str(caught.value) == "limit must be at least 1 (got 0)"
+
+    def test_the_smallest_window_there_is_still_works(self, mock_galaxy_instance):
+        self._five(mock_galaxy_instance)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_history_contents_fn("test_history_1", limit=1, offset=0)
+
+        assert result.count == 1
+        assert result.pagination.limit == 1
+        assert result.pagination.offset == 0
+        assert result.pagination.has_next is True
+        assert result.pagination.next_offset == 1
+
+    def test_no_ceiling_here_because_this_server_does_not_cap_this_tool(self, mock_galaxy_instance):
+        self._five(mock_galaxy_instance)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_history_contents_fn("test_history_1", limit=100_000)
+
+        assert result.count == 5
+
+
 class TestBothHistoryListingsKeepTheirNumbers:
     """Only the sentence was supposed to move onto the shared helper.
 
@@ -582,6 +641,13 @@ class TestBothHistoryListingsKeepTheirNumbers:
     window, and offsets that step by the limit. This walks a grid of windows over
     both tools and checks every field against that arithmetic, written out here
     rather than imported, so a change to the helper has to answer for it.
+
+    The grid is non-negative on purpose, and that is now a precondition rather
+    than a choice of examples: the arithmetic written out below holds for a window
+    that starts at or after zero and asks for at least one item, and
+    get_history_contents refuses anything else outright (get_histories' name
+    filter and unpaged fetch keep it inside the same range). A window from outside
+    it has no correct answer to compare against.
     """
 
     @staticmethod
