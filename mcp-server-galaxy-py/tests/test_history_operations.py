@@ -2,6 +2,7 @@
 Test history-related operations
 """
 
+import asyncio
 from unittest.mock import patch
 
 import bioblend
@@ -631,6 +632,36 @@ class TestGetHistoryContentsRefusesAWindowThatIsNotOne:
             result = get_history_contents_fn("test_history_1", limit=100_000)
 
         assert result.count == 5
+
+    @pytest.mark.parametrize("field", ["limit", "offset"])
+    def test_a_fractional_window_never_reaches_the_tool(self, field):
+        """The third refusal, and this server's is the schema's rather than the body's.
+
+        ``_validate_pagination`` never sees a float: the parameters are typed ``int``
+        and pydantic turns 1.5 away at the tool boundary, before ``ensure_connected``
+        and before any window arithmetic. The TypeScript surfaces declare the same
+        integer parameters and refuse it at the same place, so the two agree on which
+        windows exist -- they word the refusal differently, which is the failure
+        envelope that is still to be aligned. Written down because the release notes
+        now claim exactly this.
+        """
+        from fastmcp import Client
+        from fastmcp.exceptions import ToolError
+
+        from galaxy_mcp.server import mcp
+
+        async def _dispatch():
+            async with Client(mcp) as client:
+                return await client.call_tool(
+                    "get_history_contents", {"history_id": "test_history_1", field: 1.5}
+                )
+
+        with pytest.raises(ToolError) as caught:
+            asyncio.run(_dispatch())
+
+        message = str(caught.value)
+        assert field in message
+        assert "Input should be a valid integer, got a number with a fractional part" in message
 
 
 class TestBothHistoryListingsKeepTheirNumbers:

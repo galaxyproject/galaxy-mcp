@@ -200,6 +200,27 @@ describe("get_history_contents", () => {
       ).rejects.toThrow("offset must be 0 or greater (got -1)");
     });
 
+    // The third refusal in the rule, and the one the release notes left out: a window
+    // has to be a whole number of rows. On the wire nothing changed -- both servers
+    // declare these parameters as integers and refuse a fraction at the schema, the
+    // other one with pydantic's "Input should be a valid integer, got a number with a
+    // fractional part" -- so this is the library path, where it used to return a page.
+    // The two sentences are written out rather than imported, so a change to either
+    // has to be made here as well as in the notes that quote them.
+    it("refuses a limit that is not a whole number of rows", async () => {
+      const client = serving(8);
+      await expect(getHistoryContents({ historyId: "h1", limit: 1.5 }, ctxWith(client))).rejects.toThrow(
+        "limit must be a whole number (got 1.5)",
+      );
+    });
+
+    it("refuses a fractional offset with the sentence it refuses a negative one with", async () => {
+      const client = serving(8);
+      await expect(
+        getHistoryContents({ historyId: "h1", limit: 10, offset: 0.5 }, ctxWith(client)),
+      ).rejects.toThrow("offset must be 0 or greater (got 0.5)");
+    });
+
     it("refuses before it asks Galaxy anything", async () => {
       let asked = 0;
       const counting = mockClient({
