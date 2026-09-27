@@ -34,10 +34,14 @@ key for key, on the MCP text block and on `galaxy-cli --format json` alike.
 - **Breaking:** `trimmedForSize` is gone from the wire. The Python server has no
   such field and folds the fact into the helper text, which this side already
   matched word for word: a cut page's `helper_text` says "This page was cut short
-  to fit the output budget, not because there is nothing more." Read that, or
-  compare `returned_items` with the `limit` asked for. `recommend_iwc_workflows`
-  has no pagination block at all -- a ranking has no offset to walk -- so its cut
-  is reported at the end of `message` instead.
+  to fit the output budget, not because there is nothing more." That sentence is
+  how a cut page is told apart, and in numbers it is `has_next` true while
+  `returned_items` is under the `limit` asked for. A short page on its own says
+  nothing -- an ordinary last page is short too, and reports `has_next: false` --
+  so comparing `returned_items` with `limit` and stopping there will call the end
+  of a walk a cut. `recommend_iwc_workflows` has no pagination block at all -- a
+  ranking has no offset to walk -- so its cut is reported at the end of `message`
+  instead.
 - **New:** `count`, the number of rows in this answer, for the tools the Python
   server counts: every listing, plus `get_tool_run_examples` (test cases),
   `get_tool_citations` (citations), `get_collection_details` (elements returned,
@@ -54,28 +58,48 @@ key for key, on the MCP text block and on `galaxy-cli --format json` alike.
 - `get_invocations` no longer sends a pagination block carrying just the `limit`.
   Galaxy windows that index itself and reports no total, so there was never a
   window to describe; the Python tool sends none either.
-- `list_user_tools` says "user tools" in its helper text where it said "tools",
-  which is the noun the Python tool uses.
+- `list_user_tools` sends "user tools" in its helper text where it sent "tools",
+  which is the noun the Python tool uses. The noun changes on the way out: a
+  direct `run()` caller still gets "tools" in `Paged.pagination.helperText`.
 - **Breaking for anyone importing them:** `runWithEnvelope` now returns
   `GalaxyResult<unknown>` (a projection may emit something other than what `run`
   returned), `GalaxyResult` has gained `count`, `Pagination` is the wire shape
   above, and `Operation.project` returns the whole envelope body rather than just
-  a message and a window.
+  a message and a window. It also takes an optional third argument, the
+  collector `runWithEnvelope` puts on the context for that one call, through
+  which an op hands its projection a fact its return value has no room for -- a
+  total off a response header, a count from a second request. Optional at both
+  ends: a context built by hand carries none and an existing projection compiles
+  unchanged.
 - **Unchanged:** every operation's `run()` result, `Paged<T>` and its camelCase
   `PaginationInfo`. A TypeScript caller importing an op directly, and code mode
   with it, sees exactly what it saw before. The same wire-versus-library split as
   the parameter-name change above.
-- **Not aligned yet, and not claimed to be:** the `message` text, which the two
-  servers still word differently, and the failure envelope -- Python raises and
-  FastMCP turns that into an MCP error, while these surfaces answer with
-  `{ success: false, message, errorKind }`. Both are named as the next
-  result-shape rows rather than quietly left out.
+- The `message` of the nine listings the output budget can cut --
+  `get_iwc_workflows`, `get_tool_panel`, `list_history_ids`, `list_user_tools`,
+  `list_workflows`, `recommend_iwc_workflows`, `search_iwc_workflows`,
+  `search_tools_by_keywords`, `search_tools_by_name` -- is now the Python
+  server's sentence word for word. That is not cosmetic: the budget is measured
+  on the whole envelope, `message` included, so prose of a different length cuts
+  the page at a different row. A page of two histories weighing exactly 50,000
+  bytes with one sentence and 50,011 with the other returned two rows on one
+  surface and one on the other.
+- **Not aligned yet, and not claimed to be:** the `message` text of every other
+  tool, which the two servers still word differently, and the failure envelope --
+  Python raises and FastMCP turns that into an MCP error, while these surfaces
+  answer with `{ success: false, message, errorKind }`. Both are named as the
+  next result-shape rows rather than quietly left out.
 
 Backed by golden fixtures rather than by reading both sides: the Python suite
 generates what its tools emit for a set of calls, with the Galaxy replies they
 were answered with (`uv run python -m tests.envelope_fixtures`), and the MCP
-server and the CLI each replay every case against those replies and compare
-keys, `data`, `count` and `pagination` exactly.
+server and the CLI each replay all 61 of those cases against those replies and
+compare keys, `data`, `count` and `pagination` exactly, plus `message` for the
+nine listings above. Nothing is skipped on either surface, the pages the budget
+cut included -- which is also why `galaxy-cli` measures the budget against the
+compact line the other surfaces measure and prints indented afterwards, rather
+than measuring its own indentation and cutting a shorter page than MCP would
+for the same call.
 
 ## 0.2.0 (unreleased)
 
