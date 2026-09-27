@@ -114,7 +114,7 @@ describe("get_histories", () => {
    * server's inputs, through this surface's envelope, so the two cannot drift apart
    * again without one of them failing.
    */
-  describe("the reviewer's [A, B] name filter", () => {
+  describe("a name filter over [A, B]", () => {
     const ab = () => serving([{ id: "hA", name: "A" }, { id: "hB", name: "B" }]);
 
     it("answers page one with the match, not with the page the match is not on", async () => {
