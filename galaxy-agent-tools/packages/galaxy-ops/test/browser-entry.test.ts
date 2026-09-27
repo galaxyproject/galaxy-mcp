@@ -124,7 +124,15 @@ beforeAll(async () => {
   opModules = candidates.filter((name) => registeredBy.get(name)!.length > 0);
   browserSafe = opModules.filter((name) => safe.includes(name));
   nodeOnly = opModules.filter((name) => unsafe.includes(name));
+  // The two entries, each loaded into a fresh registry, so the comparison below does not depend
+  // on how any single module was classified above.
+  fullEntry = await registrations(pathToFileURL(join(PKG_DIR, "src", "index.ts")).href);
+  browserEntry = await registrations(pathToFileURL(join(PKG_DIR, "src", "index.browser.ts")).href);
 }, 60_000);
+
+/** Every op name each whole entry registers when it is the only thing imported. */
+let fullEntry: string[];
+let browserEntry: string[];
 
 describe("the browser entry", () => {
   it("bundles for a browser with no node builtin left in it", async () => {
@@ -146,6 +154,17 @@ describe("the browser entry", () => {
   it("registers exactly the ops its listed modules register", () => {
     const expected = [...new Set(listed.flatMap((name) => registeredBy.get(name)!))].sort();
     expect(browserOperations.map((op) => op.name).sort()).toEqual(expected);
+  });
+
+  it("registers exactly what the full entry registers, minus the Node-only modules' ops", () => {
+    // Independent of the per-module probe: an op that only registers under some condition looks
+    // like a helper when its module is imported alone, but the full entry still registers it, so
+    // it shows up here as a name the browser entry lacks that no Node-only module accounts for.
+    const nodeOnlyOps = new Set(nodeOnly.flatMap((name) => registeredBy.get(name)!));
+    const missingFromBrowser = fullEntry.filter((name) => !browserEntry.includes(name)).sort();
+    expect(missingFromBrowser).toEqual([...nodeOnlyOps].sort());
+    expect(browserEntry.filter((name) => !fullEntry.includes(name))).toEqual([]);
+    expect(nodeOnlyOps.size).toBeGreaterThan(0);
   });
 
   it("registers no op that needs a filesystem or node:crypto", () => {
