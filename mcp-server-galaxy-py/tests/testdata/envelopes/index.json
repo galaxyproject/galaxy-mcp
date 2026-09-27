@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 62,
+  "caseCount": 65,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -573,6 +573,39 @@
         "limit": 5
       },
       "envelope": "recommend_iwc_workflows/no_terms_match.json",
+      "replies": "recommend_iwc_workflows/ranked.galaxy.json"
+    },
+    {
+      "tool": "recommend_iwc_workflows",
+      "case": "empty_manifest",
+      "note": "an IWC manifest with nothing in it, which is not the same as nothing matching",
+      "input": {
+        "intent": "rnaseq quality control",
+        "limit": 5
+      },
+      "envelope": "recommend_iwc_workflows/empty_manifest.json",
+      "replies": "get_iwc_workflows/empty.galaxy.json"
+    },
+    {
+      "tool": "recommend_iwc_workflows",
+      "case": "no_searchable_terms",
+      "note": "an intent that tokenises to nothing, over a manifest that is not empty",
+      "input": {
+        "intent": "",
+        "limit": 5
+      },
+      "envelope": "recommend_iwc_workflows/no_searchable_terms.json",
+      "replies": "recommend_iwc_workflows/ranked.galaxy.json"
+    },
+    {
+      "tool": "recommend_iwc_workflows",
+      "case": "only_stop_words",
+      "note": "an intent that is nothing but the words the tokeniser drops",
+      "input": {
+        "intent": "the and for with",
+        "limit": 5
+      },
+      "envelope": "recommend_iwc_workflows/only_stop_words.json",
       "replies": "recommend_iwc_workflows/ranked.galaxy.json"
     },
     {

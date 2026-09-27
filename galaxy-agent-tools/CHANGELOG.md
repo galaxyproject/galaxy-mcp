@@ -94,7 +94,12 @@ key for key, on the MCP text block and on `galaxy-cli --format json` alike.
   on the whole envelope, `message` included, so prose of a different length cuts
   the page at a different row. A page of two histories weighing exactly 50,000
   bytes with one sentence and 50,011 with the other returned two rows on one
-  surface and one on the other.
+  surface and one on the other. That includes a tool's early returns:
+  `recommend_iwc_workflows` says "No workflows in IWC manifest" when the IWC
+  manifest is empty and "No searchable terms in query" when the intent tokenises
+  to nothing, rather than reporting that nothing matched -- three different
+  reasons to get an empty ranking, and only one of them is the query being too
+  broad. `list_history_ids` says "No histories found" for an account with none.
 - **Not aligned yet, and not claimed to be:** the `message` text of every other
   tool, which the two servers still word differently, and the failure envelope --
   Python raises and FastMCP turns that into an MCP error, while these surfaces
@@ -104,7 +109,7 @@ key for key, on the MCP text block and on `galaxy-cli --format json` alike.
 Backed by golden fixtures rather than by reading both sides: the Python suite
 generates what its tools emit for a set of calls, with the Galaxy replies they
 were answered with (`uv run python -m tests.envelope_fixtures`), and the MCP
-server and the CLI each replay all 62 of those cases against those replies and
+server and the CLI each replay all 65 of those cases against those replies and
 compare keys, `data`, `count` and `pagination` exactly, plus `message` for the
 nine listings above. Nothing is skipped on either surface, the pages the budget
 cut included -- which is also why `galaxy-cli` measures the budget against the

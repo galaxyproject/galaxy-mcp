@@ -817,6 +817,32 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         lambda: recommend_iwc_workflows_fn("zzzz", limit=5),
         [route(IWC_MANIFEST_URL, ranked_manifest)],
     )
+    # The two early returns, which say why there is nothing rather than reporting
+    # zero matches. Order matters: the manifest is tested before the query.
+    add(
+        "recommend_iwc_workflows",
+        "empty_manifest",
+        "an IWC manifest with nothing in it, which is not the same as nothing matching",
+        {"intent": "rnaseq quality control", "limit": 5},
+        lambda: recommend_iwc_workflows_fn("rnaseq quality control", limit=5),
+        [route(IWC_MANIFEST_URL, [])],
+    )
+    add(
+        "recommend_iwc_workflows",
+        "no_searchable_terms",
+        "an intent that tokenises to nothing, over a manifest that is not empty",
+        {"intent": "", "limit": 5},
+        lambda: recommend_iwc_workflows_fn("", limit=5),
+        [route(IWC_MANIFEST_URL, ranked_manifest)],
+    )
+    add(
+        "recommend_iwc_workflows",
+        "only_stop_words",
+        "an intent that is nothing but the words the tokeniser drops",
+        {"intent": "the and for with", "limit": 5},
+        lambda: recommend_iwc_workflows_fn("the and for with", limit=5),
+        [route(IWC_MANIFEST_URL, ranked_manifest)],
+    )
 
     # -- get_invocations -----------------------------------------------------
     add(
