@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 61,
+  "caseCount": 62,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -271,6 +271,16 @@
     },
     {
       "tool": "get_histories",
+      "case": "no_limit_with_offset",
+      "note": "an offset and no limit, which skips without describing a window",
+      "input": {
+        "offset": 1
+      },
+      "envelope": "get_histories/no_limit_with_offset.json",
+      "replies": "get_histories/no_limit_with_offset.galaxy.json"
+    },
+    {
+      "tool": "get_histories",
       "case": "name_filter_first_page",
       "note": "page one of a name filter whose only match is not in the first window",
       "input": {
@@ -279,7 +289,7 @@
         "name": "B"
       },
       "envelope": "get_histories/name_filter_first_page.json",
-      "replies": "get_histories/name_filter_first_page.galaxy.json"
+      "replies": "get_histories/no_limit_with_offset.galaxy.json"
     },
     {
       "tool": "get_histories",
@@ -291,7 +301,7 @@
         "name": "B"
       },
       "envelope": "get_histories/name_filter_past_the_end.json",
-      "replies": "get_histories/name_filter_first_page.galaxy.json"
+      "replies": "get_histories/no_limit_with_offset.galaxy.json"
     },
     {
       "tool": "get_histories",

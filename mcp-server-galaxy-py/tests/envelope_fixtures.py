@@ -565,6 +565,14 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
     histories_ab_route = [route("/api/histories", histories_ab)]
     add(
         "get_histories",
+        "no_limit_with_offset",
+        "an offset and no limit, which skips without describing a window",
+        {"offset": 1},
+        lambda: get_histories_fn(offset=1),
+        histories_ab_route,
+    )
+    add(
+        "get_histories",
         "name_filter_first_page",
         "page one of a name filter whose only match is not in the first window",
         {"limit": 1, "offset": 0, "name": "B"},

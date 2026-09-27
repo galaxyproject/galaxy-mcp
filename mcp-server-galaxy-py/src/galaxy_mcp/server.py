@@ -2407,12 +2407,18 @@ def get_histories(
                 pagination=pagination,
             )
         else:
-            # No pagination requested
+            # No window to describe, but an offset still skips. bioblend handed this
+            # branch's offset to Galaxy and the caller got the rest of the list back,
+            # so fetching unpaged has to do the skipping here or the argument stops
+            # meaning anything. Still no pagination block, as before. A negative
+            # offset is left alone rather than read as "count back from the end",
+            # which is what a bare slice would quietly turn it into.
+            rest = matching[offset:] if offset > 0 else matching
             return GalaxyResult(
-                data=matching,
+                data=rest,
                 success=True,
-                message=f"Retrieved {len(matching)} histories",
-                count=len(matching),
+                message=f"Retrieved {len(rest)} histories",
+                count=len(rest),
             )
     except Exception as e:
         raise ValueError(

@@ -531,6 +531,49 @@ class TestNameFilterPagesTheMatches:
         assert result.pagination.next_offset is None
 
 
+class TestTheNoLimitBranchStillSkips:
+    """An offset with no limit skips, the way it did before the unpaged fetch.
+
+    bioblend sent this branch's offset to Galaxy (``if offset:``) and the caller
+    got the rest of the list back. Fetching unpaged so the name filter can run
+    first took the skipping away with it, and ``[A, B]`` with ``offset=1`` started
+    answering with both histories.
+    """
+
+    AB = [{"id": "hA", "name": "A"}, {"id": "hB", "name": "B"}]
+
+    def test_an_offset_without_a_limit_skips_the_histories_before_it(self, mock_galaxy_instance):
+        mock_galaxy_instance.histories.get_histories.side_effect = _bioblend_get_histories(self.AB)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_histories_fn(offset=1)
+
+        assert [h["id"] for h in result.data] == ["hB"]
+        assert result.count == 1
+        assert result.message == "Retrieved 1 histories"
+        # Still the branch with nothing to describe: no window was asked for.
+        assert result.pagination is None
+
+    def test_an_offset_past_the_end_without_a_limit_is_empty(self, mock_galaxy_instance):
+        mock_galaxy_instance.histories.get_histories.side_effect = _bioblend_get_histories(self.AB)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_histories_fn(offset=5)
+
+        assert result.data == []
+        assert result.count == 0
+        assert result.pagination is None
+
+    def test_no_offset_still_returns_everything(self, mock_galaxy_instance):
+        mock_galaxy_instance.histories.get_histories.side_effect = _bioblend_get_histories(self.AB)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_histories_fn()
+
+        assert [h["id"] for h in result.data] == ["hA", "hB"]
+        assert result.count == 2
+
+
 class TestBothHistoryListingsKeepTheirNumbers:
     """Only the sentence was supposed to move onto the shared helper.
 

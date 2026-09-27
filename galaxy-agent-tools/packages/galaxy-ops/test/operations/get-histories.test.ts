@@ -148,6 +148,22 @@ describe("get_histories", () => {
       expect(result.data).toHaveLength(1);
       expect(result.pagination).toMatchObject({ limit: 1, has_next: false, next_offset: null });
     });
+
+    /**
+     * No limit is not no offset. The other server used to hand bioblend the offset
+     * on this branch and got the rest of the list back; when it started fetching
+     * unpaged so its name filter could run first, `[A, B]` with offset=1 began
+     * answering with both. This side always skipped, and pins it so neither can
+     * drop it again.
+     */
+    it("skips the histories before the offset even with no limit to describe", async () => {
+      const input = { offset: 1 };
+      const result = await runWithEnvelope(getHistoriesOp as never, input as never, ctxWith(ab()));
+      expect((result.data as { id: string }[]).map((h) => h.id)).toEqual(["hB"]);
+      expect(result.count).toBe(1);
+      // The branch with no window asked for still sends no block at all.
+      expect(result.pagination).toBeNull();
+    });
   });
 
   it("handles a user with no histories", async () => {
