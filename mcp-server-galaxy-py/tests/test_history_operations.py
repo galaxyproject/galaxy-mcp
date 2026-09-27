@@ -338,3 +338,116 @@ class TestHistoryOperations:
             mock_galaxy_instance.histories.show_history.assert_called_once_with(
                 "test_history_1", contents=True
             )
+
+
+class TestSharedPaginationWording:
+    """Both history listings describe a page the way every other listing does.
+
+    These two used to hand-write "Page N of M." and "Showing page N of M." with
+    navigation arithmetic of their own, so an agent reading one listing learned a
+    sentence the next listing did not use. The helper is the wording now, and these
+    pin it: the same noun-and-offset sentence, the same last-page and past-the-end
+    branches, and next_offset that follows what was actually returned.
+    """
+
+    def _histories(self, count):
+        return [{"id": f"h{i}", "name": f"History {i}"} for i in range(count)]
+
+    def _contents(self, count):
+        return [{"id": f"d{i}", "hid": i, "visible": True, "deleted": False} for i in range(count)]
+
+    def test_get_histories_page_reads_like_the_others(self, mock_galaxy_instance):
+        everything = self._histories(25)
+        mock_galaxy_instance.histories.get_histories.side_effect = (
+            lambda limit=None, offset=0, name=None: (
+                everything[offset : offset + limit] if limit is not None else everything
+            )
+        )
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_histories_fn(limit=10, offset=10)
+
+        assert result.pagination.helper_text == (
+            "Showing 10 of 25 histories (offset 10). Use offset=20 for the next page."
+        )
+        assert result.pagination.next_offset == 20
+        assert result.pagination.previous_offset == 0
+
+    def test_get_histories_last_page(self, mock_galaxy_instance):
+        everything = self._histories(25)
+        mock_galaxy_instance.histories.get_histories.side_effect = (
+            lambda limit=None, offset=0, name=None: (
+                everything[offset : offset + limit] if limit is not None else everything
+            )
+        )
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_histories_fn(limit=10, offset=20)
+
+        assert result.pagination.helper_text == (
+            "Showing 5 of 25 histories (offset 20). This is the last page."
+        )
+        assert result.pagination.has_next is False
+        assert result.pagination.next_offset is None
+
+    def test_get_histories_past_the_end(self, mock_galaxy_instance):
+        everything = self._histories(5)
+        mock_galaxy_instance.histories.get_histories.side_effect = (
+            lambda limit=None, offset=0, name=None: (
+                everything[offset : offset + limit] if limit is not None else everything
+            )
+        )
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_histories_fn(limit=10, offset=50)
+
+        assert result.pagination.helper_text == (
+            "offset 50 is past the end of 5 histories; use a smaller offset"
+        )
+
+    def test_get_histories_without_a_limit_has_no_page_to_describe(self, mock_galaxy_instance):
+        mock_galaxy_instance.histories.get_histories.return_value = self._histories(3)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_histories_fn()
+
+        assert result.pagination is None
+        assert result.count == 3
+
+    def test_get_history_contents_page_reads_like_the_others(self, mock_galaxy_instance):
+        mock_galaxy_instance.histories.show_history.return_value = self._contents(25)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            from tests.test_helpers import get_history_contents_fn
+
+            result = get_history_contents_fn("test_history_1", limit=10, offset=10)
+
+        assert result.pagination.helper_text == (
+            "Showing 10 of 25 items (offset 10). Use offset=20 for the next page."
+        )
+        assert result.pagination.previous_offset == 0
+
+    def test_get_history_contents_last_page(self, mock_galaxy_instance):
+        mock_galaxy_instance.histories.show_history.return_value = self._contents(25)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            from tests.test_helpers import get_history_contents_fn
+
+            result = get_history_contents_fn("test_history_1", limit=10, offset=20)
+
+        assert result.pagination.helper_text == (
+            "Showing 5 of 25 items (offset 20). This is the last page."
+        )
+        assert result.pagination.next_offset is None
+
+    def test_get_history_contents_past_the_end(self, mock_galaxy_instance):
+        mock_galaxy_instance.histories.show_history.return_value = self._contents(5)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            from tests.test_helpers import get_history_contents_fn
+
+            result = get_history_contents_fn("test_history_1", limit=10, offset=50)
+
+        assert result.pagination.helper_text == (
+            "offset 50 is past the end of 5 items; use a smaller offset"
+        )

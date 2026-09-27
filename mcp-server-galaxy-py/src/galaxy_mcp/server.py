@@ -2385,27 +2385,15 @@ def get_histories(
             all_histories = gi.histories.get_histories(name=name)
             total_items = len(all_histories) if all_histories else 0
 
-            # Calculate pagination metadata
-            has_next = (offset + limit) < total_items
-            has_previous = offset > 0
-            current_page = (offset // limit) + 1 if limit > 0 else 1
-            total_pages = ((total_items - 1) // limit) + 1 if limit > 0 and total_items > 0 else 1
-
-            pagination = PaginationInfo(
+            # The same helper every other listing uses, so one sentence describes a
+            # page whichever tool returned it, and the navigation arithmetic cannot
+            # disagree from one tool to the next.
+            pagination = _pagination_info(
                 total_items=total_items,
                 returned_items=len(histories),
                 limit=limit,
                 offset=offset,
-                has_next=has_next,
-                has_previous=has_previous,
-                next_offset=offset + limit if has_next else None,
-                previous_offset=max(0, offset - limit) if has_previous else None,
-                helper_text=f"Page {current_page} of {total_pages}. "
-                + (
-                    f"Use offset={offset + limit} for next page."
-                    if has_next
-                    else "This is the last page."
-                ),
+                noun="histories",
             )
 
             return GalaxyResult(
@@ -2632,31 +2620,17 @@ def get_history_contents(
         total_items = len(sorted_contents)
         paginated_contents = sorted_contents[offset : offset + limit]
 
-        # Calculate pagination metadata
-        has_next = (offset + limit) < total_items
-        has_previous = offset > 0
-        current_page = (offset // limit) + 1 if limit > 0 else 1
-        total_pages = ((total_items - 1) // limit) + 1 if limit > 0 and total_items > 0 else 1
+        logger.info(f"Retrieved {len(paginated_contents)} of {total_items} items (offset {offset})")
 
-        logger.info(
-            f"Retrieved {len(paginated_contents)} items (page {current_page} of {total_pages})"
-        )
-
-        pagination = PaginationInfo(
+        # The same helper every other listing uses, so one sentence describes a page
+        # whichever tool returned it, and the navigation arithmetic cannot disagree
+        # from one tool to the next.
+        pagination = _pagination_info(
             total_items=total_items,
             returned_items=len(paginated_contents),
             limit=limit,
             offset=offset,
-            has_next=has_next,
-            has_previous=has_previous,
-            next_offset=offset + limit if has_next else None,
-            previous_offset=max(0, offset - limit) if has_previous else None,
-            helper_text=f"Showing page {current_page} of {total_pages}. "
-            + (
-                f"Use offset={offset + limit} for next page."
-                if has_next
-                else "This is the last page."
-            ),
+            noun="items",
         )
 
         return GalaxyResult(
