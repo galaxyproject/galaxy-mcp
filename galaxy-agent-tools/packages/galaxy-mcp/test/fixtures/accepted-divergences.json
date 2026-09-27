@@ -19,7 +19,7 @@
   },
   "ratchet": {
     "$comment": "unreviewed-gap is the one status nobody has ruled on, so it is the one meant to go only down. This number is how many of them the registry is allowed to hold: the check fails when there are more, and fails asking for this number to come down when there are fewer, so the count and the number cannot drift apart. What no check can do is stop somebody raising both together -- that edit is in the diff, and refusing it is a reviewer's job. A gap found from here on wants a status somebody reviewed and a reason, not a bigger number.",
-    "unreviewedGaps": 1
+    "unreviewedGaps": 0
   },
   "divergences": [
     {
@@ -37,14 +37,6 @@
       "observed": "python=read (tag) typescript=write (hint)",
       "status": "intentional",
       "reason": "Both surfaces write the bytes to a local path when they are given one, and both say so; they disagree because the two flags are about different things. Python's read tag is a statement about Galaxy: the tags exist to gate GALAXY_MCP_INCLUDE/EXCLUDE_TAGS, and the tool is two GETs that create, change and delete nothing on the server -- the file Python writes to file_path is outside what the tag speaks to. The MCP readOnlyHint has no such scope: the SDK defines readOnlyHint true as a tool that does not modify its environment, and with filePath the TS op overwrites whatever file is at that path, so it advertises false and clients that gate approval on the hint ask before it runs. Dannon's call (2026-09-26): each flag is correct about its own scope, so neither side moves and the mismatch is what the two scopes look like from the comparator."
-    },
-    {
-      "tool": "recommend_biocontainer",
-      "param": null,
-      "kind": "missing-ts-tool",
-      "observed": "python=read (tag) params=[packages type=array&items<string> required=true default=none]",
-      "status": "unreviewed-gap",
-      "reason": "Needs galaxy.tool_util's mulled recommender, which has no TS equivalent, so a port means reimplementing mulled name resolution rather than translating an op."
     }
   ],
   "builtin": {

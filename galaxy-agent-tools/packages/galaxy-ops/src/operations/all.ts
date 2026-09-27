@@ -45,3 +45,4 @@ import "./update-page";
 import "./list-page-revisions";
 import "./get-page-revision";
 import "./revert-page-revision";
+import "./recommend-biocontainer";

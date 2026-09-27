@@ -101,3 +101,17 @@ export type {
 export type { WorkflowInputTemplate, WorkflowSlot, WorkflowGuide, DatatypesMapping, ValidationReport } from "./workflow-inputs";
 export { validateInputs, subtypeSatisfies } from "./workflow-inputs";
 export type { IwcWorkflow, EnrichedIwcWorkflow } from "./iwc-manifest";
+export {
+  recommendBiocontainerOp,
+  recommendBiocontainer,
+  type BiocontainerRecommendation,
+} from "./operations/recommend-biocontainer";
+export {
+  recommendContainer,
+  biocontainerTagBuilt,
+  QUAY_BIOCONTAINERS_PREFIX,
+  type ContainerRecommendation,
+  type MatchQuality,
+  type PackageSpec,
+  type RecommendationSource,
+} from "./mulled";

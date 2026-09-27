@@ -19,10 +19,10 @@ Two differences with that server are recorded once here rather than as a row per
 | `intentional` | `2` |
 | `pending-port` | `0` |
 | `pending-decision` | `0` |
-| `unreviewed-gap` | `1` |
-| **total** | `3` |
+| `unreviewed-gap` | `0` |
+| **total** | `2` |
 
-`unreviewed-gap` is the status nobody has ruled on yet. The check holds the registry to the 1 it declares, so the count cannot drift from the number; raising that number is an edit somebody has to make in the diff, and it is meant to come down, never up.
+`unreviewed-gap` is the status nobody has ruled on yet. The check holds the registry to the 0 it declares, so the count cannot drift from the number; raising that number is an edit somebody has to make in the diff, and it is meant to come down, never up.
 
 ### Python and Galaxy's built-in server
 
@@ -42,7 +42,7 @@ Every tool any surface has, against the surfaces that do not have it. A name her
 
 **Missing from Python** (4): `get_invocation_details`, `get_job_status`, `list_file_source_templates`, `list_user_file_sources`
 
-**Missing from TypeScript** (6): `connect`, `get_invocation_details`, `get_job_status`, `list_file_source_templates`, `list_user_file_sources`, `recommend_biocontainer`
+**Missing from TypeScript** (5): `connect`, `get_invocation_details`, `get_job_status`, `list_file_source_templates`, `list_user_file_sources`
 
 **Missing from Built-in** (6): `get_iwc_workflows`, `get_tool_input_template`, `get_workflow_input_template`, `recommend_iwc_workflows`, `update_history`, `upload_file`
 
@@ -126,7 +126,7 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `list_workflows` | `search` | -- | -- | `type=string required=false default=none` | `vs built-in: missing-py-param` | `unreviewed-gap` | Galaxy's hands the term to WorkflowManager.index_query, which parses it: a bare word matches the name, a tag or the owner, and `name:`/`tag:`/`user:`/`is:` narrow it. A word that appears only in a workflow's annotation is not found. Ours filters name only, through `name`. |
 | `list_workflows` | `show_published` | -- | -- | `type=boolean required=false default=false` | `vs built-in: missing-py-param` | `unreviewed-gap` | One flag under two names: `show_published` there, `published` here, same default. |
 | `list_workflows` | `show_shared` | -- | -- | `type=boolean required=false default=true` | `vs built-in: missing-py-param` | `unreviewed-gap` | Galaxy's can leave out workflows shared with the user; ours always includes them. |
-| `recommend_biocontainer` |  | `read (tag)` | -- | `write (mcp default)` | `missing-ts-tool` | `unreviewed-gap` | Needs galaxy.tool_util's mulled recommender, which has no TS equivalent, so a port means reimplementing mulled name resolution rather than translating an op. |
+| `recommend_biocontainer` |  | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `recommend_iwc_workflows` |  | `read (tag)` | `read (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here, and what Galaxy's server is missing is BM25, not free-text ranking as such: its search_iwc_workflows takes a natural-language query -- its own examples are sentences -- and ranks the manifest through iwc.search_workflows. That score is a count (lib/galaxy/agents/iwc.py:155): one point per query token found anywhere in name, annotation, tags, the 300-character readme summary and tool names, with no IDF, no term frequency and no length normalisation, so a common word weighs as much as a rare one and integer ties are ordinary. Ours scores with rank_bm25's Okapi over name (counted twice, to weight it), annotation, tags, the whole readme and tool names, minus a stop-word list, so a rare term separates workflows a token count ties and a long readme does not win for being long. It is not one-way: ours tokenises runs of two or more letters, so a term like hg38 tokenises to nothing, where Galaxy's alphanumeric tokeniser keeps it. Both drop zero scores and return match_score. |
 | `revert_page_revision` |  | `write (tag), requires >=26.1` | `write (hint), requires >=26.1` | `write (mcp default)` |  |  |  |
 | `run_tool` |  | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |

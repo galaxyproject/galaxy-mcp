@@ -13,6 +13,8 @@ export function applyInputs(cmd: Command, op: AnyOperation): void {
       cmd.option(`--no-${flag}`, `Set ${flag} to false.`);
     }
     else if (kind === "json") cmd.option(`--${flag} <json>`, `${describe(schema) ?? key} (JSON or @file.json)`);
+    // Variadic: `--packages a b` and `--packages a --packages b` both build the same list.
+    else if (kind === "array") cmd.option(`--${flag} <value...>`, describe(schema) ?? key);
     else cmd.option(`--${flag} <value>`, describe(schema) ?? key);
   }
 }

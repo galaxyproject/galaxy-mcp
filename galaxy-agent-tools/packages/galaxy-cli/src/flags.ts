@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { z, type ZodRawShape, type ZodTypeAny } from "zod";
 import { laxenLikePydantic } from "@galaxyproject/galaxy-ops";
 
-export type FieldKind = "positional" | "option" | "boolean" | "json";
+export type FieldKind = "positional" | "option" | "boolean" | "json" | "array";
 
 const WRAPPERS = new Set(["optional", "nullable", "default"]);
 
@@ -33,6 +33,10 @@ export function classifyField(schema: ZodTypeAny): FieldKind {
   // `--inputs @file.json` stops reading the file and hands the op the literal "@file.json".
   if (unionMembers(schema)?.some((m) => isJsonTag(typeTag(m)))) return "json";
   if (tag === "boolean") return "boolean";
+  // A list is a repeatable flag whether it is required or not. As a positional it could only
+  // ever arrive as one string, which every array schema here refuses -- so an op that takes
+  // one had no working command line at all.
+  if (tag === "array") return "array";
   return isOptional(schema) ? "option" : "positional";
 }
 
