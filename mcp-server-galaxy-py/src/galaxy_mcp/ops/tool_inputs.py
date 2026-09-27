@@ -758,6 +758,32 @@ class ToolInputsUncheckableError(Exception):
     """
 
 
+def supplies_a_reference(inputs: Any) -> bool:
+    """Whether any supplied value could be a dataset or collection reference.
+
+    check_tool_inputs only ever rejects a value is_reference() recognises, at the
+    top level or inside a list, so a set of inputs this returns False for has
+    nothing to check. A caller can use that to skip reading the tool's schema,
+    which is the expensive part of a preflight.
+
+    It asks the same predicate the checker asks, rather than a second copy of it:
+    the skip is only safe while the two agree about what a reference is, and one
+    function is how that stays true. It lives here for the same reason -- what
+    makes it correct is the checker's reject surface, not the caller's.
+    """
+    if not isinstance(inputs, dict):
+        return False
+
+    def carries_src(value: Any) -> bool:
+        if isinstance(value, dict):
+            return is_reference(value) or any(carries_src(item) for item in value.values())
+        if isinstance(value, list):
+            return any(carries_src(item) for item in value)
+        return False
+
+    return any(carries_src(value) for value in inputs.values())
+
+
 def check_tool_inputs(
     tool_info: dict[str, Any], inputs: dict[str, Any]
 ) -> dict[str, list[dict[str, Any]]]:
