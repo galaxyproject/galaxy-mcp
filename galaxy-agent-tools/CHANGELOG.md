@@ -188,6 +188,29 @@ schemas advertise.
   inside `_meta` or `task`, or on a prototype, is passed on rather than copied
   and is read by the SDK and by zod as often as they read it.
 
+### `get_dataset_details` previews the dataset by default (#134)
+
+- **Breaking:** `get_dataset_details` asks Galaxy for the dataset's own text
+  peek (`GET /api/datasets/{id}/get_content_as_text`) whenever the dataset is in
+  the `ok` state, and returns it as `preview` beside the dataset payload -- the
+  first ten lines by default -- where `0.1.0` returned the payload alone and
+  made no second request. `include_preview: false` (`includePreview` from
+  galaxy-ops, `--no-include-preview` from the CLI) restores the single request;
+  `preview_lines` sets the slice. The preview has the three shapes the Python
+  tool returns: the text, `lines: null` with an `error` and Galaxy's own
+  truncation flag for a datatype Galaxy has no text for, and `lines: null` with
+  an `error` alone when the peek could not be taken -- a failed peek is reported
+  in `preview`, never as a failure of the call.
+- `download_dataset` declares `require_ok_state` (default true) and takes
+  `use_default_filename` (default true) the way the Python tool takes it, which
+  is to say it changes nothing: the flag is inert on both servers, and neither
+  writes a file the caller did not name. Its description no longer claims the
+  bytes come back "in memory" without `file_path`; what comes back then is
+  metadata (`file_size`, `suggested_filename`, `content_available`), and
+  `file_path` is the only way to get the content.
+- `upload_file_from_url` declares the `file_type` (`"auto"`) and `dbkey` (`"?"`)
+  defaults it was already applying.
+
 ### Also since 0.1.0
 
 - Pages: `list_pages`, `get_page`, `create_page`, `update_page`,
