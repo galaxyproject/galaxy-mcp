@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 // Only the browser entry, and nothing else: the registry is one module-level array, so a
 // file that also imported the full entry would be asserting against a registry both filled.
@@ -12,21 +12,39 @@ import { allOperations as browserOperations } from "../src/index.browser";
  */
 const OPS_DIR = join(__dirname, "..", "src", "operations");
 
-/** Op modules whose implementation reaches for something only Node has. */
+const SRC_DIR = join(__dirname, "..", "src");
+
+/** Whether a module, or any local module it imports, reaches for a node builtin. */
+function reachesNode(file: string, seen = new Set<string>()): boolean {
+  if (seen.has(file)) return false;
+  seen.add(file);
+  const text = readFileSync(file, "utf8");
+  if (/from "node:/.test(text)) return true;
+  // A relative import resolved against the importing file, so `../mulled` from an op finds
+  // src/mulled.ts -- the biocontainer recommender hashes with node:crypto one module away.
+  for (const m of text.matchAll(/from "(\.\.?\/[^"]+)"/g)) {
+    const target = join(file, "..", m[1]!) + ".ts";
+    if (target.startsWith(SRC_DIR) && existsSync(target) && reachesNode(target, seen)) return true;
+  }
+  return false;
+}
+
+/** Op modules whose implementation, directly or through what they import, needs Node. */
 function needsNode(): string[] {
   return readdirSync(OPS_DIR)
-    .filter((f) => f.endsWith(".ts"))
-    .filter((f) => /from "node:/.test(readFileSync(join(OPS_DIR, f), "utf8")))
+    .filter((f) => f.endsWith(".ts") && f !== "all.ts" && f !== "all-browser.ts")
+    .filter((f) => reachesNode(join(OPS_DIR, f)))
     .map((f) => f.replace(/\.ts$/, ""))
     .sort();
 }
 
 describe("the browser entry", () => {
-  it("registers no op that needs a filesystem", () => {
+  it("registers no op that needs a filesystem or node:crypto", () => {
     const names = browserOperations.map((o) => o.name);
     expect(names.length).toBeGreaterThan(0);
     expect(names).not.toContain("upload_file");
     expect(names).not.toContain("download_dataset");
+    expect(names).not.toContain("recommend_biocontainer");
   });
 
   it("registers every op that does not need one", () => {
@@ -41,7 +59,7 @@ describe("the browser entry", () => {
 
   it("leaves out exactly the op modules that import a node builtin", () => {
     // If an op grows a node: import, it has to leave all-browser in the same change.
-    expect(needsNode()).toEqual(["download-dataset", "upload-file"]);
+    expect(needsNode()).toEqual(["download-dataset", "recommend-biocontainer", "upload-file"]);
   });
 
   it("pulls no node builtin into its own module graph", () => {
