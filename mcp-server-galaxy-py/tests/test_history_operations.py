@@ -451,3 +451,185 @@ class TestSharedPaginationWording:
         assert result.pagination.helper_text == (
             "offset 50 is past the end of 5 items; use a smaller offset"
         )
+
+
+def _bioblend_get_histories(everything):
+    """bioblend's own order of operations, which is the whole point of these tests.
+
+    ``HistoryClient._get_histories`` sends limit and offset to Galaxy and then runs
+    ``[h for h in histories if h["name"] == name]`` over whatever came back, so the
+    name filter sees a window that was chosen before the filter existed. A falsy
+    limit or offset is not sent at all (``if limit:``).
+    """
+
+    def get_histories(limit=None, offset=0, name=None, **_kwargs):
+        window = everything
+        if offset:
+            window = window[offset:]
+        if limit:
+            window = window[:limit]
+        if name is not None:
+            window = [h for h in window if h["name"] == name]
+        return list(window)
+
+    return get_histories
+
+
+class TestNameFilterPagesTheMatches:
+    """A name filter has to run before the window, or the window cannot page it.
+
+    bioblend filters the page Galaxy already cut, so asking for one name and one
+    page at a time used to answer from the wrong set: page one of ``name="B"``
+    over ``[A, B]`` came back empty and claimed there was more, and page two
+    reported a total of two matches when only one history matched. The tool fetches
+    the matches and windows them itself now, so count, total and the navigation all
+    describe the same set.
+    """
+
+    AB = [{"id": "hA", "name": "A"}, {"id": "hB", "name": "B"}]
+
+    def test_first_page_of_a_name_filter_holds_the_match(self, mock_galaxy_instance):
+        mock_galaxy_instance.histories.get_histories.side_effect = _bioblend_get_histories(self.AB)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_histories_fn(limit=1, offset=0, name="B")
+
+        assert result.count == 1
+        assert [h["id"] for h in result.data] == ["hB"]
+        assert result.pagination.total_items == 1
+        assert result.pagination.has_next is False
+        assert result.pagination.next_offset is None
+
+    def test_second_page_of_a_name_filter_counts_only_the_matches(self, mock_galaxy_instance):
+        mock_galaxy_instance.histories.get_histories.side_effect = _bioblend_get_histories(self.AB)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_histories_fn(limit=1, offset=1, name="B")
+
+        # One history matches, so the total is one however far past the end the
+        # caller asked. The shared helper's floor -- items in hand prove a total at
+        # least offset + returned -- was reading a window that belonged to a
+        # different set, and reported two.
+        assert result.pagination.total_items == 1
+        assert result.pagination.has_next is False
+        assert result.pagination.previous_offset == 0
+        assert result.data == []
+
+    def test_a_zero_limit_describes_the_page_it_actually_returns(self, mock_galaxy_instance):
+        one = [{"id": "hA", "name": "A"}]
+        mock_galaxy_instance.histories.get_histories.side_effect = _bioblend_get_histories(one)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_histories_fn(limit=0, offset=0)
+
+        # bioblend drops a falsy limit, so zero has always meant "no window" and
+        # has always returned everything. What it used to report was limit=0, a
+        # window no page could fit in.
+        assert [h["id"] for h in result.data] == ["hA"]
+        assert result.pagination.limit == 1
+        assert result.pagination.has_next is False
+        assert result.pagination.next_offset is None
+
+
+class TestBothHistoryListingsKeepTheirNumbers:
+    """Only the sentence was supposed to move onto the shared helper.
+
+    The numbers either listing reports are still the ones the hand-written blocks
+    computed: a total that is the size of the set being paged, has_next from the
+    window, and offsets that step by the limit. This walks a grid of windows over
+    both tools and checks every field against that arithmetic, written out here
+    rather than imported, so a change to the helper has to answer for it.
+    """
+
+    @staticmethod
+    def _expected(total, limit, offset):
+        """What the hand-written pagination blocks computed, spelled out."""
+        has_next = (offset + limit) < total
+        has_previous = offset > 0
+        return {
+            "total_items": total,
+            "has_next": has_next,
+            "has_previous": has_previous,
+            "next_offset": offset + limit if has_next else None,
+            "previous_offset": max(0, offset - limit) if has_previous else None,
+        }
+
+    @staticmethod
+    def _seen(pagination):
+        return {
+            "total_items": pagination.total_items,
+            "has_next": pagination.has_next,
+            "has_previous": pagination.has_previous,
+            "next_offset": pagination.next_offset,
+            "previous_offset": pagination.previous_offset,
+        }
+
+    GRID = [
+        (25, 10, 0),
+        (25, 10, 10),
+        (25, 10, 20),
+        (25, 10, 30),
+        (25, 25, 0),
+        (5, 10, 0),
+        (5, 10, 50),
+        (1, 1, 0),
+        (1, 1, 1),
+        (0, 10, 0),
+    ]
+
+    def test_get_histories(self, mock_galaxy_instance):
+        for total, limit, offset in self.GRID:
+            everything = [{"id": f"h{i}", "name": "same"} for i in range(total)]
+            mock_galaxy_instance.histories.get_histories.side_effect = _bioblend_get_histories(
+                everything
+            )
+
+            with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+                plain = get_histories_fn(limit=limit, offset=offset)
+                filtered = get_histories_fn(limit=limit, offset=offset, name="same")
+
+            expected = self._expected(total, limit, offset)
+            assert self._seen(plain.pagination) == expected, (total, limit, offset)
+            # And a name every history carries pages exactly like no name at all.
+            assert self._seen(filtered.pagination) == expected, (total, limit, offset)
+
+    def test_get_histories_with_a_name_only_some_histories_carry(self, mock_galaxy_instance):
+        everything = [
+            {"id": f"h{i}", "name": "pick" if i % 8 == 0 else f"History {i}"} for i in range(25)
+        ]
+        matches = 4  # i = 0, 8, 16, 24
+
+        for limit, offset in [(2, 0), (2, 2), (2, 4), (10, 0), (1, 3)]:
+            mock_galaxy_instance.histories.get_histories.side_effect = _bioblend_get_histories(
+                everything
+            )
+
+            with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+                result = get_histories_fn(limit=limit, offset=offset, name="pick")
+
+            # The set being paged is the matching one, so the arithmetic is the same
+            # arithmetic over a total of four.
+            assert self._seen(result.pagination) == self._expected(matches, limit, offset), (
+                limit,
+                offset,
+            )
+            assert result.count == len(result.data)
+            assert all(h["name"] == "pick" for h in result.data)
+
+    def test_get_history_contents(self, mock_galaxy_instance):
+        from tests.test_helpers import get_history_contents_fn
+
+        for total, limit, offset in self.GRID:
+            contents = [
+                {"id": f"d{i}", "hid": i, "visible": True, "deleted": False} for i in range(total)
+            ]
+            mock_galaxy_instance.histories.show_history.return_value = contents
+
+            with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+                result = get_history_contents_fn("test_history_1", limit=limit, offset=offset)
+
+            assert self._seen(result.pagination) == self._expected(total, limit, offset), (
+                total,
+                limit,
+                offset,
+            )

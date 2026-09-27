@@ -498,24 +498,16 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
     )
 
     # -- get_histories -------------------------------------------------------
-    # Two answers from one path: the window Galaxy is asked for, and the unpaged
-    # fetch this server counts with. The TypeScript op fetches once, unpaged.
-    def paged_histories(all_rows: list[dict[str, Any]], limit: int, offset: int) -> list[dict]:
-        query = {"limit": str(limit)}
-        if offset:
-            query["offset"] = str(offset)
-        return [
-            route("/api/histories", all_rows[offset : offset + limit], query=query),
-            route("/api/histories", all_rows),
-        ]
-
+    # One unpaged fetch on both sides now: this server filters by name before it
+    # windows, because bioblend's name filter runs after Galaxy has cut the page.
+    histories_index_unpaged = [route("/api/histories", histories_40)]
     add(
         "get_histories",
         "limited_full_page",
         "a limit and an offset, so a pagination block comes back",
         {"limit": 10, "offset": 10},
         lambda: get_histories_fn(limit=10, offset=10),
-        paged_histories(histories_40, 10, 10),
+        histories_index_unpaged,
     )
     add(
         "get_histories",
@@ -523,7 +515,7 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         "the last page under a limit",
         {"limit": 15, "offset": 30},
         lambda: get_histories_fn(limit=15, offset=30),
-        paged_histories(histories_40, 15, 30),
+        histories_index_unpaged,
     )
     add(
         "get_histories",
@@ -531,7 +523,7 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         "an offset past the last history, under a limit",
         {"limit": 10, "offset": 400},
         lambda: get_histories_fn(limit=10, offset=400),
-        paged_histories(histories_40, 10, 400),
+        histories_index_unpaged,
     )
     add(
         "get_histories",
@@ -548,6 +540,38 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         {"limit": 10, "offset": 0},
         lambda: get_histories_fn(limit=10, offset=0),
         [route("/api/histories", [])],
+    )
+    # Two histories, one of them named B: the window has to be cut from the matches,
+    # or page one of name="B" answers with A's window -- empty, and claiming there is
+    # more -- and the page after it counts a match that was never there.
+    histories_ab = [
+        {"id": "hA", "name": "A", "state": "ok", "update_time": "2026-01-01T00:00:00"},
+        {"id": "hB", "name": "B", "state": "ok", "update_time": "2026-01-02T00:00:00"},
+    ]
+    histories_ab_route = [route("/api/histories", histories_ab)]
+    add(
+        "get_histories",
+        "name_filter_first_page",
+        "page one of a name filter whose only match is not in the first window",
+        {"limit": 1, "offset": 0, "name": "B"},
+        lambda: get_histories_fn(limit=1, offset=0, name="B"),
+        histories_ab_route,
+    )
+    add(
+        "get_histories",
+        "name_filter_past_the_end",
+        "the page after the only match, which still totals one",
+        {"limit": 1, "offset": 1, "name": "B"},
+        lambda: get_histories_fn(limit=1, offset=1, name="B"),
+        histories_ab_route,
+    )
+    add(
+        "get_histories",
+        "zero_limit",
+        "limit=0, which bioblend reads as no window at all: one page holding everything",
+        {"limit": 0, "offset": 0},
+        lambda: get_histories_fn(limit=0, offset=0),
+        [route("/api/histories", history_rows(1))],
     )
 
     # -- get_history_contents ------------------------------------------------

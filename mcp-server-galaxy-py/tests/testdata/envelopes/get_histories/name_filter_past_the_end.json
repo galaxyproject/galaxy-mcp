@@ -1,0 +1,17 @@
+{
+  "data": [],
+  "success": true,
+  "message": "Retrieved 0 of 1 histories",
+  "count": 0,
+  "pagination": {
+    "total_items": 1,
+    "returned_items": 0,
+    "limit": 1,
+    "offset": 1,
+    "has_next": false,
+    "has_previous": true,
+    "next_offset": null,
+    "previous_offset": 0,
+    "helper_text": "offset 1 is past the end of 1 histories; use a smaller offset"
+  }
+}

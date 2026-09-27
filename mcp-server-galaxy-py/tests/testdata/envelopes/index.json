@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 57,
+  "caseCount": 60,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -215,7 +215,7 @@
         "offset": 10
       },
       "envelope": "get_histories/limited_full_page.json",
-      "replies": "get_histories/limited_full_page.galaxy.json"
+      "replies": "list_history_ids/full_page.galaxy.json"
     },
     {
       "tool": "get_histories",
@@ -226,7 +226,7 @@
         "offset": 30
       },
       "envelope": "get_histories/limited_last_page.json",
-      "replies": "get_histories/limited_last_page.galaxy.json"
+      "replies": "list_history_ids/full_page.galaxy.json"
     },
     {
       "tool": "get_histories",
@@ -237,7 +237,7 @@
         "offset": 400
       },
       "envelope": "get_histories/limited_past_the_end.json",
-      "replies": "get_histories/limited_past_the_end.galaxy.json"
+      "replies": "list_history_ids/full_page.galaxy.json"
     },
     {
       "tool": "get_histories",
@@ -257,6 +257,41 @@
       },
       "envelope": "get_histories/empty.json",
       "replies": "list_history_ids/empty.galaxy.json"
+    },
+    {
+      "tool": "get_histories",
+      "case": "name_filter_first_page",
+      "note": "page one of a name filter whose only match is not in the first window",
+      "input": {
+        "limit": 1,
+        "offset": 0,
+        "name": "B"
+      },
+      "envelope": "get_histories/name_filter_first_page.json",
+      "replies": "get_histories/name_filter_first_page.galaxy.json"
+    },
+    {
+      "tool": "get_histories",
+      "case": "name_filter_past_the_end",
+      "note": "the page after the only match, which still totals one",
+      "input": {
+        "limit": 1,
+        "offset": 1,
+        "name": "B"
+      },
+      "envelope": "get_histories/name_filter_past_the_end.json",
+      "replies": "get_histories/name_filter_first_page.galaxy.json"
+    },
+    {
+      "tool": "get_histories",
+      "case": "zero_limit",
+      "note": "limit=0, which bioblend reads as no window at all: one page holding everything",
+      "input": {
+        "limit": 0,
+        "offset": 0
+      },
+      "envelope": "get_histories/zero_limit.json",
+      "replies": "get_histories/zero_limit.galaxy.json"
     },
     {
       "tool": "get_history_contents",

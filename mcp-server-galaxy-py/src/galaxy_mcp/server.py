@@ -2376,40 +2376,43 @@ def get_histories(
     gi: GalaxyInstance = state["gi"]
 
     try:
-        # Get histories with pagination and optional filtering
-        histories = gi.histories.get_histories(limit=limit, offset=offset, name=name)
+        # Filter first, then window. bioblend applies `name` client-side, AFTER Galaxy
+        # has already cut the window -- `[h for h in histories if h["name"] == name]`
+        # at the end of HistoryClient._get_histories -- so a name and a limit in the
+        # same call filter a page that was chosen before the filter ran: page one of
+        # name="B" over [A, B] came back empty while claiming there was more, and page
+        # two counted two matches where one history matched. Fetching the matches and
+        # windowing them here is also one request rather than two, because the count
+        # this tool has to report was already an unpaged fetch of the same thing.
+        matching = gi.histories.get_histories(name=name) or []
 
-        # If pagination is used, get total count for metadata
+        # If pagination is used, describe the window
         if limit is not None:
-            # Get total count without pagination
-            all_histories = gi.histories.get_histories(name=name)
-            total_items = len(all_histories) if all_histories else 0
-
+            # A falsy limit means "no window" to bioblend (`if limit:`), which is why
+            # limit=0 has always returned everything; it now says so, reporting the
+            # page it actually returned instead of a window nothing could fit in.
+            page_size = limit or max(len(matching), 1)
             # The same helper every other listing uses, so one sentence describes a
             # page whichever tool returned it, and the navigation arithmetic cannot
-            # disagree from one tool to the next.
-            pagination = _pagination_info(
-                total_items=total_items,
-                returned_items=len(histories),
-                limit=limit,
-                offset=offset,
-                noun="histories",
-            )
+            # disagree from one tool to the next. The numbers are the ones the
+            # hand-written block computed, because the page is now a slice of the set
+            # it reports a total for.
+            page, pagination = _paginate(matching, limit=page_size, offset=offset, noun="histories")
 
             return GalaxyResult(
-                data=histories,
+                data=page,
                 success=True,
-                message=f"Retrieved {len(histories)} of {total_items} histories",
-                count=len(histories),
+                message=f"Retrieved {len(page)} of {len(matching)} histories",
+                count=len(page),
                 pagination=pagination,
             )
         else:
             # No pagination requested
             return GalaxyResult(
-                data=histories,
+                data=matching,
                 success=True,
-                message=f"Retrieved {len(histories)} histories",
-                count=len(histories),
+                message=f"Retrieved {len(matching)} histories",
+                count=len(matching),
             )
     except Exception as e:
         raise ValueError(
