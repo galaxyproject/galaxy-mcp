@@ -135,8 +135,10 @@ Each command's arguments come from that operation's inputs:
 
 `--format table` (default, also accepts `text`) prints a compact table for lists
 and a key/value block for single objects, with the status line on stderr.
-`--format json` prints the full result envelope (`{ data, success, message, ... }`)
-pretty-printed -- use this for scripting. `--quiet` drops the stderr status line.
+`--format json` prints the full result envelope
+(`{ data, success, message, count, pagination }`, the same one the MCP surface
+sends -- see [The result envelope](#the-result-envelope)) pretty-printed -- use
+this for scripting. `--quiet` drops the stderr status line.
 
 The process exit code reflects the outcome, following `sysexits.h` conventions:
 
@@ -263,9 +265,48 @@ byte budget either, exactly as on the Python side; and `recommend_iwc_workflows`
 takes a `limit` but no `offset`, because a ranking is cut from the bottom rather
 than paged through. The two history listings count their own items and filter,
 sort and slice them here rather than asking Galaxy to, which is what the Python
-tools do and is why they can report a real total. The Pages operations are not in this scheme at all:
-`list_pages` takes `limit` and `offset` but tells you nothing about what is left,
-and `list_page_revisions` returns every revision.
+tools do and is why they can report a real total. The Pages operations sit half
+in: `list_pages` takes `limit` and `offset` and reports the total the server
+counted, on a `total_matches` header, but no helper sentence -- the Python tool
+sends none there either -- and `list_page_revisions` returns every revision at
+once.
+
+### The result envelope
+
+Both surfaces answer with the Python MCP server's envelope, key for key. Over
+MCP it is the text content block; from the CLI it is what `--format json`
+prints.
+
+```json
+{
+  "data": [{ "id": "f2db41e1fa331b3e", "name": "RNA-seq" }],
+  "success": true,
+  "message": "1 of 40 histories",
+  "count": 1,
+  "pagination": {
+    "total_items": 40,
+    "returned_items": 1,
+    "limit": 1,
+    "offset": 10,
+    "has_next": true,
+    "has_previous": true,
+    "next_offset": 11,
+    "previous_offset": 9,
+    "helper_text": "Showing 1 of 40 histories (offset 10). Use offset=11 for the next page."
+  }
+}
+```
+
+`data` is the answer itself -- for a listing, the page, not a wrapper around it.
+`count` is how many rows are in this answer, for the tools that count. `count`
+and `pagination` are always there, `null` where the tool has neither, so a
+missing key never has to be told apart from "this tool does not page". A page
+cut short to fit the output budget says so in `helper_text`; a ranking, which
+has no pagination block, says it in `message`.
+
+A TypeScript caller importing an operation from `@galaxyproject/galaxy-ops`
+directly gets none of this: `run()` returns its own typed data, and a listing
+returns `Paged<T>` with camelCase pagination, unchanged.
 
 ### Connection
 | Operation | What it does |

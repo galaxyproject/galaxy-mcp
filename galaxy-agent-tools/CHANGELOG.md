@@ -4,6 +4,79 @@
 `@galaxyproject/galaxy-mcp` share a version and are published together, so one
 entry covers all three; where something only affects one surface, it says which.
 
+## 0.3.0 (unreleased)
+
+Breaking on both surfaces. 0.2.0 has not been published, so one release will
+carry both entries.
+
+### The MCP and CLI envelopes are the Python server's (#NNN)
+
+A prompt written against the Python MCP server reads `data[0]` and
+`pagination.next_offset`. Against these packages it got an object with the page
+inside it under `items`, a pagination block in camelCase under different names,
+a second copy of that block travelling inside `data`, and no `count` at all. Two
+servers, the same tool names, two answers. The envelope is now that server's,
+key for key, on the MCP text block and on `galaxy-cli --format json` alike.
+
+- **Breaking:** a listing's `data` is the page itself, not `{ items, pagination }`.
+  `data[0]` is the first row. The exceptions are the tools where the Python
+  server returns an object too: `get_tool_panel` answers with `{ entries }` or
+  `{ section_id, section_name, tools }`, and `get_history_contents` with
+  `{ history_id, contents }` -- in each case without the pagination block that
+  used to travel inside `data` as well.
+- **Breaking:** the pagination keys are the Python server's names. Old to new:
+  `total` -> `total_items`, `returned` -> `returned_items`,
+  `hasNext` -> `has_next`, `hasPrevious` -> `has_previous`,
+  `nextOffset` -> `next_offset`, `previousOffset` -> `previous_offset`,
+  `helperText` -> `helper_text`. `limit` and `offset` keep their names. Every
+  field is always present, `null` where there is nothing to say, rather than
+  absent -- which is what the pydantic model on the other side serialises to.
+- **Breaking:** `trimmedForSize` is gone from the wire. The Python server has no
+  such field and folds the fact into the helper text, which this side already
+  matched word for word: a cut page's `helper_text` says "This page was cut short
+  to fit the output budget, not because there is nothing more." Read that, or
+  compare `returned_items` with the `limit` asked for. `recommend_iwc_workflows`
+  has no pagination block at all -- a ranking has no offset to walk -- so its cut
+  is reported at the end of `message` instead.
+- **New:** `count`, the number of rows in this answer, for the tools the Python
+  server counts: every listing, plus `get_tool_run_examples` (test cases),
+  `get_tool_citations` (citations), `get_collection_details` (elements returned,
+  after truncation), `get_workflow_input_template` (input slots),
+  `get_invocations` (the list, not a single invocation), `list_pages`,
+  `list_page_revisions`, and `get_history_details` -- which counts everything in
+  the history, and now pays for the same second request the Python tool pays for
+  to get it.
+- `list_pages` reports a real `total_items`, taken from the `total_matches`
+  response header, where before it returned only the window it had asked for.
+  Its block is hand-built to match the Python tool exactly, which means it
+  advances by the `limit` asked for rather than by what came back, and carries no
+  helper text.
+- `get_invocations` no longer sends a pagination block carrying just the `limit`.
+  Galaxy windows that index itself and reports no total, so there was never a
+  window to describe; the Python tool sends none either.
+- `list_user_tools` says "user tools" in its helper text where it said "tools",
+  which is the noun the Python tool uses.
+- **Breaking for anyone importing them:** `runWithEnvelope` now returns
+  `GalaxyResult<unknown>` (a projection may emit something other than what `run`
+  returned), `GalaxyResult` has gained `count`, `Pagination` is the wire shape
+  above, and `Operation.project` returns the whole envelope body rather than just
+  a message and a window.
+- **Unchanged:** every operation's `run()` result, `Paged<T>` and its camelCase
+  `PaginationInfo`. A TypeScript caller importing an op directly, and code mode
+  with it, sees exactly what it saw before. The same wire-versus-library split as
+  the parameter-name change above.
+- **Not aligned yet, and not claimed to be:** the `message` text, which the two
+  servers still word differently, and the failure envelope -- Python raises and
+  FastMCP turns that into an MCP error, while these surfaces answer with
+  `{ success: false, message, errorKind }`. Both are named as the next
+  result-shape rows rather than quietly left out.
+
+Backed by golden fixtures rather than by reading both sides: the Python suite
+generates what its tools emit for a set of calls, with the Galaxy replies they
+were answered with (`uv run python -m tests.envelope_fixtures`), and the MCP
+server and the CLI each replay every case against those replies and compare
+keys, `data`, `count` and `pagination` exactly.
+
 ## 0.2.0 (unreleased)
 
 Breaking, and the first release since the packages went up on npm. Everything in

@@ -1,6 +1,6 @@
 {
   "name": "@galaxyproject/galaxy-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Model Context Protocol (MCP) server exposing Galaxy agent operations as tools over stdio.",
   "license": "MIT",
   "author": "Galaxy Project",
