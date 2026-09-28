@@ -63,6 +63,7 @@ from .test_helpers import (
     get_job_details_fn,
     get_page_fn,
     get_page_revision_fn,
+    get_server_info_fn,
     get_tool_citations_fn,
     get_tool_details_fn,
     get_tool_input_template_fn,
@@ -1737,12 +1738,84 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
 
 
 def single_record_cases(add: AddCase) -> None:
+    server_info_cases(add)
     user_cases(add)
     dataset_details_cases(add)
     tool_details_cases(add)
     tool_input_template_cases(add)
     workflow_details_cases(add)
     job_details_cases(add)
+
+
+def server_info_cases(add: AddCase) -> None:
+    """What the connected Galaxy is, and what it is too old to run.
+
+    Three things this tool answers with are its own rather than Galaxy's: the address
+    is the one the session stored, ``config`` is sixteen named fields lifted out of
+    Galaxy's configuration with their own defaults (a brand that is missing reads
+    "Galaxy", everything else missing reads null), and ``unsupported_tools`` is the
+    declared tools this version cannot run, by name. So the cases are a current server,
+    one a version too old for the page tools, one that will not say what it is, and a
+    configuration bare enough that every default shows.
+    """
+    config = {
+        "brand": "Example Galaxy",
+        "logo_url": "/static/images/galaxyIcon_noText.png",
+        "welcome_url": "/static/welcome.html",
+        "support_url": "https://galaxy.example/support",
+        "citation_url": "https://galaxy.example/citing",
+        "terms_url": None,
+        "allow_user_creation": True,
+        "allow_user_deletion": False,
+        "enable_quotas": True,
+        "ftp_upload_site": None,
+        "wiki_url": "https://galaxy.example/wiki",
+        "screencasts_url": "https://galaxy.example/screencasts",
+        "library_import_dir": None,
+        "user_library_import_dir": None,
+        "allow_library_path_paste": False,
+        "enable_unique_workflow_defaults": False,
+        # Fields this tool does not lift out, so a case proves they do not travel.
+        "version_major": "26.1",
+        "email_from": "noreply@galaxy.example",
+        "server_startttime": 1767225845,
+    }
+    config_route = route("/api/configuration", config)
+    add(
+        "get_server_info",
+        "current_galaxy",
+        "a server new enough for everything, so nothing is ruled out",
+        {},
+        get_server_info_fn,
+        [VERSION_ROUTE, config_route],
+    )
+    add(
+        "get_server_info",
+        "too_old_for_the_page_tools",
+        "one minor version short, so the six declared tools are named",
+        {},
+        get_server_info_fn,
+        [
+            route("/api/version", {"version_major": "26.0", "version_minor": "0"}),
+            config_route,
+        ],
+    )
+    add(
+        "get_server_info",
+        "version_unreadable",
+        "a version route that says nothing, where nothing is known and nothing is refused",
+        {},
+        get_server_info_fn,
+        [route("/api/version", {}), config_route],
+    )
+    add(
+        "get_server_info",
+        "bare_configuration",
+        "a configuration carrying almost nothing, so every default shows",
+        {},
+        get_server_info_fn,
+        [VERSION_ROUTE, route("/api/configuration", {"logo_url": None})],
+    )
 
 
 def user_cases(add: AddCase) -> None:

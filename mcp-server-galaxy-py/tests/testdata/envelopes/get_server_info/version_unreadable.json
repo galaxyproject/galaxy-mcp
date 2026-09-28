@@ -1,0 +1,30 @@
+{
+  "data": {
+    "url": "https://galaxy.example/",
+    "version": {},
+    "version_known": false,
+    "unsupported_tools": [],
+    "config": {
+      "brand": "Example Galaxy",
+      "logo_url": "/static/images/galaxyIcon_noText.png",
+      "welcome_url": "/static/welcome.html",
+      "support_url": "https://galaxy.example/support",
+      "citation_url": "https://galaxy.example/citing",
+      "terms_url": null,
+      "allow_user_creation": true,
+      "allow_user_deletion": false,
+      "enable_quotas": true,
+      "ftp_upload_site": null,
+      "wiki_url": "https://galaxy.example/wiki",
+      "screencasts_url": "https://galaxy.example/screencasts",
+      "library_import_dir": null,
+      "user_library_import_dir": null,
+      "allow_library_path_paste": false,
+      "enable_unique_workflow_defaults": false
+    }
+  },
+  "success": true,
+  "message": "Retrieved server info for https://galaxy.example/",
+  "count": null,
+  "pagination": null
+}

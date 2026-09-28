@@ -1,0 +1,33 @@
+{
+  "data": {
+    "url": "https://galaxy.example/",
+    "version": {
+      "version_major": "26.1",
+      "version_minor": "1"
+    },
+    "version_known": true,
+    "unsupported_tools": [],
+    "config": {
+      "brand": "Galaxy",
+      "logo_url": null,
+      "welcome_url": null,
+      "support_url": null,
+      "citation_url": null,
+      "terms_url": null,
+      "allow_user_creation": null,
+      "allow_user_deletion": null,
+      "enable_quotas": null,
+      "ftp_upload_site": null,
+      "wiki_url": null,
+      "screencasts_url": null,
+      "library_import_dir": null,
+      "user_library_import_dir": null,
+      "allow_library_path_paste": null,
+      "enable_unique_workflow_defaults": null
+    }
+  },
+  "success": true,
+  "message": "Retrieved server info for https://galaxy.example/",
+  "count": null,
+  "pagination": null
+}

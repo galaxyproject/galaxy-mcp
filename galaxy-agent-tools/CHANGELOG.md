@@ -283,6 +283,20 @@ with no fixture at all, which is where a difference hides. Every open tool now h
 golden cases generated from the Python server and replayed on both surfaces, and
 the differences they turned up are below.
 
+- **Breaking:** `get_server_info` answers the way the Python tool does, in three
+  ways. The list of things this server is too old to run is `unsupported_tools`
+  rather than `unsupported_ops`, and it is sorted by name. `config` is the sixteen
+  fields that tool lifts out of `/api/configuration` by name -- `brand`,
+  `logo_url`, `welcome_url`, `support_url`, `citation_url`, `terms_url`,
+  `allow_user_creation`, `allow_user_deletion`, `enable_quotas`,
+  `ftp_upload_site`, `wiki_url`, `screencasts_url`, `library_import_dir`,
+  `user_library_import_dir`, `allow_library_path_paste` and
+  `enable_unique_workflow_defaults` -- rather than Galaxy's whole configuration; a
+  field Galaxy did not mention reads `null`, and an unmentioned `brand` reads
+  `"Galaxy"`. And `version_source` is gone: the other server sends no such key, so
+  a caller could not rely on it. Whether the version was supplied rather than
+  fetched is still said, in the summary line. `UnsupportedOp` is now
+  `UnsupportedTool` and `ServerConfigSummary` is exported beside it.
 - **Breaking:** `get_page`, `create_page` and `update_page` drop the expanded
   `content` on an HTML page too. They dropped it only for a page that had a
   `content_editor` to keep instead, which left an HTML page -- where Galaxy fills

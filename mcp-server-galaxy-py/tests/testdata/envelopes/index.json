@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 128,
+  "caseCount": 132,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -994,6 +994,38 @@
       },
       "envelope": "get_tool_citations/none.json",
       "replies": "get_tool_citations/none.galaxy.json"
+    },
+    {
+      "tool": "get_server_info",
+      "case": "current_galaxy",
+      "note": "a server new enough for everything, so nothing is ruled out",
+      "input": {},
+      "envelope": "get_server_info/current_galaxy.json",
+      "replies": "get_server_info/current_galaxy.galaxy.json"
+    },
+    {
+      "tool": "get_server_info",
+      "case": "too_old_for_the_page_tools",
+      "note": "one minor version short, so the six declared tools are named",
+      "input": {},
+      "envelope": "get_server_info/too_old_for_the_page_tools.json",
+      "replies": "get_server_info/too_old_for_the_page_tools.galaxy.json"
+    },
+    {
+      "tool": "get_server_info",
+      "case": "version_unreadable",
+      "note": "a version route that says nothing, where nothing is known and nothing is refused",
+      "input": {},
+      "envelope": "get_server_info/version_unreadable.json",
+      "replies": "get_server_info/version_unreadable.galaxy.json"
+    },
+    {
+      "tool": "get_server_info",
+      "case": "bare_configuration",
+      "note": "a configuration carrying almost nothing, so every default shows",
+      "input": {},
+      "envelope": "get_server_info/bare_configuration.json",
+      "replies": "get_server_info/bare_configuration.galaxy.json"
     },
     {
       "tool": "get_user",
