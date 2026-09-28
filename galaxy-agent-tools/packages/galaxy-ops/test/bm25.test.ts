@@ -84,6 +84,30 @@ describe("tokenizeForSearch draws word boundaries where the other server draws t
     });
   }
 
+  /**
+   * The boundary is the contract interpreter's data, not this runtime's.
+   *
+   * These three came off that interpreter the same way the table above did:
+   *
+   *   >>> tok("rnaseqꟋ")   -> ['rnaseq']
+   *   >>> tok("rnaseqꟊ")   -> []
+   *   >>> tok("ꟋrnaseqꟋ quality") -> ['rnaseq', 'quality']
+   *
+   * U+A7CB is a letter Unicode assigned after 15.0.0, so `\p{L}` here says yes and the pinned
+   * table says no. Reading the table is what makes "rnaseq" a term on both servers; reading
+   * `\p{L}` made this side see one long word, find no searchable term, and answer a different
+   * question from the one the other server answered.
+   */
+  it("treats a letter assigned after the pinned Unicode edition as a separator", () => {
+    expect(tokenizeForSearch("rnaseqꟋ")).toEqual(["rnaseq"]);
+    expect(tokenizeForSearch("ꟋrnaseqꟋ quality")).toEqual(["rnaseq", "quality"]);
+  });
+
+  it("treats a letter assigned before it as part of the word", () => {
+    // U+A7CA has been a letter since Unicode 5.1, so both sides continue the word through it.
+    expect(tokenizeForSearch("rnaseqꟊ")).toEqual([]);
+  });
+
   it("reads a letter outside the Basic Multilingual Plane as one character, not two", () => {
     // 'rna𝐚' is one letter after the three, so there is no word here at all -- and a
     // boundary test without the u flag would inspect the high surrogate, find it in no

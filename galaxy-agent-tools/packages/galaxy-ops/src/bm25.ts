@@ -1,10 +1,25 @@
-import { PY_WORD_CHAR } from "./python-str";
+import { isPyWordChar } from "./python-str";
 
 /** The other server's `stop_words`, word for word. */
 const STOPWORDS = new Set([
   "the", "and", "for", "with", "from", "have", "want",
   "data", "this", "that", "are", "was", "will",
 ]);
+
+const isAsciiLetter = (code: number): boolean =>
+  (code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a);
+
+/** The code point ending just before `index`, or null at the start of the string. */
+function codePointBefore(text: string, index: number): number | null {
+  if (index <= 0) return null;
+  const unit = text.charCodeAt(index - 1);
+  if (unit >= 0xdc00 && unit <= 0xdfff && index >= 2) {
+    const lead = text.charCodeAt(index - 2);
+    // A trail surrogate after a lead is the second half of one letter, not a character.
+    if (lead >= 0xd800 && lead <= 0xdbff) return (lead - 0xd800) * 0x400 + (unit - 0xdc00) + 0x10000;
+  }
+  return unit;
+}
 
 /**
  * `_tokenize_for_search`: runs of two or more ASCII letters standing alone as a word,
@@ -21,26 +36,39 @@ const STOPWORDS = new Set([
  * terms in query" and the other says it found no matches, which sends an agent to rewrite a
  * query that was never the problem.
  *
- * So the boundaries are spelled out instead, as lookaround over `PY_WORD_CHAR`: a token may not
- * be preceded or followed by a letter, a number or an underscore. Both assertions are negative
- * and both are satisfied at the ends of the string, which is what `\b` does on either side of
- * a letter. The `u` flag is load-bearing twice -- `\p{...}` needs it, and without it the
- * lookaround would inspect half of an astral letter and see a lone surrogate, which is in no
- * class at all.
+ * So the boundary is drawn by hand instead: find each run of ASCII letters and keep it when
+ * the code points on either side of it are not word characters, which is exactly what a `\b`
+ * at each end of the run asks. `isPyWordChar` answers from the contract interpreter's table
+ * rather than from this runtime's `\p{L}`, so a letter Unicode assigned after that
+ * interpreter's edition -- U+A7CB, say -- is a separator on both sides, and "rnaseq" beside
+ * one is a term on both sides too.
  *
- * The corpus is tokenised with this too, so the change moves both sides of the match together:
+ * One pass, no regex: the scan walks code units, and only the two neighbours of a candidate
+ * run are decoded as code points, so half of an astral letter is never read as a separator.
+ * Lowercasing a run of ASCII letters is the same operation in both languages, so `toLowerCase`
+ * is `str.lower()` here without any of the Unicode data question the boundary had.
+ *
+ * The corpus is tokenised with this too, so the rule moves both sides of the match together:
  * a readme saying "café" indexes no `caf` term any more, and an intent that asked for one
  * stops matching it. That is the other server's ranking, which is the point.
  */
 export function tokenizeForSearch(text: string): string[] {
   const tokens: string[] = [];
-  const regex = new RegExp(`(?<!${PY_WORD_CHAR})[a-zA-Z]{2,}(?!${PY_WORD_CHAR})`, "gu");
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(text)) !== null) {
-    const tok = match[0].toLowerCase();
-    if (!STOPWORDS.has(tok)) {
-      tokens.push(tok);
+  let index = 0;
+  while (index < text.length) {
+    if (!isAsciiLetter(text.charCodeAt(index))) {
+      index += 1;
+      continue;
     }
+    const start = index;
+    while (index < text.length && isAsciiLetter(text.charCodeAt(index))) index += 1;
+    if (index - start < 2) continue;
+    const before = codePointBefore(text, start);
+    const after = text.codePointAt(index);
+    if (before !== null && isPyWordChar(before)) continue;
+    if (after !== undefined && isPyWordChar(after)) continue;
+    const token = text.slice(start, index).toLowerCase();
+    if (!STOPWORDS.has(token)) tokens.push(token);
   }
   return tokens;
 }

@@ -8,6 +8,7 @@
  * spelling it looks like in a way that changes which container gets recommended.
  */
 import { GalaxyValidationError } from "./errors";
+import { PY_WORD_CHAR_RANGES } from "./python-unicode-data";
 
 /**
  * The code points CPython's `str.isspace()` is true for -- bidirectional class WS, B or S, or
@@ -300,27 +301,42 @@ export function pyUtf8EncodeError(value: string): string | null {
   return `'utf-8' codec can't encode ${where}: surrogates not allowed`;
 }
 
+/** Is this code point inside one of the inclusive ranges? Binary search; the table is sorted. */
+function inRanges(ranges: readonly (readonly [number, number])[], code: number): boolean {
+  let low = 0;
+  let high = ranges.length - 1;
+  while (low <= high) {
+    const middle = (low + high) >> 1;
+    const range = ranges[middle]!;
+    if (code < range[0]) high = middle - 1;
+    else if (code > range[1]) low = middle + 1;
+    else return true;
+  }
+  return false;
+}
+
 /**
- * The character class Python's `\w` is, on a `str` -- spelled out, because JavaScript's is not.
+ * Is this code point one Python's `\w` matches on a `str` -- and so one that a `\b` there
+ * counts as the inside of a word?
  *
- * `re` on a `str` matches `\w` against a letter, a number or an underscore in any script, and
- * that set is exactly Unicode's general categories L and N plus U+005F: the installed
- * interpreter was asked about every code point in the space and it disagreed with
- * `[\p{L}\p{N}_]` on none of them, in either direction. JavaScript's `\w` is `[A-Za-z0-9_]` and
- * nothing else, so a port that leaves it alone reads a Greek or accented letter as a separator.
+ * Read from `PY_WORD_CHAR_RANGES`, which is the contract interpreter's own answer for every
+ * code point in the space, rather than from `[\p{L}\p{N}_]`. The class is the right *rule* --
+ * asked about all 1,114,112 code points, that interpreter's `\w` and categories L and N plus
+ * U+005F agree everywhere -- but the rule is not the question. Which code points are letters
+ * is Unicode *data*, and the two runtimes carry different editions of it: this one knows 9,661
+ * code points as letters or numbers that Unicode 15.0.0 had not assigned, U+A7CB and the Garay
+ * block among them. Spelled as a class, a boundary lands in a different place on each side and
+ * an intent of "rnaseq" followed by one of those letters is a term on one server and nothing
+ * to search for on the other. Read from the table, both sides answer what the contract
+ * interpreter answers, and the table moves only when someone regenerates it on purpose.
  *
- * The class matters most where the pattern never mentions it: `\b`. A boundary is a place where
- * one side is a word character and the other is not, so `\b` inherits whichever `\w` the engine
- * has -- which is why `re.findall(r"\b[a-zA-Z]{2,}\b", "café")` finds nothing (the `é`
- * continues the word) while the same pattern in JavaScript finds `caf`. JavaScript has no
- * Unicode `\b` to switch on, so a boundary has to be built out of this class with lookaround,
- * and the pattern needs the `u` flag or the class stops at a lone surrogate.
- *
- * One residue that no spelling fixes: this is a Unicode *data* question, and the two runtimes
- * carry different editions of the data. Node 22's is 17.0 and the interpreter here reports
- * 15.0.0, which knows 9,661 fewer code points as letters or numbers -- U+A7CB and the Garay
- * block among them. Those are word characters here and separators there until the interpreter
- * updates, at which point the two agree again; everything assigned before Unicode 15.0.0, which
- * is every character a Galaxy name or an IWC readme has carried so far, matches today.
+ * The class matters most where a pattern never mentions it: `\b`. A boundary is a place where
+ * one side is a word character and the other is not, so `\b` inherits whichever `\w` its engine
+ * has -- which is why `re.findall(r"\b[a-zA-Z]{2,}\b", "café")` finds nothing there (the `é`
+ * continues the word) while the same pattern finds `caf` here. JavaScript has no Unicode `\b`
+ * to switch on, so a boundary is built out of this predicate instead, on code points rather
+ * than code units so half of an astral letter is never mistaken for a separator.
  */
-export const PY_WORD_CHAR = "[\\p{L}\\p{N}_]";
+export function isPyWordChar(code: number): boolean {
+  return inRanges(PY_WORD_CHAR_RANGES, code);
+}
