@@ -195,13 +195,80 @@ key for key, on the MCP text block and on `galaxy-cli --format json` alike.
 Backed by golden fixtures rather than by reading both sides: the Python suite
 generates what its tools emit for a set of calls, with the Galaxy replies they
 were answered with (`uv run python -m tests.envelope_fixtures`), and the MCP
-server and the CLI each replay all 68 of those cases against those replies and
+server and the CLI each replay all 89 of those cases against those replies and
 compare keys, `data`, `count` and `pagination` exactly, plus `message` for the
 nine listings above. Nothing is skipped on either surface, the pages the budget
 cut included -- which is also why `galaxy-cli` measures the budget against the
 compact line the other surfaces measure and prints indented afterwards, rather
 than measuring its own indentation and cutting a shorter page than MCP would
 for the same call.
+
+### What is inside `data` is the Python server's (#NNN)
+
+The envelope PR settled the shape around the payload -- `data`, `success`,
+`message`, `count`, `pagination` -- and left the payload itself alone. Three
+tools got a `count` and no golden case because their `data` did not match at
+all, and five smaller differences were written down and not acted on. This is
+that list.
+
+- **Breaking:** `get_history_details` answers with `{ history, contents_summary }`
+  rather than the bare history record. `data.history` is what Galaxy sent;
+  `data.contents_summary` is `{ total_items, note }`, the number of items in the
+  history -- deleted and hidden included, which is why it costs a second request
+  -- and the sentence the Python tool puts beside it. `run()` still returns the
+  record itself.
+- **Breaking:** `get_collection_details` answers with the Python tool's
+  normalised object -- `{ collection_id, history_content_type, collection,
+  elements, elements_truncated, note }` -- rather than Galaxy's record with its
+  `elements` sliced. Each element is flattened to `{ element_index,
+  element_identifier, element_type, object_id, name, state, extension,
+  file_size }`, one level deep: a nested collection keeps its `object_id` and
+  comes back with the dataset fields empty rather than recursed into. `run()`
+  still returns Galaxy's record, truncated.
+- **Breaking:** `get_tool_run_examples` always states `requested_version`. It is
+  `null` when the caller named no version, where the key used to be absent.
+- **Breaking:** `list_history_ids` calls a history with no name `"Unnamed"`,
+  which is the word the other server uses, rather than the empty string. A name
+  Galaxy sent as `null` stays null and an empty one stays empty -- the word
+  stands in for a missing field, not for a blank one.
+- **Breaking:** `list_pages` sends the same pagination block every other listing
+  sends. It now carries `helper_text` instead of `null`, and `next_offset`
+  advances by the rows that came back rather than by the `limit` asked for, so a
+  short page no longer points past rows nobody has seen. The Python tool moved
+  first: it was the last listing there still hand-building its own block.
+- `get_workflow_input_template` builds the same slots as the other builder.
+  `step_uuid` is stated as `null` for a step with no uuid rather than left out; a
+  `step_index` Galaxy sent as null skips the step instead of falling through to
+  its id; a tool step whose `type` happens to read as an input discriminator is
+  no longer templated as an input; and an empty `parameter_type` on a param falls
+  through to the step's.
+- A workflow's steps are walked in a stated order on both servers, because a JSON
+  object has none the two languages agree on: numeric key ascending for keys that
+  are non-negative integers written canonically -- no leading zeros, no sign --
+  then the remaining keys in the order they arrived. That changes `tools_used` on
+  the four IWC operations, the `inputs` and `outputs` of
+  `get_iwc_workflow_details`, and the slot order of `get_workflow_input_template`
+  for any workflow whose step keys do not arrive sorted. The same rule says which
+  key is a step index, which retires a second skew: `1e2` and `0x10` used to be
+  read as indexes on one side and skipped on the other.
+- `searchToolsByName`, `searchToolsByKeywords` and `searchIwcWorkflows` test for
+  a substring by code point, as Python's `in` does, rather than by UTF-16 code
+  unit as `String.prototype.includes` does. A query that is half of a surrogate
+  pair no longer matches the other half of an astral character. It takes a lone
+  surrogate in the query to reach, which the JSON-RPC wire does carry.
+- Not changed, deliberately: `get_tool_panel` gains no `tool_count` or
+  `section_count` for the whole server. The Python tool has no such keys -- its
+  overview answers with `entries`, and a section entry's `tool_count` is the
+  tools directly inside that section, a sub-section neither counted nor walked
+  through. Two fixtures on a nested panel pin that.
+
+Twenty-one more golden cases, 89 in all across twenty tools, and the three tools
+the envelope PR could only count are now compared in full on both surfaces. Still
+not aligned: the `message` text of every tool but the nine listings, and the
+failure envelope. One new wrinkle in that second one -- a lone-surrogate query is
+a call the Python server cannot answer at all, because its message echoes the
+query and `pydantic_core` refuses to serialise a lone surrogate, where these
+surfaces answer with an empty page.
 
 ## 0.2.0 (unreleased)
 
