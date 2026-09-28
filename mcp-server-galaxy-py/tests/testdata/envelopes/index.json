@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 82,
+  "caseCount": 85,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -538,6 +538,27 @@
       "replies": "get_iwc_workflows/full_page.galaxy.json"
     },
     {
+      "tool": "get_iwc_workflows",
+      "case": "steps_out_of_order",
+      "note": "a workflow whose step keys arrive out of order, which decides tools_used",
+      "input": {
+        "limit": 10,
+        "offset": 0
+      },
+      "envelope": "get_iwc_workflows/steps_out_of_order.json",
+      "replies": "get_iwc_workflows/steps_out_of_order.galaxy.json"
+    },
+    {
+      "tool": "get_iwc_workflow_details",
+      "case": "steps_out_of_order",
+      "note": "one workflow's inputs and outputs, which are the step order read twice",
+      "input": {
+        "trs_id": "#workflow/github.com/iwc-workflows/wf0/main"
+      },
+      "envelope": "get_iwc_workflow_details/steps_out_of_order.json",
+      "replies": "get_iwc_workflow_details/steps_out_of_order.galaxy.json"
+    },
+    {
       "tool": "search_iwc_workflows",
       "case": "full_page",
       "note": "a page of IWC search matches",
@@ -888,6 +909,16 @@
       },
       "envelope": "get_workflow_input_template/ga_fallback.json",
       "replies": "get_workflow_input_template/ga_fallback.galaxy.json"
+    },
+    {
+      "tool": "get_workflow_input_template",
+      "case": "steps_out_of_order",
+      "note": "step keys out of order, plus two keys that are not step indexes",
+      "input": {
+        "workflow_id": "wf000003"
+      },
+      "envelope": "get_workflow_input_template/steps_out_of_order.json",
+      "replies": "get_workflow_input_template/steps_out_of_order.galaxy.json"
     },
     {
       "tool": "get_tool_citations",

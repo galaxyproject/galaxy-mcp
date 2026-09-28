@@ -52,6 +52,7 @@ from .test_helpers import (
     get_history_contents_fn,
     get_history_details_fn,
     get_invocations_fn,
+    get_iwc_workflow_details_fn,
     get_iwc_workflows_fn,
     get_tool_citations_fn,
     get_tool_panel_fn,
@@ -819,6 +820,95 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         lambda: get_iwc_workflows_fn(limit=10, offset=400),
         manifest_route,
     )
+    # Steps whose keys arrive out of order, with a key that is not an index at all.
+    # A JSON object has no order the two servers agree on, so the order tools_used
+    # comes out in is the stated one: canonical non-negative integers ascending,
+    # then the rest as they arrived. Insertion order alone would answer
+    # hisat2, multiqc, fastqc, cutadapt; ascending-everything would put cutadapt
+    # somewhere it does not belong.
+    out_of_order_steps = {
+        "2": {"type": "tool", "tool_id": "toolshed.g2.bx.psu.edu/repos/iuc/hisat2/hisat2/2.2.1"},
+        "10": {"type": "tool", "tool_id": "multiqc"},
+        "1": {"type": "tool", "tool_id": "fastqc"},
+        "x": {"type": "tool", "tool_id": "cutadapt"},
+    }
+    out_of_order_manifest = [
+        {
+            "repo": "repo0",
+            "workflows": [
+                {
+                    "trsID": "#workflow/github.com/iwc-workflows/wf0/main",
+                    "definition": {
+                        "name": "Workflow 0",
+                        "annotation": "rnaseq analysis number 0",
+                        "tags": ["transcriptomics", "rnaseq"],
+                        "license": "MIT",
+                        "creator": [{"class": "Person", "name": "IWC", "identifier": ""}],
+                        "steps": out_of_order_steps,
+                    },
+                    "readme": "Workflow 0 runs rnaseq quality control.",
+                    "categories": ["Transcriptomics"],
+                }
+            ],
+        }
+    ]
+    add(
+        "get_iwc_workflows",
+        "steps_out_of_order",
+        "a workflow whose step keys arrive out of order, which decides tools_used",
+        {"limit": 10, "offset": 0},
+        lambda: get_iwc_workflows_fn(limit=10, offset=0),
+        [route(IWC_MANIFEST_URL, out_of_order_manifest)],
+    )
+
+    # -- get_iwc_workflow_details -------------------------------------------
+    # The same steps read a second way: this tool walks them for inputs and
+    # outputs, so its two lists are the same order question again.
+    details_steps = {
+        "2": {
+            "type": "data_input",
+            "label": "Reads",
+            "annotation": "the fastq",
+            "workflow_outputs": [{"label": "copy", "output_name": "output"}],
+        },
+        "10": {"type": "parameter_input", "label": "Threads", "annotation": ""},
+        "1": {
+            "type": "tool",
+            "tool_id": "fastqc",
+            "label": "QC",
+            "workflow_outputs": [{"output_name": "html_file"}],
+        },
+        "x": {"type": "data_collection_input", "label": "Extra", "annotation": ""},
+    }
+    details_manifest = [
+        {
+            "repo": "repo0",
+            "workflows": [
+                {
+                    "trsID": "#workflow/github.com/iwc-workflows/wf0/main",
+                    "definition": {
+                        "name": "Workflow 0",
+                        "annotation": "rnaseq analysis number 0",
+                        "tags": ["transcriptomics"],
+                        "license": "MIT",
+                        "creator": [{"class": "Person", "name": "IWC", "identifier": ""}],
+                        "steps": details_steps,
+                    },
+                    "readme": "Workflow 0 runs rnaseq quality control.",
+                    "categories": ["Transcriptomics"],
+                }
+            ],
+        }
+    ]
+    add(
+        "get_iwc_workflow_details",
+        "steps_out_of_order",
+        "one workflow's inputs and outputs, which are the step order read twice",
+        {"trs_id": "#workflow/github.com/iwc-workflows/wf0/main"},
+        lambda: get_iwc_workflow_details_fn("#workflow/github.com/iwc-workflows/wf0/main"),
+        [route(IWC_MANIFEST_URL, details_manifest)],
+    )
+
     add(
         "search_iwc_workflows",
         "full_page",
@@ -1407,6 +1497,33 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
                 }
             ),
             {**wf_show, "readme": "", "help": "", "annotation": "a bare annotation"},
+        ),
+    )
+    # The same order question on the .ga path: the slots come out in step order, and
+    # the key that is not an index is not a slot. Insertion order alone would put
+    # step 2 first; treating every integer-ish key as an index would make a slot of
+    # "007", which is a key a workflow should not have.
+    add(
+        "get_workflow_input_template",
+        "steps_out_of_order",
+        "step keys out of order, plus two keys that are not step indexes",
+        {"workflow_id": "wf000003"},
+        lambda: get_workflow_input_template_fn("wf000003"),
+        wf_routes(
+            "wf000003",
+            run_model({}),
+            {
+                "a_galaxy_workflow": "true",
+                "name": "Out of order",
+                "steps": {
+                    "2": {"type": "data_input", "label": "Second", "tool_state": "{}"},
+                    "10": {"type": "data_input", "label": "Tenth", "tool_state": "{}"},
+                    "1": {"type": "data_input", "label": "First", "tool_state": "{}"},
+                    "x": {"type": "data_input", "label": "Not a step", "tool_state": "{}"},
+                    "007": {"type": "data_input", "label": "Padded", "tool_state": "{}"},
+                },
+            },
+            {**wf_show, "readme": "", "help": "", "annotation": "out of order"},
         ),
     )
 

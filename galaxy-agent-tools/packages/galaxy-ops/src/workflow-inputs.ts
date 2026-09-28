@@ -10,6 +10,7 @@
  */
 
 import { cleanReadmeSummary } from "./iwc-manifest";
+import { canonicalStepIndex, stepsInOrder } from "./workflow-steps";
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -46,9 +47,6 @@ function coerceState(toolState: unknown): Record<string, unknown> {
   }
   return {};
 }
-
-// Sentinel value for sorting non-numeric step keys to the end.
-const SORT_SENTINEL = 1e9;
 
 const INPUT_TYPE_MAP: Record<string, string> = {
   data_input: "data",
@@ -163,18 +161,10 @@ export function normalizeGaSteps(definition: Record<string, unknown>): WorkflowS
 
   const stepsRecord = steps as Record<string, unknown>;
 
-  // Sort numeric keys first (ascending), non-numeric keys to the end (then skipped).
-  const sorted = Object.entries(stepsRecord).sort(([ka], [kb]) => {
-    const ia = safeInt(ka) ?? SORT_SENTINEL;
-    const ib = safeInt(kb) ?? SORT_SENTINEL;
-    if (ia !== ib) return ia - ib;
-    return ka < kb ? -1 : ka > kb ? 1 : 0;
-  });
-
   const slots: WorkflowSlot[] = [];
-  for (const [key, step] of sorted) {
-    const index = safeInt(key);
-    if (index == null) continue; // non-numeric key -- skip
+  for (const [key, step] of stepsInOrder(stepsRecord)) {
+    const index = canonicalStepIndex(key);
+    if (index == null) continue; // not a step index -- skip
 
     const stepObj = typeof step === "object" && step !== null ? (step as Record<string, unknown>) : {};
     const inputType = INPUT_TYPE_MAP[String(stepObj["type"] ?? "")];
@@ -222,15 +212,7 @@ export function normalizeRunModel(runDict: Record<string, unknown>): WorkflowSlo
 
   let stepIter: unknown[];
   if (typeof rawSteps === "object" && rawSteps !== null && !Array.isArray(rawSteps)) {
-    // dict keyed by step index -- sort numerically, non-numeric keys to end
-    stepIter = Object.entries(rawSteps as Record<string, unknown>)
-      .sort(([ka], [kb]) => {
-        const ia = safeInt(ka) ?? SORT_SENTINEL;
-        const ib = safeInt(kb) ?? SORT_SENTINEL;
-        if (ia !== ib) return ia - ib;
-        return ka < kb ? -1 : ka > kb ? 1 : 0;
-      })
-      .map(([, v]) => v);
+    stepIter = stepsInOrder(rawSteps as Record<string, unknown>).map(([, v]) => v);
   } else {
     stepIter = Array.isArray(rawSteps) ? rawSteps : [];
   }
@@ -329,15 +311,9 @@ export function findLegacyWarnings(
   if (typeof steps !== "object" || steps == null || Array.isArray(steps)) return [];
 
   const stepsRecord = steps as Record<string, unknown>;
-  const sorted = Object.entries(stepsRecord).sort(([ka], [kb]) => {
-    const ia = safeInt(ka) ?? SORT_SENTINEL;
-    const ib = safeInt(kb) ?? SORT_SENTINEL;
-    if (ia !== ib) return ia - ib;
-    return ka < kb ? -1 : ka > kb ? 1 : 0;
-  });
 
   const warnings: Array<{ kind: string; message: string }> = [];
-  for (const [key, step] of sorted) {
+  for (const [key, step] of stepsInOrder(stepsRecord)) {
     const stepObj =
       typeof step === "object" && step !== null ? (step as Record<string, unknown>) : {};
     if (stepObj["type"] !== "tool") continue;

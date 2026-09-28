@@ -69,6 +69,7 @@ from galaxy_mcp.workflow_inputs import (
     find_legacy_warnings,
     normalize_ga_steps,
     normalize_run_model,
+    steps_in_order,
     validate_inputs,
 )
 
@@ -3386,11 +3387,18 @@ def get_iwc_workflows(limit: int = 20, offset: int = 0) -> GalaxyResult:
 
 
 def _extract_tool_names_from_steps(steps: dict) -> list[str]:
-    """Extract unique tool names from workflow steps."""
+    """Extract unique tool names from workflow steps, first use first.
+
+    The order the steps are walked in is the order the names come out in, and a
+    JSON object has no order the two servers agree on, so it is stated rather than
+    inherited: steps are visited by numeric key ascending for keys that are
+    non-negative integers written canonically (no leading zeros, no sign), then the
+    remaining keys in the order they arrived.
+    """
     tool_names = []
     seen = set()
 
-    for step_data in steps.values():
+    for _, step_data in steps_in_order(steps):
         if not isinstance(step_data, dict):
             continue
 
@@ -3668,7 +3676,9 @@ def get_iwc_workflow_details(trs_id: str) -> GalaxyResult:
         inputs = []
         outputs = []
 
-        for step_id, step_data in steps.items():
+        # Stated order rather than the dict's own, for the reason spelled out on
+        # steps_in_order: the two servers' objects do not agree on one.
+        for step_id, step_data in steps_in_order(steps):
             if not isinstance(step_data, dict):
                 continue
 

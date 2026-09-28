@@ -1,0 +1,117 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/workflows/wf000003/download",
+      "query": {
+        "style": "run"
+      },
+      "status": 200,
+      "headers": {},
+      "body": {
+        "id": "wf000001",
+        "name": "Reads QC",
+        "has_upgrade_messages": false,
+        "step_version_changes": [],
+        "steps": {}
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/workflows/wf000003/download",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "a_galaxy_workflow": "true",
+        "name": "Out of order",
+        "steps": {
+          "2": {
+            "type": "data_input",
+            "label": "Second",
+            "tool_state": "{}"
+          },
+          "10": {
+            "type": "data_input",
+            "label": "Tenth",
+            "tool_state": "{}"
+          },
+          "1": {
+            "type": "data_input",
+            "label": "First",
+            "tool_state": "{}"
+          },
+          "x": {
+            "type": "data_input",
+            "label": "Not a step",
+            "tool_state": "{}"
+          },
+          "007": {
+            "type": "data_input",
+            "label": "Padded",
+            "tool_state": "{}"
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/workflows/download/wf000003",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "a_galaxy_workflow": "true",
+        "name": "Out of order",
+        "steps": {
+          "2": {
+            "type": "data_input",
+            "label": "Second",
+            "tool_state": "{}"
+          },
+          "10": {
+            "type": "data_input",
+            "label": "Tenth",
+            "tool_state": "{}"
+          },
+          "1": {
+            "type": "data_input",
+            "label": "First",
+            "tool_state": "{}"
+          },
+          "x": {
+            "type": "data_input",
+            "label": "Not a step",
+            "tool_state": "{}"
+          },
+          "007": {
+            "type": "data_input",
+            "label": "Padded",
+            "tool_state": "{}"
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/workflows/wf000003",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "id": "wf000001",
+        "name": "Reads QC",
+        "version": 3,
+        "annotation": "out of order",
+        "readme": "",
+        "help": "",
+        "source_metadata": {
+          "trs_tool_id": "#workflow/github.com/iwc-workflows/reads-qc/main",
+          "trs_url": "https://dockstore.org/api/ga4gh/trs/v2/tools/reads-qc"
+        }
+      }
+    }
+  ]
+}

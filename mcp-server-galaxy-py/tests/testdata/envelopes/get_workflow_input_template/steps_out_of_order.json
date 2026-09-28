@@ -1,0 +1,73 @@
+{
+  "data": {
+    "inputs_template": {
+      "1": {
+        "src": "hda",
+        "id": "<dataset_id>"
+      },
+      "2": {
+        "src": "hda",
+        "id": "<dataset_id>"
+      },
+      "10": {
+        "src": "hda",
+        "id": "<dataset_id>"
+      }
+    },
+    "slots": [
+      {
+        "step_index": 1,
+        "step_uuid": null,
+        "label": "First",
+        "input_type": "data",
+        "src": "hda",
+        "accepted_formats": [],
+        "collection_type": null,
+        "parameter_type": null,
+        "optional": false
+      },
+      {
+        "step_index": 2,
+        "step_uuid": null,
+        "label": "Second",
+        "input_type": "data",
+        "src": "hda",
+        "accepted_formats": [],
+        "collection_type": null,
+        "parameter_type": null,
+        "optional": false
+      },
+      {
+        "step_index": 10,
+        "step_uuid": null,
+        "label": "Tenth",
+        "input_type": "data",
+        "src": "hda",
+        "accepted_formats": [],
+        "collection_type": null,
+        "parameter_type": null,
+        "optional": false
+      }
+    ],
+    "inputs_by": "step_index|step_uuid",
+    "warnings": [],
+    "guide": {
+      "summary": "out of order",
+      "annotation": "out of order",
+      "provenance": {
+        "version": 3,
+        "source": {
+          "trs_id": "#workflow/github.com/iwc-workflows/reads-qc/main",
+          "trs_url": "https://dockstore.org/api/ga4gh/trs/v2/tools/reads-qc"
+        }
+      },
+      "notes": [
+        "Parameter options (e.g. reference genome) resolve at run time; call again with a history_id for resolved values."
+      ]
+    }
+  },
+  "success": true,
+  "message": "Built an input template for workflow 'wf000003' (3 slot(s), source: ga-fallback). Fill inputs_template and invoke with inputs_by='step_index|step_uuid'.",
+  "count": 3,
+  "pagination": null
+}

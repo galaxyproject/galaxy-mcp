@@ -4,6 +4,7 @@ import type { GalaxyContext } from "../context";
 import { GalaxyNotFoundError } from "../errors";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
+import { stepsInOrder } from "../workflow-steps";
 
 // Extend the enriched type with details-only fields
 export interface IwcWorkflowDetail extends EnrichedIwcWorkflow {
@@ -33,7 +34,9 @@ async function run(i: In, _ctx: GalaxyContext): Promise<IwcWorkflowDetail> {
   const outputs: IwcWorkflowDetail["outputs"] = [];
 
   if (steps && !Array.isArray(steps) && typeof steps === "object") {
-    for (const [stepId, stepData] of Object.entries(steps)) {
+    // Stated order rather than the runtime's own, for the reason spelled out on
+    // stepsInOrder: the two servers' objects do not agree on one.
+    for (const [stepId, stepData] of stepsInOrder(steps as Record<string, unknown>)) {
       if (!stepData || typeof stepData !== "object") continue;
       const step = stepData as Record<string, unknown>;
       const stepType = typeof step["type"] === "string" ? step["type"] : "";

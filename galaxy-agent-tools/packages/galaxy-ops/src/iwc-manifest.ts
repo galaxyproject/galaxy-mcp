@@ -6,6 +6,7 @@
  * registration and is not exported from index.ts.
  */
 import { pySplitWhitespace, pyStrip } from "./python-str";
+import { stepsInOrder } from "./workflow-steps";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -97,14 +98,18 @@ export async function fetchIwcWorkflows(): Promise<IwcWorkflow[]> {
 // ---------------------------------------------------------------------------
 
 /**
- * Extract deduplicated tool names from workflow steps.
+ * Extract deduplicated tool names from workflow steps, first use first.
  * Mirrors Python `_extract_tool_names_from_steps`.
  *
  * `steps` may be a Record<string, unknown> (Galaxy .ga format) or an array --
- * handle both.
+ * handle both. The order the steps are walked in is the order the names come out
+ * in, so it is stated rather than inherited from the runtime's object: see
+ * `stepsInOrder`.
  */
 export function extractToolNamesFromSteps(steps: Record<string, unknown> | unknown[]): string[] {
-  const values: unknown[] = Array.isArray(steps) ? steps : Object.values(steps);
+  const values: unknown[] = Array.isArray(steps)
+    ? steps
+    : stepsInOrder(steps).map(([, step]) => step);
   const seen = new Set<string>();
   const result: string[] = [];
 
