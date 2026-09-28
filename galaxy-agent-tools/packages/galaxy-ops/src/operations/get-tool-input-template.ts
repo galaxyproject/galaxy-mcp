@@ -52,6 +52,12 @@ export const getToolInputTemplateOp: Operation<typeof input, ToolInputTemplateRe
       `Built an input template for tool '${i.toolId}'. Replace placeholders ` +
       "(e.g. <dataset_id>) and pass the result as `inputs` to run_tool.",
   }),
+  // server.py, get_tool_input_template.
+  failure: {
+    shape: "bioblend-get",
+    action: "Get tool input template",
+    context: (i) => ({ tool_id: i.toolId }),
+  },
 };
 
 register(getToolInputTemplateOp as AnyOperation);

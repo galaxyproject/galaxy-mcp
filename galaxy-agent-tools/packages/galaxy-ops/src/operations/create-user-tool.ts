@@ -67,6 +67,13 @@ export const createUserToolOp: Operation<typeof input, CreatedUserTool> = {
       pyGet(i.representation, "name", pyGet(i.representation, "id", "unknown")),
     )}'`,
   }),
+  // server.py, create_user_tool: the context names the id out of the representation with
+  // dict.get, so a representation without one reads None rather than being defaulted.
+  failure: {
+    shape: "bioblend-write",
+    action: "Create user tool",
+    context: (i) => ({ tool_id: pyGet(i.representation as Record<string, unknown>, "id", undefined) }),
+  },
 };
 
 register(createUserToolOp as AnyOperation);

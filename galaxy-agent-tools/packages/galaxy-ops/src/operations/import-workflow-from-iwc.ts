@@ -38,6 +38,12 @@ export const importWorkflowFromIwcOp: Operation<typeof input, ImportedWorkflow> 
   // server.py, import_workflow_from_iwc: the TRS id that was asked for. The id
   // Galaxy gave the imported copy is in data, which is where a caller goes next.
   project: (_out, i) => ({ message: `Successfully imported workflow '${i.trsId}'` }),
+  // server.py, import_workflow_from_iwc: two clients, so two shapes -- requests for the
+  // manifest, bioblend for the import -- and one sentence over both.
+  failure: {
+    shape: (facts) => (facts.url.includes("iwc.galaxyproject.org") ? "raise-for-status" : "bioblend-write"),
+    sentence: (text) => `Failed to import workflow from IWC: ${text}`,
+  },
 };
 
 register(importWorkflowFromIwcOp as AnyOperation);

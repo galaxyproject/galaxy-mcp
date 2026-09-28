@@ -1,6 +1,6 @@
 import type { GetJson } from "../bindings";
 import type { GalaxyContext, GalaxyVersionSource } from "../context";
-import { classifyHttp } from "../errors";
+import { httpError } from "../errors";
 import { satisfiesRequirement } from "../version";
 import { allOperations, register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
@@ -106,7 +106,7 @@ async function run(_in: Record<string, never>, ctx: GalaxyContext): Promise<Serv
   const { version, payload, error, source = "unknown" } = (await ctx.galaxyVersion?.()) ?? {};
   if (error) throw error;
   const c = await ctx.client.GET("/api/configuration", {});
-  if (c.error || !c.data) throw classifyHttp(c.response.status, c.error);
+  if (c.error || !c.data) throw httpError(c.response, c.error);
   // Sorted by name, because the other server walks a dict of requirements through
   // `sorted()` and a list in registration order would be the same set in a different order.
   const unsupported: UnsupportedTool[] = version
@@ -150,6 +150,13 @@ export const getServerInfoOp: Operation<typeof input, ServerInfo> = {
   project: (s) => {
     const { version_source: _source, ...data } = s;
     return { data, message: `Retrieved server info for ${s.url}` };
+  },
+  // server.py, get_server_info: its own sentence. The configuration is read first there,
+  // and the version after it, so a server that answers one and not the other fails on the
+  // same request on both sides.
+  failure: {
+    shape: "bioblend-get",
+    sentence: (text) => `Failed to get server information: ${text}`,
   },
 };
 

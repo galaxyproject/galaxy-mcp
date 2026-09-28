@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
-import { classifyHttp } from "../errors";
+import { httpError, GalaxyValidationError } from "../errors";
 import { pyGet, pyStr } from "../python-values";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
@@ -109,7 +109,7 @@ async function previewFor(
       { params: { path: { dataset_id: datasetId } } },
     );
     const httpOk = response.status >= 200 && response.status < 300;
-    if (error || !httpOk) throw classifyHttp(response.status, error);
+    if (error || !httpOk) throw httpError(response, error);
     // Python reads the reply with `body.get("item_data")`, so a 200 whose JSON is not an
     // object -- a list, a string, a number, null -- raises AttributeError there and comes back
     // as the preview error. Reading fields off one of those here instead would find them all
@@ -159,11 +159,42 @@ async function previewFor(
   }
 }
 
+/**
+ * What to say when the dataset could not be read: possibly that it is not a dataset.
+ *
+ * server.py, get_dataset_details: before reporting the failure it asks the collections API
+ * about the same id, and answers with the collection it found instead -- because handing a
+ * collection id to this tool is the common mistake, and "not found" sends the caller looking
+ * for a dataset that was never the thing they had. The probe is best-effort on both sides: a
+ * probe that fails leaves the original failure to speak.
+ */
+async function notADataset(
+  ctx: GalaxyContext,
+  datasetId: string,
+  failure: Error,
+): Promise<Error> {
+  try {
+    const { data, error } = await ctx.client.GET("/api/dataset_collections/{hdca_id}", {
+      params: { path: { hdca_id: datasetId }, query: { instance_type: "history" } },
+    });
+    if (error || !data) return failure;
+    const name = pyStr(pyGet(data as Record<string, unknown>, "name", "Unknown"));
+    return new GalaxyValidationError(
+      `The ID '${datasetId}' is a dataset collection, not a dataset. ` +
+        `Collection name: '${name}'. ` +
+        "Use get_collection_details(collection_id) to inspect dataset " +
+        "collections and their members.",
+    );
+  } catch {
+    return failure;
+  }
+}
+
 async function run(i: In, ctx: GalaxyContext): Promise<DatasetDetailsResult> {
   const { data, error, response } = await ctx.client.GET("/api/datasets/{dataset_id}", {
     params: { path: { dataset_id: i.datasetId } },
   });
-  if (error || !data) throw classifyHttp(response.status, error);
+  if (error || !data) throw await notADataset(ctx, i.datasetId, httpError(response, error));
   const dataset = data as DatasetDetail;
 
   const includePreview = i.includePreview ?? true;
@@ -196,6 +227,18 @@ export const getDatasetDetailsOp: Operation<typeof input, DatasetDetailsResult> 
     // `data` and this line does not repeat it.
     message: `Retrieved details for dataset '${pyStr(pyGet(d.dataset as unknown as Record<string, unknown>, "name", d.dataset_id))}'`,
   }),
+  // server.py, get_dataset_details: a 404 says what to check, and the collection the id
+  // turned out to name is refused at the throw site, because that answer needs a request.
+  failure: {
+    shape: "bioblend-get",
+    action: "Get dataset details",
+    context: (i) => ({ dataset_id: i.datasetId }),
+    sentence: (_text, status, i) =>
+      status === 404
+        ? `Dataset ID '${i.datasetId}' not found. ` +
+          "Make sure the dataset exists and you have permission to view it."
+        : undefined,
+  },
 };
 
 register(getDatasetDetailsOp as AnyOperation);

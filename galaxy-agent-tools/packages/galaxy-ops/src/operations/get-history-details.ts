@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
-import { classifyHttp } from "../errors";
+import { httpError } from "../errors";
 import { pyGet, pyStr } from "../python-values";
 import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import { register, runOperation } from "./registry";
@@ -28,13 +28,13 @@ async function run(i: In, ctx: GalaxyContext): Promise<HistoryDetail> {
   const { data, error, response } = await ctx.client.GET("/api/histories/{history_id}", {
     params: { path: { history_id: i.historyId } },
   });
-  if (error || !data) throw classifyHttp(response.status, error);
+  if (error || !data) throw httpError(response, error);
   const history = data as HistoryDetail;
   const contents = await ctx.client.GET("/api/histories/{history_id}/contents", {
     params: { path: { history_id: i.historyId } },
   });
   if (contents.error || !contents.data) {
-    throw classifyHttp(contents.response.status, contents.error);
+    throw httpError(contents.response, contents.error);
   }
   recordFact(ctx, contentsCount, Array.isArray(contents.data) ? contents.data.length : 0);
   return history;
@@ -71,6 +71,19 @@ export const getHistoryDetailsOp: Operation<typeof input, HistoryDetail> = {
       message: `Retrieved details for history '${pyStr(pyGet(h as Record<string, unknown>, "name", i.historyId))}'`,
       count: total,
     };
+  },
+  // server.py, get_history_details: a 404 keeps the tool's own sentence, which says which id
+  // was not found and that this argument is a string rather than a history object -- passing
+  // the repr of one is the mistake that brings people here. Anything else goes through
+  // format_error.
+  failure: {
+    shape: "bioblend-get",
+    action: "Get history details",
+    context: (i) => ({ history_id: i.historyId }),
+    sentence: (_text, status, i) =>
+      status === 404
+        ? `History ID '${i.historyId}' not found. Make sure to pass a valid history ID string.`
+        : undefined,
   },
 };
 

@@ -2,7 +2,7 @@
 // We route it through legacyGet, which handles the any-cast internally and throws typed errors.
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
-import { classifyHttp, GalaxyNotFoundError } from "../errors";
+import { httpError, GalaxyNotFoundError } from "../errors";
 import { legacyGet } from "../legacy";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
@@ -39,10 +39,12 @@ type In = { datasetId: string; historyId?: string };
 
 async function run(i: In, ctx: GalaxyContext): Promise<GetJobDetailsResult> {
   let jobId: string | undefined;
+  // What provenance said, kept rather than thrown. The other server holds this failure back
+  // and only reports it if the fallback ALSO fails or finds no job: a dataset whose
+  // provenance record is out of reach still names its creating job, and answering with the
+  // provenance failure there would refuse a question that had an answer.
+  let provenanceError: unknown;
 
-  // Try provenance path if historyId supplied (off-schema; routed through legacyGet).
-  // 404 means the provenance record doesn't exist -- fall through to dataset lookup.
-  // Any other error (401/403/5xx) is a real problem and must surface to the caller.
   if (i.historyId) {
     try {
       const prov = await legacyGet<ProvenanceResponse>(ctx, "/api/histories/{history_id}/contents/{dataset_id}/provenance", {
@@ -50,10 +52,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetJobDetailsResult> {
       });
       jobId = prov.job_id;
     } catch (err) {
-      if (!(err instanceof GalaxyNotFoundError)) {
-        throw err;
-      }
-      // 404: provenance not available, fall through to dataset creating_job path
+      provenanceError = err;
     }
     // Also fall through if provenance returned 200 but had no job_id
   }
@@ -63,15 +62,21 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetJobDetailsResult> {
     const { data, error, response } = await ctx.client.GET("/api/datasets/{dataset_id}", {
       params: { path: { dataset_id: i.datasetId } },
     });
-    if (error || !data) throw classifyHttp(response.status, error);
+    if (error || !data) throw provenanceError ?? httpError(response, error);
     jobId = (data as DatasetMeta).creating_job;
-    if (!jobId) throw classifyHttp(404, { err_msg: `No job found for dataset ${i.datasetId}` });
+    if (!jobId) {
+      if (provenanceError) throw provenanceError;
+      throw new GalaxyNotFoundError(
+        `No job information found for dataset '${i.datasetId}'. ` +
+          "The dataset may not have been created by a job.",
+      );
+    }
   }
 
   const { data: jobData, error: jobError, response: jobResp } = await ctx.client.GET("/api/jobs/{job_id}", {
     params: { path: { job_id: jobId } },
   });
-  if (jobError || !jobData) throw classifyHttp(jobResp.status, jobError);
+  if (jobError || !jobData) throw httpError(jobResp, jobError);
 
   return {
     job: jobData as JobDetail,
@@ -89,6 +94,21 @@ export const getJobDetailsOp: Operation<typeof input, GetJobDetailsResult> = {
   // server.py, get_job_details: the dataset that was asked about, not the job that
   // was found for it -- the job's id is in `data`.
   project: (out) => ({ message: `Retrieved job details for dataset '${out.dataset_id}'` }),
+  // server.py, _job_details_failed: every failure here is described from the exception that
+  // actually failed, and a 404 keeps the tool's own sentence because a 404 from the jobs API
+  // is as likely to be a permission problem as a missing dataset. The two routes are asked
+  // through two different clients over there -- bioblend for the dataset and provenance,
+  // requests itself for the job -- so they do not word a failure the same way.
+  failure: {
+    shape: (facts) => (facts.url.includes("/api/jobs/") ? "raise-for-status" : "bioblend-get"),
+    action: "Get job details",
+    context: (i) => ({ dataset_id: i.datasetId }),
+    sentence: (_text, status, i) =>
+      status === 404
+        ? `Dataset ID '${i.datasetId}' not found or job not accessible. ` +
+          "Make sure the dataset exists and you have permission to view it."
+        : undefined,
+  },
 };
 
 register(getJobDetailsOp as AnyOperation);

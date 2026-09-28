@@ -54,7 +54,7 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 
 | Tool | Parameter | Cases | Python | TypeScript | Built-in | Difference | Status | Why |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `cancel_workflow_invocation` |  | `1` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
+| `cancel_workflow_invocation` |  | `2` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
 | `connect` |  | `0` | `write (tag)` | -- | `write (mcp default)` | `missing-ts-tool` | `intentional` | TS takes the Galaxy URL and key when the server is built, so there is no per-session connect call to expose. |
 | `connect` | `api_key` |  | `type=string required=false default=none` | -- | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours takes the key as an argument, because connect is the tool that establishes a session; the built-in's api_key is the per-call credential the comparison drops everywhere. So this row is the one place the dropped parameter is a real difference in what the tool does. |
 | `connect` | `url` |  | `type=string required=false default=none` | -- | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours points the session at a Galaxy; the built-in is served BY one, so there is no URL to take. |
@@ -70,17 +70,17 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `download_dataset` | `use_default_filename` |  | `type=boolean required=false default=true` | `type=boolean required=false default=true` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours can name the file after the dataset; Galaxy's has no local file to name. |
 | `get_collection_details` |  | `4` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_collection_details` | `max_elements` |  | `type=integer required=false default=100` | `type=integer required=false default=100` | `type=integer required=false default=500` | `vs built-in: default-mismatch` | `unreviewed-gap` | Both cap the elements returned and the caps differ: 100 here, 500 there. |
-| `get_dataset_details` |  | `7` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
+| `get_dataset_details` |  | `8` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_dataset_details` | `include_preview` |  | `type=boolean required=false default=true` | `type=boolean required=false default=true` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours can put the first N lines of the dataset's text in the answer, read through get_content_as_text; Galaxy's serialises the `detailed` view, which carries `peek` -- the stored few-line snippet Galaxy renders for text-like datatypes -- but no way to ask for the content itself or to leave the peek out. |
 | `get_dataset_details` | `preview_lines` |  | `type=integer required=false default=10` | `type=integer required=false default=10` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | How many lines ours reads; Galaxy's `peek` is a fixed snippet with no line count to choose. |
-| `get_histories` |  | `9` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
+| `get_histories` |  | `10` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_histories` | `limit` |  | `type=integer required=false default=none` | `type=integer required=false default=none` | `type=integer required=false default=50` | `vs built-in: default-mismatch` | `unreviewed-gap` | Ours declares no default and returns every history; Galaxy's pages at 50. |
-| `get_history_contents` |  | `4` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
+| `get_history_contents` |  | `6` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_history_contents` | `deleted` |  | `type=boolean required=false default=false` | `type=boolean required=false default=false` | `type=boolean required=false default=none` | `vs built-in: default-mismatch` | `unreviewed-gap` | Ours defaults to excluding deleted items; Galaxy's passes None through and lets the API decide. |
 | `get_history_contents` | `visible` |  | `type=boolean required=false default=true` | `type=boolean required=false default=true` | `type=boolean required=false default=none` | `vs built-in: default-mismatch` | `unreviewed-gap` | Ours defaults to visible items only; Galaxy's passes None through and lets the API decide. |
-| `get_history_details` |  | `3` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
+| `get_history_details` |  | `4` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_invocation_details` |  | `0` | -- | -- | `write (mcp default)` | `vs built-in: missing-py-tool` | `unreviewed-gap` | Only Galaxy's. The same reading exists here inside get_invocations, which returns one invocation's detail when it is given invocation_id. |
-| `get_invocations` |  | `3` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
+| `get_invocations` |  | `4` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_invocations` | `invocation_id` |  | `type=string required=false default=none` | `type=string required=false default=none` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours takes an invocation id and returns that one invocation's detail; Galaxy's splits that into get_invocation_details. |
 | `get_invocations` | `limit` |  | `type=integer required=false default=none` | `type=integer required=false default=none` | `type=integer required=false default=50` | `vs built-in: default-mismatch` | `unreviewed-gap` | Ours declares no default; Galaxy's pages at 50. |
 | `get_invocations` | `offset` |  | -- | -- | `type=integer required=false default=0` | `vs built-in: missing-py-param` | `unreviewed-gap` | Galaxy's pages with limit+offset; ours takes limit only. |
@@ -90,21 +90,21 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `get_iwc_workflows` |  | `5` | `read (tag)` | `read (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here, and it is a browse listing rather than a dump: limit/offset over projected summaries, cut short again when a page would not fit the output budget. Galaxy's server can rank the manifest against a query (search_iwc_workflows) and fetch one entry whole (get_iwc_workflow_details), but nothing there pages the catalogue without a query. |
 | `get_job_details` |  | `3` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_job_status` |  | `0` | -- | -- | `write (mcp default)` | `vs built-in: missing-py-tool` | `unreviewed-gap` | Only Galaxy's, and what it adds is an entry point rather than runtime. get_job_status calls jobs_service.show(full=False) (lib/galaxy/agents/operations.py:318), which is view_show_job -> Job.to_dict("element"): id, state, exit_code, create_time, update_time, tool_id, tool_version, galaxy_version, command_version, history_id, plus params and input/output ids. No runtime and no job metrics -- metrics need full=true and an admin -- and update_time minus create_time is not a runtime, because it includes the time the job sat queued. The gap is the id: a job is reachable here only through get_job_details(dataset_id), which resolves the job from the dataset's provenance and then reads the same non-full job, so an agent holding a job id from run_tool has nowhere to take it. |
-| `get_page` |  | `4` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
+| `get_page` |  | `5` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_page_revision` |  | `3` | `read (tag), requires >=26.1` | `read (hint), requires >=26.1` | `write (mcp default)` |  |  |  |
 | `get_page_revision` | `include_rendered` |  | -- | -- | `type=boolean required=false default=false` | `vs built-in: missing-py-param` | `unreviewed-gap` | Galaxy's can return the rendered revision beside the editable one; ours returns the editable text and says which source it came from. |
 | `get_server_info` |  | `4` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_tool_citations` |  | `2` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
-| `get_tool_details` |  | `2` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
+| `get_tool_details` |  | `3` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_tool_input_template` |  | `2` | `read (tag)` | `read (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Galaxy's server has no pre-flight skeleton for run_tool, so an agent there shapes `inputs` from get_tool_details(io_details=True) by hand. |
-| `get_tool_panel` |  | `7` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
+| `get_tool_panel` |  | `8` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_tool_panel` | `limit` |  | `type=integer required=false default=100` | `type=integer required=false default=100` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours pages the panel, because the whole tree is far more than a model can read; Galaxy's returns the whole thing. |
 | `get_tool_panel` | `offset` |  | `type=integer required=false default=0` | `type=integer required=false default=0` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | The other half of that window; Galaxy's returns the whole panel. |
 | `get_tool_panel` | `section_id` |  | `type=string required=false default=none` | `type=string required=false default=none` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours drills into one section by id; Galaxy's has no drill-in. |
 | `get_tool_panel` | `view` |  | -- | -- | `type=string required=false default=none` | `vs built-in: missing-py-param` | `unreviewed-gap` | Galaxy's can ask for an admin-configured named panel view; ours always reads the standard panel. |
-| `get_tool_run_examples` |  | `3` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
-| `get_user` |  | `2` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
-| `get_workflow_details` |  | `3` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
+| `get_tool_run_examples` |  | `4` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
+| `get_user` |  | `3` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
+| `get_workflow_details` |  | `5` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_workflow_input_template` |  | `7` | `read (tag)` | `read (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Same gap before invoke_workflow: no template, no run guide, no input validation on that side. |
 | `import_workflow_from_iwc` |  | `1` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
 | `invoke_workflow` |  | `3` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
@@ -122,7 +122,7 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `list_user_tools` |  | `4` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `list_user_tools` | `limit` |  | `type=integer required=false default=25` | `type=integer required=false default=25` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours pages the list; Galaxy's returns every user-defined tool. |
 | `list_user_tools` | `offset` |  | `type=integer required=false default=0` | `type=integer required=false default=0` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | The other half of that window; Galaxy's has none. |
-| `list_workflows` |  | `4` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
+| `list_workflows` |  | `5` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `list_workflows` | `name` |  | `type=string required=false default=none` | `type=string required=false default=none` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours filters by name; Galaxy's filters with `search`, which runs its structured workflow query over names, tags and owners. |
 | `list_workflows` | `published` |  | `type=boolean required=false default=false` | `type=boolean required=false default=false` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | One flag under two names: `published` here, `show_published` there, same default. |
 | `list_workflows` | `search` |  | -- | -- | `type=string required=false default=none` | `vs built-in: missing-py-param` | `unreviewed-gap` | Galaxy's hands the term to WorkflowManager.index_query, which parses it: a bare word matches the name, a tag or the owner, and `name:`/`tag:`/`user:`/`is:` narrow it. A word that appears only in a workflow's annotation is not found. Ours filters name only, through `name`. |
@@ -140,10 +140,10 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `search_tools_by_keywords` |  | `4` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `search_tools_by_keywords` | `limit` |  | `type=integer required=false default=50` | `type=integer required=false default=50` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours pages the matches; Galaxy's returns them all. |
 | `search_tools_by_keywords` | `offset` |  | `type=integer required=false default=0` | `type=integer required=false default=0` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | The other half of that window; Galaxy's has none. |
-| `search_tools_by_name` |  | `6` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
+| `search_tools_by_name` |  | `7` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `search_tools_by_name` | `limit` |  | `type=integer required=false default=25` | `type=integer required=false default=25` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours pages the matches; Galaxy's returns them all. |
 | `search_tools_by_name` | `offset` |  | `type=integer required=false default=0` | `type=integer required=false default=0` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | The other half of that window; Galaxy's has none. |
-| `update_history` |  | `2` | `write (tag)` | `write (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Galaxy's server can create a history and read it, but cannot rename, annotate, tag, publish or delete one. |
+| `update_history` |  | `4` | `write (tag)` | `write (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Galaxy's server can create a history and read it, but cannot rename, annotate, tag, publish or delete one. |
 | `update_page` |  | `2` | `write (tag), requires >=26.1` | `write (hint), requires >=26.1` | `write (mcp default)` |  |  |  |
 | `upload_file` |  | `0` | `write (tag)` | `write (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Galaxy's server uploads only from a URL; there is no tool for a local path (the tus upload). |
 | `upload_file_from_url` |  | `0` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |

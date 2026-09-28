@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from contextlib import ExitStack
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -46,6 +47,7 @@ from galaxy_mcp import server
 from galaxy_mcp.server import GalaxyResult, galaxy_state
 from galaxy_mcp.version import clear_version_cache
 
+from .mcp_session import LiveMCPSession
 from .test_helpers import (
     cancel_workflow_invocation_fn,
     create_history_fn,
@@ -120,11 +122,20 @@ def route(
     headers: dict[str, str] | None = None,
     status: int = 200,
     method: str = "GET",
+    body_text: str | None = None,
 ) -> dict[str, Any]:
     """One canned Galaxy reply.
 
     ``query`` is only set where a case needs two answers from one path; a route that
     declares none answers any query on that path.
+
+    ``body_text`` serves those exact bytes instead of a JSON rendering of ``body``, and
+    is what every failure route uses. It has to: a failure sentence quotes the reply
+    body -- twice, for a bioblend GET, once as a Python ``bytes`` repr and once as text
+    -- so the two sides have to be answered with the same bytes and not merely with the
+    same value. ``json.dumps`` writes ``{"a": 1}`` and ``JSON.stringify`` writes
+    ``{"a":1}``, which is a sentence two bytes apart for a reason that has nothing to do
+    with either server.
     """
     return {
         "method": method,
@@ -132,7 +143,9 @@ def route(
         "query": query or {},
         "status": status,
         "headers": headers or {},
-        "body": body,
+        # One or the other, never both: a route whose bytes matter says so, and a reader
+        # cannot then wonder which of two spellings of the same reply was served.
+        **({"body": body} if body_text is None else {"bodyText": body_text}),
     }
 
 
@@ -151,8 +164,14 @@ class Case:
     # The tool's arguments in this server's parameter names, which is what the MCP wire
     # takes -- so the other side calls the tool with this object unchanged.
     input: dict[str, Any]
-    call: Callable[[], GalaxyResult]
+    # How to make the call, for a case that succeeds. A failure case leaves this out and
+    # is driven by name through a real MCP client instead -- see ``run_case``.
+    call: Callable[[], GalaxyResult] | None
     routes: list[dict[str, Any]] = field(default_factory=list)
+    # Whether this case pins a failure. A success is pinned as the envelope the tool
+    # built; a failure has no envelope to pin, so what is written down is the tool result
+    # the MCP wire carries.
+    failure: bool = False
 
 
 # How a section below adds one case: the same six arguments ``cases()`` takes, so a
@@ -160,6 +179,10 @@ class Case:
 AddCase = Callable[
     [str, str, str, dict[str, Any], Callable[[], GalaxyResult], list[dict[str, Any]]], None
 ]
+
+# The same, for a failure: no callable, because a failure case is driven by tool name and
+# arguments through a real MCP client rather than by calling the function.
+AddFailure = Callable[[str, str, str, dict[str, Any], list[dict[str, Any]]], None]
 
 
 # ---------------------------------------------------------------------------
@@ -1758,6 +1781,19 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
     mutation_cases(add)
     biocontainer_cases(add)
 
+    def add_failure(
+        tool: str,
+        name: str,
+        note: str,
+        inp: dict[str, Any],
+        routes: list[dict[str, Any]],
+    ) -> None:
+        out.append(
+            Case(tool=tool, name=name, note=note, input=inp, call=None, routes=routes, failure=True)
+        )
+
+    failure_cases(add_failure)
+
     return out
 
 
@@ -3292,6 +3328,210 @@ def biocontainer_cases(add: AddCase) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Failures
+#
+# A tool that fails raises, and what a client reads is not an envelope at all: FastMCP
+# turns the exception into a tool result with ``isError`` and one text block carrying
+# `Error calling tool '<name>': ` and then the tool's own sentence. Measured, not assumed
+# -- see ``failure_json``.
+#
+# Every route here spells its reply out as bytes rather than as a value. The sentences
+# quote what Galaxy said, and a bioblend GET quotes it twice: once as a Python ``bytes``
+# repr and once as text. Two JSON writers that agree on the value and disagree on the
+# spaces would put the two surfaces two bytes apart for a reason belonging to neither.
+# ---------------------------------------------------------------------------
+
+# One error body, spelled the way Galaxy spells one: MessageExceptionModel is
+# {err_msg, err_code} and nothing else.
+DENIED = '{"err_msg": "History is not accessible by user", "err_code": 403002}'
+MISSING = '{"err_msg": "History not found", "err_code": 404001}'
+BROKEN = '{"err_msg": "Uncaught exception in exposed API method:", "err_code": 0}'
+
+
+def fail(
+    path: str,
+    status: int,
+    body: str,
+    *,
+    method: str = "GET",
+    query: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """A route that answers with an error, byte for byte."""
+    return route(path, None, status=status, method=method, query=query, body_text=body)
+
+
+def failure_cases(add: AddFailure) -> None:
+    http_failure_cases(add)
+    refusal_cases(add)
+
+
+def http_failure_cases(add: AddFailure) -> None:
+    """What a tool says when Galaxy refuses the request it made.
+
+    The sentence is ``format_error``'s, and the middle of it is the exception's own text,
+    which is the client library's rather than this server's. Three shapes reach it:
+
+    * a bioblend client GET, which reports `GET: error <status>: <bytes>, 0 attempts left:
+      <text>` -- the body twice, and the attempt counter of a default max_get_attempts
+      of 1;
+    * a bioblend write, which reports `Unexpected HTTP status code: <status>: <text>`;
+    * a raw ``make_get_request`` followed by ``raise_for_status``, which reports requests'
+      own `<status> Client Error: <reason> for url: <url>`.
+
+    A case per shape, and per status class where the hint differs.
+    """
+    # -- the bioblend GET shape ---------------------------------------------
+    add(
+        "get_workflow_details",
+        "not_found",
+        "a 404 from a bioblend GET: the not-found hint, and a context with a None in it",
+        {"workflow_id": "w0000404"},
+        [fail("/api/workflows/w0000404", 404, MISSING)],
+    )
+    add(
+        "get_workflow_details",
+        "server_error",
+        "a 500 from the same request, which picks the other hint",
+        {"workflow_id": "w0000500"},
+        [fail("/api/workflows/w0000500", 500, BROKEN)],
+    )
+    add(
+        "get_tool_details",
+        "unauthorized",
+        "a 401, whose hint is about the API key",
+        {"tool_id": "cat1"},
+        [fail("/api/tools/cat1", 401, DENIED)],
+    )
+    add(
+        "get_history_contents",
+        "permission_denied",
+        "a 403, whose hint is about the account",
+        {"history_id": "h0000403"},
+        [fail("/api/histories/h0000403/contents", 403, DENIED)],
+    )
+    add(
+        "get_tool_run_examples",
+        "refused_without_a_hint",
+        "a 400, which no hint speaks to -- so the sentence is the text and the context",
+        {"tool_id": "cat1"},
+        [fail("/api/tools/cat1/test_data", 400, DENIED)],
+    )
+    add(
+        "get_user",
+        "unauthorized",
+        "the tool's own sentence, which takes neither a hint nor a context",
+        {},
+        [fail("/api/users/current", 401, DENIED)],
+    )
+    add(
+        "get_histories",
+        "server_error",
+        "the tool's own sentence, with its own advice after the exception text",
+        {},
+        [fail("/api/histories", 500, BROKEN)],
+    )
+    # -- the bioblend write shape ------------------------------------------
+    add(
+        "update_history",
+        "refused_by_galaxy",
+        "a 400 from a PUT: no hint, and this tool passes no context",
+        {"history_id": "h0000400", "name": "renamed"},
+        [fail("/api/histories/h0000400", 400, DENIED, method="PUT")],
+    )
+    add(
+        "cancel_workflow_invocation",
+        "not_found",
+        "a 404 from a DELETE, which reports the write shape and takes the hint",
+        {"invocation_id": "i0000404"},
+        [fail("/api/invocations/i0000404", 404, MISSING, method="DELETE")],
+    )
+    # -- the raise_for_status shape ----------------------------------------
+    add(
+        "get_page",
+        "not_found",
+        "requests' own text, which names the URL it could not read",
+        {"page_id": "p0000404"},
+        [fail("/api/pages/p0000404", 404, MISSING)],
+    )
+    # -- an error body under a 200 -----------------------------------------
+    add(
+        "get_invocations",
+        "error_body_under_a_200",
+        "Galaxy answers 200 with a MessageExceptionModel, which is refused as an error",
+        {},
+        [
+            route(
+                "/api/invocations",
+                {"err_msg": "History is not accessible by user", "err_code": 403002},
+            )
+        ],
+    )
+
+
+def refusal_cases(add: AddFailure) -> None:
+    """What a tool says before it asks Galaxy anything, or instead of answering.
+
+    These sentences are the server's own from end to end -- no exception text, no hint and
+    no context -- so they are the ones a port has to get exactly right on its own.
+    """
+    add(
+        "list_workflows",
+        "limit_above_the_ceiling",
+        "the page ceiling, with the advice to use offset that a pageable tool gets",
+        {"limit": 5000},
+        [],
+    )
+    add(
+        "get_history_contents",
+        "limit_below_one",
+        "the floor, on a listing with no ceiling",
+        {"history_id": "h0001", "limit": 0},
+        [],
+    )
+    add(
+        "search_tools_by_name",
+        "negative_offset",
+        "the offset floor",
+        {"query": "cat", "offset": -1},
+        [],
+    )
+    add(
+        "get_history_details",
+        "not_found",
+        "the tool's own 404 sentence, which says what kind of argument it wanted",
+        {"history_id": "h0000404"},
+        [fail("/api/histories/h0000404", 404, MISSING)],
+    )
+    add(
+        "get_tool_panel",
+        "no_such_section",
+        "a refusal after a request that succeeded",
+        {"section_id": "not-a-section"},
+        [route("/api/tools", panel_sections(2, 2))],
+    )
+    add(
+        "update_history",
+        "nothing_to_update",
+        "no field to change, refused before anything is sent",
+        {"history_id": "h0001"},
+        [],
+    )
+    add(
+        "get_dataset_details",
+        "is_a_collection",
+        "the id turned out to name a collection, which the tool says by name",
+        {"dataset_id": "c0001"},
+        [
+            fail("/api/datasets/c0001", 404, MISSING),
+            route(
+                "/api/dataset_collections/c0001",
+                {"id": "c0001", "name": "My collection", "collection_type": "list"},
+            ),
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
 # Running and writing
 # ---------------------------------------------------------------------------
 
@@ -3326,8 +3566,16 @@ def _clear_recommendation_cache() -> None:
         mulled_recommend._cache.clear()
 
 
-def run_case(case: Case) -> GalaxyResult:
-    """Answer this case's requests from its table and return what the tool built."""
+def run_case(case: Case, session: LiveMCPSession | None = None) -> GalaxyResult | dict[str, Any]:
+    """Answer this case's requests from its table and return what the tool answered.
+
+    A success case calls the tool function and the envelope it built is what gets written
+    down. A failure case is driven through ``session`` -- a real in-memory MCP client --
+    because there is no envelope to write down: the tool raises, FastMCP turns the
+    exception into a tool result with ``isError`` and one text block, and that result is
+    the only thing a client ever sees. Calling the function directly would pin the
+    exception instead, which is not what crosses the wire.
+    """
     _reset_caches()
     gi = GalaxyInstance(url=GALAXY_BASE_URL, key=PLACEHOLDER_KEY)
     previous = galaxy_state.copy()
@@ -3339,10 +3587,10 @@ def run_case(case: Case) -> GalaxyResult:
             # Most specific first: `responses` takes the first registration that matches,
             # and the TypeScript replay picks the same one by the same rule.
             for spec in sorted(case.routes, key=lambda r: -len(r["query"])):
+                body = spec.get("bodyText")
                 mock.add(
                     method=spec["method"],
                     url=absolute(spec["path"]),
-                    json=spec["body"],
                     status=spec["status"],
                     headers=spec["headers"],
                     match=(
@@ -3350,7 +3598,16 @@ def run_case(case: Case) -> GalaxyResult:
                         if spec["query"]
                         else []
                     ),
+                    **(
+                        {"body": body, "content_type": "application/json"}
+                        if body is not None
+                        else {"json": spec["body"]}
+                    ),
                 )
+            if case.failure:
+                assert session is not None, "a failure case needs an MCP session"
+                return session.wire_result(case.tool, case.input)
+            assert case.call is not None, "a success case needs something to call"
             return case.call()
     finally:
         galaxy_state.clear()
@@ -3362,6 +3619,46 @@ def envelope_json(result: GalaxyResult) -> str:
     """The envelope as FastMCP sends it, re-indented so a diff is readable."""
     sent = pydantic_core.to_json(result, fallback=str)
     return json.dumps(json.loads(sent), indent=2, ensure_ascii=False) + "\n"
+
+
+# What FastMCP prefixes a tool's own message with on its way out. Measured rather than
+# assumed (fastmcp 3.4.2, `mask_error_details` False by default): a tool that raises
+# anything other than a ToolError reaches the client as
+# `ToolError(f"Error calling tool {name!r}: {e}")`, and that is the text the content block
+# carries. The prefix belongs to the MCP surface and not to the tool, so it is stripped
+# off here as well as written out -- a surface with no FastMCP under it says the sentence
+# on its own, and the two halves are kept apart rather than left for a reader to guess at.
+def tool_error_prefix(tool: str) -> str:
+    return f"Error calling tool {tool!r}: "
+
+
+def failure_json(case: Case, result: dict[str, Any]) -> str:
+    """A failed call, as the wire carries it, plus the tool's own sentence."""
+    blocks = result.get("content") or []
+    assert result.get("isError") is True, f"{case.tool}/{case.name} did not fail: {result}"
+    assert len(blocks) == 1, f"{case.tool}/{case.name} answered {len(blocks)} content blocks"
+    text = blocks[0]["text"]
+    prefix = tool_error_prefix(case.tool)
+    assert text.startswith(prefix), f"{case.tool}/{case.name} is not wrapped: {text!r}"
+    return (
+        json.dumps(
+            {
+                "$comment": (
+                    "A failed tool call from the Python MCP server -- do not edit by hand. "
+                    f"Regenerate with `{REGENERATE_COMMAND}`. `result` is the CallToolResult "
+                    "the MCP wire carries, dumped the way the SDK dumps it (by alias, JSON "
+                    "mode, None-valued fields left out). `sentence` is the same text with "
+                    "FastMCP's own wrapper removed, which is what the tool itself said."
+                ),
+                "outcome": "failure",
+                "result": result,
+                "sentence": text[len(prefix) :],
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n"
+    )
 
 
 def replies_json_for(case: Case) -> str:
@@ -3398,35 +3695,54 @@ def build() -> dict[str, str]:
     # weigh. The first case to use a table owns the file; the rest of the index
     # points at it.
     by_replies: dict[str, str] = {}
-    for case in cases():
-        result = run_case(case)
-        replies = replies_json_for(case)
-        path = by_replies.get(replies)
-        if path is None:
-            path = f"{case.tool}/{case.name}.galaxy.json"
-            by_replies[replies] = path
-            files[path] = replies
-        files[f"{case.tool}/{case.name}.json"] = envelope_json(result)
-        index.append(
-            {
-                "tool": case.tool,
-                "case": case.name,
-                "note": case.note,
-                "input": case.input,
-                "envelope": f"{case.tool}/{case.name}.json",
-                "replies": path,
-            }
+    all_cases = cases()
+    # One client for every failure case, because one connection means one session id and
+    # the session-scoped connection store then does its job across the calls -- the same
+    # reasoning tests/mcp_session.py is built on. Opened only when something needs it.
+    with ExitStack() as stack:
+        session = (
+            stack.enter_context(LiveMCPSession())
+            if any(case.failure for case in all_cases)
+            else None
         )
+        for case in all_cases:
+            result = run_case(case, session)
+            replies = replies_json_for(case)
+            path = by_replies.get(replies)
+            if path is None:
+                path = f"{case.tool}/{case.name}.galaxy.json"
+                by_replies[replies] = path
+                files[path] = replies
+            if case.failure:
+                assert isinstance(result, dict)
+                files[f"{case.tool}/{case.name}.json"] = failure_json(case, result)
+            else:
+                assert isinstance(result, GalaxyResult)
+                files[f"{case.tool}/{case.name}.json"] = envelope_json(result)
+            index.append(
+                {
+                    "tool": case.tool,
+                    "case": case.name,
+                    "note": case.note,
+                    "outcome": "failure" if case.failure else "success",
+                    "input": case.input,
+                    "envelope": f"{case.tool}/{case.name}.json",
+                    "replies": path,
+                }
+            )
     files["index.json"] = (
         json.dumps(
             {
                 "$comment": (
                     "Generated golden envelopes from the Python MCP server -- do not edit by "
                     f"hand. Regenerate with `{REGENERATE_COMMAND}`. `input` is spelled in the "
-                    "server's own parameter names, which is what the MCP wire takes."
+                    "server's own parameter names, which is what the MCP wire takes. A case "
+                    'whose `outcome` is "failure" pins the tool result a failed call '
+                    "answers with instead of an envelope."
                 ),
                 "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
                 "caseCount": len(index),
+                "failureCaseCount": sum(1 for row in index if row["outcome"] == "failure"),
                 "cases": index,
             },
             indent=2,

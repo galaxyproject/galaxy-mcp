@@ -50,6 +50,12 @@ export const getToolCitationsOp: Operation<typeof input, ToolCitationsResult> = 
     message: `Retrieved ${out.citations.length} citations for tool '${i.toolId}'`,
     count: out.citations.length,
   }),
+  // server.py, get_tool_citations.
+  failure: {
+    shape: "bioblend-get",
+    action: "Get tool citations",
+    context: (i) => ({ tool_id: i.toolId }),
+  },
 };
 
 register(getToolCitationsOp as AnyOperation);

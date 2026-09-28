@@ -17,6 +17,13 @@
  * Nothing is skipped, the cut cases included. This surface measures the budget
  * on the compact line the other two measure and prints indented afterwards, so
  * a page is cut at the same row wherever it is read.
+ *
+ * A failure case is compared differently, because this surface's failure shape is its own
+ * and not the other server's. There is no FastMCP here to turn a raised exception into an
+ * MCP error result, and a command line has to say something an exit code can be read off:
+ * so a failure prints `{success: false, message, errorKind}` and what parity means is the
+ * SENTENCE -- the same words the other server's tool said, with nothing of FastMCP's
+ * wrapper around it. `errorKind` stays, because the exit code hangs on it.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -36,23 +43,33 @@ interface Route {
   query: Record<string, string>;
   status: number;
   headers: Record<string, string>;
-  body: unknown;
+  /** The reply as a value, for a route whose exact bytes do not matter. */
+  body?: unknown;
+  /** The reply as bytes, for a route that feeds a sentence quoting the body. */
+  bodyText?: string;
 }
 
 interface CaseEntry {
   tool: string;
   case: string;
   note: string;
+  outcome: "success" | "failure";
   input: Record<string, unknown>;
   envelope: string;
   replies: string;
+}
+
+/** A failed call on the other server: the wire result, and the tool's own sentence. */
+interface FailureCase {
+  sentence: string;
 }
 
 const readJson = <T>(name: string): T =>
   JSON.parse(readFileSync(fileURLToPath(new URL(name, FIXTURES)), "utf8")) as T;
 
 const index = readJson<{ cases: CaseEntry[] }>("index.json");
-const replayable = index.cases;
+const replayable = index.cases.filter((c) => c.outcome === "success");
+const failures = index.cases.filter((c) => c.outcome === "failure");
 
 /** The canned replies, matched the way the generator registered them. */
 function replier(baseUrl: string, routes: Route[]): typeof fetch {
@@ -86,7 +103,7 @@ function replier(baseUrl: string, routes: Route[]): typeof fetch {
         headers: { "content-type": "application/json" },
       });
     }
-    return new Response(JSON.stringify(target.body), {
+    return new Response(target.bodyText ?? JSON.stringify(target.body), {
       status: target.status,
       headers: { "content-type": "application/json", ...target.headers },
     });
@@ -187,6 +204,43 @@ describe("the CLI's json envelope is the Python server's", () => {
       expect(printed.pagination, "pagination").toEqual(expected.pagination);
       expect(typeof printed.message, "message").toBe("string");
       expect(printed.message, "message").toEqual(expected.message);
+    },
+  );
+});
+
+describe("the CLI's json failure says what the Python server's tool said", () => {
+  it("has cases to check", () => {
+    expect(failures.length).toBeGreaterThan(10);
+  });
+
+  it.each(failures.map((c) => [`${c.tool} / ${c.case}`, c] as const))(
+    "%s",
+    async (_label, entry) => {
+      const expected = readJson<FailureCase>(entry.envelope);
+      const replies = readJson<{ baseUrl: string; routes: Route[] }>(entry.replies);
+      const op = allOperations.find((o) => o.name === entry.tool);
+      expect(op, `no op named ${entry.tool}`).toBeDefined();
+      const { __resetIwcCacheForTest } = await import("../../galaxy-ops/src/iwc-manifest");
+      const { __clearRecommendationCacheForTest } = await import("../../galaxy-ops/src/mulled");
+      __resetIwcCacheForTest();
+      __clearRecommendationCacheForTest();
+
+      const run = await runCli(
+        argvFor(op!, entry.input),
+        replies.baseUrl,
+        replier(replies.baseUrl, replies.routes),
+      );
+      const printed = JSON.parse(run.stdout) as Record<string, unknown>;
+      expect(printed.success, "success").toBe(false);
+      expect(printed.message, "the sentence").toEqual(expected.sentence);
+      // The shape is this surface's own, and it is the whole of it: no data, no count, no
+      // pagination, and a kind for the exit code to be read off.
+      expect(Object.keys(printed).sort(), "the failure's keys").toEqual([
+        "errorKind",
+        "message",
+        "success",
+      ]);
+      expect(run.exitCode, "the exit code").not.toBe(0);
     },
   );
 });

@@ -77,6 +77,13 @@ export const runUserToolOp: Operation<typeof input, UserToolRun> = {
       `Started user tool '${readFact(facts, userToolId) ?? ""}' (UUID: ${i.toolUuid}) ` +
       `in history '${i.historyId}'`,
   }),
+  // server.py, run_user_tool: the lookup is a raw GET it checks itself and the run is a
+  // bioblend write, so which sentence a caller reads depends on which of the two failed.
+  failure: {
+    shape: (facts) => (facts.method === "GET" ? "raise-for-status" : "bioblend-write"),
+    action: "Run user tool",
+    context: (i) => ({ history_id: i.historyId, tool_uuid: i.toolUuid }),
+  },
 };
 
 register(runUserToolOp as AnyOperation);

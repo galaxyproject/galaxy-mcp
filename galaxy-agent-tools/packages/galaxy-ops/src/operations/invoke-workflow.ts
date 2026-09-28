@@ -295,6 +295,18 @@ export const invokeWorkflowOp: Operation<typeof input, InvokeWorkflowResult> = {
   // what came back -- one invocation or the list a batch expanded to, the ids are in
   // data either way.
   project: (_out, i) => ({ message: `Invoked workflow '${i.workflowId}'` }),
+  // server.py, invoke_workflow: a bioblend write, with every argument that decides where the
+  // run went in the context.
+  failure: {
+    shape: "bioblend-write",
+    action: "Invoke workflow",
+    context: (i) => ({
+      workflow_id: i.workflowId,
+      history_id: i.historyId,
+      history_name: i.historyName,
+      inputs_by: i.inputsBy ?? "step_index",
+    }),
+  },
 };
 
 register(invokeWorkflowOp as AnyOperation);

@@ -71,6 +71,9 @@ export const listUserToolsOp: Operation<typeof input, Paged<UserTool>> = {
     // The other server's noun, on the wire only.
     pagination: wirePagination(withNoun(out.pagination, "user tools")),
   }),
+  // server.py, list_user_tools: a raw GET whose status it checks itself, so requests' own
+  // text is what the sentence quotes. format_error with two arguments -- no context.
+  failure: { shape: "raise-for-status", action: "List user tools" },
 };
 
 register(listUserToolsOp as AnyOperation);

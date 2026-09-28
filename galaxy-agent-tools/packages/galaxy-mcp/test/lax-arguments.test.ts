@@ -121,8 +121,12 @@ describe("an integer argument, decoded the way the other surface decodes it", ()
     // Decoding and validating are different jobs: "0" is a number here and not a page there.
     const { isError, text } = await call("list_history_ids", { limit: "0" as never });
     expect(isError).toBe(true);
-    expect(text).toContain("limit must be at least 1 (got 0)");
-    expect(text).toContain('"errorKind":"validation"');
+    // A refusal goes out as an MCP error carrying the sentence and nothing else -- no
+    // envelope, so no errorKind on the wire. The kind is still on the op's own error, which
+    // is what the CLI reads its exit code off; see galaxy-ops' errors.test.ts.
+    expect(text).toBe(
+      "Error calling tool 'list_history_ids': limit must be at least 1 (got 0)",
+    );
   });
 
   it.each(INTEGERS_ACCEPTED)("puts %j on the wire as %i", async (given, want) => {

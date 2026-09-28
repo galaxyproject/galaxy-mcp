@@ -60,6 +60,8 @@ export const listHistoryIdsOp: Operation<typeof input, Paged<HistoryRef>> = {
     count: out.items.length,
     pagination: wirePagination(out.pagination),
   }),
+  // server.py, list_history_ids: its own sentence over the same listing get_histories reads.
+  failure: { shape: "bioblend-get", sentence: (text) => `Failed to list history IDs: ${text}` },
 };
 
 register(listHistoryIdsOp as AnyOperation);

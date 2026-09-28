@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
-import { classifyHttp } from "../errors";
+import { httpError } from "../errors";
 import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import { paginationInfo, wirePagination } from "./pagination";
 import type { PageSummary } from "./pages-common";
@@ -56,7 +56,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<PageSummary[]> {
       },
     },
   });
-  if (error || !data) throw classifyHttp(response.status, error);
+  if (error || !data) throw httpError(response, error);
   const pages = data as PageSummary[];
   // Number(null) is 0, which would report an empty server rather than an absent
   // header, so the missing case is checked before the parse. No header means the
@@ -97,6 +97,13 @@ export const listPagesOp: Operation<typeof input, PageSummary[]> = {
       }),
     ),
   }),
+  // server.py, list_pages: a raw GET plus raise_for_status, so requests names the URL --
+  // which means the two sides have to have asked Galaxy the same question, query and all.
+  failure: {
+    shape: "raise-for-status",
+    action: "List pages",
+    context: (i) => ({ history_id: i.historyId }),
+  },
 };
 
 register(listPagesOp as AnyOperation);

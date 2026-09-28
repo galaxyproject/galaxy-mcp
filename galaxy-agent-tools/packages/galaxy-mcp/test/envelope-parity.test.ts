@@ -21,6 +21,12 @@
  *
  * Key ORDER is not part of the contract. JSON objects are unordered, no client
  * depends on it, and neither side promises one.
+ *
+ * A case whose `outcome` is "failure" pins something else entirely, because a failed call
+ * carries no envelope: the other server raises, FastMCP turns the exception into a tool
+ * result with `isError` and one text block, and the fixture holds that result as the wire
+ * carries it. Those cases are compared whole -- the blocks, their text byte for byte, and
+ * the flag -- because the text IS the answer there and there is nothing else in it.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -46,16 +52,31 @@ interface Route {
   query: Record<string, string>;
   status: number;
   headers: Record<string, string>;
-  body: unknown;
+  /** The reply as a value, for a route whose exact bytes do not matter. */
+  body?: unknown;
+  /**
+   * The reply as bytes, for a route whose do. A failure sentence quotes the body -- twice,
+   * for a bioblend GET, once as a Python `bytes` repr -- so a route that feeds one has to
+   * answer both sides with the same bytes and not merely with the same value.
+   */
+  bodyText?: string;
 }
 
 interface CaseEntry {
   tool: string;
   case: string;
   note: string;
+  outcome: "success" | "failure";
   input: Record<string, unknown>;
   envelope: string;
   replies: string;
+}
+
+/** A failed call as the other server's wire carries it, plus the tool's own sentence. */
+interface FailureCase {
+  outcome: "failure";
+  result: { content: Array<{ type: string; text: string }>; isError: true };
+  sentence: string;
 }
 
 const readJson = <T>(name: string): T =>
@@ -102,7 +123,7 @@ function replier(baseUrl: string, routes: Route[]): typeof fetch {
         headers: { "content-type": "application/json" },
       });
     }
-    return new Response(JSON.stringify(target.body), {
+    return new Response(target.bodyText ?? JSON.stringify(target.body), {
       status: target.status,
       headers: { "content-type": "application/json", ...target.headers },
     });
@@ -114,7 +135,7 @@ async function callThroughMcp(
   baseUrl: string,
   tool: string,
   args: Record<string, unknown>,
-): Promise<{ parsed: Record<string, unknown>; isError: boolean }> {
+): Promise<{ content: Array<{ type: string; text?: string }>; isError: boolean }> {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const server = buildServer({ baseUrl, apiKey: "envelope-parity-not-a-key" });
   const client = new Client({ name: "envelope-parity", version: "0" });
@@ -124,8 +145,7 @@ async function callThroughMcp(
       content: Array<{ type: string; text?: string }>;
       isError?: boolean;
     };
-    const text = result.content.map((c) => c.text ?? "").join("");
-    return { parsed: JSON.parse(text) as Record<string, unknown>, isError: result.isError === true };
+    return { content: result.content, isError: result.isError === true };
   } finally {
     await client.close();
     await server.close();
@@ -138,23 +158,33 @@ afterEach(() => {
   __clearRecommendationCacheForTest();
 });
 
+const successes = index.cases.filter((c) => c.outcome === "success");
+const failures = index.cases.filter((c) => c.outcome === "failure");
+
+/** Point the runtime at this case's canned Galaxy, from nothing remembered. */
+function arrange(replies: { baseUrl: string; routes: Route[] }): void {
+  __resetIwcCacheForTest();
+  __clearRecommendationCacheForTest();
+  vi.stubGlobal("fetch", replier(replies.baseUrl, replies.routes));
+}
+
 describe("the MCP envelope is the Python server's", () => {
   it("has cases to check", () => {
     expect(index.cases.length).toBe(index.caseCount);
-    expect(index.cases.length).toBeGreaterThan(40);
+    expect(successes.length).toBeGreaterThan(40);
   });
 
-  it.each(index.cases.map((c) => [`${c.tool} / ${c.case}`, c] as const))(
+  it.each(successes.map((c) => [`${c.tool} / ${c.case}`, c] as const))(
     "%s",
     async (_label, entry) => {
       const expected = readJson<Record<string, unknown>>(entry.envelope);
       const replies = readJson<{ baseUrl: string; routes: Route[] }>(entry.replies);
-      __resetIwcCacheForTest();
-      __clearRecommendationCacheForTest();
-      vi.stubGlobal("fetch", replier(replies.baseUrl, replies.routes));
+      arrange(replies);
 
-      const { parsed, isError } = await callThroughMcp(replies.baseUrl, entry.tool, entry.input);
-      expect(isError, JSON.stringify(parsed)).toBe(false);
+      const { content, isError } = await callThroughMcp(replies.baseUrl, entry.tool, entry.input);
+      const text = content.map((c) => c.text ?? "").join("");
+      expect(isError, text).toBe(false);
+      const parsed = JSON.parse(text) as Record<string, unknown>;
 
       expect(Object.keys(parsed).sort(), "the envelope's keys").toEqual(
         Object.keys(expected).sort(),
@@ -166,6 +196,32 @@ describe("the MCP envelope is the Python server's", () => {
       expect(typeof parsed.message, "message").toBe("string");
       expect((parsed.message as string).length).toBeGreaterThan(0);
       expect(parsed.message, "message").toEqual(expected.message);
+    },
+  );
+});
+
+describe("the MCP failure is the Python server's", () => {
+  it("has cases to check", () => {
+    expect(failures.length).toBeGreaterThan(10);
+  });
+
+  it.each(failures.map((c) => [`${c.tool} / ${c.case}`, c] as const))(
+    "%s",
+    async (_label, entry) => {
+      const expected = readJson<FailureCase>(entry.envelope);
+      const replies = readJson<{ baseUrl: string; routes: Route[] }>(entry.replies);
+      arrange(replies);
+
+      const { content, isError } = await callThroughMcp(replies.baseUrl, entry.tool, entry.input);
+      const text = content.map((c) => c.text ?? "").join("");
+      expect(isError, text).toBe(true);
+      // One block, of type text, carrying the whole answer -- not an envelope with
+      // success:false in it, which is what this surface used to send.
+      expect(content.length, "content blocks").toBe(expected.result.content.length);
+      expect(content[0]?.type, "the block's type").toBe(expected.result.content[0]?.type);
+      expect(text, "the failure text").toEqual(expected.result.content[0]?.text);
+      // And the tool's own sentence is in there, with FastMCP's wrapper in front of it.
+      expect(text.endsWith(expected.sentence), "the tool's sentence").toBe(true);
     },
   );
 });

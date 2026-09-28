@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
-import { classifyHttp, GalaxyConnectionError } from "../errors";
+import { httpError, GalaxyConnectionError } from "../errors";
 import { stripRendered, type PageDetail } from "./pages-common";
 import { pyGet, pyStr } from "../python-values";
 import { register, runOperation } from "./registry";
@@ -50,7 +50,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<PageDetail> {
   if (i.slug !== undefined) body["slug"] = i.slug;
 
   const { data, error, response } = await ctx.client.POST("/api/pages", { body: body as never });
-  if (error || !data) throw classifyHttp(response.status, error);
+  if (error || !data) throw httpError(response, error);
   return stripRendered(data as PageDetail, false);
 }
 
@@ -70,6 +70,13 @@ export const createPageOp: Operation<typeof input, PageDetail> = {
   project: (p) => ({
     message: `Created page '${pyStr(pyGet(p as unknown as Record<string, unknown>, "id", ""))}'`,
   }),
+  // server.py, create_page: a bioblend write, and the context names the history rather than
+  // the page that does not exist yet.
+  failure: {
+    shape: "bioblend-write",
+    action: "Create page",
+    context: (i) => ({ history_id: i.historyId }),
+  },
 };
 
 register(createPageOp as AnyOperation);

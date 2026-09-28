@@ -1,6 +1,7 @@
 import type { ZodRawShape } from "zod";
 import type { EnvelopeFacts, GalaxyContext } from "../context";
 import { GalaxyError, GalaxyVersionError } from "../errors";
+import { pyFormatError, pyLibraryText } from "../python-failure";
 import { parseRequirement, requirementSentence, satisfiesRequirement } from "../version";
 import { trimToBudget } from "./pagination";
 import type { AnyOperation, GalaxyResult, InputOf, Operation } from "./types";
@@ -150,12 +151,44 @@ export async function runWithEnvelope<Shape extends ZodRawShape, O>(
     return envelope(op.budget ? trimToBudget(data, op.budget, (d) => serialize(envelope(d))) : data);
   } catch (err) {
     if (err instanceof GalaxyError) {
-      // The failure envelope is this surface's own and is not touched here; the two
-      // servers still report a failure differently.
-      return { data: undefined as unknown as O, success: false, message: err.message, errorKind: err.kind };
+      return {
+        data: undefined as unknown as O,
+        success: false,
+        message: pythonFailureSentence(op, err, input),
+        errorKind: err.kind,
+      };
     }
     throw err; // non-Galaxy errors are bugs -- let them surface
   }
+}
+
+/**
+ * What the Python server would have said about this failure.
+ *
+ * Its tools catch whatever their client raised and word one sentence out of three things: an
+ * action, the exception's own text, and a context dict. Only the first and third belong to
+ * the tool, so they live on the op (see FailureContract) and the middle one is rebuilt here
+ * from the reply the request left behind.
+ *
+ * A failure with no reply behind it is a refusal of ours, and its message is already the
+ * whole sentence -- the same reason the other server re-raises its own ValueErrors
+ * untouched. An op that declares no contract keeps its own short message, which is the
+ * library sentence a caller reading the result would have seen before this existed.
+ */
+export function pythonFailureSentence<Shape extends ZodRawShape, O>(
+  op: Operation<Shape, O>,
+  err: GalaxyError,
+  input: InputOf<Shape>,
+): string {
+  const facts = err.http;
+  const contract = op.failure;
+  if (!facts || !contract) return err.message;
+  const shape = typeof contract.shape === "function" ? contract.shape(facts) : contract.shape;
+  const text = pyLibraryText(shape, facts);
+  const own = contract.sentence?.(text, facts.status, input);
+  if (own !== undefined) return own;
+  if (contract.action === undefined) return text;
+  return pyFormatError(contract.action, text, facts.status, contract.context?.(input) ?? {});
 }
 
 /** The v1 registry. Populated as ops land (Tasks 8, 12, 15). */

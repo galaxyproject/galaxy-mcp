@@ -92,7 +92,7 @@ describe("get_tool_panel paging and drill-in", () => {
 
   it("tells an agent how to find the valid ids when the section is unknown", async () => {
     await expect(getToolPanel({ sectionId: "nope" }, ctxWith(serving(3, 4)))).rejects.toThrow(
-      /no tool panel section with id 'nope'.*get_tool_panel with no arguments/s,
+      /Tool panel section 'nope' not found\..*get_tool_panel\(\) with no arguments/s,
     );
   });
 
@@ -125,7 +125,7 @@ describe("get_tool_panel node classification", () => {
     expect(out.entries[0]).toEqual({ id: "s1", name: "Empty", type: "tool", description: "" });
     // And it is not a section to drill into, for the same reason: Python looks up
     // a section by the elems key, so this one is not found there either.
-    await expect(getToolPanel({ sectionId: "s1" }, ctxWith(client))).rejects.toThrow(/no tool panel section/);
+    await expect(getToolPanel({ sectionId: "s1" }, ctxWith(client))).rejects.toThrow(/not found/);
   });
 
   it("keeps a real tool whose id happens to end in _label", async () => {

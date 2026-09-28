@@ -1,5 +1,5 @@
 import type { GalaxyContext } from "../context";
-import { classifyHttp, GalaxyAuthError } from "../errors";
+import { httpError, GalaxyAuthError } from "../errors";
 import { pyGet, pyStr } from "../python-values";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
@@ -26,7 +26,7 @@ async function run(_in: Record<string, never>, ctx: GalaxyContext): Promise<Curr
   const { data, error, response } = await ctx.client.GET("/api/users/{user_id}", {
     params: { path: { user_id: "current" } },
   });
-  if (error || !data) throw classifyHttp(response.status, error);
+  if (error || !data) throw httpError(response, error);
   // The endpoint returns DetailedUserModel | AnonUserModel; the anonymous shape has
   // no id/email/username. Surface that as an auth error rather than silently
   // returning undefined fields.
@@ -47,6 +47,8 @@ export const getUserOp: Operation<typeof input, CurrentUser> = {
   // announced as "unknown". run() has already refused an anonymous reply, so the
   // fallback is unreachable on this path and is transcribed rather than relied on.
   project: (u) => ({ message: `Retrieved user info for '${pyStr(pyGet(u, "username", "unknown"))}'` }),
+  // server.py, get_user: its own sentence, with neither a hint nor a context.
+  failure: { shape: "bioblend-get", sentence: (text) => `Failed to get user: ${text}` },
 };
 
 register(getUserOp as AnyOperation);

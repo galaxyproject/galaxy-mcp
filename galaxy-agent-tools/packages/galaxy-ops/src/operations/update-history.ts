@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { PutJson } from "../bindings";
 import type { GalaxyContext } from "../context";
-import { classifyHttp, GalaxyConnectionError } from "../errors";
+import { httpError, GalaxyValidationError } from "../errors";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
@@ -34,14 +34,19 @@ async function run(i: In, ctx: GalaxyContext): Promise<UpdatedHistory> {
   if (i.published !== undefined) body["published"] = i.published;
 
   if (Object.keys(body).length === 0) {
-    throw new GalaxyConnectionError("nothing to update", 400);
+    // server.py, update_history: refused before the connection is even checked, so the
+    // sentence is the whole answer and names the fields it would have taken.
+    throw new GalaxyValidationError(
+      "No fields provided to update. Pass at least one of: " +
+        "name, annotation, tags, deleted, published.",
+    );
   }
 
   const { data, error, response } = await ctx.client.PUT("/api/histories/{history_id}", {
     params: { path: { history_id: i.historyId } },
     body: body as never,
   });
-  if (error || !data) throw classifyHttp(response.status, error);
+  if (error || !data) throw httpError(response, error);
   return data as UpdatedHistory;
 }
 
@@ -58,6 +63,8 @@ export const updateHistoryOp: Operation<typeof input, UpdatedHistory> = {
     );
     return { message: `Updated history ${i.historyId} (${changed.join(", ")})` };
   },
+  // server.py, update_history: format_error with two arguments, so nothing is appended.
+  failure: { shape: "bioblend-write", action: "Update history" },
 };
 
 register(updateHistoryOp as AnyOperation);

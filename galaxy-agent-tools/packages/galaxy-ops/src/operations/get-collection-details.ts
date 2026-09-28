@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
-import { classifyHttp } from "../errors";
+import { httpError } from "../errors";
 import { pyGet, pyStr } from "../python-values";
 import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import { register, runOperation } from "./registry";
@@ -68,7 +68,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<CollectionDetail> {
   const { data, error, response } = await ctx.client.GET("/api/dataset_collections/{hdca_id}", {
     params: { path: { hdca_id: i.collectionId } },
   });
-  if (error || !data) throw classifyHttp(response.status, error);
+  if (error || !data) throw httpError(response, error);
   // Always truncated, as on the Python side: a collection can hold thousands of
   // elements and a caller that did not ask for a limit is not asking for all of them.
   const d = data as { elements?: unknown[] };
@@ -123,6 +123,17 @@ export const getCollectionDetailsOp: Operation<typeof input, CollectionDetail> =
       // which is what the other surface counts too.
       count: elements.length,
     };
+  },
+  // server.py, get_collection_details.
+  failure: {
+    shape: "bioblend-get",
+    action: "Get collection details",
+    context: (i) => ({ collection_id: i.collectionId }),
+    sentence: (_text, status, i) =>
+      status === 404
+        ? `Collection ID '${i.collectionId}' not found. ` +
+          "Make sure the collection exists and you have permission to view it."
+        : undefined,
   },
 };
 

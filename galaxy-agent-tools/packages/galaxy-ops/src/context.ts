@@ -1,5 +1,5 @@
 import { createGalaxyClient, type GalaxyClient } from "./client";
-import { classifyHttp, GalaxyConnectionError, type GalaxyError } from "./errors";
+import { httpError, GalaxyConnectionError, type GalaxyError } from "./errors";
 import { parseGalaxyVersion, type GalaxyVersion } from "./version";
 
 export interface PollPolicy {
@@ -154,7 +154,7 @@ function versionLookup(
           rejectWhenAborted(signal),
         ]);
         if (error || !data) {
-          return { error: classifyHttp(response.status, error), source: "unknown" };
+          return { error: httpError(response, error), source: "unknown" };
         }
         const payload = data as Record<string, unknown>;
         const major = payload["version_major"];

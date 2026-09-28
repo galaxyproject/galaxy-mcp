@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
-import { classifyHttp } from "../errors";
+import { httpError } from "../errors";
 import { paginate, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
@@ -39,7 +39,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<Histories> {
   const { data, error, response } = await ctx.client.GET("/api/histories", {
     params: { query: { limit: null, offset: null } },
   });
-  if (error || !data) throw classifyHttp(response.status, error);
+  if (error || !data) throw httpError(response, error);
   const all = data as History[];
   // Exact equality, because that is what bioblend does on the other surface:
   // `[h for h in histories if h["name"] == name]`, and it filters whenever the
@@ -80,6 +80,13 @@ export const getHistoriesOp: Operation<typeof input, Histories> = {
       // windows, because a library caller wants a Paged either way.
       pagination: i.limit == null ? null : wirePagination(out.pagination),
     };
+  },
+  // server.py, get_histories: its own sentence, and its own advice after it.
+  failure: {
+    shape: "bioblend-get",
+    sentence: (text) =>
+      `Failed to get histories: ${text}. Check your connection to Galaxy and that you have ` +
+      "permission to view histories.",
   },
 };
 

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
-import { classifyHttp, GalaxyConnectionError } from "../errors";
+import { httpError, GalaxyConnectionError } from "../errors";
 import { stripRendered, type PageDetail } from "./pages-common";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
@@ -32,7 +32,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<PageDetail> {
     params: { path: { id: i.pageId } },
     body: body as never,
   });
-  if (error || !data) throw classifyHttp(response.status, error);
+  if (error || !data) throw httpError(response, error);
   return stripRendered(data as PageDetail, false);
 }
 
@@ -50,6 +50,12 @@ export const updatePageOp: Operation<typeof input, PageDetail> = {
   // server.py, update_page: the page that was updated, and not which fields moved.
   // A caller knows what it sent; the updated record is in data.
   project: (_p, i) => ({ message: `Updated page '${i.pageId}'` }),
+  // server.py, update_page: a bioblend write.
+  failure: {
+    shape: "bioblend-write",
+    action: "Update page",
+    context: (i) => ({ page_id: i.pageId }),
+  },
 };
 
 register(updatePageOp as AnyOperation);

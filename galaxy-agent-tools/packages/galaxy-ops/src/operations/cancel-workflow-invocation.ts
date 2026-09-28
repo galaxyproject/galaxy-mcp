@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
-import { classifyHttp } from "../errors";
+import { httpError } from "../errors";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
@@ -19,7 +19,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<CancelledInvocation> {
   const { data, error, response } = await ctx.client.DELETE("/api/invocations/{invocation_id}", {
     params: { path: { invocation_id: i.invocationId } },
   });
-  if (error || !data) throw classifyHttp(response.status, error);
+  if (error || !data) throw httpError(response, error);
   return { cancelled: true, invocation: data as Record<string, unknown> };
 }
 
@@ -32,6 +32,12 @@ export const cancelWorkflowInvocationOp: Operation<typeof input, CancelledInvoca
   destructive: true,
   run,
   project: (_data, i) => ({ message: `Cancelled workflow invocation '${i.invocationId}'` }),
+  // server.py, cancel_workflow_invocation.
+  failure: {
+    shape: "bioblend-write",
+    action: "Cancel workflow invocation",
+    context: (i) => ({ invocation_id: i.invocationId }),
+  },
 };
 
 register(cancelWorkflowInvocationOp as AnyOperation);

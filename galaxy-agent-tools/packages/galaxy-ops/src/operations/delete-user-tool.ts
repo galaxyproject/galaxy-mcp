@@ -30,6 +30,12 @@ export const deleteUserToolOp: Operation<typeof input, DeletedUserTool> = {
   destructive: true,
   run,
   project: (_out, i) => ({ message: `Deactivated user-defined tool '${i.uuid}'` }),
+  // server.py, delete_user_tool: a raw DELETE whose status it checks itself.
+  failure: {
+    shape: "raise-for-status",
+    action: "Delete user tool",
+    context: (i) => ({ uuid: i.uuid }),
+  },
 };
 
 register(deleteUserToolOp as AnyOperation);

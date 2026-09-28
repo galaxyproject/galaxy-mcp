@@ -72,6 +72,11 @@ export const searchIwcWorkflowsOp: Operation<typeof input, Paged<EnrichedIwcWork
     count: out.items.length,
     pagination: wirePagination(out.pagination),
   }),
+  // server.py, search_iwc_workflows: the same manifest fetch, its own sentence.
+  failure: {
+    shape: "raise-for-status",
+    sentence: (text) => `Failed to search IWC workflows: ${text}`,
+  },
 };
 
 register(searchIwcWorkflowsOp as AnyOperation);

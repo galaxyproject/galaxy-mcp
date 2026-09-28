@@ -1,7 +1,9 @@
 import { z } from "zod";
 import type { components, GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
-import { classifyHttp, GalaxyConnectionError } from "../errors";
+import { httpError, GalaxyConnectionError } from "../errors";
+import { pyFormatError } from "../python-failure";
+import { pyStr } from "../python-values";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
 
@@ -57,7 +59,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetInvocationsResult> {
     const { data, error, response } = await ctx.client.GET("/api/invocations/{invocation_id}", {
       params: { path: { invocation_id: i.invocationId } },
     });
-    if (error || !data) throw classifyHttp(response.status, error);
+    if (error || !data) throw httpError(response, error);
     return data as InvocationDetail;
   }
 
@@ -79,17 +81,32 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetInvocationsResult> {
       },
     },
   });
-  if (error || !data) throw classifyHttp(response.status, error);
+  if (error || !data) throw httpError(response, error);
 
   if (!Array.isArray(data)) {
     // A 200 whose body is not a list is Galaxy reporting a problem inside the response -- the
     // err_msg shape the other ops surface. Coercing it to [] would hand the caller a failure
     // dressed up as "Retrieved 0 workflow invocations".
-    const errMsg =
-      data && typeof data === "object" && "err_msg" in data
-        ? String((data as { err_msg: unknown }).err_msg)
-        : "the invocation index did not return a list";
-    throw new GalaxyConnectionError(errMsg, response.status);
+    //
+    // server.py, _refuse_error_body: this one is worded here rather than through the op's
+    // failure contract, because it is not a failed request -- it is a reply that succeeded
+    // and said no. Python builds it from an exception it made out of err_msg, which carries
+    // no status field, so the hint falls to the text search that exception text gets.
+    const said = data && typeof data === "object" && "err_msg" in data;
+    if (said) {
+      const body = data as { err_msg: unknown; err_code?: unknown };
+      throw new GalaxyConnectionError(
+        pyFormatError(
+          "Get workflow invocations",
+          pyStr(body.err_msg),
+          null,
+          { err_code: "err_code" in body ? body.err_code : undefined },
+          { statusIsKnown: false },
+        ),
+        response.status,
+      );
+    }
+    throw new GalaxyConnectionError("the invocation index did not return a list", response.status);
   }
 
   // Whatever the index sends back for the window it was asked for. Trimming the page here
@@ -117,6 +134,12 @@ export const getInvocationsOp: Operation<typeof input, GetInvocationsResult> = {
       message: `Retrieved ${result.length} workflow invocations`,
       count: result.length,
     };
+  },
+  // server.py, get_invocations: its own sentence. An error body under a 200 is refused at the
+  // throw site instead, because that one is format_error's with a context of its own.
+  failure: {
+    shape: "bioblend-get",
+    sentence: (text) => `Failed to get workflow invocations: ${text}`,
   },
 };
 

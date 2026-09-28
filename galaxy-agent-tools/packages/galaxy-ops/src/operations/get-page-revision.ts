@@ -41,6 +41,12 @@ export const getPageRevisionOp: Operation<typeof input, PageRevisionDetails> = {
   // editable text came from is in data, under content_editor_source, which is what
   // the docstring tells a caller to read.
   project: (_rev, i) => ({ message: `Retrieved revision '${i.revisionId}' of page '${i.pageId}'` }),
+  // server.py, get_page_revision: a raw GET plus raise_for_status.
+  failure: {
+    shape: "raise-for-status",
+    action: "Get page revision",
+    context: (i) => ({ page_id: i.pageId, revision_id: i.revisionId }),
+  },
 };
 
 register(getPageRevisionOp as AnyOperation);

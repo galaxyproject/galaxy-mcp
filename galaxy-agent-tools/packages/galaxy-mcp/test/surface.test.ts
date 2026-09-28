@@ -140,16 +140,23 @@ describe("the text a tool call puts on the wire", () => {
   const envelope = { data: [{ id: "h1" }], success: true, message: "1", pagination: { total: 1 } };
 
   it("is the whole envelope, compact, in a single text block", () => {
-    const result = toolResult(envelope);
+    const result = toolResult("get_histories", envelope);
     expect(result.content).toHaveLength(1);
     expect(result.content[0]).toEqual({ type: "text", text: JSON.stringify(envelope) });
     expect(Object.keys(result).sort()).toEqual(["content", "isError"]);
   });
 
-  it("flags a failed envelope as an error without changing the text", () => {
+  it("sends a failure as an MCP error carrying the sentence, not an envelope", () => {
     const failed = { data: undefined, success: false, message: "nope", errorKind: "validation" };
-    expect(toolResult(failed)).toEqual({
-      content: [{ type: "text", text: JSON.stringify(failed) }],
+    expect(toolResult("get_histories", failed)).toEqual({
+      content: [{ type: "text", text: "Error calling tool 'get_histories': nope" }],
+      isError: true,
+    });
+  });
+
+  it("says the prefix even for a failure that lost its sentence", () => {
+    expect(toolResult("get_page", { success: false })).toEqual({
+      content: [{ type: "text", text: "Error calling tool 'get_page': " }],
       isError: true,
     });
   });

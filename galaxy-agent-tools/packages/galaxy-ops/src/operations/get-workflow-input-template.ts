@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
-import { classifyHttp } from "../errors";
+import { httpError } from "../errors";
 import { legacyGet } from "../legacy";
 import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import {
@@ -144,7 +144,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<WorkflowInputTemplate> {
       params: { path: { workflow_id: i.workflowId } },
     });
     if (!error && data) workflowShow = data as Record<string, unknown>;
-    else if (error) throw classifyHttp(response.status, error);
+    else if (error) throw httpError(response, error);
   } catch {
     // best-effort -- guide absent is fine
   }
@@ -178,6 +178,13 @@ export const getWorkflowInputTemplateOp: Operation<typeof input, WorkflowInputTe
         "and invoke with inputs_by='step_index|step_uuid'.",
       count: slots,
     };
+  },
+  // server.py, get_workflow_input_template: only the export fallback can fail there -- the
+  // run-model fetch and the two best-effort reads are swallowed on both sides.
+  failure: {
+    shape: "bioblend-get",
+    action: "Get workflow input template",
+    context: (i) => ({ workflow_id: i.workflowId }),
   },
 };
 

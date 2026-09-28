@@ -35,6 +35,12 @@ export const getToolDetailsOp: Operation<typeof input, ToolDetail> = {
   // server.py, get_tool_details: the id that was asked for. The name and the version
   // Galaxy answered with are in data, and the id here is the one to ask again with.
   project: (_t, i) => ({ message: `Retrieved details for tool '${i.toolId}'` }),
+  // server.py, get_tool_details: the flag is in the context too, as Python's bool.
+  failure: {
+    shape: "bioblend-get",
+    action: "Get tool details",
+    context: (i) => ({ tool_id: i.toolId, io_details: i.ioDetails ?? false }),
+  },
 };
 
 register(getToolDetailsOp as AnyOperation);

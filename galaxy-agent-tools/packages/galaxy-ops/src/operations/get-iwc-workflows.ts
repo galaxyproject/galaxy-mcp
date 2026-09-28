@@ -51,6 +51,12 @@ export const getIwcWorkflowsOp: Operation<typeof input, Paged<EnrichedIwcWorkflo
     count: out.items.length,
     pagination: wirePagination(out.pagination),
   }),
+  // server.py, get_iwc_workflows: the manifest is fetched with requests and checked with
+  // raise_for_status, so requests' own text is what the sentence quotes.
+  failure: {
+    shape: "raise-for-status",
+    sentence: (text) => `Failed to fetch IWC workflows: ${text}`,
+  },
 };
 
 register(getIwcWorkflowsOp as AnyOperation);

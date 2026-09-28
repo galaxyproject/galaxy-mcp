@@ -78,6 +78,12 @@ export const getIwcWorkflowDetailsOp: Operation<typeof input, IwcWorkflowDetail>
   input,
   run,
   project: (out) => ({ message: `Retrieved details for workflow '${out.name}'` }),
+  // server.py, get_iwc_workflow_details: its refusal for a trsID nobody has is raised INSIDE
+  // its try, so the tool's own sentence wraps it too -- see the throw site.
+  failure: {
+    shape: "raise-for-status",
+    sentence: (text) => `Failed to get IWC workflow details: ${text}`,
+  },
 };
 
 register(getIwcWorkflowDetailsOp as AnyOperation);

@@ -122,6 +122,14 @@ export const runToolOp: Operation<typeof input, ToolSubmission> = {
     }
     return { message: `Started tool '${i.toolId}'${version} in history '${i.historyId}'` };
   },
+  // server.py, run_tool: the run is a bioblend write. A 400 is the status Galaxy rejects a
+  // tool form with, and that failure gets the input-shape explanation rather than the bare
+  // sentence -- see the throw site.
+  failure: {
+    shape: "bioblend-write",
+    action: "Run tool",
+    context: (i) => ({ history_id: i.historyId, tool_id: i.toolId, inputs: i.inputs }),
+  },
 };
 
 register(runToolOp as AnyOperation);
