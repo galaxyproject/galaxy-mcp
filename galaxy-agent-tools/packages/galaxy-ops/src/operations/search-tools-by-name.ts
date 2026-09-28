@@ -38,9 +38,9 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<ToolListItem>> {
   const tools = await legacyGet<ToolListItem[]>(ctx, "/api/tools", {
     params: { query: { in_panel: false } },
   });
-  // `pyLower`, not `toLowerCase`: the other server lowercases with tables that have not
-  // been told about 55 of the code points this runtime folds, and a needle and a haystack
-  // cased differently on the two sides match differently.
+  // `pyLower`, not `toLowerCase`: the other server lowercases out of an older edition of
+  // Unicode, both the mapping and the rule that decides whether a sigma is final, and a
+  // needle and a haystack cased differently on the two sides match differently.
   const needle = pyLower(i.query);
   // A 200 carrying something other than a list is Galaxy breaking its contract.
   const matches = (Array.isArray(tools) ? tools : []).filter(

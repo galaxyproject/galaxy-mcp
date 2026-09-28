@@ -28,7 +28,8 @@ async function run(i: In, _ctx: GalaxyContext): Promise<Paged<EnrichedIwcWorkflo
   const offset = i.offset ?? 0;
   validatePagination(limit, offset, { maxLimit: MAX_LIMIT });
   const workflows = await fetchIwcWorkflows();
-  // The other server's `lower()`; this runtime's folds 55 code points it leaves alone.
+  // The other server's `lower()`; this runtime's reads a newer edition of Unicode and
+  // answers differently about what to fold and about where a word ends.
   const q = pyLower(i.query);
 
   const matches = workflows

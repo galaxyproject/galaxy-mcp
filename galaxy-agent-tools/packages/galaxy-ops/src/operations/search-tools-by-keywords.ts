@@ -89,7 +89,8 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<ToolKeywordMatch>> 
 
   const allTools = flattenTools(panel).filter((t) => t.id);
 
-  // The other server's `lower()`, which this runtime's differs from on 55 code points.
+  // The other server's `lower()`, mapping and final-sigma rule alike, which this runtime's
+  // answers differently because it reads a newer edition of Unicode.
   const needles = i.keywords.map((k) => pyLower(k));
 
   const matchesImmediately = (t: PanelNode) => {

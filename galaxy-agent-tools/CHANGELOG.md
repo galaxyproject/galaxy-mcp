@@ -124,10 +124,13 @@ key for key, on the MCP text block and on `galaxy-cli --format json` alike.
     not plain ASCII can come back in a different order or not at all. Plain ASCII
     text, which is nearly all of the IWC manifest, ranks exactly as before.
   - `searchToolsByName`, `searchToolsByKeywords` and `searchIwcWorkflows` fold
-    case with the Python server's `str.lower()` rather than `toLowerCase`, which
-    differ on 55 code points (below). A query of a capital letter Unicode gave a
-    case mapping after that server's edition no longer matches a tool named with
-    the small one -- the other server never made that match.
+    case with the Python server's `str.lower()` rather than `toLowerCase`, both
+    the mapping and the final-sigma rule (below). A query of a capital letter
+    Unicode gave a case mapping after that server's edition no longer matches a
+    tool named with the small one -- the other server never made that match --
+    and a capital sigma is final or not according to which characters that
+    server calls cased, so a tool named U+1C8A followed by U+03A3 lowercases to
+    an ordinary sigma and a query of an ordinary sigma finds it.
   - `cleanReadmeSummary` is `_clean_readme_summary`'s output now, which moves
     `readme_summary` on the four operations that enrich a manifest entry
     (`get_iwc_workflows`, `get_iwc_workflow_details`, `recommend_iwc_workflows`,
@@ -165,10 +168,26 @@ key for key, on the MCP text block and on `galaxy-cli --format json` alike.
   `packages/galaxy-ops/src/python-unicode-data.ts`, with a test comparing the two
   copies row for row. Whitespace needed no new table: `isPySpace` was already a
   written-down copy of that interpreter's 29 code points and still matches it
-  exactly, and it is now compared against the file too. Lowercasing needed 55
-  exceptions, listed in the same module. Moving to an interpreter with newer
-  tables is a deliberate regeneration and a note here, not a silent change of
-  answer.
+  exactly, and it is now compared against the file too. Lowercasing takes two
+  tables and a rule, because `str.lower()` is two things: a mapping, shipped
+  whole (1,433 code points, U+0130 to two of them), and one context-sensitive
+  case -- a capital sigma is a FINAL sigma when a cased character stands behind
+  it and none in front, with only case-ignorable characters in between. Which
+  characters those are is Unicode data again, so both sets are read off the
+  contract interpreter (4,259 cased code points in 150 ranges, 2,707
+  case-ignorable in 437) and the rule is applied over them. Nothing in
+  `pyLower` calls `toLowerCase` or a Unicode property class any more: a list of
+  exceptions only covers the code points whose own lowercase differs, and in a
+  name ending U+1C8A followed by a capital sigma neither character's own
+  lowercase differs at all -- the name still ends in a final sigma under this
+  runtime's tables and an ordinary one under that server's, which is one search
+  result against none. The tables are held
+  to the interpreter at both ends: it checks that the rule over them reproduces
+  its `lower()` for every code point in the space in four contexts each, and
+  the checked-in sample of its own output
+  (`python-lower-probes-15.0.0.json`, 6,392 strings) is what this side's copy
+  is compared against. Moving to an interpreter with newer tables is a
+  deliberate regeneration and a note here, not a silent change of answer.
 - **Not aligned yet, and not claimed to be:** the `message` text of every other
   tool, which the two servers still word differently, and the failure envelope --
   Python raises and FastMCP turns that into an MCP error, while these surfaces
@@ -178,7 +197,7 @@ key for key, on the MCP text block and on `galaxy-cli --format json` alike.
 Backed by golden fixtures rather than by reading both sides: the Python suite
 generates what its tools emit for a set of calls, with the Galaxy replies they
 were answered with (`uv run python -m tests.envelope_fixtures`), and the MCP
-server and the CLI each replay all 67 of those cases against those replies and
+server and the CLI each replay all 68 of those cases against those replies and
 compare keys, `data`, `count` and `pagination` exactly, plus `message` for the
 nine listings above. Nothing is skipped on either surface, the pages the budget
 cut included -- which is also why `galaxy-cli` measures the budget against the
