@@ -1029,6 +1029,16 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         lambda: get_tool_run_examples_fn("cat1", tool_version="1.0.0"),
         [route("/api/tools/cat1/test_data", [])],
     )
+    # No version asked for, which is still a stated one: requested_version comes back
+    # null rather than missing, because an absent key reads as "no such field".
+    add(
+        "get_tool_run_examples",
+        "no_version_asked_for",
+        "no version named, which the answer states as null rather than leaving out",
+        {"tool_id": "cat1"},
+        lambda: get_tool_run_examples_fn("cat1"),
+        [route("/api/tools/cat1/test_data", test_cases)],
+    )
 
     # -- get_collection_details ----------------------------------------------
     # The elements come back normalised rather than as Galaxy sent them: one flat

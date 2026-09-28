@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 80,
+  "caseCount": 81,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -766,6 +766,16 @@
       },
       "envelope": "get_tool_run_examples/none.json",
       "replies": "get_tool_run_examples/none.galaxy.json"
+    },
+    {
+      "tool": "get_tool_run_examples",
+      "case": "no_version_asked_for",
+      "note": "no version named, which the answer states as null rather than leaving out",
+      "input": {
+        "tool_id": "cat1"
+      },
+      "envelope": "get_tool_run_examples/no_version_asked_for.json",
+      "replies": "get_tool_run_examples/with_version.galaxy.json"
     },
     {
       "tool": "get_collection_details",
