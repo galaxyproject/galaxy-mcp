@@ -1,0 +1,30 @@
+{
+  "data": [
+    {
+      "id": "hmissing",
+      "name": "Unnamed"
+    },
+    {
+      "id": "hnull",
+      "name": null
+    },
+    {
+      "id": "hempty",
+      "name": ""
+    }
+  ],
+  "success": true,
+  "message": "Found 3 of 3 histories",
+  "count": 3,
+  "pagination": {
+    "total_items": 3,
+    "returned_items": 3,
+    "limit": 10,
+    "offset": 0,
+    "has_next": false,
+    "has_previous": false,
+    "next_offset": null,
+    "previous_offset": null,
+    "helper_text": "Showing 3 of 3 histories (offset 0). This is the last page."
+  }
+}

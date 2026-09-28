@@ -521,6 +521,26 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
     # on one surface keeps a row the other cuts. That is not a hypothetical: it is
     # what the two surfaces did here while their messages were still their own.
     boundary_histories = [{"id": f"h{i}", "name": "n" * 24_835} for i in range(2)]
+    # A history with no name at all, one whose name Galaxy sent as null, and one
+    # named the empty string. The word "Unnamed" stands in for the missing key and
+    # for nothing else, so all three have to be here to say which is which.
+    add(
+        "list_history_ids",
+        "nameless",
+        "histories with no name, a null name and an empty name, which are three answers",
+        {"limit": 10, "offset": 0},
+        lambda: list_history_ids_fn(limit=10, offset=0),
+        [
+            route(
+                "/api/histories",
+                [
+                    {"id": "hmissing", "state": "ok"},
+                    {"id": "hnull", "name": None, "state": "ok"},
+                    {"id": "hempty", "name": "", "state": "ok"},
+                ],
+            )
+        ],
+    )
     add(
         "list_history_ids",
         "budget_boundary",
