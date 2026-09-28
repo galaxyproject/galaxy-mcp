@@ -133,18 +133,20 @@ function argvFor(op: AnyOperation, input: Record<string, unknown>): string[] {
   return [op.name, ...positionals, ...options, "--format", "json"];
 }
 
-async function runCli(argv: string[], fetchImpl: typeof fetch) {
+async function runCli(argv: string[], baseUrl: string, fetchImpl: typeof fetch) {
   const out = vi.spyOn(console, "log").mockImplementation(() => {});
   const err = vi.spyOn(console, "error").mockImplementation(() => {});
-  // The context's client takes the canned fetch as an argument; the IWC manifest
-  // does not -- it goes through the global. Both are answered from the table, so
-  // no case here can reach the network.
+  // The context's client takes the canned fetch as an argument; the IWC manifest and
+  // quay.io do not -- they go through the global. All of them are answered from the
+  // table, so no case here can reach the network.
   vi.stubGlobal("fetch", fetchImpl);
   process.exitCode = 0;
   try {
     await buildProgram({
-      makeContext: () =>
-        createGalaxyContext({ baseUrl: "https://galaxy.example", apiKey: "not-a-key", fetchImpl }),
+      // The table's own base, spelled as it spells it: get_server_info answers with the
+      // address it was given, so a trailing slash dropped here would be a difference in
+      // the harness rather than in the surface.
+      makeContext: () => createGalaxyContext({ baseUrl, apiKey: "not-a-key", fetchImpl }),
     }).parseAsync(["node", "galaxy-cli", ...argv]);
     return {
       stdout: out.mock.calls.flat().join(""),
@@ -176,7 +178,11 @@ describe("the CLI's json envelope is the Python server's", () => {
       const { __resetIwcCacheForTest } = await import("../../galaxy-ops/src/iwc-manifest");
       __resetIwcCacheForTest();
 
-      const run = await runCli(argvFor(op!, entry.input), replier(replies.baseUrl, replies.routes));
+      const run = await runCli(
+        argvFor(op!, entry.input),
+        replies.baseUrl,
+        replier(replies.baseUrl, replies.routes),
+      );
       expect(run.exitCode, run.stderr || run.stdout).toBe(0);
       const printed = JSON.parse(run.stdout) as Record<string, unknown>;
 
@@ -210,7 +216,7 @@ describe("the table view still says how to page on", () => {
     const op = allOperations.find((o) => o.name === entry.tool)!;
     const argv = argvFor(op, entry.input).slice(0, -2); // drop --format json: table is the default
 
-    const run = await runCli(argv, replier(replies.baseUrl, replies.routes));
+    const run = await runCli(argv, replies.baseUrl, replier(replies.baseUrl, replies.routes));
     expect(run.stderr).toContain(expected.pagination.helper_text);
     // And the rows are a table of the page itself, not the shape around it.
     expect(run.stdout).toMatch(/id\s+name/);
@@ -224,7 +230,7 @@ describe("the table view still says how to page on", () => {
     const op = allOperations.find((o) => o.name === entry.tool)!;
     const argv = argvFor(op, entry.input).slice(0, -2);
 
-    const run = await runCli(argv, replier(replies.baseUrl, replies.routes));
+    const run = await runCli(argv, replies.baseUrl, replier(replies.baseUrl, replies.routes));
     expect(run.stdout).toMatch(/id\s+hid/);
     expect(run.stdout).not.toContain("contents");
   });

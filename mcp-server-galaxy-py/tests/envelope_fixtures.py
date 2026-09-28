@@ -75,6 +75,14 @@ REGENERATE_COMMAND = "uv run python -m tests.envelope_fixtures"
 # Where the fake Galaxy lives. The TypeScript replay uses the same base, so a route's
 # path reads the same on both sides.
 GALAXY_URL = "https://galaxy.example"
+# The same address as a connected session holds it. ``connect`` stores whatever it was
+# given with a trailing slash added, and two tools read that string rather than a
+# client's normalised copy of it: get_server_info answers with it, and get_job_details
+# joins "api/jobs/{id}" straight onto it. So a session on this Galaxy is set up here the
+# way connect would leave it, and the reply table hands the same spelling to the other
+# side -- pointing the two surfaces at one address written two ways would be a
+# difference in the fixture rather than in either server.
+GALAXY_BASE_URL = f"{GALAXY_URL}/"
 # Not a credential: every request in this module is answered by `responses`, and the
 # string exists only because bioblend wants one.
 PLACEHOLDER_KEY = "fixture-not-a-key"
@@ -1710,10 +1718,10 @@ def _reset_caches() -> None:
 def run_case(case: Case) -> GalaxyResult:
     """Answer this case's requests from its table and return what the tool built."""
     _reset_caches()
-    gi = GalaxyInstance(url=GALAXY_URL, key=PLACEHOLDER_KEY)
+    gi = GalaxyInstance(url=GALAXY_BASE_URL, key=PLACEHOLDER_KEY)
     previous = galaxy_state.copy()
     galaxy_state.update(
-        {"url": GALAXY_URL, "api_key": PLACEHOLDER_KEY, "gi": gi, "connected": True}
+        {"url": GALAXY_BASE_URL, "api_key": PLACEHOLDER_KEY, "gi": gi, "connected": True}
     )
     try:
         with responses.RequestsMock(assert_all_requests_are_fired=False) as mock:
@@ -1760,7 +1768,7 @@ def replies_json_for(case: Case) -> str:
                     "declares a query, every declared parameter must match, and the most "
                     "specific matching route wins."
                 ),
-                "baseUrl": GALAXY_URL,
+                "baseUrl": GALAXY_BASE_URL,
                 "routes": case.routes,
             },
             indent=2,
