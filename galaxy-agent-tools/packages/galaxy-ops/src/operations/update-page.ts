@@ -47,10 +47,9 @@ export const updatePageOp: Operation<typeof input, PageDetail> = {
   requires: { galaxy: ">=26.1" },
   readOnly: false,
   run,
-  project: (_p, i) => {
-    const changed = (["content", "title"] as const).filter((k) => i[k] !== undefined);
-    return { message: `Updated page ${i.pageId} (${changed.join(", ")})` };
-  },
+  // server.py, update_page: the page that was updated, and not which fields moved.
+  // A caller knows what it sent; the updated record is in data.
+  project: (_p, i) => ({ message: `Updated page '${i.pageId}'` }),
 };
 
 register(updatePageOp as AnyOperation);

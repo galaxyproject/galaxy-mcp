@@ -37,7 +37,10 @@ export const getPageRevisionOp: Operation<typeof input, PageRevisionDetails> = {
   input,
   requires: { galaxy: ">=26.1" },
   run,
-  project: (rev) => ({ message: `Revision ${rev.id} of page ${rev.page_id} (${rev.edit_source ?? "unknown"}, content_editor from ${rev.content_editor_source})` }),
+  // server.py, get_page_revision: the two ids that were asked for. Where the
+  // editable text came from is in data, under content_editor_source, which is what
+  // the docstring tells a caller to read.
+  project: (_rev, i) => ({ message: `Retrieved revision '${i.revisionId}' of page '${i.pageId}'` }),
 };
 
 register(getPageRevisionOp as AnyOperation);

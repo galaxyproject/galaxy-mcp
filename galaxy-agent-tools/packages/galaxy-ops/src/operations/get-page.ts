@@ -30,7 +30,8 @@ export const getPageOp: Operation<typeof input, PageDetail> = {
     "markdown to pass back to update_page.",
   input,
   run,
-  project: (p) => ({ message: `Page ${p.id} (${p.title})` }),
+  // server.py, get_page: the id that was asked for. The title is in data.
+  project: (_p, i) => ({ message: `Retrieved page '${i.pageId}'` }),
 };
 
 register(getPageOp as AnyOperation);

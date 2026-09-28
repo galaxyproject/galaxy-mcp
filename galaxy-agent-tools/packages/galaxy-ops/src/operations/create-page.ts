@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { classifyHttp, GalaxyConnectionError } from "../errors";
 import { stripRendered, type PageDetail } from "./pages-common";
+import { pyGet, pyStr } from "../python-values";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
@@ -63,7 +64,12 @@ export const createPageOp: Operation<typeof input, PageDetail> = {
   requires: { galaxy: ">=26.1" },
   readOnly: false,
   run,
-  project: (p) => ({ message: `Created page ${p.id} (${p.title})` }),
+  // server.py, create_page: the id of the page Galaxy made -- the one thing the
+  // caller did not have before the call -- read with dict.get and defaulted to the
+  // empty string, so a reply that carries no id still produces a sentence.
+  project: (p) => ({
+    message: `Created page '${pyStr(pyGet(p as unknown as Record<string, unknown>, "id", ""))}'`,
+  }),
 };
 
 register(createPageOp as AnyOperation);

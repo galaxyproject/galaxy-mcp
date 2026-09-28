@@ -78,7 +78,8 @@ export const listPagesOp: Operation<typeof input, PageSummary[]> = {
   requires: { galaxy: ">=26.1" },
   run,
   project: (pages, i, facts) => ({
-    message: `${pages.length} page(s)`,
+    // server.py, list_pages: the rows in hand. The total is in the pagination block.
+    message: `Retrieved ${pages.length} pages`,
     count: pages.length,
     // The shared describer, like every other listing. This one windows server-side
     // and reads its total from a header, which the describer already has a line for:
