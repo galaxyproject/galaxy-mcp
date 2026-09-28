@@ -64,14 +64,10 @@ const replayable = index.cases;
  */
 const MESSAGE_NOT_YET_COMPARED = new Set([
   "cancel_workflow_invocation",
-  "create_history",
   "create_page",
   "create_user_tool",
   "delete_user_tool",
   "get_dataset_details",
-  "get_histories",
-  "get_history_contents",
-  "get_history_details",
   "get_invocations",
   "get_job_details",
   "get_page",

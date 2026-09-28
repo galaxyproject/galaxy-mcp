@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
+import { pyGet, pyStr } from "../python-values";
 import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
@@ -61,11 +62,13 @@ export const getHistoryDetailsOp: Operation<typeof input, HistoryDetail> = {
   // own key and the count it already paid a request for under another, so a caller
   // reading `data` cannot mistake one number for the history's own metadata. run()
   // goes on returning the bare record, which is what a library caller destructures.
-  project: (h, _i, facts) => {
+  project: (h, i, facts) => {
     const total = readFact(facts, contentsCount) ?? 0;
     return {
       data: { history: h, contents_summary: { total_items: total, note: CONTENTS_NOTE } },
-      message: `History ${(h as { id?: string }).id} state=${(h as { state?: string }).state}`,
+      // server.py, get_history_details: the record's name through dict.get, so a
+      // history with no name at all is named by the id that was asked for.
+      message: `Retrieved details for history '${pyStr(pyGet(h as Record<string, unknown>, "name", i.historyId))}'`,
       count: total,
     };
   },

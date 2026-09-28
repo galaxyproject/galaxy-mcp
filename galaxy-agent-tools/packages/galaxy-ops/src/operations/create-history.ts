@@ -30,7 +30,10 @@ export const createHistoryOp: Operation<typeof input, CreatedHistory> = {
   input,
   readOnly: false,
   run,
-  project: (h) => ({ message: `Created history ${(h as { id?: string }).id} (${(h as { name?: string }).name})` }),
+  // The name that was ASKED for, which is the one server.py's sentence carries
+  // (create_history): Galaxy is free to hand back a different one, and the caller
+  // reading this line is being told what it requested went through.
+  project: (_h, i) => ({ message: `Created history '${i.historyName}'` }),
 };
 
 register(createHistoryOp as AnyOperation);

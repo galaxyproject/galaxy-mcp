@@ -137,7 +137,9 @@ export const getHistoryContentsOp: Operation<typeof input, HistoryContents> = {
   // of several should not have to remember which history it asked about.
   project: (out, i) => ({
     data: { history_id: i.historyId, contents: out.items },
-    message: `${out.items.length} of ${out.pagination.total} item(s)`,
+    // server.py, get_history_contents: the page size and nothing else. The total is
+    // in the pagination block beside it, which is where this sentence leaves it.
+    message: `Retrieved ${out.items.length} items from history`,
     count: out.items.length,
     pagination: wirePagination(out.pagination),
   }),

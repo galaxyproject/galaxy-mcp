@@ -67,7 +67,13 @@ export const getHistoriesOp: Operation<typeof input, Histories> = {
     const returned = out.items.length;
     return {
       data: out.items,
-      message: `${returned} of ${out.pagination.total} histor${out.pagination.total === 1 ? "y" : "ies"}`,
+      // Two sentences, because server.py's get_histories has two branches: a limit
+      // describes the window it returned out of what matched, and no limit has no
+      // window to describe. Neither of them is singular for one row.
+      message:
+        i.limit == null
+          ? `Retrieved ${returned} histories`
+          : `Retrieved ${returned} of ${out.pagination.total} histories`,
       count: returned,
       // No limit, no window to describe: the Python tool returns no pagination
       // block at all on that branch, and neither does this one. run() still
