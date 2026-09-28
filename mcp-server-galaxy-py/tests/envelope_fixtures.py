@@ -79,6 +79,7 @@ from .test_helpers import (
     list_pages_fn,
     list_user_tools_fn,
     list_workflows_fn,
+    recommend_biocontainer_fn,
     recommend_iwc_workflows_fn,
     revert_page_revision_fn,
     run_tool_fn,
@@ -1726,6 +1727,7 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
 
     single_record_cases(add)
     mutation_cases(add)
+    biocontainer_cases(add)
 
     return out
 
@@ -3045,6 +3047,89 @@ def revision_cases(add: AddCase) -> None:
 
 
 # ---------------------------------------------------------------------------
+# The one tool that does not talk to a Galaxy
+# ---------------------------------------------------------------------------
+
+
+def quay_repository(name: str) -> str:
+    """Where a biocontainer's tag list lives, on both sides."""
+    return f"https://quay.io/api/v1/repository/biocontainers/{name}"
+
+
+def biocontainer_cases(add: AddCase) -> None:
+    """A conda package list resolved to a built quay.io image.
+
+    The only tool here that reaches a host other than the Galaxy: quay.io answers with a
+    repository's tag list, and the recommender picks a tag from it and then asks again to
+    verify the one it picked -- two requests to one route, which one canned reply answers
+    on both sides. A single package is looked up under its own name; several are a
+    mulled-v2 repository whose name hashes the sorted package names and whose tag hashes
+    their versions. The inputs are plain ASCII with an ordinary JSON reply on purpose: the
+    accepted divergences of the port are all about codecs, charsets and timing, and these
+    cases are about the algorithm.
+    """
+    samtools_tags = {
+        "tags": {
+            "1.17--hd87286a_2": {"name": "1.17--hd87286a_2"},
+            "1.17--h00b6d6a_0": {"name": "1.17--h00b6d6a_0"},
+            "1.16.1--h6899075_1": {"name": "1.16.1--h6899075_1"},
+            "latest": {"name": "latest"},
+        }
+    }
+    samtools = route(quay_repository("samtools"), samtools_tags)
+    add(
+        "recommend_biocontainer",
+        "single_pinned",
+        "one package at a version that is built, which is an exact match",
+        {"packages": ["samtools=1.17"]},
+        lambda: recommend_biocontainer_fn(["samtools=1.17"]),
+        [samtools],
+    )
+    add(
+        "recommend_biocontainer",
+        "single_unpinned",
+        "one package with no version, so the newest built tag and a name-only match",
+        {"packages": ["samtools"]},
+        lambda: recommend_biocontainer_fn(["samtools"]),
+        [samtools],
+    )
+    add(
+        "recommend_biocontainer",
+        "version_never_built",
+        "a version nobody built, which falls back to the newest and says so in a note",
+        {"packages": ["samtools=9.9"]},
+        lambda: recommend_biocontainer_fn(["samtools=9.9"]),
+        [samtools],
+    )
+    add(
+        "recommend_biocontainer",
+        "no_such_repository",
+        "a package with no biocontainer at all: no image, and nothing to verify",
+        {"packages": ["nosuchpackage"]},
+        lambda: recommend_biocontainer_fn(["nosuchpackage"]),
+        [route(quay_repository("nosuchpackage"), {"detail": "Not Found"}, status=404)],
+    )
+    # Two packages are a mulled-v2 image: the repository name is a hash of the sorted
+    # package names and the tag is a hash of their versions, both written out here so a
+    # reader can see that the two sides hash the same thing.
+    mulled_v2 = "mulled-v2-fe8faa35dbf6dc65a0f7f5d4ea12e31a79f73e40"
+    mulled_tag = "49f21fe4737f78633ac5b610f847c089b6251c74-0"
+    add(
+        "recommend_biocontainer",
+        "two_packages",
+        "a pinned pair, which is a mulled-v2 repository and a hashed tag",
+        {"packages": ["bwa=0.7.17", "samtools=1.17"]},
+        lambda: recommend_biocontainer_fn(["bwa=0.7.17", "samtools=1.17"]),
+        [
+            route(
+                quay_repository(mulled_v2),
+                {"tags": {mulled_tag: {"name": mulled_tag}, "latest": {"name": "latest"}}},
+            )
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
 # Running and writing
 # ---------------------------------------------------------------------------
 
@@ -3058,6 +3143,14 @@ def _reset_caches() -> None:
     server._TOOL_SCHEMA_CACHE.clear()
     server._DATATYPES_MAPPING_CACHE.clear()
     clear_version_cache()
+    # The container recommender keeps a five-minute memo of every lookup, module-wide, and
+    # two cases asking about the same package would otherwise be one request and one
+    # answer. Reached inside the function because the module only exists with the
+    # container-recommend extra, which is what registers the tool at all.
+    from galaxy.tool_util.deps.mulled import recommend as mulled_recommend
+
+    with mulled_recommend._cache_lock:
+        mulled_recommend._cache.clear()
 
 
 def run_case(case: Case) -> GalaxyResult:

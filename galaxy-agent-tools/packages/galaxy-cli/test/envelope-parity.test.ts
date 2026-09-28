@@ -178,10 +178,13 @@ describe("the CLI's json envelope is the Python server's", () => {
       const replies = readJson<{ baseUrl: string; routes: Route[] }>(entry.replies);
       const op = allOperations.find((o) => o.name === entry.tool);
       expect(op, `no op named ${entry.tool}`).toBeDefined();
-      // The IWC manifest is memoised for the life of the process; a case serving
-      // its own has to start from nothing remembered.
+      // The IWC manifest and the container recommender are both memoised for the life
+      // of the process; a case serving its own manifest or its own tag list has to
+      // start from nothing remembered.
       const { __resetIwcCacheForTest } = await import("../../galaxy-ops/src/iwc-manifest");
+      const { __clearRecommendationCacheForTest } = await import("../../galaxy-ops/src/mulled");
       __resetIwcCacheForTest();
+      __clearRecommendationCacheForTest();
 
       const run = await runCli(
         argvFor(op!, entry.input),

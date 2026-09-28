@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 138,
+  "caseCount": 143,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -1552,6 +1552,67 @@
       },
       "envelope": "revert_page_revision/restored.json",
       "replies": "revert_page_revision/restored.galaxy.json"
+    },
+    {
+      "tool": "recommend_biocontainer",
+      "case": "single_pinned",
+      "note": "one package at a version that is built, which is an exact match",
+      "input": {
+        "packages": [
+          "samtools=1.17"
+        ]
+      },
+      "envelope": "recommend_biocontainer/single_pinned.json",
+      "replies": "recommend_biocontainer/single_pinned.galaxy.json"
+    },
+    {
+      "tool": "recommend_biocontainer",
+      "case": "single_unpinned",
+      "note": "one package with no version, so the newest built tag and a name-only match",
+      "input": {
+        "packages": [
+          "samtools"
+        ]
+      },
+      "envelope": "recommend_biocontainer/single_unpinned.json",
+      "replies": "recommend_biocontainer/single_pinned.galaxy.json"
+    },
+    {
+      "tool": "recommend_biocontainer",
+      "case": "version_never_built",
+      "note": "a version nobody built, which falls back to the newest and says so in a note",
+      "input": {
+        "packages": [
+          "samtools=9.9"
+        ]
+      },
+      "envelope": "recommend_biocontainer/version_never_built.json",
+      "replies": "recommend_biocontainer/single_pinned.galaxy.json"
+    },
+    {
+      "tool": "recommend_biocontainer",
+      "case": "no_such_repository",
+      "note": "a package with no biocontainer at all: no image, and nothing to verify",
+      "input": {
+        "packages": [
+          "nosuchpackage"
+        ]
+      },
+      "envelope": "recommend_biocontainer/no_such_repository.json",
+      "replies": "recommend_biocontainer/no_such_repository.galaxy.json"
+    },
+    {
+      "tool": "recommend_biocontainer",
+      "case": "two_packages",
+      "note": "a pinned pair, which is a mulled-v2 repository and a hashed tag",
+      "input": {
+        "packages": [
+          "bwa=0.7.17",
+          "samtools=1.17"
+        ]
+      },
+      "envelope": "recommend_biocontainer/two_packages.json",
+      "replies": "recommend_biocontainer/two_packages.galaxy.json"
     }
   ]
 }

@@ -1,0 +1,16 @@
+{
+  "data": {
+    "image": null,
+    "found": false,
+    "match_quality": "not_found",
+    "source": "none",
+    "notes": [
+      "no biocontainer found for 'nosuchpackage'"
+    ],
+    "verified": null
+  },
+  "success": true,
+  "message": "No biocontainer found for the requested packages",
+  "count": null,
+  "pagination": null
+}

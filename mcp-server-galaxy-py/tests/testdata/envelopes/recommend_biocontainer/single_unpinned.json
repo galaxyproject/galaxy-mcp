@@ -1,0 +1,14 @@
+{
+  "data": {
+    "image": "quay.io/biocontainers/samtools:1.17--hd87286a_2",
+    "found": true,
+    "match_quality": "name_only",
+    "source": "quay_single",
+    "notes": [],
+    "verified": true
+  },
+  "success": true,
+  "message": "Resolved quay.io/biocontainers/samtools:1.17--hd87286a_2 (name_only)",
+  "count": null,
+  "pagination": null
+}
