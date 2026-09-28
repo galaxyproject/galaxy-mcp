@@ -1,6 +1,7 @@
 """galaxy_mcp.ops is the layer that owes nothing to the caller it serves.
 
-The rule is narrow on purpose -- the standard library, and each other. A helper that needs a
+The rule is narrow on purpose -- a short list of pure-data standard-library modules, and each
+other. A helper that needs a
 client, a session or the toolbox is not this layer, whatever else it is.
 
 Two witnesses say so, and they disagree in useful ways. The static one lives in
@@ -92,8 +93,10 @@ def _interpreter_baseline() -> frozenset[str]:
 def outside_the_layer(loaded: set[str]) -> set[str]:
     """The modules in `loaded` that the layer is not allowed to have pulled in.
 
-    The allowed set is the static rule's own: the layer's subtree, and the roots the
-    allow-list names. Whatever a bare interpreter already had is not this layer's doing.
+    The allowed set here is wider than the static rule's: the layer's subtree plus the whole
+    standard library, because ``json``, ``re`` and ``typing`` pull other stdlib modules in
+    transitively and none of those is what this witness exists to catch. Whatever a bare
+    interpreter already had is not this layer's doing either.
     """
     return {
         name
@@ -182,6 +185,20 @@ def test_the_import_allow_list_is_what_stops_an_ordinary_stdlib_loader(tmp_path)
 
     assert boundary_refusals(tmp_path, OPS_PACKAGE) == {"ops_locate.py": ["pydoc"]}
     loaded = loaded_after("import ops_locate", tmp_path)
+    assert not (loaded & NEVER_LOADED)
+
+
+def test_holding_the_package_root_is_refused_before_it_can_wake_the_server(tmp_path):
+    """A bare ``import galaxy_mcp.ops.x`` binds ``galaxy_mcp``; the root answers ``mcp`` lazily,
+    so nothing loads at import time and only the static witness can catch it."""
+    (tmp_path / "ops_root.py").write_text(
+        "import galaxy_mcp.ops.tool_inputs\n\n\ndef load():\n    return galaxy_mcp.mcp\n"
+    )
+
+    assert boundary_refusals(tmp_path, OPS_PACKAGE) == {
+        "ops_root.py": [refusal("galaxy_mcp (bound by a bare import)", 1), refusal("galaxy_mcp", 5)]
+    }
+    loaded = loaded_after("import ops_root", tmp_path)
     assert not (loaded & NEVER_LOADED)
 
 
@@ -311,6 +328,19 @@ def write_fabricated_layer(layer: pathlib.Path) -> None:
         "def patched():\n"
         "    return mock.patch('galaxy_mcp.server.mcp')\n"
     )
+    # Holding the package root's name: a bare import binds it, and the root resolves the server
+    # lazily one attribute later -- deferred, so the runtime witness never sees it.
+    (layer / "root_via_import.py").write_text(
+        "import galaxy_mcp.ops.tool_inputs\n\n\ndef load():\n    return galaxy_mcp.mcp\n"
+    )
+    (layer / "root_via_annotation.py").write_text(
+        "import galaxy_mcp.ops.tool_inputs\n"
+        "from typing import get_type_hints\n\n\n"
+        "class Result:\n"
+        "    value: 'galaxy_mcp.server.GalaxyResult'\n\n\n"
+        "def load():\n"
+        "    return get_type_hints(Result)\n"
+    )
     (layer / "zip_loader.py").write_text(
         "import zipimport\n\n\n"
         "def load(archive):\n"
@@ -358,7 +388,7 @@ def test_the_check_refuses_a_reach_back_out_of_the_layer(tmp_path):
 
     assert boundary_refusals(layer, OPS_PACKAGE) == {
         "absolute_from.py": ["galaxy_mcp.server"],
-        "plain_import.py": ["galaxy_mcp.server"],
+        "plain_import.py": ["galaxy_mcp.server", refusal("galaxy_mcp (bound by a bare import)", 1)],
         "relative_from.py": ["galaxy_mcp.server"],
         "relative_sibling.py": ["galaxy_mcp.auth"],
         "escaping.py": ["..."],
@@ -441,6 +471,11 @@ def test_the_check_refuses_a_reach_back_out_of_the_layer(tmp_path):
             refusal("zipimporter", 5),
         ],
         "pydoc_locate.py": ["pydoc"],
+        "root_via_import.py": [
+            refusal("galaxy_mcp (bound by a bare import)", 1),
+            refusal("galaxy_mcp", 5),
+        ],
+        "root_via_annotation.py": [refusal("galaxy_mcp (bound by a bare import)", 1)],
         "pickle_restore.py": ["pickle"],
         "mock_patch.py": ["unittest"],
         "code_builtins.py": [
@@ -452,6 +487,9 @@ def test_the_check_refuses_a_reach_back_out_of_the_layer(tmp_path):
         "module_table.py": ["sys", refusal(MODULE_TABLE, 3)],
         "module_table_aliased.py": ["sys", refusal(MODULE_TABLE, 3)],
         "module_table_from.py": ["sys", refusal(MODULE_TABLE, 1)],
-        "nested/helper.py": ["galaxy_mcp.server"],
+        "nested/helper.py": [
+            "galaxy_mcp.server",
+            refusal("galaxy_mcp (bound by a bare import)", 1),
+        ],
         "nested/climbing_out.py": ["galaxy_mcp.server"],
     }

@@ -3,10 +3,11 @@
 A check that ran at import time would pass simply because something else had already pulled
 bioblend in, so this reads the source. Two rules, and only the first one resolves anything.
 
-**Imports that are written down** are judged against an allow-list: the standard library, the
-layer's own modules, and whatever third party the layer genuinely needs, which is nothing
-today. ``ast.Import`` and ``ast.ImportFrom``, absolute or relative, with a relative name
-resolved against the package the file itself sits in, so the same line means different things
+**Imports that are written down** are judged against an allow-list: a short list of pure-data
+standard-library modules (``ALLOWED_IMPORTS``), the layer's own modules, and whatever third
+party the layer genuinely needs, which is nothing today. ``ast.Import`` and ``ast.ImportFrom``,
+absolute or relative, with a relative name resolved against the package the file itself sits
+in, so the same line means different things
 at different depths and is judged accordingly. Everything else is refused without being named
 -- the server, the auth provider, bioblend, fastmcp, whichever HTTP client someone reaches for
 next year -- which is the point of writing it as an allow-list. Nested packages are walked
@@ -128,6 +129,14 @@ FORBIDDEN_CALLS = frozenset({"globals", "vars", "exec", "eval", "compile"})
 # Reported for any attribute named ``modules``; the table itself is the thing to stay out of.
 MODULE_TABLE = "sys.modules"
 
+# The package root. ``import galaxy_mcp.ops.tool_inputs`` binds the name ``galaxy_mcp`` in the
+# importing module, and the root resolves ``mcp`` and the tool functions lazily -- so a layer
+# module that holds that name is one attribute away from waking the server, deferred past both
+# witnesses. The layer imports its siblings with ``from ... import`` or relative imports and never
+# holds the root's name at all.
+ROOT_NAME = "galaxy_mcp"
+ROOT_BINDING = "galaxy_mcp (bound by a bare import)"
+
 
 def refusal(name: str, lineno: int) -> str:
     """How a mention of the machinery is reported."""
@@ -203,8 +212,15 @@ def machinery_mentions(tree: ast.Module) -> list[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import | ast.ImportFrom):
             found += [(line, name) for name, line in _machinery_in_import(node)]
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    root = alias.name.split(".")[0]
+                    if root == ROOT_NAME and alias.asname is None:
+                        found.append((node.lineno, ROOT_BINDING))
         elif isinstance(node, ast.Name) and node.id in MACHINERY:
             found.append((node.lineno, node.id))
+        elif isinstance(node, ast.Name) and node.id == ROOT_NAME:
+            found.append((node.lineno, ROOT_NAME))
         elif isinstance(node, ast.Attribute):
             if node.attr in MACHINERY:
                 found.append((node.lineno, node.attr))
