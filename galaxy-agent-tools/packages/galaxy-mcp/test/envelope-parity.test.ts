@@ -13,18 +13,11 @@
  * * the same keys, so a surface cannot quietly drop `count` or send `pagination`
  *   where the other sends null;
  * * `data`, `success`, `count` and `pagination` deep-equal, nulls included;
- * * `message` deep-equal for the nine tools whose page the output budget cuts:
- *   get_iwc_workflows, get_tool_panel, list_history_ids, list_user_tools,
- *   list_workflows, recommend_iwc_workflows, search_iwc_workflows,
- *   search_tools_by_keywords and search_tools_by_name. The budget is measured on
- *   the whole envelope, message included, so a sentence eleven bytes longer on
- *   one side cuts one row fewer there -- the prose is part of the contract for
- *   exactly these nine and a fixture that stops at a boundary proves it.
- * * `message` a non-empty string, but NOT compared, for every other tool:
- *   get_histories, get_history_contents, get_invocations, get_tool_citations,
- *   get_tool_run_examples, list_page_revisions and list_pages. Nothing about
- *   those answers depends on the sentence's length, and aligning the rest of the
- *   prose is still its own piece of work.
+ * * `message` deep-equal, byte for byte. The sentence is part of the contract for
+ *   every tool: it is what an agent reads first, and for the nine tools whose page
+ *   the output budget cuts it also decides where the cut falls, because the budget
+ *   is measured on the whole envelope and a sentence eleven bytes longer on one
+ *   side cuts one row fewer there.
  *
  * Key ORDER is not part of the contract. JSON objects are unordered, no client
  * depends on it, and neither side promises one.
@@ -70,17 +63,44 @@ const readJson = <T>(name: string): T =>
 
 const index = readJson<{ caseCount: number; cases: CaseEntry[] }>("index.json");
 
-/** The tools whose message is part of the contract, because their budget is. */
-const MESSAGE_PARITY = new Set([
-  "get_iwc_workflows",
-  "get_tool_panel",
-  "list_history_ids",
-  "list_user_tools",
-  "list_workflows",
-  "recommend_iwc_workflows",
-  "search_iwc_workflows",
-  "search_tools_by_keywords",
-  "search_tools_by_name",
+/**
+ * The tools whose sentence has not been carried over yet.
+ *
+ * Temporary, and it only shrinks: one commit per group of tools takes its names off
+ * this list, so each of them is checked against the other server's bytes by the
+ * commit that moves it. The list is empty by the end of the change that introduced
+ * it, and then it goes.
+ */
+const MESSAGE_NOT_YET_COMPARED = new Set([
+  "cancel_workflow_invocation",
+  "create_history",
+  "create_page",
+  "create_user_tool",
+  "delete_user_tool",
+  "get_dataset_details",
+  "get_histories",
+  "get_history_contents",
+  "get_history_details",
+  "get_invocations",
+  "get_job_details",
+  "get_page",
+  "get_page_revision",
+  "get_server_info",
+  "get_tool_citations",
+  "get_tool_details",
+  "get_tool_input_template",
+  "get_tool_run_examples",
+  "get_user",
+  "get_workflow_details",
+  "get_workflow_input_template",
+  "import_workflow_from_iwc",
+  "invoke_workflow",
+  "list_page_revisions",
+  "list_pages",
+  "revert_page_revision",
+  "run_tool",
+  "run_user_tool",
+  "update_page",
 ]);
 
 /**
@@ -185,9 +205,7 @@ describe("the MCP envelope is the Python server's", () => {
       expect(parsed.pagination, "pagination").toEqual(expected.pagination);
       expect(typeof parsed.message, "message").toBe("string");
       expect((parsed.message as string).length).toBeGreaterThan(0);
-      // Compared for the budgeted tools, because their sentence decides where the
-      // page is cut; only required to exist for the rest. See the note at the top.
-      if (MESSAGE_PARITY.has(entry.tool)) {
+      if (!MESSAGE_NOT_YET_COMPARED.has(entry.tool)) {
         expect(parsed.message, "message").toEqual(expected.message);
       }
     },

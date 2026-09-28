@@ -8,14 +8,11 @@
  * parsed, op run, `render` printing to stdout -- and the JSON it prints has to
  * parse to the same envelope.
  *
- * Compared: the keys, and `data`, `success`, `count` and `pagination` exactly.
- * `message` too for the nine tools whose page the output budget cuts --
- * get_iwc_workflows, get_tool_panel, list_history_ids, list_user_tools,
- * list_workflows, recommend_iwc_workflows, search_iwc_workflows,
- * search_tools_by_keywords and search_tools_by_name -- because the budget is
- * measured on the whole envelope and a longer sentence cuts a row. For every
- * other tool `message` only has to be a non-empty string; the rest of the prose
- * is still its own piece of work. Key order is not part of the contract.
+ * Compared: the keys, and `data`, `success`, `count`, `pagination` and `message`
+ * exactly. The sentence is part of the contract for every tool -- it is what an
+ * agent reads first, and for the nine tools whose page the output budget cuts it
+ * also decides where the cut falls, because the budget is measured on the whole
+ * envelope and a longer sentence cuts a row. Key order is not part of the contract.
  *
  * Nothing is skipped, the cut cases included. This surface measures the budget
  * on the compact line the other two measure and prints indented afterwards, so
@@ -57,17 +54,44 @@ const readJson = <T>(name: string): T =>
 const index = readJson<{ cases: CaseEntry[] }>("index.json");
 const replayable = index.cases;
 
-/** The tools whose message is part of the contract, because their budget is. */
-const MESSAGE_PARITY = new Set([
-  "get_iwc_workflows",
-  "get_tool_panel",
-  "list_history_ids",
-  "list_user_tools",
-  "list_workflows",
-  "recommend_iwc_workflows",
-  "search_iwc_workflows",
-  "search_tools_by_keywords",
-  "search_tools_by_name",
+/**
+ * The tools whose sentence has not been carried over yet.
+ *
+ * Temporary, and it only shrinks: one commit per group of tools takes its names off
+ * this list, so each of them is checked against the other server's bytes by the
+ * commit that moves it. The list is empty by the end of the change that introduced
+ * it, and then it goes.
+ */
+const MESSAGE_NOT_YET_COMPARED = new Set([
+  "cancel_workflow_invocation",
+  "create_history",
+  "create_page",
+  "create_user_tool",
+  "delete_user_tool",
+  "get_dataset_details",
+  "get_histories",
+  "get_history_contents",
+  "get_history_details",
+  "get_invocations",
+  "get_job_details",
+  "get_page",
+  "get_page_revision",
+  "get_server_info",
+  "get_tool_citations",
+  "get_tool_details",
+  "get_tool_input_template",
+  "get_tool_run_examples",
+  "get_user",
+  "get_workflow_details",
+  "get_workflow_input_template",
+  "import_workflow_from_iwc",
+  "invoke_workflow",
+  "list_page_revisions",
+  "list_pages",
+  "revert_page_revision",
+  "run_tool",
+  "run_user_tool",
+  "update_page",
 ]);
 
 /** The canned replies, matched the way the generator registered them. */
@@ -202,7 +226,7 @@ describe("the CLI's json envelope is the Python server's", () => {
       expect(printed.count, "count").toEqual(expected.count);
       expect(printed.pagination, "pagination").toEqual(expected.pagination);
       expect(typeof printed.message, "message").toBe("string");
-      if (MESSAGE_PARITY.has(entry.tool)) {
+      if (!MESSAGE_NOT_YET_COMPARED.has(entry.tool)) {
         expect(printed.message, "message").toEqual(expected.message);
       }
     },

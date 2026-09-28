@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
+import { pyGet, pyStr } from "../python-values";
 import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
@@ -30,14 +31,6 @@ type In = { collectionId: string; maxElements?: number };
  */
 const rawElementCount = envelopeFact<number>("get_collection_details.raw_element_count");
 
-/**
- * What `dict.get(key, fallback)` does: the fallback stands in for an ABSENT key and
- * for nothing else, so a field Galaxy sent as null stays null.
- */
-function get(record: Record<string, unknown>, key: string, fallback: unknown): unknown {
-  return key in record ? record[key] : fallback;
-}
-
 const asRecord = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -53,16 +46,16 @@ const asRecord = (value: unknown): Record<string, unknown> =>
  */
 function normalizeElement(element: unknown, index: number): Record<string, unknown> {
   const e = asRecord(element);
-  const object = asRecord(get(e, "object", {}));
+  const object = asRecord(pyGet(e, "object", {}));
   return {
     element_index: index,
-    element_identifier: get(e, "element_identifier", ""),
-    element_type: get(e, "element_type", ""),
-    object_id: get(object, "id", ""),
-    name: get(object, "name", ""),
-    state: get(object, "state", ""),
-    extension: get(object, "extension", ""),
-    file_size: get(object, "file_size", null),
+    element_identifier: pyGet(e, "element_identifier", ""),
+    element_type: pyGet(e, "element_type", ""),
+    object_id: pyGet(object, "id", ""),
+    name: pyGet(object, "name", ""),
+    state: pyGet(object, "state", ""),
+    extension: pyGet(object, "extension", ""),
+    file_size: pyGet(object, "file_size", null),
   };
 }
 
@@ -104,23 +97,28 @@ export const getCollectionDetailsOp: Operation<typeof input, CollectionDetail> =
     const elements = Array.isArray(record["elements"]) ? (record["elements"] as unknown[]) : [];
     const max = i.maxElements ?? MAX_ELEMENTS;
     const raw = readFact(facts, rawElementCount) ?? elements.length;
+    const collection = {
+      id: pyGet(record, "id", null),
+      name: pyGet(record, "name", null),
+      collection_type: pyGet(record, "collection_type", null),
+      element_count: pyGet(record, "element_count", 0),
+      populated: pyGet(record, "populated", true),
+      state: pyGet(record, "state", "unknown"),
+    };
     return {
       data: {
         collection_id: i.collectionId,
         history_content_type: "dataset_collection",
-        collection: {
-          id: get(record, "id", null),
-          name: get(record, "name", null),
-          collection_type: get(record, "collection_type", null),
-          element_count: get(record, "element_count", 0),
-          populated: get(record, "populated", true),
-          state: get(record, "state", "unknown"),
-        },
+        collection,
         elements: elements.map(normalizeElement),
         elements_truncated: raw > max,
         note: ELEMENTS_NOTE,
       },
-      message: `Collection ${String(get(record, "id", i.collectionId))} (${elements.length} elements)`,
+      // Read off the NORMALISED record, as the other server's sentence is
+      // (server.py, get_collection_details): its `name` key is always there, so the
+      // id it names as a fallback is unreachable and a collection Galaxy states no
+      // name for is announced as `None`.
+      message: `Retrieved collection '${pyStr(pyGet(collection, "name", i.collectionId))}'`,
       // The count is the elements actually returned -- after the truncation above --
       // which is what the other surface counts too.
       count: elements.length,
