@@ -1,5 +1,5 @@
 import type { GalaxyContext } from "../context";
-import { httpError, GalaxyAuthError } from "../errors";
+import { httpError } from "../errors";
 import { pyGet, pyStr } from "../python-values";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
