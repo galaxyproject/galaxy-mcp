@@ -110,11 +110,11 @@ key for key, on the MCP text block and on `galaxy-cli --format json` alike.
   and on that no-limit branch a negative offset is read differently by each
   server -- a divergence older than this entry, left alone deliberately rather
   than settled by a rule nobody has chosen yet.
-- **Unchanged, with three exceptions:** every operation's `run()` result,
+- **Unchanged, with four exceptions:** every operation's `run()` result,
   `Paged<T>` and its camelCase `PaginationInfo`. A TypeScript caller importing an
   op directly, and code mode with it, sees exactly what it saw before -- the same
   wire-versus-library split as the parameter-name change above -- except for the
-  three places where the library was not doing what the Python server does and so
+  four places where the library was not doing what the Python server does and so
   had to move with it:
   - `getHistoryContents` throws for the windows above instead of returning a page.
   - `recommendIwcWorkflows` tokenises intents and readmes by Unicode word
@@ -123,6 +123,11 @@ key for key, on the MCP text block and on `galaxy-cli --format json` alike.
     saying "protéomique" no longer indexes `prot`, and a ranking over text that is
     not plain ASCII can come back in a different order or not at all. Plain ASCII
     text, which is nearly all of the IWC manifest, ranks exactly as before.
+  - `searchToolsByName`, `searchToolsByKeywords` and `searchIwcWorkflows` fold
+    case with the Python server's `str.lower()` rather than `toLowerCase`, which
+    differ on 55 code points (below). A query of a capital letter Unicode gave a
+    case mapping after that server's edition no longer matches a tool named with
+    the small one -- the other server never made that match.
   - `cleanReadmeSummary` is `_clean_readme_summary`'s output now, which moves
     `readme_summary` on the four operations that enrich a manifest entry
     (`get_iwc_workflows`, `get_iwc_workflow_details`, `recommend_iwc_workflows`,
@@ -145,6 +150,25 @@ key for key, on the MCP text block and on `galaxy-cli --format json` alike.
   to nothing, rather than reporting that nothing matched -- three different
   reasons to get an empty ranking, and only one of them is the query being too
   broad. `list_history_ids` says "No histories found" for an account with none.
+- **The Unicode data is the Python server's, by table rather than by rule.** A
+  word boundary, the whitespace a summary is split on and a lowercased needle are
+  all decided by Unicode data, and the two runtimes read different editions of it
+  -- Node 22 is on 17.0, CPython 3.12 reports 15.0.0, and 9,661 code points are
+  word characters to the first and not to the second. Spelling `\w` out as
+  `[\p{L}\p{N}_]` therefore still put a word boundary in a different place on
+  each side: an intent of "rnaseq" followed by one of those letters was five
+  ranked workflows on one server and "No searchable terms in query" on the other.
+  So the tokeniser and the text helpers read a table instead, generated from the
+  contract interpreter's own answer for every code point in the space
+  (`mcp-server-galaxy-py/tests/testdata/python-unicode-15.0.0.json`, written by
+  `uv run python -m tests.python_unicode`) and copied into
+  `packages/galaxy-ops/src/python-unicode-data.ts`, with a test comparing the two
+  copies row for row. Whitespace needed no new table: `isPySpace` was already a
+  written-down copy of that interpreter's 29 code points and still matches it
+  exactly, and it is now compared against the file too. Lowercasing needed 55
+  exceptions, listed in the same module. Moving to an interpreter with newer
+  tables is a deliberate regeneration and a note here, not a silent change of
+  answer.
 - **Not aligned yet, and not claimed to be:** the `message` text of every other
   tool, which the two servers still word differently, and the failure envelope --
   Python raises and FastMCP turns that into an MCP error, while these surfaces
@@ -154,7 +178,7 @@ key for key, on the MCP text block and on `galaxy-cli --format json` alike.
 Backed by golden fixtures rather than by reading both sides: the Python suite
 generates what its tools emit for a set of calls, with the Galaxy replies they
 were answered with (`uv run python -m tests.envelope_fixtures`), and the MCP
-server and the CLI each replay all 66 of those cases against those replies and
+server and the CLI each replay all 67 of those cases against those replies and
 compare keys, `data`, `count` and `pagination` exactly, plus `message` for the
 nine listings above. Nothing is skipped on either surface, the pages the budget
 cut included -- which is also why `galaxy-cli` measures the budget against the
