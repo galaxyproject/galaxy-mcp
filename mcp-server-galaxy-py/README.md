@@ -329,7 +329,7 @@ reads the imports out of the source and refuses anything outside the standard li
 the layer's own modules, whichever way the import is written and however deep the package
 it sits in. The layer has no dynamic imports at all, so rather than work out what a call
 would load, the check refuses any mention of the machinery that could load one --
-`importlib`, `import_module`, `__import__`, `builtins`, `sys.modules`, `exec` and the like
+`importlib`, `import_module`, `__import__`, `builtins`, `pkgutil.resolve_name`, `runpy`, `sys.modules`, `exec` and the like
 -- and then imports every module of the layer in a clean interpreter to see what actually
 ended up in `sys.modules`. The dependency runs one way, so a caller imports ops and never
 the reverse. The two modules used to sit directly under `galaxy_mcp`, and both old paths

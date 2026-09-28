@@ -153,6 +153,26 @@ def test_both_witnesses_catch_an_importer_that_arrives_as_a_default_argument(tmp
     assert "galaxy_mcp.server" in outside_the_layer(loaded)
 
 
+def test_the_static_witness_alone_catches_a_loader_that_only_runs_when_called(tmp_path):
+    """A stdlib loader deferred into a function loads nothing at import time, so the runtime
+    witness cannot see it; refusing the loader's name is what catches it."""
+    (tmp_path / "ops_deferred.py").write_text(
+        "from pkgutil import resolve_name\n\n\n"
+        "def load():\n"
+        "    return resolve_name('galaxy_mcp.server:mcp')\n"
+    )
+
+    assert boundary_refusals(tmp_path, OPS_PACKAGE) == {
+        "ops_deferred.py": [
+            refusal("pkgutil", 1),
+            refusal("resolve_name", 1),
+            refusal("resolve_name", 5),
+        ]
+    }
+    loaded = loaded_after("import ops_deferred", tmp_path)
+    assert not (loaded & NEVER_LOADED)
+
+
 def write_fabricated_layer(layer: pathlib.Path) -> None:
     """A layer holding every escape review has found, plus what must keep passing."""
     layer.mkdir(exist_ok=True)
@@ -256,6 +276,21 @@ def write_fabricated_layer(layer: pathlib.Path) -> None:
         "server = __builtins__['__import__']('galaxy_mcp.server')\n"
     )
     (layer / "exec_source.py").write_text("exec('import galaxy_mcp.server')\n")
+    # The standard library's own dotted-name loaders, which name no importer at all and only
+    # load when called, so the runtime witness alone would never see them.
+    (layer / "pkgutil_resolve.py").write_text(
+        "from pkgutil import resolve_name\n\n\n"
+        "def load():\n"
+        "    return resolve_name('galaxy_mcp.server:mcp')\n"
+    )
+    (layer / "runpy_module.py").write_text(
+        "import runpy\n\n\ndef load():\n    return runpy.run_module('galaxy_mcp.server')\n"
+    )
+    (layer / "zip_loader.py").write_text(
+        "import zipimport\n\n\n"
+        "def load(archive):\n"
+        "    return zipimport.zipimporter(archive).load_module('galaxy_mcp.server')\n"
+    )
     (layer / "code_builtins.py").write_text(
         "def run(source):\n    return eval(compile(source, '<ops>', 'exec'), globals(), vars())\n"
     )
@@ -369,6 +404,17 @@ def test_the_check_refuses_a_reach_back_out_of_the_layer(tmp_path):
         "string_name.py": [refusal("__import__", 1)],
         "builtins_table.py": [refusal("__builtins__", 1), refusal("__import__", 1)],
         "exec_source.py": [refusal("exec", 1)],
+        "pkgutil_resolve.py": [
+            refusal("pkgutil", 1),
+            refusal("resolve_name", 1),
+            refusal("resolve_name", 5),
+        ],
+        "runpy_module.py": [refusal("runpy", 1), refusal("run_module", 5), refusal("runpy", 5)],
+        "zip_loader.py": [
+            refusal("zipimport", 1),
+            refusal("zipimport", 5),
+            refusal("zipimporter", 5),
+        ],
         "code_builtins.py": [
             refusal("compile", 2),
             refusal("eval", 2),

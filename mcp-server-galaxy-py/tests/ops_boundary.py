@@ -21,8 +21,10 @@ alias shadowed in another scope -- and the resolver is wrong again. The layer is
 functions over input shapes and has nothing to load at runtime, so the rule is that naming the
 machinery is itself the refusal:
 
-* ``importlib``, ``import_module``, ``__import__``, ``builtins`` and ``__builtins__``, however
-  they appear -- a name, an attribute, an import statement, an alias, a string literal. There
+* ``importlib``, ``import_module``, ``__import__``, ``builtins`` and ``__builtins__``, and the
+  standard library's other loaders -- ``pkgutil`` (``resolve_name``), ``runpy`` (``run_module``,
+  ``run_path``) and ``zipimport`` -- however they appear: a name, an attribute, an import
+  statement, an alias, a string literal. There
   is no scoping and no resolution, so a default argument, a lambda, a class body, a decorator
   and a docstring all count. A module of this layer can be written without saying any of
   those words.
@@ -60,7 +62,25 @@ ALLOWED_THIRD_PARTY: frozenset[str] = frozenset()
 ALLOWED_ROOTS = frozenset(sys.stdlib_module_names) | ALLOWED_THIRD_PARTY
 
 # Every way of naming the machinery that turns a string into a loaded module.
-MACHINERY = frozenset({"importlib", "import_module", "__import__", "builtins", "__builtins__"})
+MACHINERY = frozenset(
+    {
+        "importlib",
+        "import_module",
+        "__import__",
+        "builtins",
+        "__builtins__",
+        # The standard library's other doors into the same machinery: pkgutil.resolve_name
+        # turns "pkg.mod:attr" into an import, runpy runs a module or a path by name, and
+        # zipimport loads from an archive. Naming any of them is the refusal, as above.
+        "pkgutil",
+        "resolve_name",
+        "runpy",
+        "run_module",
+        "run_path",
+        "zipimport",
+        "zipimporter",
+    }
+)
 
 # Builtins that turn a string into code or hand back a namespace to rummage through.
 FORBIDDEN_CALLS = frozenset({"globals", "vars", "exec", "eval", "compile"})
