@@ -8,9 +8,9 @@ against a description of a server that no longer exists.
 
 import asyncio
 import json
+import re
 from copy import deepcopy
 from itertools import zip_longest
-from pathlib import Path
 
 import pytest
 from fastmcp.tools import Tool
@@ -39,14 +39,29 @@ def checked_in() -> dict:
     return json.loads(MANIFEST_PATH.read_text())
 
 
-def test_no_tool_description_ships_an_example_id():
+def _descriptions(node):
+    """Every description string in a manifest, at whatever depth a schema nests one."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "description" and isinstance(value, str):
+                yield value
+            else:
+                yield from _descriptions(value)
+    elif isinstance(node, list):
+        for item in node:
+            yield from _descriptions(item)
+
+
+def test_no_tool_description_ships_an_example_id(generated):
     """An id an agent can copy reads as a real one. A 16-hex example from a description was
     copied verbatim into three live analyses as the input dataset, in histories that did not
-    contain it, so descriptions name the shape and use a placeholder for the value."""
-    import re
+    contain it, so descriptions name the shape and use a placeholder for the value.
 
-    source = Path(server.__file__).read_text()
-    found = sorted(set(re.findall(r"\b[0-9a-f]{16}\b", source)))
+    Read off the built surface rather than the source: what an agent is handed is the
+    description the server renders, and prose about the server is not part of it."""
+    ids = re.compile(r"\b[0-9a-f]{16}\b")
+    found = sorted({match for text in _descriptions(generated) for match in ids.findall(text)})
+
     assert not found, f"these look like example Galaxy ids: {found}. Use a placeholder instead."
 
 
