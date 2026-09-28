@@ -1,5 +1,5 @@
 import type { GetJson } from "../bindings";
-import type { GalaxyContext } from "../context";
+import type { GalaxyContext, GalaxyVersionSource } from "../context";
 import { classifyHttp } from "../errors";
 import { satisfiesRequirement } from "../version";
 import { allOperations, register, runOperation } from "./registry";
@@ -49,6 +49,14 @@ export interface ServerInfo {
   version_known: boolean;
   /** The tools this server cannot run. Empty on a new enough server and on an unreadable one. */
   unsupported_tools: UnsupportedTool[];
+  /**
+   * Where `version` came from: "server" when it was fetched, "supplied" when the caller
+   * handed the context a `serverVersion` and nothing was asked of the server, "unknown" when
+   * neither. A library caller is the only one who can supply a version, so this is the
+   * library result's to say -- it stays off the wire, where the other server has no such key
+   * and a caller cannot have supplied one.
+   */
+  version_source: GalaxyVersionSource;
 }
 
 /**
@@ -95,7 +103,7 @@ async function run(_in: Record<string, never>, ctx: GalaxyContext): Promise<Serv
   // answers -- one good response cached here and a later 401 seen by the guard -- and then this
   // op reports a set of refusals that will not happen. One lookup, one answer, and the answer
   // this op obtains is the one every later guard sees.
-  const { version, payload, error } = (await ctx.galaxyVersion?.()) ?? {};
+  const { version, payload, error, source = "unknown" } = (await ctx.galaxyVersion?.()) ?? {};
   if (error) throw error;
   const c = await ctx.client.GET("/api/configuration", {});
   if (c.error || !c.data) throw classifyHttp(c.response.status, c.error);
@@ -120,6 +128,7 @@ async function run(_in: Record<string, never>, ctx: GalaxyContext): Promise<Serv
     config: summarizeConfig(c.data),
     version_known: version !== undefined,
     unsupported_tools: unsupported,
+    version_source: source,
   };
   return info;
 }
@@ -135,8 +144,13 @@ export const getServerInfoOp: Operation<typeof input, ServerInfo> = {
   run,
   // server.py, get_server_info: the address that was connected to, and nothing else.
   // The version, whether it could be read, and the tools this server is too old for are
-  // all in data, which is where a caller reads them.
-  project: (s) => ({ message: `Retrieved server info for ${s.url}` }),
+  // all in data, which is where a caller reads them. `version_source` is not: the other
+  // server has no such key, and no wire caller can supply a version, so the fact stays on
+  // the library result and comes off here -- the way trimmedForSize does.
+  project: (s) => {
+    const { version_source: _source, ...data } = s;
+    return { data, message: `Retrieved server info for ${s.url}` };
+  },
 };
 
 register(getServerInfoOp as AnyOperation);

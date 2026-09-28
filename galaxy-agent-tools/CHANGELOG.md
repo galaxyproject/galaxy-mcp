@@ -315,10 +315,11 @@ the differences they turned up are below.
   `user_library_import_dir`, `allow_library_path_paste` and
   `enable_unique_workflow_defaults` -- rather than Galaxy's whole configuration; a
   field Galaxy did not mention reads `null`, and an unmentioned `brand` reads
-  `"Galaxy"`. And `version_source` is gone: the other server sends no such key, so
-  a caller could not rely on it. Whether the version was supplied rather than
-  fetched was still said in the summary line at this point; the entry below took
-  that away too, because the other server's sentence does not say it either.
+  `"Galaxy"`. And `version_source` is gone from the wire: the other server sends
+  no such key, so a caller could not rely on it. Whether the version was supplied
+  rather than fetched was still said in the summary line at this point; the entry
+  below moves it onto the library result instead, because the other server's
+  sentence does not say it either.
   `UnsupportedOp` is now
   `UnsupportedTool` and `ServerConfigSummary` is exported beside it.
 - **Breaking:** `get_page`, `create_page` and `update_page` drop the expanded
@@ -402,11 +403,15 @@ exactly rather than checking that it is a non-empty string.
   "Started tool 'T' in history 'H'"; `run_user_tool` "Submitted user tool UUID to
   history H" -> "Started user tool 'TOOL_ID' (UUID: UUID) in history 'H'";
   `update_page` "Updated page P (FIELDS)" -> "Updated page 'P'".
-- **Breaking:** `get_server_info` no longer reports anywhere whether the version
-  it answers with was supplied by the caller or fetched from the server. The
-  other server has no such field and says nothing about it in its sentence, and
-  the only place this surface said it was that sentence. A caller that supplied
-  `serverVersion` knows what it passed in.
+- **Breaking:** `get_server_info`'s wire answer no longer says whether the version
+  it reports was supplied by the caller or fetched from the server -- the other
+  server has no such field and its sentence does not say it, and nobody on the
+  MCP or CLI surface can supply a version anyway. The one caller who can, a
+  library caller handing `createGalaxyContext` a `serverVersion`, reads it on the
+  op's own result: `ServerInfo.version_source` is `"server"`, `"supplied"` or
+  `"unknown"`, and comes off in the projection to the wire, the way
+  `trimmedForSize` does. A version that was never asked of the server is not
+  reported as if it had been.
 - **New in the sentence:** `run_tool` reports the version that RAN when a version
   was asked for, read off the jobs Galaxy answered with -- " at version 0.74", or
   " at version 0.74 (not the 0.72 requested)", or " at an unreported version (0.72

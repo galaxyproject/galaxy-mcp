@@ -86,13 +86,15 @@ describe("get_server_info", () => {
   });
 
   it("names the address it was connected to, and leaves the version to data", async () => {
-    // version_source is not a field of the answer -- the other server has no such key --
-    // and its sentence says nothing about the version either, so where the version came
-    // from is now nowhere in the envelope. Recorded as a loss in the release notes.
+    // version_source is not a field of the wire answer -- the other server has no such key
+    // -- and its sentence says nothing about the version either. The library result keeps
+    // it, because a library caller is the only one who can have supplied a version.
     const { ctx } = serverThatSays(always("26.0"));
     const out = await runWithEnvelope(getServerInfoOp as never, {}, ctx);
     expect("version_source" in (out.data as object)).toBe(false);
     expect(out.message).toBe("Retrieved server info for https://g.example");
+    const lib = await getServerInfoOp.run({}, ctx);
+    expect(lib.version_source).toBe("server");
   });
 
   it("says unknown when nothing readable came back", async () => {
@@ -118,6 +120,11 @@ describe("get_server_info", () => {
     const info = out.data as { version_known: boolean; version: { version_major?: string } };
     expect(info.version_known).toBe(true);
     expect(info.version.version_major).toBe("26.0");
+    // A supplied version must not read as one the server was asked for: the library result
+    // says where it came from, and the wire -- where nobody could have supplied one -- omits it.
+    const lib = await getServerInfoOp.run({}, ctx);
+    expect(lib.version_source).toBe("supplied");
+    expect("version_source" in (out.data as object)).toBe(false);
   });
 
   it("normalises a supplied full version to a version_major", async () => {
