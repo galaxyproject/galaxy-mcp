@@ -71,6 +71,31 @@ describe("search_tools_by_name", () => {
     expect(out).toHaveLength(0);
   });
 
+  /**
+   * And the other half of case folding, which a table of mappings does not cover: whether a
+   * sigma is at the end of a word. The other server was asked directly:
+   *
+   *   >>> "\u1c8a\u03a3".lower()          -> '\u1c8a\u03c3'
+   *   >>> "\u03c3" in "\u1c8a\u03a3".lower() -> True
+   *
+   * U+1C8A lowercases to itself on both runtimes, so it is not a mapping difference at all --
+   * it is a cased letter here and unassigned there, and this runtime therefore reads the sigma
+   * after it as final. A needle of a plain sigma then finds the tool on that server and not on
+   * this one. Also pinned end to end as the golden envelope
+   * `search_tools_by_name/sigma_after_a_letter_assigned_after_unicode_15`.
+   */
+  it("finds a sigma the other server does not make final", async () => {
+    const client = mockClient({
+      GET: () => ({
+        data: [{ id: "t", name: "\u1c8a\u03a3", description: "" }],
+        response: { status: 200 },
+      }),
+    });
+    const { items: out } = await searchToolsByName({ query: "\u03c3" }, ctxWith(client));
+    expect(out).toHaveLength(1);
+    expect(out[0]!.id).toBe("t");
+  });
+
   it("returns empty array when no match", async () => {
     const client = mockClient({
       GET: () => ({ data: TOOLS, response: { status: 200 } }),

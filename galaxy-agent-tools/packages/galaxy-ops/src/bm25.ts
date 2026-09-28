@@ -1,4 +1,4 @@
-import { isPyWordChar } from "./python-str";
+import { codePointBefore, isPyWordChar } from "./python-str";
 
 /** The other server's `stop_words`, word for word. */
 const STOPWORDS = new Set([
@@ -8,18 +8,6 @@ const STOPWORDS = new Set([
 
 const isAsciiLetter = (code: number): boolean =>
   (code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a);
-
-/** The code point ending just before `index`, or null at the start of the string. */
-function codePointBefore(text: string, index: number): number | null {
-  if (index <= 0) return null;
-  const unit = text.charCodeAt(index - 1);
-  if (unit >= 0xdc00 && unit <= 0xdfff && index >= 2) {
-    const lead = text.charCodeAt(index - 2);
-    // A trail surrogate after a lead is the second half of one letter, not a character.
-    if (lead >= 0xd800 && lead <= 0xdbff) return (lead - 0xd800) * 0x400 + (unit - 0xdc00) + 0x10000;
-  }
-  return unit;
-}
 
 /**
  * `_tokenize_for_search`: runs of two or more ASCII letters standing alone as a word,

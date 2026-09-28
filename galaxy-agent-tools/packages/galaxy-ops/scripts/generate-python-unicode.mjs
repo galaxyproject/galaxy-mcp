@@ -11,11 +11,10 @@
  * package has no build step that needs a Python and no runtime dependency on this runtime's
  * Unicode edition.
  *
- * The word-character ranges are copied across as they are. The lowercasing table is the
- * short list of code points where this runtime's `toLowerCase` disagrees with the other
- * server's `str.lower()` -- computed here, because it is a fact about both sides -- and
- * `test/python-unicode-data.test.ts` recomputes it over the whole code space, so a Node
- * whose Unicode data has moved on fails there rather than diverging quietly.
+ * Everything is copied across as it is written down there -- the word-character ranges, the
+ * whole one-code-point lowercase mapping, and the two sets the final-sigma rule reads. Nothing
+ * here asks this runtime anything about Unicode, and `test/python-unicode-data.test.ts`
+ * compares both copies row for row so they cannot drift.
  */
 import { readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -38,20 +37,19 @@ const data = JSON.parse(readFileSync(new URL(source, TESTDATA), "utf8"));
 const hex = (cp) => `0x${cp.toString(16).padStart(4, "0")}`;
 const rangeLines = (rows) => rows.map(([lo, hi]) => `  [${hex(lo)}, ${hex(hi)}],`).join("\n");
 
-/** The code points the other server's `lower()` leaves alone and this runtime's does not. */
-const lowered = new Map(data.lower_map.rows);
-const exceptions = [];
-for (let cp = 0; cp < 0x110000; cp += 1) {
-  const character = String.fromCodePoint(cp);
-  const theirs = lowered.get(cp) ?? character;
-  if (theirs !== character.toLowerCase()) exceptions.push(cp);
-}
-const exceptionRanges = [];
-for (const cp of exceptions) {
-  const last = exceptionRanges[exceptionRanges.length - 1];
-  if (last && last[1] === cp - 1) last[1] = cp;
-  else exceptionRanges.push([cp, cp]);
-}
+/** A string literal for the code points `lower()` makes of one character. */
+const literal = (codePoints) => {
+  const body = codePoints
+    .map((cp) => {
+      if (cp === 0x22 || cp === 0x5c) return `\\${String.fromCodePoint(cp)}`;
+      if (cp >= 0x20 && cp <= 0x7e) return String.fromCodePoint(cp);
+      return cp > 0xffff ? `\\u{${cp.toString(16)}}` : `\\u${cp.toString(16).padStart(4, "0")}`;
+    })
+    .join("");
+  return `"${body}"`;
+};
+const lowerLines = (rows) =>
+  rows.map(([cp, lowered]) => `  [${hex(cp)}, ${literal(lowered)}],`).join("\n");
 
 const text = `/**
  * The Unicode facts the other server's string methods are built on, copied from that
@@ -85,17 +83,44 @@ ${rangeLines(data.word_chars.rows)}
 ];
 
 /**
- * Inclusive ranges of the code points this runtime lowercases and the other server does
- * not: ${exceptions.length} of them, each one a character Unicode gave a case mapping
- * after ${data.unicode_version}. \`pyLower\` leaves exactly these alone.
+ * The cased characters, as the final-sigma rule asks about them: ${data.cased.count} ranges
+ * holding ${data.cased.code_points.toLocaleString("en-US")} code points. A sigma is a final
+ * sigma when one of these is behind it and none is in front, with only case-ignorable
+ * characters in between either way.
+ *
+ * "As the rule asks about them" is the whole of the subtlety: the interpreter walks past
+ * case-ignorable characters before it asks whether anything is cased, so a character that is
+ * both -- U+0345 among them -- never gets asked, and this set leaves those out.
  */
-export const PY_LOWER_EXCEPTION_RANGES: readonly (readonly [number, number])[] = [
-${rangeLines(exceptionRanges)}
+export const PY_CASED_RANGES: readonly (readonly [number, number])[] = [
+${rangeLines(data.cased.rows)}
+];
+
+/**
+ * The characters the final-sigma rule walks past on its way to a cased one, in either
+ * direction: ${data.case_ignorable.count} ranges holding
+ * ${data.case_ignorable.code_points.toLocaleString("en-US")} code points -- accents, the soft
+ * hyphen, quotation marks, modifier letters.
+ */
+export const PY_CASE_IGNORABLE_RANGES: readonly (readonly [number, number])[] = [
+${rangeLines(data.case_ignorable.rows)}
+];
+
+/**
+ * Every code point the contract interpreter's \`str.lower()\` does not leave alone, and what
+ * it makes of it: ${data.lower_map.count.toLocaleString("en-US")} of them, the complete
+ * mapping rather than the places this runtime disagrees. U+0130 maps to two code points; the
+ * rest map to one. U+03A3 is in here as its plain lowercase, and the rule that overrides it in
+ * context reads the two sets above.
+ */
+export const PY_LOWER_MAP: readonly (readonly [number, string])[] = [
+${lowerLines(data.lower_map.rows)}
 ];
 `;
 
 writeFileSync(fileURLToPath(OUT), text);
 console.log(
   `wrote src/python-unicode-data.ts from ${source}: ${data.word_chars.count} word-char ranges, ` +
-    `${exceptions.length} lowercasing exceptions`,
+    `${data.cased.count} cased ranges, ${data.case_ignorable.count} case-ignorable ranges, ` +
+    `${data.lower_map.count} lowercase mappings`,
 );

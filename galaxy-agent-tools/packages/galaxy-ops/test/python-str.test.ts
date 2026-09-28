@@ -277,11 +277,22 @@ describe("pyUtf8EncodeError", () => {
  *   >>> "\ua7cb\u03a3".lower()          -> '\ua7cb\u03c3'
  *   >>> "\u0391\u03a3\ua7cb\u0391".lower() -> '\u03b1\u03c2\ua7cb\u03b1'
  *
- * The sigma cases are the reason `pyLower` splits the string at an untouched code point and
- * hands the rest to `toLowerCase` rather than walking a mapping table: a final sigma is a rule
- * about context, not an entry, and both languages apply it. A character the interpreter has no
- * case data for is uncased there, so a sigma beside it is at the end of its word -- which is
- * also what `toLowerCase` says about a sigma at the end of a slice.
+ *   >>> "ᲊΣ".lower()          -> 'ᲊσ'
+ *   >>> "ᲊΣᲊ".lower()    -> 'ᲊσᲊ'
+ *   >>> "ΟΔΟΣ".lower() -> 'οδος'
+ *
+ * The sigma cases are why `pyLower` walks the whole string through the pinned mapping and
+ * applies the pinned final-sigma rule rather than handing any run of it to `toLowerCase`.
+ * Lowercasing differs between the two runtimes on two axes, not one: which code points have a
+ * mapping at all, and which ones count as cased when a sigma asks whether it is at the end of
+ * a word. Handing the runs between the first kind to `toLowerCase` still answers the second
+ * kind out of this runtime's Unicode edition, which is how "ᲊΣ" came out with a final
+ * sigma here and an ordinary one there -- one match against a query of "σ" on that server
+ * and none on this one. Both axes are now read from the contract interpreter's tables.
+ *
+ * The exhaustive comparisons -- every code point on its own, and every code point in four
+ * contexts around a capital sigma -- are in `python-unicode-data.test.ts`, along with the
+ * sampled file of that interpreter's own output. These are the shapes worth reading.
  */
 describe("pyLower", () => {
   it("leaves alone a letter the contract interpreter was never told to lowercase", () => {
@@ -298,12 +309,23 @@ describe("pyLower", () => {
     expect(pyLower("\u0391\u03a3\ua7cb")).toBe("\u03b1\u03c2\ua7cb");
     expect(pyLower("\ua7cb\u03a3")).toBe("\ua7cb\u03c3");
     // Still a FINAL sigma: the interpreter has no case data for what follows, so as far as
-    // it is concerned the word ends there, and splitting the string at that character is how
-    // this side reaches the same answer.
+    // it is concerned the word ends there.
     expect(pyLower("\u0391\u03a3\ua7cb\u0391")).toBe("\u03b1\u03c2\ua7cb\u03b1");
   });
 
-  it("is toLowerCase everywhere else, astral letters and dotted capital I included", () => {
+  it("reads cased-ness from the pinned tables, not from this runtime's", () => {
+    // U+1C8A is a cased letter here and unassigned to the contract interpreter, so the sigma
+    // after it ends a word on one runtime and does not on the other. Nothing about U+1C8A's
+    // OWN lowercase differs -- both leave it alone -- so an exception list of code points
+    // whose mapping differs never sees this one.
+    expect(pyLower("\u1c8a\u03a3")).toBe("\u1c8a\u03c3");
+    expect("\u1c8a\u03a3".toLowerCase()).toBe("\u1c8a\u03c2");
+    expect(pyLower("\u1c8a\u03a3\u1c8a")).toBe("\u1c8a\u03c3\u1c8a");
+    // A word that really does end in a sigma still gets a final one.
+    expect(pyLower("\u039f\u0394\u039f\u03a3")).toBe("\u03bf\u03b4\u03bf\u03c2");
+  });
+
+  it("is the interpreter's lower() everywhere else, astral letters and dotted capital I included", () => {
     expect(pyLower("RNA-Seq DATA")).toBe("rna-seq data");
     expect(pyLower("\u0130")).toBe("i\u0307");
     expect(pyLower("\u{1D400}")).toBe("\u{1D400}");

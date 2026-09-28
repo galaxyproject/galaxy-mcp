@@ -8,7 +8,12 @@
  * spelling it looks like in a way that changes which container gets recommended.
  */
 import { GalaxyValidationError } from "./errors";
-import { PY_LOWER_EXCEPTION_RANGES, PY_WORD_CHAR_RANGES } from "./python-unicode-data";
+import {
+  PY_CASED_RANGES,
+  PY_CASE_IGNORABLE_RANGES,
+  PY_LOWER_MAP,
+  PY_WORD_CHAR_RANGES,
+} from "./python-unicode-data";
 
 /**
  * The code points CPython's `str.isspace()` is true for -- bidirectional class WS, B or S, or
@@ -341,40 +346,125 @@ export function isPyWordChar(code: number): boolean {
   return inRanges(PY_WORD_CHAR_RANGES, code);
 }
 
+/** The code point ending just before `index`, or null at the start of the string. */
+export function codePointBefore(text: string, index: number): number | null {
+  if (index <= 0) return null;
+  const unit = text.charCodeAt(index - 1);
+  if (unit >= 0xdc00 && unit <= 0xdfff && index >= 2) {
+    const lead = text.charCodeAt(index - 2);
+    // A trail surrogate after a lead is the second half of one letter, not a character.
+    if (lead >= 0xd800 && lead <= 0xdbff) return (lead - 0xd800) * 0x400 + (unit - 0xdc00) + 0x10000;
+  }
+  return unit;
+}
+
+/** The contract interpreter's one-code-point lowercase mapping, as a lookup. */
+const PY_LOWER = new Map<number, string>(PY_LOWER_MAP);
+
+const CAPITAL_SIGMA = 0x03a3;
+const SMALL_SIGMA = "\u03c3";
+const FINAL_SIGMA = "\u03c2";
+
+/** Is this code point cased, in the sense the final-sigma rule asks about? */
+function isPyCased(code: number): boolean {
+  return inRanges(PY_CASED_RANGES, code);
+}
+
+/** Is this code point one the final-sigma rule walks straight past? */
+function isPyCaseIgnorable(code: number): boolean {
+  return inRanges(PY_CASE_IGNORABLE_RANGES, code);
+}
+
 /**
- * Python's `str.lower()`, which is `toLowerCase()` except on the code points the contract
- * interpreter has not been told to lowercase.
+ * Is the capital sigma at `index` a FINAL sigma -- the one case where what a character
+ * lowercases to depends on what is around it?
+ *
+ * `handle_capital_sigma` in the contract interpreter's `Objects/unicodeobject.c`, step for
+ * step. Its own comment states the context as
+ *
+ *     \p{cased} \p{case-ignorable}* U+03A3 !( \p{case-ignorable}* \p{cased} )
+ *
+ * and its two loops read it like this: walk back over case-ignorable characters and the sigma
+ * is final so far when the walk stops on a cased one (and not final when it runs off the start
+ * of the string); then walk forward the same way, and the sigma stays final when that walk
+ * runs off the end or stops on something uncased. Case-ignorable is asked first in both
+ * directions, so a character that is both cased and case-ignorable -- U+0345 -- is walked past
+ * rather than counted, which is why the cased table leaves those out.
+ *
+ * Both walks read the original string, not what has been lowercased so far, and both sets come
+ * from that interpreter's own answers rather than from this runtime's Unicode edition. That is
+ * the point of the round: U+1C8A has a case here and none there, so a sigma after it is final
+ * to this runtime's `toLowerCase` and ordinary to the other server, and a tool named
+ * "\u1c8a\u03a3" stops matching a query of "\u03c3" on one surface and not the other.
+ */
+function isFinalSigma(value: string, index: number): boolean {
+  let scan = index;
+  let behind: number | null = null;
+  while (scan > 0) {
+    const code = codePointBefore(value, scan);
+    if (code === null) break;
+    scan -= code > 0xffff ? 2 : 1;
+    if (isPyCaseIgnorable(code)) continue;
+    behind = code;
+    break;
+  }
+  if (behind === null || !isPyCased(behind)) return false;
+  // The sigma is one code unit wide, so what follows it starts at the next one.
+  let ahead = index + 1;
+  while (ahead < value.length) {
+    const code = value.codePointAt(ahead)!;
+    ahead += code > 0xffff ? 2 : 1;
+    if (isPyCaseIgnorable(code)) continue;
+    return !isPyCased(code);
+  }
+  return true;
+}
+
+/**
+ * Python's `str.lower()`, out of the contract interpreter's tables and nothing else.
  *
  * The three search tools lower the needle and the haystack before asking whether one contains
- * the other, so a code point the two runtimes case differently decides a match: this runtime
- * folds the capital rams horn U+A7CB to the small one U+0264 and the interpreter leaves it
- * standing, which makes a query of the capital find a tool named with the small letter here
- * and find nothing there. The same Unicode data
- * gap as the word table, in the other half of the search path -- 55 code points today, each
- * one given a case mapping after 15.0.0, listed in `PY_LOWER_EXCEPTION_RANGES`.
+ * the other, so a character the two runtimes case differently decides a match. There are two
+ * ways for them to differ and this delegates neither of them to `toLowerCase`:
  *
- * Those are left alone and everything between them is handed to `toLowerCase`, rather than
- * lowercased code point by code point out of a table, because lowercasing has one rule that no
- * table holds: a Greek capital sigma at the end of a word is a final sigma, and both languages
- * apply it. Splitting the string at a character the interpreter treats as uncased and
- * unassigned gives that rule the same answer it gives over there -- there is no cased
- * character across the split either way. Checked against the interpreter's own output for
- * every code point in the space (`test/python-unicode-data.test.ts`) and for the sigma
- * contexts around each of the 55 (`test/python-str.test.ts`).
+ *  - the mapping. This runtime folds the capital rams horn U+A7CB to the small one and the
+ *    other server leaves it standing, so a query of the capital finds a tool named with the
+ *    small letter here and finds nothing there. Every code point goes through `PY_LOWER_MAP`
+ *    instead, which is the interpreter's complete non-identity mapping -- 1,433 entries, U+0130
+ *    to two code points among them -- and anything not in it is left alone.
+ *  - the context. A sigma at the end of a word lowercases to a final sigma, and "the end of a
+ *    word" is a question about which characters are cased, which is Unicode data again:
+ *    `"\u1c8a\u03a3".lower()` is an ordinary sigma there and a final one under this runtime's
+ *    tables, so a tool named that matches a query of "\u03c3" on one server and not the other.
+ *    `isFinalSigma` applies the interpreter's rule over the interpreter's two sets.
+ *
+ * So no part of this asks this runtime what a character is. Checked against that interpreter's
+ * own output for every code point in the space and for the four contexts around every code
+ * point in the space (`test/python-unicode-data.test.ts`, plus the sampled oracle the other
+ * server writes), and the whole-space context check is run against the live interpreter on that
+ * side (`tests/test_python_unicode.py`).
  */
 export function pyLower(value: string): string {
   let out = "";
+  // Everything from here to the current character is unchanged, and gets copied in one slice
+  // when something finally changes -- so an already-lowercase name costs one comparison per
+  // code point and no string building at all.
   let runStart = 0;
   let index = 0;
-  for (const character of value) {
-    const code = character.codePointAt(0)!;
-    if (inRanges(PY_LOWER_EXCEPTION_RANGES, code)) {
-      out += value.slice(runStart, index).toLowerCase() + character;
-      runStart = index + character.length;
+  while (index < value.length) {
+    const code = value.codePointAt(index)!;
+    const width = code > 0xffff ? 2 : 1;
+    const mapped =
+      code === CAPITAL_SIGMA
+        ? isFinalSigma(value, index)
+          ? FINAL_SIGMA
+          : SMALL_SIGMA
+        : PY_LOWER.get(code);
+    if (mapped !== undefined) {
+      out += value.slice(runStart, index) + mapped;
+      runStart = index + width;
     }
-    index += character.length;
+    index += width;
   }
-  // Nothing to keep: the whole string in one call, which is the common case by far.
-  if (runStart === 0) return value.toLowerCase();
-  return out + value.slice(runStart).toLowerCase();
+  return runStart === 0 ? value : out + value.slice(runStart);
 }
