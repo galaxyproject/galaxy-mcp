@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 85,
+  "caseCount": 87,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -173,6 +173,29 @@
       },
       "envelope": "get_tool_panel/section_cut_by_the_budget.json",
       "replies": "get_tool_panel/section_cut_by_the_budget.galaxy.json"
+    },
+    {
+      "tool": "get_tool_panel",
+      "case": "nested_overview",
+      "note": "a nested panel, where a section entry counts only the tools directly in it",
+      "input": {
+        "limit": 5,
+        "offset": 0
+      },
+      "envelope": "get_tool_panel/nested_overview.json",
+      "replies": "get_tool_panel/nested_overview.galaxy.json"
+    },
+    {
+      "tool": "get_tool_panel",
+      "case": "nested_section",
+      "note": "opening a section that holds a sub-section and a label as well as a tool",
+      "input": {
+        "section_id": "outer",
+        "limit": 5,
+        "offset": 0
+      },
+      "envelope": "get_tool_panel/nested_section.json",
+      "replies": "get_tool_panel/nested_overview.galaxy.json"
     },
     {
       "tool": "list_history_ids",

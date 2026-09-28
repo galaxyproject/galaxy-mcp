@@ -1,0 +1,30 @@
+{
+  "data": {
+    "section_id": "outer",
+    "section_name": "Outer",
+    "tools": [
+      {
+        "id": "outer_tool",
+        "name": "Outer Tool",
+        "description": "directly in the section",
+        "versions": [
+          "1.0.0"
+        ]
+      }
+    ]
+  },
+  "success": true,
+  "message": "Retrieved 1 of 1 tools in section 'outer'",
+  "count": 1,
+  "pagination": {
+    "total_items": 1,
+    "returned_items": 1,
+    "limit": 5,
+    "offset": 0,
+    "has_next": false,
+    "has_previous": false,
+    "next_offset": null,
+    "previous_offset": null,
+    "helper_text": "Showing 1 of 1 tools (offset 0). This is the last page."
+  }
+}

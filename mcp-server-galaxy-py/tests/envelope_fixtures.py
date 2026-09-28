@@ -481,6 +481,69 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         ],
     )
 
+    # A panel that is not flat: a section holding a tool, a sub-section and a
+    # divider label, and a tool sitting outside any section. A section entry's
+    # tool_count counts the tools directly in it -- a sub-section is neither a tool
+    # nor counted through, and a label is not a tool -- so a recursive count would
+    # read 2 here and a flat one over every node would read 3. Neither number is
+    # what either server reports, and the drill-in lists the one tool for the same
+    # reason. There is no panel-wide total on this tool at all, on either side.
+    nested_panel = [
+        {
+            "id": "outer",
+            "name": "Outer",
+            "model_class": "ToolSection",
+            "elems": [
+                {
+                    "id": "outer_tool",
+                    "name": "Outer Tool",
+                    "description": "directly in the section",
+                    "versions": ["1.0.0"],
+                    "model_class": "Tool",
+                },
+                {
+                    "id": "inner",
+                    "name": "Inner",
+                    "model_class": "ToolSection",
+                    "elems": [
+                        {
+                            "id": "inner_tool",
+                            "name": "Inner Tool",
+                            "description": "one level down",
+                            "versions": ["1.0.0"],
+                            "model_class": "Tool",
+                        }
+                    ],
+                },
+                {"id": "divider", "name": "Divider", "model_class": "ToolSectionLabel"},
+            ],
+        },
+        {
+            "id": "loose_tool",
+            "name": "Loose Tool",
+            "description": "outside any section",
+            "versions": ["1.0.0"],
+            "model_class": "Tool",
+        },
+    ]
+    nested_panel_routes = [route("/api/tools", nested_panel)]
+    add(
+        "get_tool_panel",
+        "nested_overview",
+        "a nested panel, where a section entry counts only the tools directly in it",
+        {"limit": 5, "offset": 0},
+        lambda: get_tool_panel_fn(limit=5, offset=0),
+        nested_panel_routes,
+    )
+    add(
+        "get_tool_panel",
+        "nested_section",
+        "opening a section that holds a sub-section and a label as well as a tool",
+        {"section_id": "outer", "limit": 5, "offset": 0},
+        lambda: get_tool_panel_fn(section_id="outer", limit=5, offset=0),
+        nested_panel_routes,
+    )
+
     # -- list_history_ids ----------------------------------------------------
     histories_40 = history_rows(40)
     histories_index = [route("/api/histories", histories_40)]

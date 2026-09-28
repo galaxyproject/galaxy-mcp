@@ -1,0 +1,61 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/tools",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": [
+        {
+          "id": "outer",
+          "name": "Outer",
+          "model_class": "ToolSection",
+          "elems": [
+            {
+              "id": "outer_tool",
+              "name": "Outer Tool",
+              "description": "directly in the section",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "inner",
+              "name": "Inner",
+              "model_class": "ToolSection",
+              "elems": [
+                {
+                  "id": "inner_tool",
+                  "name": "Inner Tool",
+                  "description": "one level down",
+                  "versions": [
+                    "1.0.0"
+                  ],
+                  "model_class": "Tool"
+                }
+              ]
+            },
+            {
+              "id": "divider",
+              "name": "Divider",
+              "model_class": "ToolSectionLabel"
+            }
+          ]
+        },
+        {
+          "id": "loose_tool",
+          "name": "Loose Tool",
+          "description": "outside any section",
+          "versions": [
+            "1.0.0"
+          ],
+          "model_class": "Tool"
+        }
+      ]
+    }
+  ]
+}
