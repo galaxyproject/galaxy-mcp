@@ -364,6 +364,22 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         lambda: search_tools_fn("matchable", limit=100, offset=0),
         [route("/api/tools", tool_rows(90, filler=CUT_FILLER))],
     )
+    # A needle and a haystack are both lowercased before one is looked for in the
+    # other, and lowercasing is not only a table: a capital sigma at the end of a
+    # word becomes a FINAL sigma, and "the end of a word" is a question about which
+    # characters are cased. U+1C8A was given a case after this interpreter's Unicode
+    # edition, so here the sigma after it is an ordinary one and a query of an
+    # ordinary sigma finds the tool. A runtime on newer tables reads U+1C8A as a
+    # cased letter, makes the sigma final, and finds nothing -- with neither
+    # character's own lowercase differing at all.
+    add(
+        "search_tools_by_name",
+        "sigma_after_a_letter_assigned_after_unicode_15",
+        "a query whose match depends on which characters count as cased",
+        {"query": "σ", "limit": 10, "offset": 0},
+        lambda: search_tools_fn("σ", limit=10, offset=0),
+        [route("/api/tools", [{"id": "t", "name": "ᲊΣ", "description": ""}])],
+    )
 
     # -- search_tools_by_keywords -------------------------------------------
     # Every tool matches on its description, so no detail lookup happens; the

@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 67,
+  "caseCount": 68,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -62,6 +62,18 @@
       },
       "envelope": "search_tools_by_name/cut_by_the_budget.json",
       "replies": "search_tools_by_name/cut_by_the_budget.galaxy.json"
+    },
+    {
+      "tool": "search_tools_by_name",
+      "case": "sigma_after_a_letter_assigned_after_unicode_15",
+      "note": "a query whose match depends on which characters count as cased",
+      "input": {
+        "query": "σ",
+        "limit": 10,
+        "offset": 0
+      },
+      "envelope": "search_tools_by_name/sigma_after_a_letter_assigned_after_unicode_15.json",
+      "replies": "search_tools_by_name/sigma_after_a_letter_assigned_after_unicode_15.galaxy.json"
     },
     {
       "tool": "search_tools_by_keywords",
