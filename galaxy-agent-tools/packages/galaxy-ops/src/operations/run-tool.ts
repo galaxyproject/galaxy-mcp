@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { jsonObject } from "../json-object";
 import { legacyPost } from "../legacy";
+import { enrichedRunFailure } from "../tool-input-error";
 import { preflightToolInputs, toolCredentialsContext } from "../tool-preflight";
 import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import { register, runOperation } from "./registry";
@@ -86,7 +87,21 @@ async function run(i: RunToolInput, ctx: GalaxyContext): Promise<ToolSubmission>
   };
   if (i.toolVersion != null) body["tool_version"] = i.toolVersion;
   if (credentials !== null) body["credentials_context"] = credentials;
-  return legacyPost<ToolSubmission>(ctx, "/api/tools", { body });
+  try {
+    return await legacyPost<ToolSubmission>(ctx, "/api/tools", { body });
+  } catch (err) {
+    // A refused run gets the other server's two enriched sentences where they apply: a
+    // failure that mentions credentials, and a 400, which is the status Galaxy refuses a
+    // tool form with. Anything else is left to the op's failure contract below.
+    throw await enrichedRunFailure(ctx, err, {
+      action: "Run tool",
+      toolId: i.toolId,
+      historyId: i.historyId,
+      inputs: i.inputs,
+      usedCredentials: credentials !== null,
+      toolVersion: i.toolVersion,
+    });
+  }
 }
 
 /**

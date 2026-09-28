@@ -1,0 +1,35 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example/",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/unprivileged_tools/61d15277-a911-45ef-aa66-5385146578cc",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "tool_id": "row_filter",
+        "representation": {
+          "id": "row_filter",
+          "version": "0.1.0",
+          "inputs": [
+            {
+              "name": "input",
+              "type": "data",
+              "optional": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/tools",
+      "query": {},
+      "status": 400,
+      "headers": {},
+      "bodyText": "{\"err_msg\": \"History is not accessible by user\", \"err_code\": 403002}"
+    }
+  ]
+}

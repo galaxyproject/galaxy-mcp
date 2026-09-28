@@ -3430,6 +3430,7 @@ def fail(
 def failure_cases(add: AddFailure) -> None:
     http_failure_cases(add)
     more_http_failure_cases(add)
+    run_failure_cases(add)
     iwc_failure_cases(add)
     refusal_cases(add)
     argument_refusal_cases(add)
@@ -3735,6 +3736,102 @@ def more_http_failure_cases(add: AddFailure) -> None:
                 {"id": "d0002", "name": "out.txt", "state": "ok", "creating_job": "j0000500"},
             ),
             fail("/api/jobs/j0000500", 500, BROKEN),
+        ],
+    )
+
+
+def run_failure_cases(add: AddFailure) -> None:
+    """A refused run, which is the failure an agent running a tool is most likely to meet.
+
+    A 400 is the status Galaxy refuses a tool form with, and the sentence for one is not the
+    bare failure: the parameter list is read back and offered, a tool test supplies a
+    structural example, and the whole thing warns about Galaxy's misleading wording. A failure
+    whose text mentions credentials takes a different branch again, and it is checked first.
+    """
+    fastqc_schema = {
+        "id": "fastqc",
+        "name": "FastQC",
+        "version": "0.74+galaxy1",
+        "inputs": [
+            {
+                "name": "input_file",
+                "type": "data",
+                "optional": False,
+                "multiple": False,
+                "extensions": ["fastqsanger"],
+            }
+        ],
+    }
+    tool_tests = [
+        {
+            "name": "Test-1",
+            "tool_id": "fastqc",
+            "inputs": {"input_file": [{"src": "hda", "id": "0123456789abcdef"}]},
+        }
+    ]
+    # The inputs here are ones the preflight is happy with, and Galaxy refuses anyway --
+    # which is an ordinary thing for it to do, since its own validation is the stricter of
+    # the two. It also keeps the two clauses that need the input checker out of the sentence,
+    # and those are the two the TypeScript side cannot produce; see the release notes.
+    add(
+        "run_tool",
+        "refused_over_the_inputs",
+        "a 400, with the parameter list and a tool test's example read back for the caller",
+        {
+            "history_id": "h0001",
+            "tool_id": "fastqc",
+            "inputs": {"input_file": {"src": "hda", "id": "d0000001"}},
+        },
+        [
+            route("/api/tools/fastqc", fastqc_schema),
+            route("/api/tools/fastqc/test_data", tool_tests),
+            fail("/api/tools", 400, DENIED, method="POST"),
+        ],
+    )
+    add(
+        "run_tool",
+        "refused_with_nothing_readable",
+        "the same 400 with neither the schema nor a test readable, so it points at a call",
+        {"history_id": "h0001", "tool_id": "fastqc", "inputs": {"input_file": "not-a-dataset"}},
+        [fail("/api/tools", 400, DENIED, method="POST")],
+    )
+    add(
+        "run_tool",
+        "refused_over_credentials",
+        "a refusal whose text mentions credentials, which is checked before the status is",
+        {"history_id": "h0001", "tool_id": "fastqc", "inputs": {"contaminants": ""}},
+        [
+            fail(
+                "/api/tools",
+                400,
+                '{"err_msg": "Tool requires service credentials that are not set", '
+                '"err_code": 400008}',
+                method="POST",
+            )
+        ],
+    )
+    add(
+        "run_user_tool",
+        "refused_over_the_inputs",
+        "the representation it already holds is the schema the sentence offers",
+        {
+            "history_id": "h0001",
+            "tool_uuid": "61d15277-a911-45ef-aa66-5385146578cc",
+            "inputs": {"input": {"src": "hda", "id": "d0000001"}},
+        },
+        [
+            route(
+                "/api/unprivileged_tools/61d15277-a911-45ef-aa66-5385146578cc",
+                {
+                    "tool_id": "row_filter",
+                    "representation": {
+                        "id": "row_filter",
+                        "version": "0.1.0",
+                        "inputs": [{"name": "input", "type": "data", "optional": False}],
+                    },
+                },
+            ),
+            fail("/api/tools", 400, DENIED, method="POST"),
         ],
     )
 

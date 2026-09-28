@@ -3,6 +3,7 @@ import type { GalaxyContext } from "../context";
 import { GalaxyNotFoundError } from "../errors";
 import { jsonObject } from "../json-object";
 import { legacyGet, legacyPost } from "../legacy";
+import { enrichedRunFailure, USER_TOOL_SHAPE_HINT } from "../tool-input-error";
 import { preflightToolInputs } from "../tool-preflight";
 import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import { register, runOperation } from "./registry";
@@ -68,15 +69,30 @@ async function run(i: In, ctx: GalaxyContext): Promise<UserToolRun> {
   if (unchecked !== null) recordFact(ctx, uncheckedInputs, unchecked);
 
   // Step 2: run via POST /api/tools (the synchronous UDT path, off-schema -> legacyPost).
-  return legacyPost<UserToolRun>(ctx, "/api/tools", {
-    body: {
-      history_id: i.historyId,
-      tool_uuid: i.toolUuid,
-      tool_version: toolVersion,
+  try {
+    return await legacyPost<UserToolRun>(ctx, "/api/tools", {
+      body: {
+        history_id: i.historyId,
+        tool_uuid: i.toolUuid,
+        tool_version: toolVersion,
+        inputs: i.inputs,
+        input_format: "legacy",
+      },
+    });
+  } catch (err) {
+    // The representation is the schema to explain the refusal with -- this tool is not in
+    // the toolbox, so a lookup by id would 404 and the message would come back empty. No
+    // credentials branch: the other server's user-tool run has no credentials handling.
+    throw await enrichedRunFailure(ctx, err, {
+      action: "Run user tool",
+      toolId: toolInfo.tool_id,
+      historyId: i.historyId,
       inputs: i.inputs,
-      input_format: "legacy",
-    },
-  });
+      usedCredentials: false,
+      schema: (toolInfo.representation ?? null) as Record<string, unknown> | null,
+      shapeHint: USER_TOOL_SHAPE_HINT,
+    });
+  }
 }
 
 export const runUserToolOp: Operation<typeof input, UserToolRun> = {

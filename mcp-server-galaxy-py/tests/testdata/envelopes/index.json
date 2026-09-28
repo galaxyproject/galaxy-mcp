@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 214,
-  "failureCaseCount": 58,
+  "caseCount": 218,
+  "failureCaseCount": 62,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -2361,6 +2361,72 @@
       },
       "envelope": "get_job_details/the_job_read_refused.json",
       "replies": "get_job_details/the_job_read_refused.galaxy.json"
+    },
+    {
+      "tool": "run_tool",
+      "case": "refused_over_the_inputs",
+      "note": "a 400, with the parameter list and a tool test's example read back for the caller",
+      "outcome": "failure",
+      "input": {
+        "history_id": "h0001",
+        "tool_id": "fastqc",
+        "inputs": {
+          "input_file": {
+            "src": "hda",
+            "id": "d0000001"
+          }
+        }
+      },
+      "envelope": "run_tool/refused_over_the_inputs.json",
+      "replies": "run_tool/refused_over_the_inputs.galaxy.json"
+    },
+    {
+      "tool": "run_tool",
+      "case": "refused_with_nothing_readable",
+      "note": "the same 400 with neither the schema nor a test readable, so it points at a call",
+      "outcome": "failure",
+      "input": {
+        "history_id": "h0001",
+        "tool_id": "fastqc",
+        "inputs": {
+          "input_file": "not-a-dataset"
+        }
+      },
+      "envelope": "run_tool/refused_with_nothing_readable.json",
+      "replies": "run_tool/refused_with_nothing_readable.galaxy.json"
+    },
+    {
+      "tool": "run_tool",
+      "case": "refused_over_credentials",
+      "note": "a refusal whose text mentions credentials, which is checked before the status is",
+      "outcome": "failure",
+      "input": {
+        "history_id": "h0001",
+        "tool_id": "fastqc",
+        "inputs": {
+          "contaminants": ""
+        }
+      },
+      "envelope": "run_tool/refused_over_credentials.json",
+      "replies": "run_tool/refused_over_credentials.galaxy.json"
+    },
+    {
+      "tool": "run_user_tool",
+      "case": "refused_over_the_inputs",
+      "note": "the representation it already holds is the schema the sentence offers",
+      "outcome": "failure",
+      "input": {
+        "history_id": "h0001",
+        "tool_uuid": "61d15277-a911-45ef-aa66-5385146578cc",
+        "inputs": {
+          "input": {
+            "src": "hda",
+            "id": "d0000001"
+          }
+        }
+      },
+      "envelope": "run_user_tool/refused_over_the_inputs.json",
+      "replies": "run_user_tool/refused_over_the_inputs.galaxy.json"
     },
     {
       "tool": "get_iwc_workflows",
