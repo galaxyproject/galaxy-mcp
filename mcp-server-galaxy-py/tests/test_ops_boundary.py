@@ -221,9 +221,10 @@ def write_fabricated_layer(layer: pathlib.Path) -> None:
         "from importlib import *\n\nserver = import_module('galaxy_mcp.server')\n"
     )
 
-    # The four ordinary bindings the last resolver admitted: a default argument, a
+    # The ordinary bindings that walked past the last resolver: a default argument, a
     # staticmethod, an alias shadowed in a scope nothing calls, and the builtin fetched from
-    # the module that holds it. None of them is resolved now either.
+    # the module that holds it. The lambda it already refused, for the shape of the assignment
+    # rather than for the name -- which is the shape this rule generalises.
     (layer / "default_arg_importer.py").write_text(
         "def load(importer=__import__):\n"
         "    return importer('galaxy_mcp.server')\n\n\n"
