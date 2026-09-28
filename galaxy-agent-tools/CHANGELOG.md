@@ -317,7 +317,9 @@ the differences they turned up are below.
   field Galaxy did not mention reads `null`, and an unmentioned `brand` reads
   `"Galaxy"`. And `version_source` is gone: the other server sends no such key, so
   a caller could not rely on it. Whether the version was supplied rather than
-  fetched is still said, in the summary line. `UnsupportedOp` is now
+  fetched was still said in the summary line at this point; the entry below took
+  that away too, because the other server's sentence does not say it either.
+  `UnsupportedOp` is now
   `UnsupportedTool` and `ServerConfigSummary` is exported beside it.
 - **Breaking:** `get_page`, `create_page` and `update_page` drop the expanded
   `content` on an HTML page too. They dropped it only for a page that had a
@@ -344,8 +346,87 @@ every tool either surface serves is now replayed on both and compared key for ke
 the key set, `data`, `success`, `count` and `pagination`, and `message` for the
 nine budgeted listings. `PARITY.md` gains a `Cases` column saying how many each
 tool has, and the parity check fails on an open tool that has none. Still not
-aligned: the `message` text of every tool but those nine, and the failure
-envelope.
+aligned at this point: the `message` text of every tool but those nine -- which
+is the entry below -- and the failure envelope.
+
+### Every tool's `message` is the Python server's sentence (#144)
+
+`message` is the first thing an agent reads and the only part of the answer
+written for it rather than for a parser, and until now it was the one field the
+two servers were free to word their own way. Nine of the forty-two open tools
+matched, because their sentence is measured against the output budget and decides
+where a page is cut; the other thirty-three said something of their own. Every
+tool's sentence is now the Python server's, byte for byte, on the MCP text block
+and on `galaxy-cli --format json` alike, and all 152 golden cases compare it
+exactly rather than checking that it is a non-empty string.
+
+- **Breaking:** the sentence changed for thirty tools. A caller matching on the
+  old text will stop matching. In one line each, old to new:
+  `cancel_workflow_invocation` "Cancelled invocation X" -> "Cancelled workflow
+  invocation 'X'"; `create_history` "Created history ID (NAME)" -> "Created
+  history 'NAME'", naming the name that was asked for rather than the record;
+  `create_page` "Created page ID (TITLE)" -> "Created page 'ID'";
+  `create_user_tool` "Created user tool UUID" -> "Created user-defined tool
+  'NAME'", from the representation that was sent; `delete_user_tool`
+  "Deactivated user tool UUID" -> "Deactivated user-defined tool 'UUID'";
+  `get_collection_details` "Collection ID (N elements)" -> "Retrieved collection
+  'NAME'"; `get_dataset_details` "Dataset ID state=S" -> "Retrieved details for
+  dataset 'NAME'"; `get_histories` "N of M histories" -> "Retrieved N of M
+  histories", and "Retrieved N histories" when no limit was given;
+  `get_history_contents` "N of M item(s)" -> "Retrieved N items from history";
+  `get_history_details` "History ID state=S" -> "Retrieved details for history
+  'NAME'"; `get_invocations` "Invocation ID state=S" -> "Retrieved invocation
+  'ID'" for one, and the plural is written for a list of one; `get_job_details`
+  "Job J for dataset D" -> "Retrieved job details for dataset 'D'"; `get_page`
+  "Page ID (TITLE)" -> "Retrieved page 'ID'"; `get_page_revision` "Revision R of
+  page P (SOURCE, content_editor from X)" -> "Retrieved revision 'R' of page
+  'P'"; `get_server_info` "Galaxy at URL (version V)" -> "Retrieved server info
+  for URL"; `get_tool_citations` "N citation(s) for NAME" -> "Retrieved N
+  citations for tool 'ID'"; `get_tool_details` "Tool ID (NAME vV)" -> "Retrieved
+  details for tool 'ID'"; `get_tool_input_template` "Input template for ID (N
+  top-level param(s))" -> "Built an input template for tool 'ID'. Replace
+  placeholders (e.g. <dataset_id>) and pass the result as `inputs` to run_tool.";
+  `get_tool_run_examples` "N test case(s) for ID" -> "Retrieved N test cases for
+  tool 'ID'"; `get_user` "Authenticated as NAME <EMAIL>" -> "Retrieved user info
+  for 'NAME'"; `get_workflow_details` "Workflow ID (NAME)" -> "Retrieved details
+  for workflow 'NAME'"; `get_workflow_input_template` "N input slot(s) for
+  workflow W" -> "Built an input template for workflow 'W' (N slot(s), source:
+  style=run). Fill inputs_template and invoke with
+  inputs_by='step_index|step_uuid'."; `import_workflow_from_iwc` "Imported
+  workflow ID (NAME)" -> "Successfully imported workflow 'TRS_ID'";
+  `invoke_workflow` "Invoked workflow W (invocation I)" -> "Invoked workflow 'W'";
+  `list_page_revisions` "N revision(s) for page P" -> "Retrieved N revisions for
+  page 'P'"; `list_pages` "N page(s)" -> "Retrieved N pages";
+  `revert_page_revision` "Reverted page P to revision R as NEW" -> "Reverted page
+  'P' to revision 'R'"; `run_tool` "Submitted T to history H (N job(s))" ->
+  "Started tool 'T' in history 'H'"; `run_user_tool` "Submitted user tool UUID to
+  history H" -> "Started user tool 'TOOL_ID' (UUID: UUID) in history 'H'";
+  `update_page` "Updated page P (FIELDS)" -> "Updated page 'P'".
+- **Breaking:** `get_server_info` no longer reports anywhere whether the version
+  it answers with was supplied by the caller or fetched from the server. The
+  other server has no such field and says nothing about it in its sentence, and
+  the only place this surface said it was that sentence. A caller that supplied
+  `serverVersion` knows what it passed in.
+- **New in the sentence:** `run_tool` reports the version that RAN when a version
+  was asked for, read off the jobs Galaxy answered with -- " at version 0.74", or
+  " at version 0.74 (not the 0.72 requested)", or " at an unreported version (0.72
+  requested)" when the jobs name none or disagree. Asking Galaxy for a version
+  does not get you that version; its toolbox falls back to an installed one, and
+  only the reply says which ran. `get_workflow_input_template` says which of its
+  two sources the template was built from, and `run_user_tool` names the Galaxy
+  tool id behind the uuid.
+- **Not reachable here:** the Python `run_tool` and `run_user_tool` can add two
+  more clauses, "(with credentials)" when a stored credential context went with
+  the run and "(inputs not pre-checked: ...)" when their schema preflight could
+  not be made. Neither piece of work exists on this surface, so neither clause is
+  produced; the gap is the one the golden-fixtures entry above already recorded.
+- Eight golden cases were added for message branches nothing exercised: a name
+  read with `dict.get` falling back to the id in three tools, a created page whose
+  reply carries no id, a representation whose name is stated as null, two of
+  `run_tool`'s version branches, and a keyword search with two keywords, whose
+  sentence joins them. 152 cases in all.
+- The nine budgeted listings are untouched: their sentences already matched, so
+  no page is cut at a different row than before.
 
 ## 0.2.0 (unreleased)
 
