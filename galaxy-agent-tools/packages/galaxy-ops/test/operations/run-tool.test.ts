@@ -15,7 +15,7 @@ const SUBMISSION = {
 };
 
 describe("run_tool", () => {
-  it("has parity name run_tool and a nested-input schema", () => {
+  it("has parity name run_tool and the other server's four parameters", () => {
     expect(runToolOp.name).toBe("run_tool");
     expect(Object.keys(runToolOp.input).sort()).toEqual(["historyId", "inputs", "toolId", "toolVersion"]);
   });
@@ -42,6 +42,29 @@ describe("run_tool", () => {
       input_format: "legacy",
       inputs: { input_file: { src: "hda", id: "d1" } },
     });
+  });
+
+  it("hands legacy pipe-keyed inputs to Galaxy untouched, in legacy format", async () => {
+    // The other server sends bioblend's default input_format ("legacy"), whose parser
+    // reads a section parameter only as "section|param"; a nested object would be
+    // silently the default. So the keys go through exactly as written.
+    let body: Record<string, unknown> | undefined;
+    const client = mockClient({
+      POST: (_path, init) => {
+        body = init.body as Record<string, unknown>;
+        return { data: SUBMISSION, response: { status: 200 } };
+      },
+    });
+    const inputs = {
+      "advanced|threshold": 9,
+      "reference_source|ref_file": { src: "hda", id: "genome" },
+      contaminants: "",
+    };
+    await runTool({ toolId: "bwa_mem", historyId: "h1", inputs }, ctxWith(client));
+    expect(body?.input_format).toBe("legacy");
+    expect(body?.inputs).toEqual(inputs);
+    expect(runToolOp.input.inputs.description).toMatch(/'\|'/);
+    expect(runToolOp.summary).not.toMatch(/nested \(no flat/);
   });
 
   it("sends a pinned version in the payload, where Galaxy reads it", async () => {

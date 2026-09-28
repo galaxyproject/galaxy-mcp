@@ -2768,6 +2768,18 @@ def run_tool_cases(add: AddCase) -> None:
     )
     add(
         "run_tool",
+        "section_inputs_legacy_keys",
+        "a parameter inside a section, spelled the flat legacy way the tool sends it",
+        {
+            "history_id": "h0000",
+            "tool_id": "fastqc",
+            "inputs": {"advanced|threshold": 9, "contaminants": ""},
+        },
+        lambda: run_tool_fn("h0000", "fastqc", {"advanced|threshold": 9, "contaminants": ""}),
+        [tools_post],
+    )
+    add(
+        "run_tool",
         "pinned_version",
         "a version asked for by name, which this server posts itself rather than bioblend",
         {

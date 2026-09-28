@@ -20,13 +20,19 @@ export interface ToolSubmission {
   [k: string]: unknown;
 }
 
-// Nested inputs only. We accept an opaque record (server `strict:true` is the real gate);
-// the type documents the intended shape without flattening.
+// An opaque record handed to Galaxy as-is in its legacy input format, which is what the
+// other server sends: a parameter inside a section, conditional or repeat is one flat key
+// with the path joined by "|" ("advanced|threshold"), not a nested object. Galaxy's legacy
+// parser reads only the flat spelling, so a nested {advanced: {threshold}} is silently the
+// default. The nested 21.01 shape belongs to the queue-and-wait path, `executeToolRequest`.
 const input = {
   toolId: z.string().describe("Tool id, e.g. 'fastqc/0.74'"),
   historyId: z.string().describe("Encoded history id to run in"),
   inputs: jsonObject().describe(
-    "Nested tool inputs: data refs as {src:'hda',id}, batches as {__class__:'Batch',values:[...]}",
+    "Tool input parameters in Galaxy's legacy format: dataset inputs as " +
+      "{\"input_name\": {\"src\": \"hda\", \"id\": \"dataset_id\"}}; a parameter inside a " +
+      "section, conditional or repeat as one flat key joined with '|', e.g. " +
+      "\"reference_source|ref_file\" -- not nested objects.",
   ),
   toolVersion: z.string().optional().describe("Optional explicit tool version"),
 };
@@ -71,7 +77,8 @@ export const runToolOp: Operation<typeof input, ToolSubmission> = {
   name: "run_tool", // parity: mcp-server-galaxy-py run_tool
   domain: "tools",
   summary:
-    "Run a Galaxy tool. Inputs are nested (no flat pipe-keys). This queues the run and " +
+    "Run a Galaxy tool. Inputs are Galaxy's legacy format: flat 'section|param' keys, not " +
+    "nested objects. This queues the run and " +
     "answers with the jobs and output datasets Galaxy created, in their starting state -- " +
     "it does not wait for them; poll the jobs with get_job_details.",
   input,

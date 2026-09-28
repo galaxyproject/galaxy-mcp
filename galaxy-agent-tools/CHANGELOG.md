@@ -293,7 +293,13 @@ the differences they turned up are below.
   bioinformatics job is a different tool from one that queues it. Poll the jobs
   with `get_job_details`. The queue-and-wait path is still here and is now
   exported as `executeToolRequest`, with its `ToolRun` result, for a caller who
-  wants it.
+  wants it. The inputs go with it: `/api/tools` takes Galaxy's legacy format, as
+  the Python tool sends it, so a parameter inside a section, conditional or
+  repeat is one flat key joined with `|` (`advanced|threshold`), and the nested
+  `{ advanced: { threshold } }` this op used to describe is read by the legacy
+  parser as nothing at all -- the default applies. A `{ __class__: "Batch" }`
+  wrapper is likewise the other path's spelling. The schema text and summary now
+  say so.
 - **Breaking:** `invoke_workflow` hands back every invocation a batch run made.
   Galaxy answers a batch with a list, and this took the first element of it and
   dropped the rest; the Python tool passes the list through, so now this does too.

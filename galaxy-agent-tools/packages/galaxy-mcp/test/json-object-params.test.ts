@@ -361,8 +361,10 @@ describe("a key at the top level of an object-valued parameter", () => {
         `version, name, shell_command, container:'<image>'}"}`,
     );
     expect(schemaOf("run_tool", "inputs")).toBe(
-      `{${open},"description":"Nested tool inputs: data refs as {src:'hda',id}, batches as ` +
-        `{__class__:'Batch',values:[...]}"}`,
+      `{${open},"description":"Tool input parameters in Galaxy's legacy format: dataset inputs as ` +
+        `{\\"input_name\\": {\\"src\\": \\"hda\\", \\"id\\": \\"dataset_id\\"}}; a parameter inside a ` +
+        `section, conditional or repeat as one flat key joined with '|', e.g. ` +
+        `\\"reference_source|ref_file\\" -- not nested objects."}`,
     );
     expect(schemaOf("run_user_tool", "inputs")).toBe(
       `{${open},"description":"tool inputs; dataset refs as {src:'hda',id}"}`,
