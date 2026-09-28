@@ -319,6 +319,28 @@ uv run pytest tests/test_real_integration.py
 
 ## Development
 
+### The `galaxy_mcp.ops` layer
+
+`src/galaxy_mcp/ops/` holds Galaxy logic that is a pure function of its arguments -- the
+input contracts (`tool_inputs`, `workflow_inputs`) today, and whatever else turns out to be
+reusable logic rather than transport or orchestration. Nothing in there may reach back for
+the server, a client, a session or a third-party package: `tests/test_ops_boundary.py`
+reads the imports out of the source and refuses anything outside a short allow-list of
+pure-data standard-library modules (`json`, `re`, `typing` and a few like them) and the
+layer's own modules, whichever way the import is written and however deep the package it
+sits in -- not "the standard library", because `pydoc`, `pickle` and `unittest.mock` can all
+turn a dotted name into a loaded module. The layer has no dynamic imports at all, so rather than work out what a call
+would load, the check refuses any mention of the machinery that could load one --
+`importlib`, `import_module`, `__import__`, `builtins`, `pkgutil.resolve_name`, `runpy`, `sys.modules`, `exec` and the like
+-- and then imports every module of the layer in a clean interpreter to see what actually
+ended up in `sys.modules`. The dependency runs one way, so a caller imports ops and never
+the reverse. The two modules used to sit directly under `galaxy_mcp`, and both old paths
+still answer, as does every name `from galaxy_mcp import *` used to bind; importing the
+package still does not build the server, so `--discovery-mode` keeps working. Those root
+names are answered at runtime, so a type checker will not see names through `from
+galaxy_mcp import *`; import them by name or from `galaxy_mcp.server` where one has to
+follow them.
+
 ### Code Style Guidelines
 
 - Use Python 3.10+ features

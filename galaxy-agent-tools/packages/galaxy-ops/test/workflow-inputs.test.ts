@@ -14,7 +14,7 @@ import {
 /**
  * Minimal style=run model fixture: two data inputs and one parameter input,
  * steps as a dict (the common case). Derived from Python normalizeRunModel
- * expectations by reading workflow_inputs.py.
+ * expectations by reading galaxy_mcp/ops/workflow_inputs.py.
  */
 const RUN_MODEL_FIXTURE: Record<string, unknown> = {
   has_upgrade_messages: false,

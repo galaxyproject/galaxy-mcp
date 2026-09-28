@@ -1,0 +1,696 @@
+"""Pure helpers for workflow input templates and invoke-time validation.
+
+No bioblend client, no network, no global state -- every function is a pure
+function of its arguments so it is trivially unit-testable. The I/O wiring
+(fetching style=run / .ga / datatypes via a Galaxy client, registering MCP
+tools) lives in server.py. Mirrors tool_inputs.py.
+"""
+
+import json
+import re
+from typing import Any
+
+
+def _safe_int(value: Any, default: int | None = None) -> int | None:
+    """Best-effort int coercion; returns ``default`` instead of raising."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_list(value: Any) -> list:
+    """Coerce a possibly-scalar field to a list. A bare string becomes a single-element list."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+def _clean_readme_summary(readme: str, max_length: int = 300) -> str:
+    """Extract a clean summary from a readme, stripping markdown headers."""
+    if not readme:
+        return ""
+    lines = readme.split("\n")
+    clean_lines: list[str] = []
+    for line in lines:
+        if line.strip().startswith("#"):
+            continue
+        if not clean_lines and not line.strip():
+            continue
+        clean_lines.append(line)
+    text = " ".join(clean_lines)
+    text = " ".join(text.split())
+    if len(text) > max_length:
+        text = text[: max_length - 3].rsplit(" ", 1)[0] + "..."
+    return text
+
+
+def _options_from_triples(raw: Any) -> list[dict]:
+    """style=run param options come as [label, value, selected] triples."""
+    if not isinstance(raw, list):
+        return []
+    out: list[dict] = []
+    for item in raw:
+        if isinstance(item, (list, tuple)) and len(item) >= 2:
+            out.append({"label": str(item[0]), "value": str(item[1])})
+    return out
+
+
+def _options_from_restrictions(raw: Any) -> list[dict]:
+    """.ga enumerated params carry a flat list of allowed string values."""
+    return [{"label": str(v), "value": str(v)} for v in raw] if isinstance(raw, list) else []
+
+
+_SORT_SENTINEL = 10**9  # sorts non-numeric step keys to the end without crashing
+
+_INPUT_TYPE_MAP = {
+    "data_input": "data",
+    "data_collection_input": "data_collection",
+    "parameter_input": "parameter",
+}
+_SRC_MAP = {"data": "hda", "data_collection": "hdca", "parameter": None}
+
+# The srcs a data input slot takes, each of which Galaxy resolves to one dataset:
+# run_request turns a library dataset, in either spelling, into an HDA before the
+# invocation starts (lib/galaxy/workflow/run_request.py). The list is closed,
+# because a src Galaxy has no branch for still costs a created history before it
+# fails.
+_DATA_SRCS = ("hda", "ldda", "ld")
+_DATA_SRC_LIST = ", ".join(_DATA_SRCS)
+# Sources Galaxy's request model parses that a data slot still refuses, each with
+# the rest of the sentence that says why.
+_REFUSED_DATA_SRCS = {
+    "hdca": (
+        "a dataset collection (hdca). Galaxy would map the workflow over its "
+        "elements, but nothing here tells a map-over that was meant apart from "
+        "the wrong reference pasted in, so a data slot wants one dataset"
+    ),
+    "dce": (
+        "a collection element (dce). Galaxy's request model parses one, but "
+        "run_request has no branch for it and answers 'Unknown workflow input "
+        "source'"
+    ),
+    "url": (
+        "a url reference (url). Galaxy does take one on a data input, but its "
+        "request model is strict about the shape and this check cannot read that "
+        "shape yet, so it would only be half-checked -- upload the file first and "
+        "pass the hda"
+    ),
+}
+
+
+# A library dataset reference is its src and its id, and nothing else. The four
+# leftovers the model still tolerates are bioblend's.
+_LIBRARY_SRCS = ("ldda", "ld")
+_LIBRARY_REF_KEYS = frozenset({"src", "id", "map_over_type", "hid", "workflow_step_id", "label"})
+_LIBRARY_STR_KEYS = ("map_over_type", "workflow_step_id", "label")
+# Every shape an encoded id can have: encode_id pads the plaintext to a whole
+# number of 8-byte cipher blocks and hex-encodes it
+# (lib/galaxy/security/idencoding.py:38-49), so an id Galaxy issued is always a
+# positive multiple of 16 hex digits, in either case. Matching proves only that
+# decode_id could get as far as trying; it says nothing about the dataset.
+_ENCODED_ID_RE = re.compile(r"(?:[0-9a-fA-F]{16})+")
+
+
+def _library_ref_problems(src: str, value: dict[str, Any]) -> list[str]:
+    """Everything Galaxy would refuse about a library dataset reference.
+
+    Mirrors DataRequestLdda and DataRequestLd field by field
+    (lib/galaxy/tool_util_models/parameters.py:555-575). They are StrictModel, so
+    an unknown key is refused outright, and ``id`` is a StrictStr, which takes a
+    string and nothing else. An id that is empty or not shaped like an encoded one
+    gets no further than decode_id, which turns the codec's error into a
+    MalformedId (lib/galaxy/security/idencoding.py:91-102).
+    """
+    problems: list[str] = []
+    stray = sorted(k for k in value if k not in _LIBRARY_REF_KEYS)
+    if stray:
+        named = ", ".join(repr(k) for k in stray)
+        problems.append(
+            f"A library dataset reference ({src}) is just src and id;"
+            f" Galaxy's request model forbids the extra"
+            f" {'keys' if len(stray) > 1 else 'key'} {named}."
+        )
+    if "id" not in value:
+        problems.append(f"A library dataset reference ({src}) needs an id.")
+    elif not isinstance(value["id"], str):
+        problems.append(
+            f"The id on a library dataset reference must be a string; {value['id']!r} is not one."
+        )
+    elif not value["id"]:
+        problems.append("The id on a library dataset reference must not be empty.")
+    elif not _ENCODED_ID_RE.fullmatch(value["id"]):
+        problems.append(
+            f"The id on a library dataset reference does not look like a Galaxy"
+            f" encoded id, which is a multiple of 16 hex digits;"
+            f" {value['id']!r} is not."
+        )
+    # Stricter than Galaxy on purpose. The field is not strict there, so pydantic
+    # would coerce "3" and 3.0 -- but reproducing that grammar exactly is not worth
+    # it for a legacy key Galaxy strips from the request anyway: refusing one costs
+    # a retry with an obvious fix, missing one costs a created history. A bool is an
+    # int in Python and the model takes it too, so it stays; size never matters,
+    # since an int of any magnitude passes there.
+    if "hid" in value and not (value["hid"] is None or isinstance(value["hid"], int)):
+        problems.append(
+            f"The hid on a library dataset reference must be a whole number or null;"
+            f" {value['hid']!r} is not one -- send it as a number."
+        )
+    for key in _LIBRARY_STR_KEYS:
+        if key in value and value[key] is not None and not isinstance(value[key], str):
+            problems.append(
+                f"The {key} on a library dataset reference must be a string or null;"
+                f" {value[key]!r} is not one."
+            )
+    return problems
+
+
+def _supplied_ext(value: dict[str, Any]) -> str | None:
+    """The datatype on a data reference, or None if there is no usable one.
+
+    Only an hda reaches here carrying one: the server resolves the ext itself and
+    falls back to whatever the caller put there when that lookup fails, so a list
+    or a dict can still arrive. That would raise out of the datatype lookup --
+    which invoke_workflow's blanket handler would turn into an empty verdict,
+    disabling every other check in the same call.
+    """
+    ext = value.get("ext")
+    return ext if isinstance(ext, str) else None
+
+
+_FALLBACK_LABEL = {
+    "data": "Input dataset",
+    "data_collection": "Input dataset collection",
+    "parameter": "Input parameter",
+}
+
+
+def _coerce_state(tool_state: Any) -> dict[str, Any]:
+    if isinstance(tool_state, str):
+        try:
+            return json.loads(tool_state)
+        except (ValueError, TypeError):
+            return {}
+    return tool_state if isinstance(tool_state, dict) else {}
+
+
+def subtype_satisfies(supplied_ext: str, accepted_exts: list[str], mapping: dict[str, Any]) -> bool:
+    """True if a dataset of ``supplied_ext`` is acceptable where ``accepted_exts`` are required.
+
+    ``accepted_exts == []`` means the slot accepts any datatype. Uses Galaxy's
+    datatype class hierarchy: supplied satisfies accepted if some accepted
+    extension's class is in the supplied extension's class ancestry (so ``bed``
+    satisfies ``tabular``). Unknown supplied/accepted extensions are treated
+    permissively -- we only reject a *provable* mismatch.
+    """
+    if not accepted_exts:
+        return True
+    ext_to_class = mapping.get("ext_to_class_name", {})
+    class_to_classes = mapping.get("class_to_classes", {})
+    supplied_class = ext_to_class.get(supplied_ext)
+    if supplied_class is None:
+        return True  # cannot prove a mismatch for an unknown extension
+    ancestry = class_to_classes.get(supplied_class, {})
+    for accepted in accepted_exts:
+        accepted_class = ext_to_class.get(accepted)
+        if accepted_class is None:
+            return True  # unknown accepted extension -> don't claim a mismatch
+        if accepted_class == supplied_class or accepted_class in ancestry:
+            return True
+    return False
+
+
+def normalize_ga_steps(definition: dict[str, Any]) -> list[dict[str, Any]]:
+    """Normalize a .ga / IWC-manifest workflow ``definition`` into input slots.
+
+    Reads ``definition["steps"]`` (dict keyed by string order_index), keeps only
+    data_input / data_collection_input / parameter_input steps, and parses each
+    step's ``tool_state`` for the declared constraints. Absent ``format`` means
+    "no restriction" (empty accepted_formats).
+    """
+    steps = definition.get("steps", {})
+    slots: list[dict[str, Any]] = []
+    # Sort numeric keys first (ascending), then non-numeric keys at the end.
+    # Non-numeric keys are skipped below; the sentinel just keeps sort() from crashing.
+    for key, step in sorted(
+        steps.items(), key=lambda kv: (_safe_int(kv[0], _SORT_SENTINEL), kv[0])
+    ):
+        index = _safe_int(key)
+        if index is None:
+            continue  # non-numeric key -- skip; .ga files should never have these
+        input_type = _INPUT_TYPE_MAP.get(step.get("type", ""))
+        if input_type is None:
+            continue
+        state = _coerce_state(step.get("tool_state"))
+        label = step.get("label") or f"{_FALLBACK_LABEL[input_type]} (step {index})"
+        slots.append(
+            _make_slot(
+                step_index=index,
+                step_uuid=step.get("uuid"),
+                label=label,
+                input_type=input_type,
+                accepted_formats=_as_list(state.get("format")),
+                acceptable_extensions=[],
+                collection_type=state.get("collection_type"),
+                parameter_type=state.get("parameter_type"),
+                optional=bool(state.get("optional", False)),
+                options=(
+                    _options_from_restrictions(state.get("restrictions"))
+                    if input_type == "parameter"
+                    else []
+                ),
+            )
+        )
+    return slots
+
+
+def _make_slot(
+    *,
+    step_index: int,
+    step_uuid: str | None,
+    label: str,
+    input_type: str,
+    accepted_formats: list,
+    acceptable_extensions: list,
+    collection_type: str | None,
+    parameter_type: str | None,
+    optional: bool,
+    options: list,
+) -> dict[str, Any]:
+    """Build the slot contract dict shared by both normalizers."""
+    return {
+        "step_index": step_index,
+        "step_uuid": step_uuid,
+        "label": label,
+        "input_type": input_type,
+        "src": _SRC_MAP[input_type],
+        "accepted_formats": accepted_formats,
+        "acceptable_extensions": acceptable_extensions,
+        "collection_type": collection_type,
+        "parameter_type": parameter_type,
+        "optional": optional,
+        "options": options,
+    }
+
+
+# style=run step "step_type" -> our input_type. Galaxy uses the same
+# data_input/data_collection_input/parameter_input discriminators here.
+def normalize_run_model(run_dict: dict[str, Any]) -> list[dict[str, Any]]:
+    """Normalize a style=run workflow model into input slots (the slot contract).
+
+    style=run is the webapp's own run-form serialization; for data inputs its
+    ``extensions`` already reflect Galaxy's downstream-consumer resolution. We
+    consume it rather than reconstruct from connections.
+    """
+    raw_steps = run_dict.get("steps")
+    if isinstance(raw_steps, dict):
+        # non-numeric keys get sorted to the end and skipped below
+        step_iter = [
+            raw_steps[k] for k in sorted(raw_steps, key=lambda k: (_safe_int(k, _SORT_SENTINEL), k))
+        ]
+    else:
+        step_iter = list(raw_steps or [])
+    slots: list[dict[str, Any]] = []
+    for step in step_iter:
+        input_type = _INPUT_TYPE_MAP.get(step.get("step_type") or step.get("type", ""))
+        if input_type is None:
+            continue
+        # style=run can expose step_index, order_index, or id; all three may be absent
+        # or may be a hash string on unusual exports -- skip rather than crash.
+        raw_idx = step.get("step_index", step.get("order_index", step.get("id")))
+        index = _safe_int(raw_idx)
+        if index is None:
+            continue
+        # The run model nests the actual param under "inputs"[0] for input steps.
+        param = (step.get("inputs") or [{}])[0]
+        ctype = param.get("collection_type")
+        if not ctype:
+            ctypes = param.get("collection_types")
+            ctype = ctypes[0] if isinstance(ctypes, list) and ctypes else None
+        # style=run uses "step_label" for the step name; param["label"] is a fallback.
+        label = (
+            step.get("step_label")
+            or param.get("label")
+            or f"{_FALLBACK_LABEL[input_type]} (step {index})"
+        )
+        # parameter_type: style=run puts it on param first, then step. The .ga path
+        # reads it only from tool_state -- different source schemas, intentional asymmetry.
+        slots.append(
+            _make_slot(
+                step_index=index,
+                step_uuid=step.get("uuid"),
+                label=label,
+                input_type=input_type,
+                accepted_formats=_as_list(param.get("extensions")),
+                acceptable_extensions=_as_list(param.get("acceptable_extensions")),
+                collection_type=ctype,
+                parameter_type=param.get("parameter_type") or step.get("parameter_type"),
+                optional=bool(param.get("optional", False)),
+                options=(
+                    _options_from_triples(param.get("options")) if input_type == "parameter" else []
+                ),
+            )
+        )
+    return slots
+
+
+def _has_runtime_value(obj: Any) -> bool:
+    """True if ``obj`` contains a bare RuntimeValue marker (not ConnectedValue)."""
+    if isinstance(obj, dict):
+        if obj.get("__class__") == "RuntimeValue":
+            return True
+        return any(_has_runtime_value(v) for v in obj.values())
+    if isinstance(obj, list):
+        return any(_has_runtime_value(v) for v in obj)
+    return False
+
+
+def find_legacy_warnings(definition: dict[str, Any]) -> list[dict[str, str]]:
+    """Warn on tool steps carrying unconnected RuntimeValue params (the real
+    legacy-run-form trigger). Bare ``parameter_input`` steps are formal inputs
+    and are NOT flagged.
+    """
+    warnings: list[dict[str, str]] = []
+    for key, step in sorted(
+        definition.get("steps", {}).items(),
+        key=lambda kv: (_safe_int(kv[0], _SORT_SENTINEL), kv[0]),
+    ):
+        if step.get("type") != "tool":
+            continue
+        if _has_runtime_value(_coerce_state(step.get("tool_state"))):
+            name = step.get("label") or step.get("tool_id") or f"step {key}"
+            warnings.append(
+                {
+                    "kind": "legacy_runtime_value",
+                    "message": (
+                        f"Tool step '{name}' has a RuntimeValue parameter set at runtime "
+                        f"(legacy run-form pattern); the workflow may not run cleanly via the API."
+                    ),
+                }
+            )
+    return warnings
+
+
+def _collection_type_compatible(supplied: str | None, required: str | None) -> bool:
+    """Direct or map-over compatibility. None required == accept any shape."""
+    if not required or not supplied:
+        return True
+    if supplied == required:
+        return True
+    # map-over: a list:paired collection can feed a 'paired' (or 'list:paired') slot.
+    # Compare colon-delimited segments, not a raw string suffix.
+    return supplied.split(":")[-1] == required or supplied.endswith(":" + required)
+
+
+def _ext_accepted(supplied_ext: str, slot: dict[str, Any], mapping: dict[str, Any]) -> bool:
+    """True if a dataset of supplied_ext is acceptable for this slot.
+
+    Prefer Galaxy's own converter+subclass-aware acceptable_extensions (exact GUI
+    parity, available from style=run); fall back to subclass closure on the
+    declared accepted_formats (the .ga path, which lacks the converter set).
+    """
+    acc = slot.get("acceptable_extensions") or []
+    if acc:
+        return supplied_ext in acc
+    return subtype_satisfies(supplied_ext, slot["accepted_formats"], mapping)
+
+
+def validate_inputs(
+    slots: list[dict[str, Any]],
+    supplied: dict[str, Any],
+    mapping: dict[str, Any],
+) -> dict[str, list[dict[str, Any]]]:
+    """Three-tier preflight. ``supplied`` keyed by str(step_index); data entries
+    carry ``ext``; collection entries carry ``collection_type`` and optional
+    ``element_extensions``; parameter entries are scalars. Rejects are provable
+    structural/datatype mismatches; warnings are inferred/uncertain.
+    """
+    rejects: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
+    # Detect duplicate step_index values before collapsing -- silent collision
+    # would validate only the last slot, hiding the schema problem.
+    seen: set[str] = set()
+    for s in slots:
+        idx = str(s["step_index"])
+        if idx in seen:
+            warnings.append(
+                {
+                    "step_index": idx,
+                    "message": (
+                        f"Workflow has multiple input slots sharing step_index {idx};"
+                        f" only one will be validated."
+                    ),
+                }
+            )
+        seen.add(idx)
+    by_index = {str(s["step_index"]): s for s in slots}
+
+    for key, value in supplied.items():
+        slot = by_index.get(str(key))
+        if slot is None:
+            warnings.append(
+                {
+                    "step_index": key,
+                    "message": (
+                        f"Supplied input for step {key} has no matching workflow input slot."
+                    ),
+                }
+            )
+            continue
+        itype = slot["input_type"]
+        is_ref = isinstance(value, dict) and "src" in value
+
+        if itype == "parameter":
+            if is_ref:
+                rejects.append(
+                    {
+                        "step_index": slot["step_index"],
+                        "label": slot["label"],
+                        "reason": (
+                            "Parameter input given a dataset/collection reference;"
+                            " expected a scalar value."
+                        ),
+                    }
+                )
+            continue
+
+        if not is_ref:
+            rejects.append(
+                {
+                    "step_index": slot["step_index"],
+                    "label": slot["label"],
+                    "reason": f"{itype} input expects a {{'src','id'}} reference.",
+                }
+            )
+            continue
+
+        if itype == "data":
+            src = value["src"]
+            # src arrives from whatever the caller sent, so it need not be a string
+            # and must not be used as a dict key before that is established.
+            got: str | None
+            if not isinstance(src, str):
+                got = f"a {type(src).__name__} where a src string was expected"
+            elif src in _REFUSED_DATA_SRCS:
+                got = _REFUSED_DATA_SRCS[src]
+            elif src not in _DATA_SRCS:
+                got = f"src '{src}'"
+            else:
+                got = None
+            if got is not None:
+                rejects.append(
+                    {
+                        "step_index": slot["step_index"],
+                        "label": slot["label"],
+                        "reason": (
+                            f"Slot expects a single dataset (src: {_DATA_SRC_LIST}); got {got}."
+                        ),
+                    }
+                )
+                continue
+            if src in _LIBRARY_SRCS:
+                problems = _library_ref_problems(src, value)
+                if problems:
+                    rejects.extend(
+                        {
+                            "step_index": slot["step_index"],
+                            "label": slot["label"],
+                            "reason": problem,
+                        }
+                        for problem in problems
+                    )
+                    continue
+            ext = _supplied_ext(value)
+            if ext and not _ext_accepted(ext, slot, mapping):
+                rejects.append(
+                    {
+                        "step_index": slot["step_index"],
+                        "label": slot["label"],
+                        "reason": (
+                            f"Dataset datatype '{ext}' is not accepted here "
+                            f"(expects: {', '.join(slot['accepted_formats'])})."
+                        ),
+                    }
+                )
+            elif not ext and slot["accepted_formats"]:
+                warnings.append(
+                    {
+                        "step_index": slot["step_index"],
+                        "message": (
+                            f"Could not determine datatype of the dataset for '{slot['label']}'; "
+                            f"slot expects {', '.join(slot['accepted_formats'])}."
+                        ),
+                    }
+                )
+
+        elif itype == "data_collection":
+            if value["src"] != "hdca":
+                rejects.append(
+                    {
+                        "step_index": slot["step_index"],
+                        "label": slot["label"],
+                        "reason": f"Slot expects a dataset collection (hdca); got {value['src']}.",
+                    }
+                )
+                continue
+            if not _collection_type_compatible(
+                value.get("collection_type"), slot["collection_type"]
+            ):
+                rejects.append(
+                    {
+                        "step_index": slot["step_index"],
+                        "label": slot["label"],
+                        "reason": (
+                            f"Collection type '{value.get('collection_type')}' is incompatible "
+                            f"with the slot's '{slot['collection_type']}'."
+                        ),
+                    }
+                )
+                continue
+            for el_ext in value.get("element_extensions") or []:
+                if not _ext_accepted(el_ext, slot, mapping):
+                    rejects.append(
+                        {
+                            "step_index": slot["step_index"],
+                            "label": slot["label"],
+                            "reason": (
+                                f"Collection element datatype '{el_ext}' is not accepted here "
+                                f"(expects: {', '.join(slot['accepted_formats'])})."
+                            ),
+                        }
+                    )
+                    break
+
+    # warn on missing required slots (don't block -- the model may add them next call)
+    for slot in slots:
+        if not slot["optional"] and str(slot["step_index"]) not in supplied:
+            warnings.append(
+                {
+                    "step_index": slot["step_index"],
+                    "message": (
+                        f"Required input '{slot['label']}'"
+                        f" (step {slot['step_index']}) not supplied yet."
+                    ),
+                }
+            )
+    return {"rejects": rejects, "warnings": warnings}
+
+
+def _placeholder_for(slot: dict[str, Any]) -> Any:
+    if slot["input_type"] == "data":
+        return {"src": "hda", "id": "<dataset_id>"}
+    if slot["input_type"] == "data_collection":
+        return {"src": "hdca", "id": "<collection_id>"}
+    return "<value>"
+
+
+_OPTIONS_INLINE_CAP = 25  # inline option sets at or below this size in full
+_OPTIONS_SAMPLE = 15  # otherwise show this many + a note (unless verbose)
+
+
+def _display_slot(slot: dict[str, Any], verbose: bool) -> dict[str, Any]:
+    """Per-slot display shaping: drop the giant acceptable_extensions, and cap
+    large option sets (keeping option_count) unless verbose. Empty options are
+    dropped so data/collection slots stay clean.
+    """
+    out = {k: v for k, v in slot.items() if k != "acceptable_extensions"}
+    options = out.get("options") or []
+    if not options:
+        out.pop("options", None)
+        return out
+    out["option_count"] = len(options)
+    if not verbose and len(options) > _OPTIONS_INLINE_CAP:
+        out["options"] = options[:_OPTIONS_SAMPLE]
+        out["options_note"] = (
+            f"showing {_OPTIONS_SAMPLE} of {len(options)}; pass verbose=true for the full list, "
+            f"or supply a value matching an installed option."
+        )
+    return out
+
+
+def build_workflow_input_template(
+    slots: list[dict[str, Any]],
+    warnings: list[dict[str, Any]] | None = None,
+    guide: dict[str, Any] | None = None,
+    verbose: bool = False,
+) -> dict[str, Any]:
+    """Assemble the model-facing template: a ready-to-fill skeleton keyed by
+    step_index, the per-slot constraint summary (with capped options), the
+    invoke key hint, any legacy warnings, and -- when provided -- the run guide.
+    """
+    result: dict[str, Any] = {
+        "inputs_template": {str(s["step_index"]): _placeholder_for(s) for s in slots},
+        "slots": [_display_slot(s, verbose) for s in slots],
+        "inputs_by": "step_index|step_uuid",
+        "warnings": warnings or [],
+    }
+    if guide is not None:
+        result["guide"] = guide
+    return result
+
+
+def build_guide(
+    workflow_show: dict[str, Any], run_model: dict[str, Any] | None, verbose: bool
+) -> dict[str, Any]:
+    """Assemble the model-facing run guide from a show_workflow dict.
+
+    summary: full readme when verbose, else a cleaned summary; falls back
+    readme -> help -> annotation. provenance: version + TRS source (always),
+    plus freshness flags from style=run when available. When run_model is None
+    (the .ga fallback path), parameter options weren't resolved -- note it.
+    """
+    readme = workflow_show.get("readme") or ""
+    help_text = workflow_show.get("help") or ""
+    annotation = workflow_show.get("annotation") or ""
+    # Pick the first source whose cleaned form has real prose (a headers-only
+    # readme cleans to ""), then render it per verbose. annotation is the last resort.
+    chosen_raw = ""
+    for text in (readme, help_text):
+        if _clean_readme_summary(text).strip():
+            chosen_raw = text
+            break
+    if chosen_raw:
+        summary = chosen_raw if verbose else _clean_readme_summary(chosen_raw)
+    else:
+        summary = annotation
+
+    src_meta = workflow_show.get("source_metadata") or {}
+    provenance: dict[str, Any] = {
+        "version": workflow_show.get("version"),
+        "source": {"trs_id": src_meta.get("trs_tool_id"), "trs_url": src_meta.get("trs_url")},
+    }
+    if run_model is not None:
+        provenance["freshness"] = {
+            "has_upgrade_messages": run_model.get("has_upgrade_messages"),
+            "step_version_changes": run_model.get("step_version_changes") or [],
+        }
+
+    guide: dict[str, Any] = {"summary": summary, "annotation": annotation, "provenance": provenance}
+    if run_model is None:
+        guide["notes"] = [
+            "Parameter options (e.g. reference genome) resolve at run time; "
+            "call again with a history_id for resolved values."
+        ]
+    return guide
