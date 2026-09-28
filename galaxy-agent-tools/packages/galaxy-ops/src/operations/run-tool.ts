@@ -34,14 +34,14 @@ const input = {
       "section, conditional or repeat as one flat key joined with '|', e.g. " +
       "\"reference_source|ref_file\" -- not nested objects.",
   ),
-  toolVersion: z.string().optional().describe("Optional explicit tool version"),
+  toolVersion: z.string().nullish().describe("Optional explicit tool version"),
 };
 
 type RunToolInput = {
   toolId: string;
   historyId: string;
   inputs: Record<string, unknown>;
-  toolVersion?: string;
+  toolVersion?: string | null;
 };
 
 /**
@@ -66,7 +66,7 @@ async function run(i: RunToolInput, ctx: GalaxyContext): Promise<ToolSubmission>
     input_format: "legacy",
     inputs: i.inputs,
   };
-  if (i.toolVersion !== undefined) body["tool_version"] = i.toolVersion;
+  if (i.toolVersion != null) body["tool_version"] = i.toolVersion;
   return legacyPost<ToolSubmission>(ctx, "/api/tools", { body });
 }
 
@@ -114,7 +114,7 @@ export const runToolOp: Operation<typeof input, ToolSubmission> = {
     // other server can add after this one (stored credentials, and inputs that went
     // unchecked) belong to work this surface does not do; see the release notes.
     let version = "";
-    if (i.toolVersion !== undefined) {
+    if (i.toolVersion != null) {
       const ran = reportedToolVersion(o);
       if (ran === null) version = ` at an unreported version (${i.toolVersion} requested)`;
       else if (ran === i.toolVersion) version = ` at version ${ran}`;

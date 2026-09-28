@@ -39,8 +39,11 @@ export async function guardVersion(
     for (const claim of required) {
       if (satisfiesRequirement(version, claim.requires.galaxy)) continue;
       const want = parseRequirement(claim.requires.galaxy);
+      // server.py, _assert_version_supported: the last clause is the useful half of it --
+      // an agent that reads "needs 26.1" still has to be told the call did not happen.
       throw new GalaxyVersionError(
-        `${claim.name} needs Galaxy ${want.major}.${want.minor} or newer; this server reports ${version.raw}`,
+        `${claim.name} needs Galaxy ${want.major}.${want.minor} or newer; ` +
+          `this server reports ${version.raw}. Nothing was sent to Galaxy.`,
       );
     }
   }

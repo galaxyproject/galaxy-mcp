@@ -58,36 +58,33 @@ describe("create_page", () => {
     await createPage({ title: "R", slug: "r", annotation: "scratch notes" }, ctxWith(client));
   });
 
-  it("rejects a standalone report with no slug before calling Galaxy, and says which field", async () => {
-    const POST = vi.fn();
-    await expect(createPage({ title: "My Report" }, ctxWith(mockClient({ POST })))).rejects.toThrow(
-      /a unique slug/,
-    );
-    expect(POST).not.toHaveBeenCalled();
-  });
-
-  it("rejects a standalone report with no title before calling Galaxy", async () => {
-    const POST = vi.fn();
-    await expect(createPage({ slug: "my-report" }, ctxWith(mockClient({ POST })))).rejects.toBeInstanceOf(
-      GalaxyConnectionError,
-    );
-    expect(POST).not.toHaveBeenCalled();
-  });
-
-  it("names both fields when a report supplies neither", async () => {
-    const POST = vi.fn();
-    await expect(createPage({}, ctxWith(mockClient({ POST })))).rejects.toThrow(
-      "a standalone report needs a title and a unique slug; pass a historyId to create a notebook instead",
-    );
-    expect(POST).not.toHaveBeenCalled();
-  });
-
-  it("treats empty strings as absent rather than posting them", async () => {
-    const POST = vi.fn();
+  // The other server refuses none of these locally: it posts what it was given and lets
+  // Galaxy answer. A report with no title and no slug is a 400 from Galaxy with Galaxy's own
+  // reason in it, which is what these now check.
+  it("posts a report with no slug and lets Galaxy refuse it", async () => {
+    const POST = vi.fn(() => ({
+      error: { err_msg: "slug is required" },
+      response: { status: 400 },
+    }));
     await expect(
-      createPage({ historyId: "", title: "", slug: "" }, ctxWith(mockClient({ POST }))),
+      createPage({ title: "My Report" }, ctxWith(mockClient({ POST }))),
     ).rejects.toBeInstanceOf(GalaxyConnectionError);
-    expect(POST).not.toHaveBeenCalled();
+    expect(POST).toHaveBeenCalledOnce();
+  });
+
+  it("posts a report with no title for the same reason", async () => {
+    const POST = vi.fn(() => ({ error: { err_msg: "title is required" }, response: { status: 400 } }));
+    await expect(
+      createPage({ slug: "my-report" }, ctxWith(mockClient({ POST }))),
+    ).rejects.toBeInstanceOf(GalaxyConnectionError);
+    expect(POST).toHaveBeenCalledOnce();
+  });
+
+  it("still treats an empty history id as absent, so an empty one makes a report", async () => {
+    const POST = vi.fn(() => ({ data: { id: "p1", content_format: "markdown" }, response: { status: 200 } }));
+    await createPage({ historyId: "", title: "T", slug: "s" }, ctxWith(mockClient({ POST })));
+    const body = POST.mock.calls[0]?.[1]?.body as Record<string, unknown>;
+    expect(body).not.toHaveProperty("history_id");
   });
 
   it("envelopes a slug collision rather than throwing", async () => {

@@ -68,7 +68,7 @@ export interface ResolvedSlots {
 export async function resolveWorkflowSlots(
   ctx: GalaxyContext,
   workflowId: string,
-  historyId?: string,
+  historyId?: string | null,
 ): Promise<ResolvedSlots> {
   // Primary: style=run -- off-schema endpoint, use legacyGet
   try {
@@ -106,7 +106,7 @@ const input = {
   workflowId: z.string().describe("Encoded stored-workflow id"),
   historyId: z
     .string()
-    .optional()
+    .nullish()
     .describe(
       "History id; resolves history-compatible dataset options in the run model",
     ),
@@ -115,7 +115,7 @@ const input = {
     .default(false)
     .describe("Return the full readme and uncapped option lists (default false)"),
 };
-type In = { workflowId: string; historyId?: string; verbose?: boolean };
+type In = { workflowId: string; historyId?: string | null; verbose?: boolean };
 
 async function run(i: In, ctx: GalaxyContext): Promise<WorkflowInputTemplate> {
   const verbose = i.verbose ?? false;

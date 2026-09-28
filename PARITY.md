@@ -61,7 +61,7 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `create_history` |  | `2` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
 | `create_history` | `history_name` |  | `type=string required=true default=none` | `type=string required=true default=none` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | One required string under two names: `history_name` here, `name` there. |
 | `create_history` | `name` |  | -- | -- | `type=string required=true default=none` | `vs built-in: missing-py-param` | `unreviewed-gap` | One required string under two names: `name` there, `history_name` here. |
-| `create_page` |  | `4` | `write (tag), requires >=26.1` | `write (hint), requires >=26.1` | `write (mcp default)` |  |  |  |
+| `create_page` |  | `6` | `write (tag), requires >=26.1` | `write (hint), requires >=26.1` | `write (mcp default)` |  |  |  |
 | `create_user_tool` |  | `6` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
 | `delete_user_tool` |  | `2` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
 | `download_dataset` |  | `0` | `read (tag)` | `write (hint)` | `write (mcp default)` | `mutability-mismatch` | `intentional` | Both surfaces write the bytes to a local path when they are given one, and both say so; they disagree because the two flags are about different things. Python's read tag is a statement about Galaxy: the tags exist to gate GALAXY_MCP_INCLUDE/EXCLUDE_TAGS, and the tool is two GETs that create, change and delete nothing on the server -- the file Python writes to file_path is outside what the tag speaks to. The MCP readOnlyHint has no such scope: the SDK defines readOnlyHint true as a tool that does not modify its environment, and with filePath the TS op overwrites whatever file is at that path, so it advertises false and clients that gate approval on the hint ask before it runs. Dannon's call (2026-09-26): each flag is correct about its own scope, so neither side moves and the mismatch is what the two scopes look like from the comparator. |
@@ -103,7 +103,7 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `get_tool_panel` | `section_id` |  | `type=string required=false default=none` | `type=string required=false default=none` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours drills into one section by id; Galaxy's has no drill-in. |
 | `get_tool_panel` | `view` |  | -- | -- | `type=string required=false default=none` | `vs built-in: missing-py-param` | `unreviewed-gap` | Galaxy's can ask for an admin-configured named panel view; ours always reads the standard panel. |
 | `get_tool_run_examples` |  | `4` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
-| `get_user` |  | `3` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
+| `get_user` |  | `4` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_workflow_details` |  | `5` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_workflow_input_template` |  | `8` | `read (tag)` | `read (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Same gap before invoke_workflow: no template, no run guide, no input validation on that side. |
 | `import_workflow_from_iwc` |  | `4` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
@@ -114,7 +114,7 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `invoke_workflow` | `parameters_normalized` |  | `type=boolean required=false default=false` | `type=boolean required=false default=false` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours passes Galaxy's parameters_normalized flag through; Galaxy's does not expose it. |
 | `invoke_workflow` | `params` |  | `type=anyOf<object\|string> required=false default=none` | `type=anyOf<object\|string> required=false default=none` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | One parameter map under two names: `params` here, `parameters` there. |
 | `list_file_source_templates` |  | `0` | -- | -- | `write (mcp default)` | `vs built-in: missing-py-tool` | `unreviewed-gap` | Only Galaxy's: the catalog of remote file-source plugin templates (Dropbox, S3, Zenodo, ...). Nothing here exposes file sources at all. |
-| `list_history_ids` |  | `7` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
+| `list_history_ids` |  | `8` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `list_history_ids` | `offset` |  | `type=integer required=false default=0` | `type=integer required=false default=0` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours pages with limit+offset; Galaxy's takes limit only. |
 | `list_page_revisions` |  | `3` | `read (tag), requires >=26.1` | `read (hint), requires >=26.1` | `write (mcp default)` |  |  |  |
 | `list_pages` |  | `6` | `read (tag), requires >=26.1` | `read (hint), requires >=26.1` | `write (mcp default)` |  |  |  |
@@ -143,7 +143,7 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `search_tools_by_name` |  | `7` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `search_tools_by_name` | `limit` |  | `type=integer required=false default=25` | `type=integer required=false default=25` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours pages the matches; Galaxy's returns them all. |
 | `search_tools_by_name` | `offset` |  | `type=integer required=false default=0` | `type=integer required=false default=0` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | The other half of that window; Galaxy's has none. |
-| `update_history` |  | `4` | `write (tag)` | `write (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Galaxy's server can create a history and read it, but cannot rename, annotate, tag, publish or delete one. |
+| `update_history` |  | `5` | `write (tag)` | `write (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Galaxy's server can create a history and read it, but cannot rename, annotate, tag, publish or delete one. |
 | `update_page` |  | `3` | `write (tag), requires >=26.1` | `write (hint), requires >=26.1` | `write (mcp default)` |  |  |  |
 | `upload_file` |  | `0` | `write (tag)` | `write (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Galaxy's server uploads only from a URL; there is no tool for a local path (the tus upload). |
 | `upload_file_from_url` |  | `0` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |

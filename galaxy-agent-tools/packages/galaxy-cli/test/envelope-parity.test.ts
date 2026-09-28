@@ -128,6 +128,10 @@ function argvFor(op: AnyOperation, input: Record<string, unknown>): string[] {
     const wire = wireName(key);
     if (!(wire in input)) continue;
     const value = input[wire];
+    // A null is not expressible on a command line, and it does not need to be: the other
+    // server drops a parameter that is still None, so leaving the flag off says the same
+    // thing the MCP caller's explicit null says. The case then exercises the same call.
+    if (value === null) continue;
     const kind = classifyField(schema as never);
     const flag = `--${flagName(key)}`;
     if (kind === "positional") positionals.push(String(value));

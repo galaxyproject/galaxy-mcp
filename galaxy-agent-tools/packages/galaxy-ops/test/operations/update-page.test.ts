@@ -43,12 +43,14 @@ describe("update_page", () => {
     await updatePage({ pageId: "page1", title: "Renamed" }, ctxWith(client));
   });
 
-  it("refuses an edit that changes nothing", async () => {
-    const PUT = vi.fn();
-    await expect(updatePage({ pageId: "page1" }, ctxWith(mockClient({ PUT })))).rejects.toBeInstanceOf(
-      GalaxyConnectionError,
-    );
-    expect(PUT).not.toHaveBeenCalled();
+  // The other server has no refusal here: an edit with nothing in it is a PUT carrying only
+  // its edit_source, which Galaxy answers. update_history does refuse its empty update, and
+  // copying that sibling's rule into this tool would be a rule one surface has.
+  it("sends an edit that changes nothing, because the other server sends it", async () => {
+    const PUT = vi.fn(() => ({ data: { id: "page1" }, response: { status: 200 } }));
+    await updatePage({ pageId: "page1" }, ctxWith(mockClient({ PUT })));
+    expect(PUT).toHaveBeenCalledOnce();
+    expect(PUT.mock.calls[0]?.[1]?.body).toEqual({ edit_source: "agent" });
   });
 
   it("envelopes a missing page as not_found", async () => {

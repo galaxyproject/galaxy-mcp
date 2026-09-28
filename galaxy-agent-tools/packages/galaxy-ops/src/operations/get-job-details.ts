@@ -33,7 +33,7 @@ export interface GetJobDetailsResult {
 
 const input = {
   datasetId: z.string().describe("dataset (HDA) id"),
-  historyId: z.string().optional().describe("history id; speeds provenance lookup"),
+  historyId: z.string().nullish().describe("history id; speeds provenance lookup"),
 };
 type In = { datasetId: string; historyId?: string };
 

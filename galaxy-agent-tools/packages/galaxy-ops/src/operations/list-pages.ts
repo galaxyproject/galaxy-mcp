@@ -10,16 +10,16 @@ import type { AnyOperation, InputOf, Operation } from "./types";
 const DEFAULT_LIMIT = 100;
 
 const input = {
-  historyId: z.string().min(1).optional().describe("Encoded history id; lists only that history's notebooks"),
-  search: z.string().optional().describe("Freetext filter over title, slug, tag and owner"),
+  historyId: z.string().min(1).nullish().describe("Encoded history id; lists only that history's notebooks"),
+  search: z.string().nullish().describe("Freetext filter over title, slug, tag and owner"),
   limit: z.number().int().default(DEFAULT_LIMIT).describe(`Max pages to return (default ${DEFAULT_LIMIT})`),
   offset: z.number().int().default(0).describe("Skip the first N"),
   showPublished: z.boolean().default(false).describe("Also include pages published by other users (default false)"),
   showShared: z.boolean().default(false).describe("Also include pages shared with the user (default false)"),
 };
 type In = {
-  historyId?: string;
-  search?: string;
+  historyId?: string | null;
+  search?: string | null;
   limit?: number;
   offset?: number;
   showPublished?: boolean;
@@ -52,7 +52,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<PageSummary[]> {
         // its own cast. That is belt and braces rather than a guard: openapi-fetch infers the
         // init generically, so an unknown query key compiles either way. The VALUES above are
         // checked.
-        ...(i.historyId === undefined ? {} : ({ history_id: i.historyId } as never)),
+        ...(i.historyId == null ? {} : ({ history_id: i.historyId } as never)),
       },
     },
   });

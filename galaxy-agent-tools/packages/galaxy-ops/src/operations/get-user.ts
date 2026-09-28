@@ -27,13 +27,13 @@ async function run(_in: Record<string, never>, ctx: GalaxyContext): Promise<Curr
     params: { path: { user_id: "current" } },
   });
   if (error || !data) throw httpError(response, error);
-  // The endpoint returns DetailedUserModel | AnonUserModel; the anonymous shape has
-  // no id/email/username. Surface that as an auth error rather than silently
-  // returning undefined fields.
-  const u = data as { id?: string; email?: string; username?: string };
-  if (!u.id || !u.email || !u.username) {
-    throw new GalaxyAuthError("Anonymous user response -- a valid API key is required");
-  }
+  // The endpoint returns DetailedUserModel | AnonUserModel, and the anonymous shape has no
+  // id, email or username. This used to refuse that reply as an auth failure; the other
+  // server answers it -- the record goes out as it arrived and the sentence names the user
+  // as "unknown", which is what `dict.get("username", "unknown")` puts there. Python is the
+  // contract, so this answers too: a caller reading `data.username` finds it missing, which
+  // is the same thing the other server tells them, and one surface refusing what the other
+  // returns is the difference that matters more.
   return data as CurrentUser;
 }
 

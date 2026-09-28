@@ -12,7 +12,7 @@ export interface ToolRunExamples {
 
 const input = {
   toolId: z.string().describe("tool id"),
-  toolVersion: z.string().optional().describe("specific tool version to fetch test cases for"),
+  toolVersion: z.string().nullish().describe("specific tool version to fetch test cases for"),
 };
 type In = { toolId: string; toolVersion?: string };
 

@@ -1924,6 +1924,14 @@ def user_cases(add: AddCase) -> None:
     )
     add(
         "get_user",
+        "anonymous",
+        "the reply an unauthenticated session gets, which this tool answers with as it is",
+        {},
+        get_user_fn,
+        [route("/api/users/current", {"total_disk_usage": 0, "quota_percent": None})],
+    )
+    add(
+        "get_user",
         "bare",
         "a record carrying only the three fields anything reading it needs",
         {},
@@ -3366,6 +3374,7 @@ def failure_cases(add: AddFailure) -> None:
     iwc_failure_cases(add)
     refusal_cases(add)
     argument_refusal_cases(add)
+    order_of_refusal_cases(add)
 
 
 def http_failure_cases(add: AddFailure) -> None:
@@ -3775,6 +3784,45 @@ def refusal_cases(add: AddFailure) -> None:
                 {"id": "c0001", "name": "My collection", "collection_type": "list"},
             ),
         ],
+    )
+
+
+def order_of_refusal_cases(add: AddFailure) -> None:
+    """Where the two surfaces used to refuse in a different order, or not at all."""
+    add(
+        "list_history_ids",
+        "history_without_an_id",
+        "the id is read with [] rather than .get, so a history without one raises",
+        {},
+        [route("/api/histories", [{"name": "Nameless"}])],
+    )
+    add(
+        "update_history",
+        "every_field_null",
+        "a null is an unset field, so a call that sets all of them to null updates nothing",
+        {
+            "history_id": "h0001",
+            "name": None,
+            "annotation": None,
+            "tags": None,
+            "deleted": None,
+            "published": None,
+        },
+        [],
+    )
+    add(
+        "create_page",
+        "report_without_a_title",
+        "a report missing both required fields, which Galaxy is left to refuse",
+        {"slug": None, "title": None, "content": "# hi"},
+        [VERSION_ROUTE, fail("/api/pages", 400, DENIED, method="POST")],
+    )
+    add(
+        "create_page",
+        "galaxy_too_old",
+        "the version guard, which refuses before anything is sent",
+        {"title": "A report", "slug": "a-report", "content": "# hi"},
+        [route("/api/version", {"version_major": "24.1", "version_minor": "0"})],
     )
 
 

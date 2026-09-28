@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 206,
-  "failureCaseCount": 54,
+  "caseCount": 211,
+  "failureCaseCount": 58,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -1157,6 +1157,15 @@
       "input": {},
       "envelope": "get_user/detailed.json",
       "replies": "get_user/detailed.galaxy.json"
+    },
+    {
+      "tool": "get_user",
+      "case": "anonymous",
+      "note": "the reply an unauthenticated session gets, which this tool answers with as it is",
+      "outcome": "success",
+      "input": {},
+      "envelope": "get_user/anonymous.json",
+      "replies": "get_user/anonymous.galaxy.json"
     },
     {
       "tool": "get_user",
@@ -2529,6 +2538,57 @@
       },
       "envelope": "recommend_biocontainer/package_entry_with_no_name.json",
       "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+    },
+    {
+      "tool": "list_history_ids",
+      "case": "history_without_an_id",
+      "note": "the id is read with [] rather than .get, so a history without one raises",
+      "outcome": "failure",
+      "input": {},
+      "envelope": "list_history_ids/history_without_an_id.json",
+      "replies": "list_history_ids/history_without_an_id.galaxy.json"
+    },
+    {
+      "tool": "update_history",
+      "case": "every_field_null",
+      "note": "a null is an unset field, so a call that sets all of them to null updates nothing",
+      "outcome": "failure",
+      "input": {
+        "history_id": "h0001",
+        "name": null,
+        "annotation": null,
+        "tags": null,
+        "deleted": null,
+        "published": null
+      },
+      "envelope": "update_history/every_field_null.json",
+      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+    },
+    {
+      "tool": "create_page",
+      "case": "report_without_a_title",
+      "note": "a report missing both required fields, which Galaxy is left to refuse",
+      "outcome": "failure",
+      "input": {
+        "slug": null,
+        "title": null,
+        "content": "# hi"
+      },
+      "envelope": "create_page/report_without_a_title.json",
+      "replies": "create_page/refused_by_galaxy.galaxy.json"
+    },
+    {
+      "tool": "create_page",
+      "case": "galaxy_too_old",
+      "note": "the version guard, which refuses before anything is sent",
+      "outcome": "failure",
+      "input": {
+        "title": "A report",
+        "slug": "a-report",
+        "content": "# hi"
+      },
+      "envelope": "create_page/galaxy_too_old.json",
+      "replies": "create_page/galaxy_too_old.galaxy.json"
     }
   ]
 }
