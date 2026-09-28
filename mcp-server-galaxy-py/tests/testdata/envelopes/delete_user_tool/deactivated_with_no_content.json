@@ -1,0 +1,10 @@
+{
+  "data": {
+    "uuid": "61d15277-a911-45ef-aa66-5385146578cd",
+    "deactivated": true
+  },
+  "success": true,
+  "message": "Deactivated user-defined tool '61d15277-a911-45ef-aa66-5385146578cd'",
+  "count": null,
+  "pagination": null
+}

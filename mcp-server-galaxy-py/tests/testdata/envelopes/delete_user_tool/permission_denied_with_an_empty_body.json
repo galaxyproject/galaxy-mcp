@@ -1,0 +1,14 @@
+{
+  "$comment": "A failed tool call from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `result` is the CallToolResult the MCP wire carries, dumped the way the SDK dumps it (by alias, JSON mode, None-valued fields left out). `sentence` is the same text with FastMCP's own wrapper removed, which is what the tool itself said.",
+  "outcome": "failure",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Error calling tool 'delete_user_tool': Delete user tool failed: 403 Client Error: Forbidden for url: https://galaxy.example/api/unprivileged_tools/u0000403 (Permission denied - check your account permissions). Context: uuid=u0000403"
+      }
+    ],
+    "isError": true
+  },
+  "sentence": "Delete user tool failed: 403 Client Error: Forbidden for url: https://galaxy.example/api/unprivileged_tools/u0000403 (Permission denied - check your account permissions). Context: uuid=u0000403"
+}

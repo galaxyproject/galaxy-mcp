@@ -2784,6 +2784,26 @@ def user_tool_mutation_cases(add: AddCase) -> None:
             )
         ],
     )
+    add(
+        "delete_user_tool",
+        "deactivated_with_no_content",
+        "a 204 with no body at all, which raise_for_status passes and the tool answers",
+        {"uuid": "61d15277-a911-45ef-aa66-5385146578cd"},
+        lambda: delete_user_tool_fn("61d15277-a911-45ef-aa66-5385146578cd"),
+        [
+            # The status is the whole reply. This tool builds its answer out of the uuid it
+            # was given and never reads a body, so a DELETE that answers 204 is the same
+            # success as one that answers a record -- and the empty body is exactly what the
+            # status guard must not read as a failure.
+            route(
+                "/api/unprivileged_tools/61d15277-a911-45ef-aa66-5385146578cd",
+                None,
+                method="DELETE",
+                status=204,
+                body_text="",
+            )
+        ],
+    )
     submission = {
         "outputs": [
             {
@@ -3539,6 +3559,24 @@ def http_failure_cases(add: AddFailure) -> None:
         "a DELETE that failed, which is a failure and not a deactivation",
         {"uuid": "u0000404"},
         [fail("/api/unprivileged_tools/u0000404", 404, MISSING, method="DELETE")],
+    )
+    # The same two statuses with nothing after them, which is what Galaxy's own middleware
+    # answers a refused DELETE with. requests reads the status line and nothing else, so the
+    # sentence is the same one an error body would have produced -- the body is quoted only
+    # by the two bioblend shapes, and this tool is neither.
+    add(
+        "delete_user_tool",
+        "permission_denied_with_an_empty_body",
+        "a 403 carrying no body, which is a failure decided by the status alone",
+        {"uuid": "u0000403"},
+        [fail("/api/unprivileged_tools/u0000403", 403, "", method="DELETE")],
+    )
+    add(
+        "delete_user_tool",
+        "not_found_with_an_empty_body",
+        "the same, for the status a deactivated-twice call answers with",
+        {"uuid": "u0000405"},
+        [fail("/api/unprivileged_tools/u0000405", 404, "", method="DELETE")],
     )
     add(
         "run_user_tool",

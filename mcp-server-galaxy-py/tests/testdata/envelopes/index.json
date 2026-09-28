@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 218,
-  "failureCaseCount": 62,
+  "caseCount": 221,
+  "failureCaseCount": 64,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -1797,6 +1797,17 @@
       "replies": "delete_user_tool/deactivated.galaxy.json"
     },
     {
+      "tool": "delete_user_tool",
+      "case": "deactivated_with_no_content",
+      "note": "a 204 with no body at all, which raise_for_status passes and the tool answers",
+      "outcome": "success",
+      "input": {
+        "uuid": "61d15277-a911-45ef-aa66-5385146578cd"
+      },
+      "envelope": "delete_user_tool/deactivated_with_no_content.json",
+      "replies": "delete_user_tool/deactivated_with_no_content.galaxy.json"
+    },
+    {
       "tool": "run_user_tool",
       "case": "scalar_input",
       "note": "a run whose inputs are all scalars, so the checker has nothing to resolve",
@@ -2092,6 +2103,28 @@
       },
       "envelope": "delete_user_tool/not_found.json",
       "replies": "delete_user_tool/not_found.galaxy.json"
+    },
+    {
+      "tool": "delete_user_tool",
+      "case": "permission_denied_with_an_empty_body",
+      "note": "a 403 carrying no body, which is a failure decided by the status alone",
+      "outcome": "failure",
+      "input": {
+        "uuid": "u0000403"
+      },
+      "envelope": "delete_user_tool/permission_denied_with_an_empty_body.json",
+      "replies": "delete_user_tool/permission_denied_with_an_empty_body.galaxy.json"
+    },
+    {
+      "tool": "delete_user_tool",
+      "case": "not_found_with_an_empty_body",
+      "note": "the same, for the status a deactivated-twice call answers with",
+      "outcome": "failure",
+      "input": {
+        "uuid": "u0000405"
+      },
+      "envelope": "delete_user_tool/not_found_with_an_empty_body.json",
+      "replies": "delete_user_tool/not_found_with_an_empty_body.galaxy.json"
     },
     {
       "tool": "run_user_tool",

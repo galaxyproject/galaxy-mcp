@@ -103,12 +103,19 @@ quoted verbatim in the middle of it -- the text bioblend or requests raised.
 - A failed request that never got a reply -- a refused connection, a DNS failure, an abort
   -- is now a typed failure with the shape of a Python one rather than an exception escaping
   as a bug. The text inside it is this runtime's and not requests', and no case pins either.
-- **Sixty-six new cases** on both replay suites, which is a failure case for all 42 open
-  tools plus the refusals that make no request: 376 files, 218 cases, of which 62 are
+- **Sixty-nine new cases** on both replay suites, which is a failure case for all 42 open
+  tools plus the refusals that make no request: 382 files, 221 cases, of which 64 are
   failures.
   The generator drives the real server through an in-memory MCP client for those, because a
   failure has no envelope to write down -- what it records is the `CallToolResult` the wire
   carries, plus the tool's own sentence with FastMCP's wrapper stripped off.
+- **Breaking:** an off-schema request whose reply carried no body is decided by the status
+  now, where the guard asked whether there was an error body to read. openapi-fetch parses a
+  failed reply's body as text, which for an empty body is the empty string -- falsy -- so
+  `delete_user_tool` answered `{"deactivated": true}` with `success: true` for a DELETE
+  Galaxy refused with a 403 or a 404 and no body. It now fails with the same sentence any
+  other refused request gets. A 204 No Content is still a success, which is what a DELETE
+  usually answers with.
 - The Python server moved in one place, because it contradicted itself: the three raw
   requests over the unprivileged-tools API did not check the status Galaxy answered with,
   so `delete_user_tool` reported `deactivated: true` for a DELETE that 404'd,

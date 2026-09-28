@@ -103,7 +103,11 @@ function replier(baseUrl: string, routes: Route[]): typeof fetch {
         headers: { "content-type": "application/json" },
       });
     }
-    return new Response(target.bodyText ?? JSON.stringify(target.body), {
+    // 204, 205 and 304 carry no body by definition, and the runtime refuses to build a
+    // reply that has both: an empty string is still a body. A route that answers one of
+    // them is answered with no body at all, which is also what Galaxy sends.
+    const noBody = target.status === 204 || target.status === 205 || target.status === 304;
+    return new Response(noBody ? null : (target.bodyText ?? JSON.stringify(target.body)), {
       status: target.status,
       headers: { "content-type": "application/json", ...target.headers },
     });
