@@ -1,43 +1,52 @@
 """What galaxy_mcp.ops may import, read out of the source rather than by importing it.
 
-A runtime check would pass simply because something else had already pulled bioblend in, so
-this reads the import statements instead. The rule is an allow-list rather than a list of
-banned names: the standard library, the layer's own modules, and whatever third party the
-layer genuinely needs, which is nothing today. Everything else is refused, so a dependency
-nobody thought to forbid fails here anyway -- the server, the auth provider, bioblend,
-fastmcp, whichever HTTP client someone reaches for next year.
+A check that ran at import time would pass simply because something else had already pulled
+bioblend in, so this reads the source. Two rules, and only the first one resolves anything.
 
-Every spelling of an import counts, because every spelling loads the same module.
-``import galaxy_mcp.server`` is as much a dependency as ``from galaxy_mcp.server import
-mcp``; ``from ..server import mcp`` is the same import written relatively; and
-``importlib.import_module("galaxy_mcp.server")`` is the same import written as a call. A
-relative name is resolved against the package the file itself belongs to, not against the
-top of the layer, so a module in a subpackage is judged by what its own dots mean. Whole
-subtrees count too: a nested package is where a reach-back would hide otherwise.
+**Imports that are written down** are judged against an allow-list: the standard library, the
+layer's own modules, and whatever third party the layer genuinely needs, which is nothing
+today. ``ast.Import`` and ``ast.ImportFrom``, absolute or relative, with a relative name
+resolved against the package the file itself sits in, so the same line means different things
+at different depths and is judged accordingly. Everything else is refused without being named
+-- the server, the auth provider, bioblend, fastmcp, whichever HTTP client someone reaches for
+next year -- which is the point of writing it as an allow-list. Nested packages are walked
+too, because a reach-back would hide there otherwise.
 
-An import written as a call is read the way the interpreter reads it. ``import_module``
-resolves a relative name against its ``package`` argument when it is given one, positionally
-or by keyword, so that argument is the anchor here as well -- ``import_module(".server",
-package="galaxy_mcp")`` is ``galaxy_mcp.server`` and not the layer's own sibling.
-``__import__`` takes its anchor from the calling module and its depth from ``level``, so that
-is what is used for it. The functions are found by what each file binds them to rather than
-by their usual spelling: ``from importlib import import_module as load`` and ``import
-importlib as il`` and ``load = importlib.import_module`` all make a call an import, and a
-name that is never bound to them is no escape hatch either.
+**The dynamic-import machinery is refused by mention**, not by resolution. Earlier versions of
+this file tried to work out what a call would load: which name the importer had been bound to,
+which anchor the dots were measured against, which assignment had passed it along. That chase
+does not end. Deciding what a name means at a call site is the whole of Python's binding
+rules, so there is always one more ordinary spelling -- a default argument, a staticmethod, an
+alias shadowed in another scope -- and the resolver is wrong again. The layer is pure
+functions over input shapes and has nothing to load at runtime, so the rule is that naming the
+machinery is itself the refusal:
 
-An import whose target is computed rather than written down cannot be resolved here at all,
-and is refused for that reason: the layer is meant to be checkable by reading it. That
-covers a name built at runtime, an anchor built at runtime, and an importer that arrived by
-a route the file does not spell out -- ``getattr(importlib, "import_module")``, an importlib
-handed in as an argument, an import function pulled out of a dictionary. The checker refuses
-what it cannot resolve rather than guessing what it probably means.
+* ``importlib``, ``import_module``, ``__import__``, ``builtins`` and ``__builtins__``, however
+  they appear -- a name, an attribute, an import statement, an alias, a string literal. There
+  is no scoping and no resolution, so a default argument, a lambda, a class body, a decorator
+  and a docstring all count. A module of this layer can be written without saying any of
+  those words.
+* a call to ``globals``, ``vars``, ``exec``, ``eval`` or ``compile``. These are builtins, so a
+  call to one is a bare name; ``re.compile`` is a different function and is left alone.
+* any ``sys.modules``. Any attribute named ``modules`` is read as ``sys.modules``, since an
+  aliased ``sys`` is still ``sys`` and nothing in this layer has a ``modules`` of its own.
 
-The directory and the package are arguments rather than constants, which is what lets a
-test point the check at a module it wrote itself.
+``getattr`` is deliberately not refused outright: ``tool_inputs`` reads an optional
+``status_code`` off an exception with it, which is honest work. Reaching the machinery through
+it takes the name as a string, and a machinery name written as a string is refused wherever it
+appears, which is the part that matters here.
+
+None of this proves a module loads nothing; it proves the source does not say so. A loader
+object reached off something already imported -- ``re.__spec__.loader`` and its class -- names
+none of these words, and no reader of the source will ever catch every such route. The second
+witness is in tests/test_ops_boundary.py: it imports each module in a fresh interpreter and
+looks at what ended up in ``sys.modules``, which does not care how the load was spelled.
+
+The directory and the package are arguments rather than constants, which is what lets a test
+point the check at a module it wrote itself.
 """
 
 import ast
-import dataclasses
 import pathlib
 import sys
 
@@ -50,30 +59,19 @@ ALLOWED_THIRD_PARTY: frozenset[str] = frozenset()
 
 ALLOWED_ROOTS = frozenset(sys.stdlib_module_names) | ALLOWED_THIRD_PARTY
 
-# The module that hands out import functions, and the two functions themselves. A file may
-# call them under any name it likes, so what each file binds them to is collected first and
-# its calls are judged against that rather than against these spellings.
-IMPORTLIB = "importlib"
-IMPORT_MODULE = "import_module"
-BUILTIN_IMPORT = "__import__"
-IMPORT_FUNCTIONS = frozenset({IMPORT_MODULE, BUILTIN_IMPORT})
+# Every way of naming the machinery that turns a string into a loaded module.
+MACHINERY = frozenset({"importlib", "import_module", "__import__", "builtins", "__builtins__"})
 
-COMPUTED_IMPORT = "dynamic import with a computed name"
+# Builtins that turn a string into code or hand back a namespace to rummage through.
+FORBIDDEN_CALLS = frozenset({"globals", "vars", "exec", "eval", "compile"})
+
+# Reported for any attribute named ``modules``; the table itself is the thing to stay out of.
+MODULE_TABLE = "sys.modules"
 
 
-@dataclasses.dataclass
-class _Importers:
-    """What a single file can import through.
-
-    ``modules`` are the names bound to importlib itself, ``functions`` maps each name bound
-    to an import function to which function it is, and ``opaque`` holds the names that came
-    out of importlib by a route this file does not spell out -- calling through one of those
-    is an import nobody can resolve by reading the source.
-    """
-
-    modules: set[str]
-    functions: dict[str, str]
-    opaque: set[str]
+def refusal(name: str, lineno: int) -> str:
+    """How a mention of the machinery is reported."""
+    return f"dynamic import machinery: {name} at line {lineno}"
 
 
 def modules_in(directory: pathlib.Path) -> list[pathlib.Path]:
@@ -101,158 +99,10 @@ def _resolve(name: str, package: str) -> str:
     return f"{base}.{remainder}" if remainder else base
 
 
-def _assigned_names(node: ast.Assign | ast.AnnAssign) -> list[str]:
-    targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-    return [target.id for target in targets if isinstance(target, ast.Name)]
-
-
-def _mentions_importer(value: ast.expr, importers: _Importers) -> bool:
-    """Whether an expression has an import function or an importlib anywhere inside it."""
-    watched = (
-        importers.modules | set(importers.functions) | importers.opaque | {IMPORTLIB}
-    ) | IMPORT_FUNCTIONS
-    for node in ast.walk(value):
-        if isinstance(node, ast.Name) and node.id in watched:
-            return True
-        if isinstance(node, ast.Attribute) and node.attr in IMPORT_FUNCTIONS:
-            return True
-    return False
-
-
-def _binding(value: ast.expr, importers: _Importers) -> tuple[str, str] | None:
-    """What an assignment's right-hand side makes of its target, if anything."""
-    if isinstance(value, ast.Name):
-        if value.id in importers.opaque:
-            return ("opaque", "")
-        if value.id in importers.functions:
-            return ("function", importers.functions[value.id])
-        if value.id in importers.modules:
-            return ("module", "")
-    if (
-        isinstance(value, ast.Attribute)
-        and value.attr in IMPORT_FUNCTIONS
-        and isinstance(value.value, ast.Name)
-        and value.value.id in importers.modules
-    ):
-        return ("function", value.attr)
-    if _mentions_importer(value, importers):
-        return ("opaque", "")
-    return None
-
-
-def importers_in(tree: ast.Module) -> _Importers:
-    """Every name a file can import through, however it came by it.
-
-    ``__import__`` is there from the start because it is a builtin; the rest are whatever the
-    file's own imports and assignments bind. Assignments are re-read until nothing new turns
-    up, so a name that is passed along a chain of them is still recognised.
-    """
-    importers = _Importers(set(), {BUILTIN_IMPORT: BUILTIN_IMPORT}, set())
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.name == IMPORTLIB:
-                    importers.modules.add(alias.asname or IMPORTLIB)
-                elif alias.name.startswith(f"{IMPORTLIB}.") and not alias.asname:
-                    # ``import importlib.util`` binds the root package as well.
-                    importers.modules.add(IMPORTLIB)
-        elif isinstance(node, ast.ImportFrom) and node.module == IMPORTLIB and not node.level:
-            for alias in node.names:
-                if alias.name in IMPORT_FUNCTIONS:
-                    importers.functions[alias.asname or alias.name] = alias.name
-
-    assignments = [node for node in ast.walk(tree) if isinstance(node, ast.Assign | ast.AnnAssign)]
-    settled = False
-    while not settled:
-        settled = True
-        for node in assignments:
-            binding = _binding(node.value, importers) if node.value is not None else None
-            if binding is None:
-                continue
-            kind, function = binding
-            for name in _assigned_names(node):
-                if kind == "module":
-                    added = name not in importers.modules
-                    importers.modules.add(name)
-                elif kind == "function" and importers.functions.get(name, function) == function:
-                    added = name not in importers.functions
-                    importers.functions[name] = function
-                else:
-                    # Either plainly unreadable, or one name standing for two different
-                    # import functions, which is no more readable than the first case.
-                    added = name not in importers.opaque
-                    importers.opaque.add(name)
-                settled = settled and not added
-    return importers
-
-
-def _call_function(func: ast.expr, importers: _Importers) -> str | None:
-    """Which import function a call goes through, or the refusal if that cannot be read."""
-    if isinstance(func, ast.Name):
-        if func.id in importers.opaque:
-            return COMPUTED_IMPORT
-        if func.id in importers.functions:
-            return importers.functions[func.id]
-        # A bare ``import_module`` the file never bound came from somewhere unreadable.
-        return COMPUTED_IMPORT if func.id in IMPORT_FUNCTIONS else None
-    if isinstance(func, ast.Attribute) and func.attr in IMPORT_FUNCTIONS:
-        if isinstance(func.value, ast.Name) and func.value.id in importers.modules:
-            return func.attr
-        # ``something.import_module(...)``: an import through an importlib that reached this
-        # call by a route the file does not spell out.
-        return COMPUTED_IMPORT
-    return None
-
-
-def _argument(call: ast.Call, position: int, keyword: str) -> ast.expr | None:
-    if len(call.args) > position:
-        return call.args[position]
-    for word in call.keywords:
-        if word.arg == keyword:
-            return word.value
-    return None
-
-
-def _string(value: ast.expr | None) -> str | None:
-    if isinstance(value, ast.Constant) and isinstance(value.value, str):
-        return value.value
-    return None
-
-
-def _call_import(call: ast.Call, package: str, importers: _Importers) -> list[str]:
-    """The module name a call imports, if it imports one at all."""
-    function = _call_function(call.func, importers)
-    if function is None:
-        return []
-    if function == COMPUTED_IMPORT:
-        return [COMPUTED_IMPORT]
-    name = _string(_argument(call, 0, "name"))
-    if name is None:
-        return [COMPUTED_IMPORT]
-    if function == IMPORT_MODULE:
-        anchor = _argument(call, 1, "package")
-        if anchor is not None:
-            # An anchor of its own replaces the file's package, exactly as import_module
-            # does it. One that is computed leaves the name unresolvable.
-            resolved_anchor = _string(anchor)
-            if resolved_anchor is None:
-                return [COMPUTED_IMPORT]
-            package = resolved_anchor
-        return [_resolve(name, package)]
-    level = _argument(call, 4, "level")
-    if level is not None:
-        if not isinstance(level, ast.Constant) or not isinstance(level.value, int):
-            return [COMPUTED_IMPORT]
-        name = "." * level.value + name
-    return [_resolve(name, package)]
-
-
-def _imported_names(node: ast.AST, package: str, importers: _Importers) -> list[str]:
-    """The module names one statement or call imports, relative ones resolved."""
+def _imported_names(node: ast.AST, package: str) -> list[str]:
+    """The module names one import statement names, relative ones resolved."""
     if isinstance(node, ast.Import):
         return [alias.name for alias in node.names]
-    if isinstance(node, ast.Call):
-        return _call_import(node, package, importers)
     if not isinstance(node, ast.ImportFrom):
         return []
     if not node.level:
@@ -264,27 +114,84 @@ def _imported_names(node: ast.AST, package: str, importers: _Importers) -> list[
     return [f"{base}.{alias.name}" for alias in node.names]
 
 
+def _machinery_in_import(node: ast.Import | ast.ImportFrom) -> list[tuple[str, int]]:
+    """The machinery an import statement names, whichever half of it says so."""
+    found = []
+    if isinstance(node, ast.Import):
+        for alias in node.names:
+            # ``import importlib.util`` is importlib; ``import x as builtins`` is a mention
+            # of the name it binds.
+            for spelling in (alias.name.split(".")[0], alias.asname):
+                if spelling in MACHINERY:
+                    found.append((spelling, node.lineno))
+        return found
+    root = (node.module or "").split(".")[0]
+    if root in MACHINERY:
+        found.append((root, node.lineno))
+    for alias in node.names:
+        for spelling in (alias.name, alias.asname):
+            if spelling in MACHINERY:
+                found.append((spelling, node.lineno))
+        if root == "sys" and alias.name == "modules":
+            found.append((MODULE_TABLE, node.lineno))
+    return found
+
+
+def machinery_mentions(tree: ast.Module) -> list[str]:
+    """Every mention of the dynamic-import machinery in a file, by line."""
+    found: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import | ast.ImportFrom):
+            found += [(line, name) for name, line in _machinery_in_import(node)]
+        elif isinstance(node, ast.Name) and node.id in MACHINERY:
+            found.append((node.lineno, node.id))
+        elif isinstance(node, ast.Attribute):
+            if node.attr in MACHINERY:
+                found.append((node.lineno, node.attr))
+            elif node.attr == "modules":
+                found.append((node.lineno, MODULE_TABLE))
+        elif (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and node.value in MACHINERY
+        ):
+            # A string literal, wherever it sits: a docstring is one too, and the layer can
+            # describe itself without naming the machinery.
+            found.append((node.lineno, node.value))
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in FORBIDDEN_CALLS
+        ):
+            found.append((node.lineno, node.func.id))
+    return [refusal(name, line) for line, name in sorted(set(found))]
+
+
 def _is_allowed(name: str, package: str) -> bool:
-    if name == COMPUTED_IMPORT:
-        return False
     if name == package or name.startswith(f"{package}."):
         return True
     return name.split(".")[0] in ALLOWED_ROOTS
 
 
-def forbidden_imports(directory: pathlib.Path, package: str = OPS_PACKAGE) -> dict[str, list[str]]:
-    """Module names imported under `directory` that a module of `package` may not import."""
+def boundary_refusals(directory: pathlib.Path, package: str = OPS_PACKAGE) -> dict[str, list[str]]:
+    """What the modules under `directory` do that a module of `package` may not.
+
+    Each value is the module names the file imports and may not, followed by every mention of
+    the dynamic-import machinery it makes.
+    """
     refused: dict[str, list[str]] = {}
     for path in modules_in(directory):
         own_package = package_of(path, directory, package)
         tree = ast.parse(path.read_text())
-        importers = importers_in(tree)
-        names = {
-            name
-            for node in ast.walk(tree)
-            for name in _imported_names(node, own_package, importers)
-            if not _is_allowed(name, package)
-        }
-        if names:
-            refused[path.relative_to(directory).as_posix()] = sorted(names)
+        names = sorted(
+            {
+                name
+                for node in ast.walk(tree)
+                for name in _imported_names(node, own_package)
+                if not _is_allowed(name, package)
+            }
+        )
+        mentions = machinery_mentions(tree)
+        if names or mentions:
+            refused[path.relative_to(directory).as_posix()] = names + mentions
     return refused
