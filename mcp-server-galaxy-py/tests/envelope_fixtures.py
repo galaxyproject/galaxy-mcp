@@ -65,6 +65,7 @@ from .test_helpers import (
     get_tool_input_template_fn,
     get_tool_panel_fn,
     get_tool_run_examples_fn,
+    get_user_fn,
     get_workflow_details_fn,
     get_workflow_input_template_fn,
     import_workflow_from_iwc_fn,
@@ -1732,10 +1733,61 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
 
 
 def single_record_cases(add: AddCase) -> None:
+    user_cases(add)
     tool_details_cases(add)
     tool_input_template_cases(add)
     workflow_details_cases(add)
     job_details_cases(add)
+
+
+def user_cases(add: AddCase) -> None:
+    """The current user, as Galaxy describes them.
+
+    Whatever the record carries is what the tool answers with -- there is no field
+    list here -- so the cases are a full DetailedUserModel and one stripped to the
+    three fields anything reading it needs.
+    """
+    add(
+        "get_user",
+        "detailed",
+        "the whole user record, every field Galaxy sent",
+        {},
+        get_user_fn,
+        [
+            route(
+                "/api/users/current",
+                {
+                    "id": "u0000001",
+                    "username": "curator",
+                    "email": "curator@galaxy.example",
+                    "model_class": "User",
+                    "deleted": False,
+                    "purged": False,
+                    "is_admin": False,
+                    "total_disk_usage": 1048576,
+                    "nice_total_disk_usage": "1.0 MB",
+                    "quota_percent": 12.5,
+                    "quota": "10.0 GB",
+                    "quota_bytes": 10737418240,
+                    "tags_used": ["rnaseq"],
+                    "preferences": {"extra_user_preferences": "{}"},
+                },
+            )
+        ],
+    )
+    add(
+        "get_user",
+        "bare",
+        "a record carrying only the three fields anything reading it needs",
+        {},
+        get_user_fn,
+        [
+            route(
+                "/api/users/current",
+                {"id": "u0000001", "username": "curator", "email": "curator@galaxy.example"},
+            )
+        ],
+    )
 
 
 def tool_details_cases(add: AddCase) -> None:

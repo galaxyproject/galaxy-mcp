@@ -276,6 +276,20 @@ a call the Python server cannot answer at all, because its message echoes the
 query and `pydantic_core` refuses to serialise a lone surrogate, where these
 surfaces answer with an empty page.
 
+### A golden case for every open tool (#143)
+
+The envelope and payload rounds compared twenty tools in full and left twenty-two
+with no fixture at all, which is where a difference hides. Every open tool now has
+golden cases generated from the Python server and replayed on both surfaces, and
+the differences they turned up are below.
+
+- **Breaking:** `get_user` answers with Galaxy's whole user record rather than
+  `{ id, email, username }`. A DetailedUserModel carries the disk usage, the
+  quota, the tags in use and the stored preferences, and the Python tool passes
+  all of it through. The three named fields are still there and are still what
+  the anonymous-response guard insists on, so a caller reading only those is
+  unaffected; `CurrentUser` has gained an index signature for the rest.
+
 ## 0.2.0 (unreleased)
 
 Breaking, and the first release since the packages went up on npm. Everything in

@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 112,
+  "caseCount": 114,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -994,6 +994,22 @@
       },
       "envelope": "get_tool_citations/none.json",
       "replies": "get_tool_citations/none.galaxy.json"
+    },
+    {
+      "tool": "get_user",
+      "case": "detailed",
+      "note": "the whole user record, every field Galaxy sent",
+      "input": {},
+      "envelope": "get_user/detailed.json",
+      "replies": "get_user/detailed.galaxy.json"
+    },
+    {
+      "tool": "get_user",
+      "case": "bare",
+      "note": "a record carrying only the three fields anything reading it needs",
+      "input": {},
+      "envelope": "get_user/bare.json",
+      "replies": "get_user/bare.galaxy.json"
     },
     {
       "tool": "get_tool_details",
