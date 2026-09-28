@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 89,
+  "caseCount": 90,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -580,6 +580,16 @@
       },
       "envelope": "get_iwc_workflow_details/steps_out_of_order.json",
       "replies": "get_iwc_workflow_details/steps_out_of_order.galaxy.json"
+    },
+    {
+      "tool": "get_iwc_workflow_details",
+      "case": "labels_null_empty_and_absent",
+      "note": "inputs and outputs whose labels are null, empty, or missing",
+      "input": {
+        "trs_id": "#workflow/github.com/iwc-workflows/wf1/main"
+      },
+      "envelope": "get_iwc_workflow_details/labels_null_empty_and_absent.json",
+      "replies": "get_iwc_workflow_details/labels_null_empty_and_absent.galaxy.json"
     },
     {
       "tool": "search_iwc_workflows",

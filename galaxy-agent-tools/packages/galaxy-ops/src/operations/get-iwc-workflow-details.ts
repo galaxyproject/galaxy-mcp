@@ -8,8 +8,8 @@ import { stepsInOrder } from "../workflow-steps";
 
 // Extend the enriched type with details-only fields
 export interface IwcWorkflowDetail extends EnrichedIwcWorkflow {
-  inputs: Array<{ name: string; type: string; annotation: string }>;
-  outputs: Array<{ name: string; step: string }>;
+  inputs: Array<{ name: string | null; type: string; annotation: string | null }>;
+  outputs: Array<{ name: string | null; step: string | null }>;
   updated: string;
 }
 
@@ -19,6 +19,11 @@ const input = {
 type In = { trsId: string };
 
 const INPUT_TYPES = new Set(["data_input", "data_collection_input", "parameter_input"]);
+
+// The other server reads these with dict.get(key, default): only an ABSENT key
+// gets the default, a key that is present with null or "" is the value.
+const orDefault = (o: Record<string, unknown>, key: string, fallback: unknown): unknown =>
+  Object.prototype.hasOwnProperty.call(o, key) ? o[key] : fallback;
 
 async function run(i: In, _ctx: GalaxyContext): Promise<IwcWorkflowDetail> {
   const workflows = await fetchIwcWorkflows();
@@ -43,9 +48,9 @@ async function run(i: In, _ctx: GalaxyContext): Promise<IwcWorkflowDetail> {
 
       if (INPUT_TYPES.has(stepType)) {
         inputs.push({
-          name: typeof step["label"] === "string" ? step["label"] : `Input ${stepId}`,
+          name: orDefault(step, "label", `Input ${stepId}`) as string | null,
           type: stepType,
-          annotation: typeof step["annotation"] === "string" ? step["annotation"] : "",
+          annotation: orDefault(step, "annotation", "") as string | null,
         });
       }
 
@@ -54,14 +59,9 @@ async function run(i: In, _ctx: GalaxyContext): Promise<IwcWorkflowDetail> {
         for (const wo of workflowOutputs) {
           if (!wo || typeof wo !== "object") continue;
           const woObj = wo as Record<string, unknown>;
-          const label =
-            typeof woObj["label"] === "string" && woObj["label"]
-              ? woObj["label"]
-              : typeof woObj["output_name"] === "string"
-                ? woObj["output_name"]
-                : "";
-          const stepLabel = typeof step["label"] === "string" ? step["label"] : `Step ${stepId}`;
-          outputs.push({ name: label, step: stepLabel });
+          const label = orDefault(woObj, "label", orDefault(woObj, "output_name", ""));
+          const stepLabel = orDefault(step, "label", `Step ${stepId}`);
+          outputs.push({ name: label as string | null, step: stepLabel as string | null });
         }
       }
     }

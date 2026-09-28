@@ -203,7 +203,7 @@ compact line the other surfaces measure and prints indented afterwards, rather
 than measuring its own indentation and cutting a shorter page than MCP would
 for the same call.
 
-### What is inside `data` is the Python server's (#NNN)
+### What is inside `data` is the Python server's (#142)
 
 The envelope PR settled the shape around the payload -- `data`, `success`,
 `message`, `count`, `pagination` -- and left the payload itself alone. Three
@@ -251,6 +251,12 @@ that list.
   for any workflow whose step keys do not arrive sorted. The same rule says which
   key is a step index, which retires a second skew: `1e2` and `0x10` used to be
   read as indexes on one side and skipped on the other.
+- `get_iwc_workflow_details` reads a step's `label` and `annotation` and an
+  output's `label` the way the other server reads them: a value that is present
+  is the value, `null` and `""` included, and only an absent key falls back to
+  `Input N`, `Step N`, the `output_name` or `""`. A `.ga` export states the labels
+  it does not have as `null`, so `name: null` is now the honest answer where it
+  used to read `Step 7`.
 - `searchToolsByName`, `searchToolsByKeywords` and `searchIwcWorkflows` test for
   a substring by code point, as Python's `in` does, rather than by UTF-16 code
   unit as `String.prototype.includes` does. A query that is half of a surrogate

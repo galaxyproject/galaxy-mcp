@@ -972,6 +972,53 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         [route(IWC_MANIFEST_URL, details_manifest)],
     )
 
+    # A .ga export states a label it does not have as null, and the other server
+    # passes a present null (or an empty string) through: only an absent key gets
+    # the "Input N" / "Step N" / output_name fallback.
+    null_label_steps = {
+        "1": {
+            "type": "data_input",
+            "label": None,
+            "annotation": None,
+            "workflow_outputs": [
+                {"label": None, "output_name": "output"},
+                {"label": "", "output_name": "out2"},
+                {"output_name": "out3"},
+                {},
+            ],
+        },
+        "2": {"type": "tool", "tool_id": "t", "workflow_outputs": [{"label": "named"}]},
+        "3": {"type": "parameter_input"},
+    }
+    null_label_manifest = [
+        {
+            "repo": "repo0",
+            "workflows": [
+                {
+                    "trsID": "#workflow/github.com/iwc-workflows/wf1/main",
+                    "definition": {
+                        "name": "Workflow 1",
+                        "annotation": "labels stated as null",
+                        "tags": [],
+                        "license": "MIT",
+                        "creator": [],
+                        "steps": null_label_steps,
+                    },
+                    "readme": "Workflow 1.",
+                    "categories": [],
+                }
+            ],
+        }
+    ]
+    add(
+        "get_iwc_workflow_details",
+        "labels_null_empty_and_absent",
+        "inputs and outputs whose labels are null, empty, or missing",
+        {"trs_id": "#workflow/github.com/iwc-workflows/wf1/main"},
+        lambda: get_iwc_workflow_details_fn("#workflow/github.com/iwc-workflows/wf1/main"),
+        [route(IWC_MANIFEST_URL, null_label_manifest)],
+    )
+
     add(
         "search_iwc_workflows",
         "full_page",
