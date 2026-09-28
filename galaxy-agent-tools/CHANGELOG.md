@@ -283,6 +283,11 @@ with no fixture at all, which is where a difference hides. Every open tool now h
 golden cases generated from the Python server and replayed on both surfaces, and
 the differences they turned up are below.
 
+- **Breaking:** `invoke_workflow` hands back every invocation a batch run made.
+  Galaxy answers a batch with a list, and this took the first element of it and
+  dropped the rest; the Python tool passes the list through, so now this does too.
+  A single invocation is unchanged. `InvokeWorkflowResult` (the op's output type)
+  is `InvocationResult | InvocationResult[]`, and the summary line names every id.
 - **Breaking:** `get_server_info` answers the way the Python tool does, in three
   ways. The list of things this server is too old to run is `unsupported_tools`
   rather than `unsupported_ops`, and it is sorted by name. `config` is the sixteen

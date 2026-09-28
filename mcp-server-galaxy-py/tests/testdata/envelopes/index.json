@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 132,
+  "caseCount": 135,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -1236,6 +1236,45 @@
       },
       "envelope": "update_history/several_fields.json",
       "replies": "update_history/several_fields.galaxy.json"
+    },
+    {
+      "tool": "invoke_workflow",
+      "case": "no_inputs",
+      "note": "nothing supplied, so nothing to check -- one POST and the record back",
+      "input": {
+        "workflow_id": "wf000001",
+        "history_id": "h0000"
+      },
+      "envelope": "invoke_workflow/no_inputs.json",
+      "replies": "invoke_workflow/no_inputs.galaxy.json"
+    },
+    {
+      "tool": "invoke_workflow",
+      "case": "inputs_checked_before_submitting",
+      "note": "a dataset supplied for the one slot, checked against the run model first",
+      "input": {
+        "workflow_id": "wf000001",
+        "history_id": "h0000",
+        "inputs": {
+          "0": {
+            "id": "d0000001",
+            "src": "hda"
+          }
+        }
+      },
+      "envelope": "invoke_workflow/inputs_checked_before_submitting.json",
+      "replies": "invoke_workflow/inputs_checked_before_submitting.galaxy.json"
+    },
+    {
+      "tool": "invoke_workflow",
+      "case": "batch_answers_with_a_list",
+      "note": "Galaxy expanded the run, so the answer is every invocation it made",
+      "input": {
+        "workflow_id": "wf000001",
+        "history_id": "h0000"
+      },
+      "envelope": "invoke_workflow/batch_answers_with_a_list.json",
+      "replies": "invoke_workflow/batch_answers_with_a_list.galaxy.json"
     },
     {
       "tool": "get_page",

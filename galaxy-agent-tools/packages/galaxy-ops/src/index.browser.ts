@@ -84,7 +84,13 @@ export { deleteUserToolOp, deleteUserTool, type DeletedUserTool } from "./operat
 export { runUserToolOp, runUserTool, type UserToolRun } from "./operations/run-user-tool";
 export { getToolInputTemplateOp, getToolInputTemplate, type ToolInputTemplateResult } from "./operations/get-tool-input-template";
 export { getWorkflowInputTemplateOp, getWorkflowInputTemplate, resolveWorkflowSlots, type ResolvedSlots } from "./operations/get-workflow-input-template";
-export { invokeWorkflowOp, invokeWorkflow, getDatatypesMapping, type InvocationResult } from "./operations/invoke-workflow";
+export {
+  invokeWorkflowOp,
+  invokeWorkflow,
+  getDatatypesMapping,
+  type InvocationResult,
+  type InvokeWorkflowResult,
+} from "./operations/invoke-workflow";
 export { uploadFileFromUrlOp, uploadFileFromUrl, type UploadFileFromUrlResult } from "./operations/upload-file-from-url";
 export { listPagesOp, listPages } from "./operations/list-pages";
 export { getPageOp, getPage } from "./operations/get-page";

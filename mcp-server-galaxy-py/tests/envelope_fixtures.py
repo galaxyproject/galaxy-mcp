@@ -73,6 +73,7 @@ from .test_helpers import (
     get_workflow_details_fn,
     get_workflow_input_template_fn,
     import_workflow_from_iwc_fn,
+    invoke_workflow_fn,
     list_history_ids_fn,
     list_page_revisions_fn,
     list_pages_fn,
@@ -2300,6 +2301,7 @@ def job_details_cases(add: AddCase) -> None:
 
 def mutation_cases(add: AddCase) -> None:
     history_mutation_cases(add)
+    invoke_workflow_cases(add)
     page_cases(add)
     user_tool_mutation_cases(add)
     invocation_mutation_cases(add)
@@ -2677,6 +2679,126 @@ def user_tool_mutation_cases(add: AddCase) -> None:
             {"table": {"src": "hda", "id": "d0000001"}, "threshold": 5},
         ),
         [lookup, route("/api/tools", submission, method="POST")],
+    )
+
+
+def invoke_workflow_cases(add: AddCase) -> None:
+    """A workflow submitted, and what comes back.
+
+    The answer is the invocation record Galaxy sent and nothing else: this is a
+    submission, not a wait, and the invocation is "new" when it arrives. Supplying
+    inputs turns on a preflight, which reads the run model, the datatype hierarchy and
+    each supplied dataset before anything is posted -- all mocked here, so the check
+    really runs and really passes rather than being skipped by a failed lookup. A
+    batch invocation is the third case: Galaxy answers with a list of invocations and
+    that list is the answer.
+    """
+    invocation = {
+        "id": "inv00002",
+        "state": "new",
+        "model_class": "WorkflowInvocation",
+        "workflow_id": "wf000001",
+        "history_id": "h0000",
+        "uuid": "33333333-3333-3333-3333-333333333333",
+        "create_time": "2026-01-02T03:04:05.000000",
+        "update_time": "2026-01-02T03:04:05.000000",
+        "inputs": {},
+        "steps": [
+            {
+                "id": "st000001",
+                "order_index": 0,
+                "state": "new",
+                "job_id": None,
+                "workflow_step_label": "Input FASTQ",
+                "model_class": "WorkflowInvocationStep",
+            }
+        ],
+        "outputs": {},
+        "output_collections": {},
+    }
+    invocations_route = route("/api/workflows/wf000001/invocations", invocation, method="POST")
+    add(
+        "invoke_workflow",
+        "no_inputs",
+        "nothing supplied, so nothing to check -- one POST and the record back",
+        {"workflow_id": "wf000001", "history_id": "h0000"},
+        lambda: invoke_workflow_fn("wf000001", history_id="h0000"),
+        [invocations_route],
+    )
+    run_model_for_invoke = {
+        "id": "wf000001",
+        "name": "Reads QC",
+        "has_upgrade_messages": False,
+        "step_version_changes": [],
+        "steps": {
+            "0": {
+                "step_type": "data_input",
+                "step_index": 0,
+                "step_label": "Input FASTQ",
+                "uuid": "11111111-1111-1111-1111-111111111111",
+                "inputs": [
+                    {
+                        "extensions": ["fastqsanger"],
+                        "acceptable_extensions": ["fastqsanger", "fastqsanger.gz"],
+                        "optional": False,
+                    }
+                ],
+            }
+        },
+    }
+    add(
+        "invoke_workflow",
+        "inputs_checked_before_submitting",
+        "a dataset supplied for the one slot, checked against the run model first",
+        {
+            "workflow_id": "wf000001",
+            "history_id": "h0000",
+            "inputs": {"0": {"id": "d0000001", "src": "hda"}},
+        },
+        lambda: invoke_workflow_fn(
+            "wf000001", inputs={"0": {"id": "d0000001", "src": "hda"}}, history_id="h0000"
+        ),
+        [
+            route(
+                "/api/workflows/wf000001/download",
+                run_model_for_invoke,
+                query={"style": "run"},
+            ),
+            route(
+                "/api/datatypes/types_and_mapping",
+                {
+                    "datatypes_mapping": {
+                        "ext_to_class_name": {
+                            "fastqsanger": "galaxy.datatypes.sequence.FastqSanger"
+                        },
+                        "class_to_classes": {
+                            "galaxy.datatypes.sequence.FastqSanger": {
+                                "galaxy.datatypes.sequence.FastqSanger": True
+                            }
+                        },
+                    }
+                },
+            ),
+            route(
+                "/api/datasets/d0000001",
+                {"id": "d0000001", "name": "reads.fastqsanger", "extension": "fastqsanger"},
+            ),
+            invocations_route,
+        ],
+    )
+    add(
+        "invoke_workflow",
+        "batch_answers_with_a_list",
+        "Galaxy expanded the run, so the answer is every invocation it made",
+        {"workflow_id": "wf000001", "history_id": "h0000"},
+        lambda: invoke_workflow_fn("wf000001", history_id="h0000"),
+        [
+            route(
+                "/api/workflows/wf000001/invocations",
+                [invocation, {**invocation, "id": "inv00003"}],
+                method="POST",
+            )
+        ],
     )
 
 
