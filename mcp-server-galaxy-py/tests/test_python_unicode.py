@@ -138,3 +138,17 @@ def test_the_sigma_after_a_letter_assigned_after_the_pinned_edition() -> None:
     """
     assert "\u1c8a\u03a3".lower() == "\u1c8a\u03c3"
     assert "\u0391\u03a3".lower() == "\u03b1\u03c2"
+
+
+def test_a_lone_surrogate_is_not_half_of_an_astral_character() -> None:
+    """`in` is a question about code points, which is not what the other runtime asks.
+
+    An astral character is one code point here and two sixteen-bit units there, so
+    `String.prototype.includes` reports the low half of an emoji as a substring of that
+    emoji and this reports nothing. A client can put a lone surrogate in a query -- JSON
+    carries one as a `\\udE00` escape and both parsers hand it back as a character -- so
+    the TypeScript search tools go through `pyContains` rather than `includes`.
+    """
+    assert "\ude00" not in "\U0001f600"
+    assert "\ud83d" not in "\U0001f600"
+    assert "\ude00" in "a\ude00b"

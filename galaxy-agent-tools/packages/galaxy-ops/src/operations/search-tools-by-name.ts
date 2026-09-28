@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { legacyGet } from "../legacy";
-import { pyLower } from "../python-str";
+import { pyContains, pyLower } from "../python-str";
 import { paginate, shrinkPaged, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
@@ -43,11 +43,14 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<ToolListItem>> {
   // needle and a haystack cased differently on the two sides match differently.
   const needle = pyLower(i.query);
   // A 200 carrying something other than a list is Galaxy breaking its contract.
+  // `pyContains`, not `includes`, for the same reason: `in` over there compares code
+  // points and `includes` compares code units, so half a surrogate pair is a substring
+  // of an astral character here and never there.
   const matches = (Array.isArray(tools) ? tools : []).filter(
     (t) =>
-      pyLower(t.name ?? "").includes(needle) ||
-      pyLower(t.id ?? "").includes(needle) ||
-      pyLower(t.description ?? "").includes(needle),
+      pyContains(pyLower(t.name ?? ""), needle) ||
+      pyContains(pyLower(t.id ?? ""), needle) ||
+      pyContains(pyLower(t.description ?? ""), needle),
   );
   return paginate(matches, { limit, offset, noun: "tools" });
 }

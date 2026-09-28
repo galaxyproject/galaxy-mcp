@@ -233,6 +233,39 @@ const PY_NONPRINTABLE = /[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Cn}\p{Zl}\p{Zp}\p{Zs}]/u;
 
 const hex = (c: number, width: number) => c.toString(16).padStart(width, "0");
 
+/** True when `pin` sits at `start` in `hay`, both already split into code points. */
+function matchesAt(hay: readonly string[], pin: readonly string[], start: number): boolean {
+  for (let k = 0; k < pin.length; k += 1) {
+    if (hay[start + k] !== pin[k]) return false;
+  }
+  return true;
+}
+
+/**
+ * Python's `needle in haystack` for two strings: a substring test over CODE POINTS.
+ *
+ * `String.prototype.includes` compares UTF-16 code units, and Python's `in` compares code
+ * points, so the two disagree wherever a needle is half of a surrogate pair. An astral
+ * character is one code point to Python and two code units here, which makes the low half of
+ * an emoji a substring of that emoji on this runtime and not on that one:
+ * `"\u{1F600}".includes("\udE00")` is true, `"\ude00" in "\U0001F600"` is False. It takes a
+ * lone surrogate in the query to reach, which the JSON-RPC wire does carry -- a client can
+ * write one as a `\udE00` escape and both parsers hand it back as a character.
+ *
+ * So the search tools ask this instead. It splits both sides with the string iterator, which
+ * pairs surrogates into code points and leaves a lone one standing on its own, and then scans;
+ * nothing in here may go through `includes` or `indexOf`, which are the code-unit view again.
+ */
+export function pyContains(haystack: string, needle: string): boolean {
+  const pin = Array.from(needle);
+  if (pin.length === 0) return true;
+  const hay = Array.from(haystack);
+  for (let start = 0; start + pin.length <= hay.length; start += 1) {
+    if (matchesAt(hay, pin, start)) return true;
+  }
+  return false;
+}
+
 /**
  * Python's `repr()` of a `str`, which is what an f-string interpolating a container renders its
  * elements with -- so it is part of the note `_recommend_multi` returns, not just a debug aid.
