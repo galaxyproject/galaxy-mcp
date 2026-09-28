@@ -80,7 +80,12 @@ function replier(baseUrl: string, routes: Route[]): typeof fetch {
           ? input.href
           : (input as { url: string }).url;
     const url = new URL(href);
-    const method = (init?.method ?? "GET").toUpperCase();
+    // openapi-fetch builds a Request and calls fetch with it, so a write's method is on
+    // the Request and not in an init the caller passed -- read `init` alone and every
+    // POST, PUT and DELETE in the table is looked up as a GET and answered with a 404.
+    const method = (
+      init?.method ?? (input instanceof Request ? input.method : "GET")
+    ).toUpperCase();
     const target = routes
       .filter((route) => {
         if (route.method.toUpperCase() !== method) return false;

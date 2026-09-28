@@ -1,0 +1,17 @@
+{
+  "data": {
+    "id": "rev00000",
+    "page_id": "pg000001",
+    "edit_source": "user",
+    "title": "Reads QC report",
+    "content_format": "markdown",
+    "create_time": "2026-01-02T03:04:05.000000",
+    "update_time": "2026-01-02T03:04:05.000000",
+    "content_editor": null,
+    "content_editor_source": "none"
+  },
+  "success": true,
+  "message": "Retrieved revision 'rev00000' of page 'pg000001'",
+  "count": null,
+  "pagination": null
+}

@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 99,
+  "caseCount": 112,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -1088,6 +1088,186 @@
       },
       "envelope": "get_job_details/provenance_without_a_job_id.json",
       "replies": "get_job_details/provenance_without_a_job_id.galaxy.json"
+    },
+    {
+      "tool": "create_history",
+      "case": "named",
+      "note": "a new history, which is one POST and the record Galaxy answers with",
+      "input": {
+        "history_name": "RNA-seq Sample A"
+      },
+      "envelope": "create_history/named.json",
+      "replies": "create_history/named.galaxy.json"
+    },
+    {
+      "tool": "update_history",
+      "case": "name_only",
+      "note": "one field changed, which the message has to name and the record has to show",
+      "input": {
+        "history_id": "h0000new",
+        "name": "RNA-seq Sample A (final)"
+      },
+      "envelope": "update_history/name_only.json",
+      "replies": "update_history/name_only.galaxy.json"
+    },
+    {
+      "tool": "update_history",
+      "case": "several_fields",
+      "note": "an annotation, tags and published at once",
+      "input": {
+        "history_id": "h0000new",
+        "annotation": "QC'd and ready",
+        "tags": [
+          "rnaseq",
+          "final"
+        ],
+        "published": true
+      },
+      "envelope": "update_history/several_fields.json",
+      "replies": "update_history/several_fields.galaxy.json"
+    },
+    {
+      "tool": "create_user_tool",
+      "case": "created",
+      "note": "a representation POSTed, and the record Galaxy answers with",
+      "input": {
+        "representation": {
+          "class": "GalaxyUserTool",
+          "id": "row_filter",
+          "version": "0.1.0",
+          "name": "Row filter",
+          "description": "Keep rows above a threshold",
+          "container": "quay.io/biocontainers/python:3.12",
+          "shell_command": "python3 -c 'pass'",
+          "inputs": [
+            {
+              "name": "table",
+              "type": "data",
+              "format": "tabular"
+            },
+            {
+              "name": "threshold",
+              "type": "integer"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "kept",
+              "type": "data",
+              "format": "tabular",
+              "from_work_dir": "out.tsv"
+            }
+          ]
+        }
+      },
+      "envelope": "create_user_tool/created.json",
+      "replies": "create_user_tool/created.galaxy.json"
+    },
+    {
+      "tool": "delete_user_tool",
+      "case": "deactivated",
+      "note": "a soft delete, where the answer is built here rather than read from Galaxy",
+      "input": {
+        "uuid": "61d15277-a911-45ef-aa66-5385146578cc"
+      },
+      "envelope": "delete_user_tool/deactivated.json",
+      "replies": "delete_user_tool/deactivated.galaxy.json"
+    },
+    {
+      "tool": "run_user_tool",
+      "case": "scalar_input",
+      "note": "a run whose inputs are all scalars, so the checker has nothing to resolve",
+      "input": {
+        "history_id": "h0000",
+        "tool_uuid": "61d15277-a911-45ef-aa66-5385146578cc",
+        "inputs": {
+          "threshold": 5
+        }
+      },
+      "envelope": "run_user_tool/scalar_input.json",
+      "replies": "run_user_tool/scalar_input.galaxy.json"
+    },
+    {
+      "tool": "run_user_tool",
+      "case": "dataset_input",
+      "note": "a dataset handed to a data parameter, checked against the tool's own definition",
+      "input": {
+        "history_id": "h0000",
+        "tool_uuid": "61d15277-a911-45ef-aa66-5385146578cc",
+        "inputs": {
+          "table": {
+            "src": "hda",
+            "id": "d0000001"
+          },
+          "threshold": 5
+        }
+      },
+      "envelope": "run_user_tool/dataset_input.json",
+      "replies": "run_user_tool/scalar_input.galaxy.json"
+    },
+    {
+      "tool": "cancel_workflow_invocation",
+      "case": "cancelled",
+      "note": "a DELETE, and the invocation Galaxy answers with wrapped beside a flag",
+      "input": {
+        "invocation_id": "inv00001"
+      },
+      "envelope": "cancel_workflow_invocation/cancelled.json",
+      "replies": "cancel_workflow_invocation/cancelled.galaxy.json"
+    },
+    {
+      "tool": "import_workflow_from_iwc",
+      "case": "imported",
+      "note": "a definition found in the IWC manifest and POSTed to Galaxy",
+      "input": {
+        "trs_id": "#workflow/github.com/iwc-workflows/wf0/main"
+      },
+      "envelope": "import_workflow_from_iwc/imported.json",
+      "replies": "import_workflow_from_iwc/imported.galaxy.json"
+    },
+    {
+      "tool": "get_page_revision",
+      "case": "content_editor_from_the_server",
+      "note": "the revision carries its own editable markdown",
+      "input": {
+        "page_id": "pg000001",
+        "revision_id": "rev00002"
+      },
+      "envelope": "get_page_revision/content_editor_from_the_server.json",
+      "replies": "get_page_revision/content_editor_from_the_server.galaxy.json"
+    },
+    {
+      "tool": "get_page_revision",
+      "case": "content_editor_from_content",
+      "note": "an older server sent no content_editor, so the expanded content stands in",
+      "input": {
+        "page_id": "pg000001",
+        "revision_id": "rev00001"
+      },
+      "envelope": "get_page_revision/content_editor_from_content.json",
+      "replies": "get_page_revision/content_editor_from_content.galaxy.json"
+    },
+    {
+      "tool": "get_page_revision",
+      "case": "no_content_at_all",
+      "note": "a revision carrying neither field, where content_editor is null",
+      "input": {
+        "page_id": "pg000001",
+        "revision_id": "rev00000"
+      },
+      "envelope": "get_page_revision/no_content_at_all.json",
+      "replies": "get_page_revision/no_content_at_all.galaxy.json"
+    },
+    {
+      "tool": "revert_page_revision",
+      "case": "restored",
+      "note": "the new revision a restore writes, read back the same way",
+      "input": {
+        "page_id": "pg000001",
+        "revision_id": "rev00001"
+      },
+      "envelope": "revert_page_revision/restored.json",
+      "replies": "revert_page_revision/restored.galaxy.json"
     }
   ]
 }

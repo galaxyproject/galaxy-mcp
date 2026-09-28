@@ -1,0 +1,18 @@
+{
+  "data": {
+    "id": "h0000new",
+    "name": "RNA-seq Sample A",
+    "state": "new",
+    "deleted": false,
+    "published": false,
+    "annotation": null,
+    "tags": [],
+    "create_time": "2026-01-02T03:04:05.000000",
+    "update_time": "2026-01-02T03:04:05.000000",
+    "model_class": "History"
+  },
+  "success": true,
+  "message": "Created history 'RNA-seq Sample A'",
+  "count": null,
+  "pagination": null
+}

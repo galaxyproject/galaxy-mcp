@@ -1,0 +1,18 @@
+{
+  "data": {
+    "id": "rev00003",
+    "page_id": "pg000001",
+    "edit_source": "restore",
+    "title": "Reads QC report",
+    "content_format": "markdown",
+    "create_time": "2026-01-02T03:04:05.000000",
+    "update_time": "2026-01-02T03:04:05.000000",
+    "content_editor": "# Reads QC\n\nthe old body\n",
+    "content": "# Reads QC\n\nthe old body\n",
+    "content_editor_source": "server"
+  },
+  "success": true,
+  "message": "Reverted page 'pg000001' to revision 'rev00001'",
+  "count": null,
+  "pagination": null
+}

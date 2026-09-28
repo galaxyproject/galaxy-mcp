@@ -1,0 +1,22 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example/",
+  "routes": [
+    {
+      "method": "DELETE",
+      "path": "/api/invocations/inv00001",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "id": "inv00001",
+        "state": "cancelling",
+        "workflow_id": "wf000001",
+        "history_id": "h0000",
+        "create_time": "2026-01-02T03:04:05.000000",
+        "update_time": "2026-01-02T03:05:05.000000",
+        "model_class": "WorkflowInvocation"
+      }
+    }
+  ]
+}

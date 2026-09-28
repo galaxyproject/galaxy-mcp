@@ -47,6 +47,10 @@ from galaxy_mcp.server import GalaxyResult, galaxy_state
 from galaxy_mcp.version import clear_version_cache
 
 from .test_helpers import (
+    cancel_workflow_invocation_fn,
+    create_history_fn,
+    create_user_tool_fn,
+    delete_user_tool_fn,
     get_collection_details_fn,
     get_histories_fn,
     get_history_contents_fn,
@@ -55,6 +59,7 @@ from .test_helpers import (
     get_iwc_workflow_details_fn,
     get_iwc_workflows_fn,
     get_job_details_fn,
+    get_page_revision_fn,
     get_tool_citations_fn,
     get_tool_details_fn,
     get_tool_input_template_fn,
@@ -62,15 +67,19 @@ from .test_helpers import (
     get_tool_run_examples_fn,
     get_workflow_details_fn,
     get_workflow_input_template_fn,
+    import_workflow_from_iwc_fn,
     list_history_ids_fn,
     list_page_revisions_fn,
     list_pages_fn,
     list_user_tools_fn,
     list_workflows_fn,
     recommend_iwc_workflows_fn,
+    revert_page_revision_fn,
+    run_user_tool_fn,
     search_iwc_workflows_fn,
     search_tools_by_keywords_fn,
     search_tools_fn,
+    update_history_fn,
 )
 
 FIXTURE_ROOT = Path(__file__).parent / "testdata" / "envelopes"
@@ -1708,6 +1717,7 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
     )
 
     single_record_cases(add)
+    mutation_cases(add)
 
     return out
 
@@ -2046,6 +2056,347 @@ def job_details_cases(add: AddCase) -> None:
             ),
             dataset_route,
             job_route,
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Mutations
+#
+# Ordinary cases: the POST, PUT or DELETE reply is canned like any other, and what
+# a case pins is the record the tool hands back afterwards. Success paths only --
+# the failure envelope is its own piece of work -- and nothing here reaches a
+# Galaxy, so "creating" a history costs one canned reply.
+# ---------------------------------------------------------------------------
+
+
+def mutation_cases(add: AddCase) -> None:
+    history_mutation_cases(add)
+    user_tool_mutation_cases(add)
+    invocation_mutation_cases(add)
+    revision_cases(add)
+
+
+def history_mutation_cases(add: AddCase) -> None:
+    created = {
+        "id": "h0000new",
+        "name": "RNA-seq Sample A",
+        "state": "new",
+        "deleted": False,
+        "published": False,
+        "annotation": None,
+        "tags": [],
+        "create_time": "2026-01-02T03:04:05.000000",
+        "update_time": "2026-01-02T03:04:05.000000",
+        "model_class": "History",
+    }
+    add(
+        "create_history",
+        "named",
+        "a new history, which is one POST and the record Galaxy answers with",
+        {"history_name": "RNA-seq Sample A"},
+        lambda: create_history_fn("RNA-seq Sample A"),
+        [route("/api/histories", created, method="POST")],
+    )
+    add(
+        "update_history",
+        "name_only",
+        "one field changed, which the message has to name and the record has to show",
+        {"history_id": "h0000new", "name": "RNA-seq Sample A (final)"},
+        lambda: update_history_fn("h0000new", name="RNA-seq Sample A (final)"),
+        [
+            route(
+                "/api/histories/h0000new",
+                {
+                    **created,
+                    "name": "RNA-seq Sample A (final)",
+                    "update_time": "2026-01-03T00:00:00",
+                },
+                method="PUT",
+            )
+        ],
+    )
+    add(
+        "update_history",
+        "several_fields",
+        "an annotation, tags and published at once",
+        {
+            "history_id": "h0000new",
+            "annotation": "QC'd and ready",
+            "tags": ["rnaseq", "final"],
+            "published": True,
+        },
+        lambda: update_history_fn(
+            "h0000new", annotation="QC'd and ready", tags=["rnaseq", "final"], published=True
+        ),
+        [
+            route(
+                "/api/histories/h0000new",
+                {
+                    **created,
+                    "annotation": "QC'd and ready",
+                    "tags": ["rnaseq", "final"],
+                    "published": True,
+                    "update_time": "2026-01-03T00:00:00",
+                },
+                method="PUT",
+            )
+        ],
+    )
+
+
+def user_tool_mutation_cases(add: AddCase) -> None:
+    """A user-defined tool created, run and deactivated.
+
+    The representation is the tool's own definition, and run_user_tool is two
+    requests: the uuid is read for the tool id and version, then the run is POSTed to
+    /api/tools like any other. The definition it reads back is also the schema this
+    server checks the supplied inputs against, so a dataset handed to a data parameter
+    is checked here without a second lookup.
+    """
+    representation = {
+        "class": "GalaxyUserTool",
+        "id": "row_filter",
+        "version": "0.1.0",
+        "name": "Row filter",
+        "description": "Keep rows above a threshold",
+        "container": "quay.io/biocontainers/python:3.12",
+        "shell_command": "python3 -c 'pass'",
+        "inputs": [
+            {"name": "table", "type": "data", "format": "tabular"},
+            {"name": "threshold", "type": "integer"},
+        ],
+        "outputs": [
+            {"name": "kept", "type": "data", "format": "tabular", "from_work_dir": "out.tsv"}
+        ],
+    }
+    created_tool = {
+        "id": "ut000001",
+        "uuid": "61d15277-a911-45ef-aa66-5385146578cc",
+        "tool_id": "row_filter",
+        "active": True,
+        "create_time": "2026-01-02T03:04:05.000000",
+        "representation": representation,
+    }
+    add(
+        "create_user_tool",
+        "created",
+        "a representation POSTed, and the record Galaxy answers with",
+        {"representation": representation},
+        lambda: create_user_tool_fn(representation),
+        [route("/api/unprivileged_tools", created_tool, method="POST")],
+    )
+    add(
+        "delete_user_tool",
+        "deactivated",
+        "a soft delete, where the answer is built here rather than read from Galaxy",
+        {"uuid": "61d15277-a911-45ef-aa66-5385146578cc"},
+        lambda: delete_user_tool_fn("61d15277-a911-45ef-aa66-5385146578cc"),
+        [
+            route(
+                "/api/unprivileged_tools/61d15277-a911-45ef-aa66-5385146578cc",
+                {"id": "ut000001", "active": False},
+                method="DELETE",
+            )
+        ],
+    )
+    submission = {
+        "outputs": [
+            {
+                "id": "d0000010",
+                "hid": 4,
+                "name": "Row filter on data 1",
+                "state": "new",
+                "history_id": "h0000",
+                "extension": "tabular",
+            }
+        ],
+        "output_collections": [],
+        "jobs": [
+            {
+                "model_class": "Job",
+                "id": "j0000010",
+                "state": "new",
+                "tool_id": "row_filter",
+                "tool_version": "0.1.0",
+                "create_time": "2026-01-02T03:04:05.000000",
+            }
+        ],
+        "implicit_collections": [],
+        "produces_entry_points": False,
+    }
+    lookup = route("/api/unprivileged_tools/61d15277-a911-45ef-aa66-5385146578cc", created_tool)
+    add(
+        "run_user_tool",
+        "scalar_input",
+        "a run whose inputs are all scalars, so the checker has nothing to resolve",
+        {
+            "history_id": "h0000",
+            "tool_uuid": "61d15277-a911-45ef-aa66-5385146578cc",
+            "inputs": {"threshold": 5},
+        },
+        lambda: run_user_tool_fn("h0000", "61d15277-a911-45ef-aa66-5385146578cc", {"threshold": 5}),
+        [lookup, route("/api/tools", submission, method="POST")],
+    )
+    add(
+        "run_user_tool",
+        "dataset_input",
+        "a dataset handed to a data parameter, checked against the tool's own definition",
+        {
+            "history_id": "h0000",
+            "tool_uuid": "61d15277-a911-45ef-aa66-5385146578cc",
+            "inputs": {"table": {"src": "hda", "id": "d0000001"}, "threshold": 5},
+        },
+        lambda: run_user_tool_fn(
+            "h0000",
+            "61d15277-a911-45ef-aa66-5385146578cc",
+            {"table": {"src": "hda", "id": "d0000001"}, "threshold": 5},
+        ),
+        [lookup, route("/api/tools", submission, method="POST")],
+    )
+
+
+def invocation_mutation_cases(add: AddCase) -> None:
+    add(
+        "cancel_workflow_invocation",
+        "cancelled",
+        "a DELETE, and the invocation Galaxy answers with wrapped beside a flag",
+        {"invocation_id": "inv00001"},
+        lambda: cancel_workflow_invocation_fn("inv00001"),
+        [
+            route(
+                "/api/invocations/inv00001",
+                {
+                    "id": "inv00001",
+                    "state": "cancelling",
+                    "workflow_id": "wf000001",
+                    "history_id": "h0000",
+                    "create_time": "2026-01-02T03:04:05.000000",
+                    "update_time": "2026-01-02T03:05:05.000000",
+                    "model_class": "WorkflowInvocation",
+                },
+                method="DELETE",
+            )
+        ],
+    )
+    # bioblend posts an imported definition to /api/workflows/upload where the other
+    # side posts it to /api/workflows. Both are the same create to Galaxy, and this
+    # table answers questions rather than replaying a log, so the record is registered
+    # under both spellings.
+    imported = {
+        "id": "wf000009",
+        "name": "Workflow 0",
+        "owner": "curator",
+        "number_of_steps": 2,
+        "published": False,
+        "deleted": False,
+        "model_class": "StoredWorkflow",
+    }
+    add(
+        "import_workflow_from_iwc",
+        "imported",
+        "a definition found in the IWC manifest and POSTed to Galaxy",
+        {"trs_id": "#workflow/github.com/iwc-workflows/wf0/main"},
+        lambda: import_workflow_from_iwc_fn("#workflow/github.com/iwc-workflows/wf0/main"),
+        [
+            route(IWC_MANIFEST_URL, iwc_manifest(2)),
+            route("/api/workflows/upload", imported, method="POST"),
+            route("/api/workflows", imported, method="POST"),
+        ],
+    )
+
+
+def revision_cases(add: AddCase) -> None:
+    """A page revision read and restored.
+
+    Both tools give a revision one field to edit whatever the server sent and say which
+    field that was, so the three cases are the three answers: the revision's own
+    content_editor, the expanded content standing in for it, and a revision carrying
+    neither. Both are refused against a Galaxy older than 26.1, so every case here is
+    answered a version first.
+    """
+    revision = {
+        "id": "rev00002",
+        "page_id": "pg000001",
+        "edit_source": "agent",
+        "title": "Reads QC report",
+        "content_format": "markdown",
+        "create_time": "2026-01-02T03:04:05.000000",
+        "update_time": "2026-01-02T03:04:05.000000",
+    }
+    add(
+        "get_page_revision",
+        "content_editor_from_the_server",
+        "the revision carries its own editable markdown",
+        {"page_id": "pg000001", "revision_id": "rev00002"},
+        lambda: get_page_revision_fn("pg000001", "rev00002"),
+        [
+            VERSION_ROUTE,
+            route(
+                "/api/pages/pg000001/revisions/rev00002",
+                {
+                    **revision,
+                    "content_editor": (
+                        "# Reads QC\n\n```galaxy\n"
+                        "history_dataset_display(history_dataset_id=d0000002)\n```\n"
+                    ),
+                    "content": "# Reads QC\n\n<div class='embedded'>expanded</div>\n",
+                },
+            ),
+        ],
+    )
+    add(
+        "get_page_revision",
+        "content_editor_from_content",
+        "an older server sent no content_editor, so the expanded content stands in",
+        {"page_id": "pg000001", "revision_id": "rev00001"},
+        lambda: get_page_revision_fn("pg000001", "rev00001"),
+        [
+            VERSION_ROUTE,
+            route(
+                "/api/pages/pg000001/revisions/rev00001",
+                {
+                    **revision,
+                    "id": "rev00001",
+                    "edit_source": "user",
+                    "content": "# Reads QC\n\n<div class='embedded'>expanded</div>\n",
+                },
+            ),
+        ],
+    )
+    add(
+        "get_page_revision",
+        "no_content_at_all",
+        "a revision carrying neither field, where content_editor is null",
+        {"page_id": "pg000001", "revision_id": "rev00000"},
+        lambda: get_page_revision_fn("pg000001", "rev00000"),
+        [
+            VERSION_ROUTE,
+            route(
+                "/api/pages/pg000001/revisions/rev00000",
+                {**revision, "id": "rev00000", "edit_source": "user", "content_editor": ""},
+            ),
+        ],
+    )
+    add(
+        "revert_page_revision",
+        "restored",
+        "the new revision a restore writes, read back the same way",
+        {"page_id": "pg000001", "revision_id": "rev00001"},
+        lambda: revert_page_revision_fn("pg000001", "rev00001"),
+        [
+            VERSION_ROUTE,
+            route(
+                "/api/pages/pg000001/revisions/rev00001/revert",
+                {
+                    **revision,
+                    "id": "rev00003",
+                    "edit_source": "restore",
+                    "content_editor": "# Reads QC\n\nthe old body\n",
+                    "content": "# Reads QC\n\nthe old body\n",
+                },
+                method="POST",
+            ),
         ],
     )
 

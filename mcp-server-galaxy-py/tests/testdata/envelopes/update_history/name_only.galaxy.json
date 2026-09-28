@@ -1,0 +1,25 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example/",
+  "routes": [
+    {
+      "method": "PUT",
+      "path": "/api/histories/h0000new",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "id": "h0000new",
+        "name": "RNA-seq Sample A (final)",
+        "state": "new",
+        "deleted": false,
+        "published": false,
+        "annotation": null,
+        "tags": [],
+        "create_time": "2026-01-02T03:04:05.000000",
+        "update_time": "2026-01-03T00:00:00",
+        "model_class": "History"
+      }
+    }
+  ]
+}

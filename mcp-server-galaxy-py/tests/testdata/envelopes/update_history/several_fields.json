@@ -1,0 +1,21 @@
+{
+  "data": {
+    "id": "h0000new",
+    "name": "RNA-seq Sample A",
+    "state": "new",
+    "deleted": false,
+    "published": true,
+    "annotation": "QC'd and ready",
+    "tags": [
+      "rnaseq",
+      "final"
+    ],
+    "create_time": "2026-01-02T03:04:05.000000",
+    "update_time": "2026-01-03T00:00:00",
+    "model_class": "History"
+  },
+  "success": true,
+  "message": "Updated history h0000new (annotation, tags, published)",
+  "count": null,
+  "pagination": null
+}

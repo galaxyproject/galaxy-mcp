@@ -1,0 +1,31 @@
+{
+  "data": {
+    "outputs": [
+      {
+        "id": "d0000010",
+        "hid": 4,
+        "name": "Row filter on data 1",
+        "state": "new",
+        "history_id": "h0000",
+        "extension": "tabular"
+      }
+    ],
+    "output_collections": [],
+    "jobs": [
+      {
+        "model_class": "Job",
+        "id": "j0000010",
+        "state": "new",
+        "tool_id": "row_filter",
+        "tool_version": "0.1.0",
+        "create_time": "2026-01-02T03:04:05.000000"
+      }
+    ],
+    "implicit_collections": [],
+    "produces_entry_points": false
+  },
+  "success": true,
+  "message": "Started user tool 'row_filter' (UUID: 61d15277-a911-45ef-aa66-5385146578cc) in history 'h0000'",
+  "count": null,
+  "pagination": null
+}
