@@ -44,7 +44,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@types/node@22.19.20)(vite@8.0.16(@types/node@22.19.20)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0))
+        version: 4.1.11(@types/node@22.19.20)(vite@8.0.16(@types/node@22.19.20)(esbuild@0.27.7)(tsx@4.23.15)(yaml@2.9.0))
 
   packages/galaxy-mcp:
     dependencies:
@@ -72,7 +72,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@types/node@22.19.20)(vite@8.0.16(@types/node@22.19.20)(esbuild@0.27.7)(tsx@4.23.15)(yaml@2.9.0))
+        version: 4.1.11(@types/node@22.19.20)(vite@8.0.16(@types/node@22.19.20)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0))
 
   packages/galaxy-ops:
     dependencies:
@@ -92,6 +92,9 @@ importers:
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.20
+      esbuild:
+        specifier: ^0.27.7
+        version: 0.27.7
       tsup:
         specifier: ^8.3.0
         version: 8.5.1(postcss@8.5.28)(tsx@4.23.15)(typescript@6.0.3)(yaml@2.9.0)
@@ -100,7 +103,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@types/node@22.19.20)(vite@8.0.16(@types/node@22.19.20)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.0))
+        version: 4.1.11(@types/node@22.19.20)(vite@8.0.16(@types/node@22.19.20)(esbuild@0.27.7)(tsx@4.23.15)(yaml@2.9.0))
 
 packages:
 

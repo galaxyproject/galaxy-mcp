@@ -48,6 +48,28 @@ through `runWithEnvelope` -- and a server that is too old is refused with a
 `/api/version` once per context, or taken from the `serverVersion` you pass to
 `createGalaxyContext`; a version that cannot be read refuses nothing.
 
+## In a browser
+
+The default entry registers every operation, and three of them need something a
+browser does not have: `download_dataset` and `upload_file` read and write local
+files, and `recommend_biocontainer` hashes with `node:crypto`. A bundler that
+resolves the `browser` export condition -- most do, for a web target -- gets the
+browser entry instead, which is the same surface minus those three operations and
+the mulled helpers behind the third, and which pulls in no Node builtin. Import
+the subpath directly if your bundler does not resolve that condition, or if you
+would rather the choice were visible in the source:
+
+```ts
+import { createGalaxyContext, getUser } from "@galaxyproject/galaxy-ops/browser";
+```
+
+Nothing else moves: the operations that are there are the same objects with the
+same types, and `allOperations` is that shorter list.
+
+The `typescript` peer dependency is optional and asks for `>=5.5` -- the emitted
+declarations use nothing newer, and a project that does not typecheck against
+them needs no TypeScript at all.
+
 ## Documentation
 
 See the [galaxy-agent-tools workspace README](https://github.com/galaxyproject/galaxy-mcp/tree/main/galaxy-agent-tools#readme)

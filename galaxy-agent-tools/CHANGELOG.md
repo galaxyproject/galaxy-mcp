@@ -245,6 +245,15 @@ schemas advertise.
   declare it, and are refused before anything is sent: `errorKind: "version"`
   over MCP, exit code 76 from the CLI, and the bound in the tool description.
   `get_server_info` reports what the connected server cannot run (#114).
+- `galaxy-ops` has an entry a browser can run. The default one registers every
+  operation, and `download_dataset`, `upload_file` and `recommend_biocontainer`
+  need a filesystem or `node:crypto`, so a bundler pulling the package in for
+  the rest got the Node builtins with them. A bundler resolving the `browser`
+  export condition, or an import of `@galaxyproject/galaxy-ops/browser`, now
+  gets everything but those three and no `node:` import in the bundle.
+- `galaxy-ops`'s `typescript` peer dependency is optional and accepts `>=5.5`
+  rather than `>=6`, so a project on TypeScript 5 can use the emitted
+  declarations, which need nothing newer.
 
 ## 0.1.0 (2026-06-26)
 
