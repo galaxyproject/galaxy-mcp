@@ -68,10 +68,11 @@ describe("import_workflow_from_iwc", () => {
     expect(out.name).toBe("RNA-Seq PE");
   });
 
-  it("project message includes workflow id and name", async () => {
+  it("project message names the TRS id that was asked for", async () => {
+    // Not the id Galaxy gave the copy, which is in data: the other server's sentence
+    // quotes the TRS id, so the line reads the same whatever Galaxy called it.
     const imported = { id: "wf99", name: "My Flow" };
     const meta = importWorkflowFromIwcOp.project!(imported, { trsId: WF.trsID });
-    expect(meta.message).toContain("wf99");
-    expect(meta.message).toContain("My Flow");
+    expect(meta.message).toBe(`Successfully imported workflow '${WF.trsID}'`);
   });
 });

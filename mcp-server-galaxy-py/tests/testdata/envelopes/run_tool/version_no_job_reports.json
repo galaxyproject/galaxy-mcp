@@ -1,0 +1,34 @@
+{
+  "data": {
+    "outputs": [
+      {
+        "id": "d0000020",
+        "hid": 5,
+        "name": "FastQC on data 1: Webpage",
+        "state": "new",
+        "history_id": "h0000",
+        "output_name": "html_file",
+        "file_ext": "html",
+        "model_class": "HistoryDatasetAssociation"
+      }
+    ],
+    "output_collections": [],
+    "jobs": [
+      {
+        "model_class": "Job",
+        "id": "j0000020",
+        "state": "new",
+        "tool_id": "fastqc",
+        "create_time": "2026-01-02T03:04:05.000000",
+        "update_time": "2026-01-02T03:04:05.000000",
+        "exit_code": null
+      }
+    ],
+    "implicit_collections": [],
+    "produces_entry_points": false
+  },
+  "success": true,
+  "message": "Started tool 'fastqc' at an unreported version (0.74+galaxy1 requested) in history 'h0000'",
+  "count": null,
+  "pagination": null
+}

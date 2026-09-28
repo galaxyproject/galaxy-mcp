@@ -93,10 +93,25 @@ describe("create_user_tool", () => {
     expect(out.active).toBe(true);
   });
 
-  it("projects the uuid into the message", () => {
+  it("names the representation it was given, not the record Galaxy answered with", () => {
     const created = { id: "1", uuid: "abc-123", tool_id: "my_filter/0.1.0", active: true };
     expect(createUserToolOp.project!(created, { representation: VALID_REP })).toEqual({
-      message: "Created user tool abc-123",
+      message: `Created user-defined tool '${String(VALID_REP["name"])}'`,
     });
+  });
+
+  it("falls back to the representation's id, and then to unknown", () => {
+    const created = { uuid: "abc-123" };
+    const { name: _dropped, ...noName } = VALID_REP as Record<string, unknown>;
+    expect(createUserToolOp.project!(created, { representation: noName }).message).toBe(
+      `Created user-defined tool '${String(noName["id"])}'`,
+    );
+    expect(createUserToolOp.project!(created, { representation: {} }).message).toBe(
+      "Created user-defined tool 'unknown'",
+    );
+    // Present and null is not absent, so it is announced rather than defaulted.
+    expect(createUserToolOp.project!(created, { representation: { name: null } }).message).toBe(
+      "Created user-defined tool 'None'",
+    );
   });
 });

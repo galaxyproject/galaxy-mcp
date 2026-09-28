@@ -31,7 +31,7 @@ export const cancelWorkflowInvocationOp: Operation<typeof input, CancelledInvoca
   readOnly: false,
   destructive: true,
   run,
-  project: (_data, i) => ({ message: `Cancelled invocation ${i.invocationId}` }),
+  project: (_data, i) => ({ message: `Cancelled workflow invocation '${i.invocationId}'` }),
 };
 
 register(cancelWorkflowInvocationOp as AnyOperation);

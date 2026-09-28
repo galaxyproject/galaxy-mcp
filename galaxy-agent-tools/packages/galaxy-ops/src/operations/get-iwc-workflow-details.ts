@@ -2,6 +2,7 @@ import { z } from "zod";
 import { fetchIwcWorkflows, enrichWorkflowResult, type EnrichedIwcWorkflow } from "../iwc-manifest";
 import type { GalaxyContext } from "../context";
 import { GalaxyNotFoundError } from "../errors";
+import { pyGet } from "../python-values";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 import { stepsInOrder } from "../workflow-steps";
@@ -19,11 +20,6 @@ const input = {
 type In = { trsId: string };
 
 const INPUT_TYPES = new Set(["data_input", "data_collection_input", "parameter_input"]);
-
-// The other server reads these with dict.get(key, default): only an ABSENT key
-// gets the default, a key that is present with null or "" is the value.
-const orDefault = (o: Record<string, unknown>, key: string, fallback: unknown): unknown =>
-  Object.prototype.hasOwnProperty.call(o, key) ? o[key] : fallback;
 
 async function run(i: In, _ctx: GalaxyContext): Promise<IwcWorkflowDetail> {
   const workflows = await fetchIwcWorkflows();
@@ -48,9 +44,9 @@ async function run(i: In, _ctx: GalaxyContext): Promise<IwcWorkflowDetail> {
 
       if (INPUT_TYPES.has(stepType)) {
         inputs.push({
-          name: orDefault(step, "label", `Input ${stepId}`) as string | null,
+          name: pyGet(step, "label", `Input ${stepId}`) as string | null,
           type: stepType,
-          annotation: orDefault(step, "annotation", "") as string | null,
+          annotation: pyGet(step, "annotation", "") as string | null,
         });
       }
 
@@ -59,8 +55,8 @@ async function run(i: In, _ctx: GalaxyContext): Promise<IwcWorkflowDetail> {
         for (const wo of workflowOutputs) {
           if (!wo || typeof wo !== "object") continue;
           const woObj = wo as Record<string, unknown>;
-          const label = orDefault(woObj, "label", orDefault(woObj, "output_name", ""));
-          const stepLabel = orDefault(step, "label", `Step ${stepId}`);
+          const label = pyGet(woObj, "label", pyGet(woObj, "output_name", ""));
+          const stepLabel = pyGet(step, "label", `Step ${stepId}`);
           outputs.push({ name: label as string | null, step: stepLabel as string | null });
         }
       }

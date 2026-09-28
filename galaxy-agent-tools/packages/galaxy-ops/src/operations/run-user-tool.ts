@@ -3,6 +3,7 @@ import type { GalaxyContext } from "../context";
 import { GalaxyNotFoundError } from "../errors";
 import { jsonObject } from "../json-object";
 import { legacyGet, legacyPost } from "../legacy";
+import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
@@ -27,6 +28,14 @@ interface ToolLookup {
   [k: string]: unknown;
 }
 
+/**
+ * The Galaxy tool_id behind the uuid, for the summary line.
+ *
+ * The other server's sentence names it, and it comes from the lookup rather than the
+ * run's reply, so it travels beside the call.
+ */
+const userToolId = envelopeFact<string>("run_user_tool.tool_id");
+
 async function run(i: In, ctx: GalaxyContext): Promise<UserToolRun> {
   // Step 1: look up tool_id and version from the UDT record.
   const toolInfo = await legacyGet<ToolLookup>(ctx, "/api/unprivileged_tools/{tool_uuid}", {
@@ -36,6 +45,8 @@ async function run(i: In, ctx: GalaxyContext): Promise<UserToolRun> {
   if (!toolInfo.tool_id) {
     throw new GalaxyNotFoundError(`No user-defined tool found with UUID '${i.toolUuid}'`);
   }
+
+  recordFact(ctx, userToolId, toolInfo.tool_id);
 
   const toolVersion = toolInfo.representation?.version ?? "0.1.0";
 
@@ -58,7 +69,14 @@ export const runUserToolOp: Operation<typeof input, UserToolRun> = {
   input,
   readOnly: false,
   run,
-  project: (_out, i) => ({ message: `Submitted user tool ${i.toolUuid} to history ${i.historyId}` }),
+  // server.py, run_user_tool. The tool_id is the one thing in it that the arguments
+  // do not carry, and run() refuses a record without one -- so an empty name here
+  // means nobody collected the fact, not that Galaxy sent no tool_id.
+  project: (_out, i, facts) => ({
+    message:
+      `Started user tool '${readFact(facts, userToolId) ?? ""}' (UUID: ${i.toolUuid}) ` +
+      `in history '${i.historyId}'`,
+  }),
 };
 
 register(runUserToolOp as AnyOperation);

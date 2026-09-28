@@ -42,6 +42,6 @@ describe("get_tool_run_examples", () => {
   it("project includes test case count and tool id", () => {
     const result = { tool_id: "fastqc", test_cases: [{}, {}] };
     const msg = getToolRunExamplesOp.project!(result as any, { toolId: "fastqc" });
-    expect(msg.message).toBe("2 test case(s) for fastqc");
+    expect(msg.message).toBe("Retrieved 2 test cases for tool 'fastqc'");
   });
 });

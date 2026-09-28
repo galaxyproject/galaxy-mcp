@@ -184,16 +184,14 @@ describe("invoke_workflow op", () => {
     expect("history" in capturedBody).toBe(false);
   });
 
-  it("project message includes workflowId and invocation id when present", () => {
-    const msg = invokeWorkflowOp.project!({ id: "inv1", state: "scheduled" }, { workflowId: "wf42" });
-    expect(msg.message).toContain("wf42");
-    expect(msg.message).toContain("inv1");
-  });
-
-  it("project message omits invocation id when absent", () => {
-    const msg = invokeWorkflowOp.project!({}, { workflowId: "wf42" });
-    expect(msg.message).toContain("wf42");
-    expect(msg.message).not.toContain("invocation");
+  it("project message names the workflow and leaves the invocation to data", () => {
+    // The other server's sentence says nothing about what came back, which is why it
+    // reads the same for one invocation and for the list a batch expands to. The ids
+    // are in data either way.
+    const one = invokeWorkflowOp.project!({ id: "inv1", state: "scheduled" }, { workflowId: "wf42" });
+    expect(one.message).toBe("Invoked workflow 'wf42'");
+    const none = invokeWorkflowOp.project!({}, { workflowId: "wf42" });
+    expect(none.message).toBe("Invoked workflow 'wf42'");
   });
 
   // (e) HDCA enrichment -- collection show GET fires, enriched metadata drives validation
@@ -352,8 +350,8 @@ describe("a batch invocation, which Galaxy answers with a list", () => {
     });
     const out = await invokeWorkflow({ workflowId: "wf1" }, ctxWith(client));
     expect(out).toEqual(made);
-    expect(invokeWorkflowOp.project?.(out, { workflowId: "wf1" } as never)?.message).toContain(
-      "2 invocations: inv42, inv43",
+    expect(invokeWorkflowOp.project?.(out, { workflowId: "wf1" } as never)?.message).toBe(
+      "Invoked workflow 'wf1'",
     );
   });
 });

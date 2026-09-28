@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
+import { pyGet, pyStr } from "../python-values";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
 
@@ -190,7 +191,10 @@ export const getDatasetDetailsOp: Operation<typeof input, DatasetDetailsResult> 
   input,
   run,
   project: (d) => ({
-    message: `Dataset ${d.dataset_id} state=${String(d.dataset.state)}`,
+    // server.py, get_dataset_details: the dataset's own name through dict.get, so a
+    // record with no name is named by the id that was asked for. The state is in
+    // `data` and this line does not repeat it.
+    message: `Retrieved details for dataset '${pyStr(pyGet(d.dataset as unknown as Record<string, unknown>, "name", d.dataset_id))}'`,
   }),
 };
 

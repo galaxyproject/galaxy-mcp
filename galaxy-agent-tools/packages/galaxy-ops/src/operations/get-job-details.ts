@@ -86,7 +86,9 @@ export const getJobDetailsOp: Operation<typeof input, GetJobDetailsResult> = {
   summary: "Get job details for the job that produced a dataset.",
   input,
   run,
-  project: (out) => ({ message: `Job ${out.job_id} for dataset ${out.dataset_id}` }),
+  // server.py, get_job_details: the dataset that was asked about, not the job that
+  // was found for it -- the job's id is in `data`.
+  project: (out) => ({ message: `Retrieved job details for dataset '${out.dataset_id}'` }),
 };
 
 register(getJobDetailsOp as AnyOperation);

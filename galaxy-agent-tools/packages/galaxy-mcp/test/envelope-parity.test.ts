@@ -13,18 +13,11 @@
  * * the same keys, so a surface cannot quietly drop `count` or send `pagination`
  *   where the other sends null;
  * * `data`, `success`, `count` and `pagination` deep-equal, nulls included;
- * * `message` deep-equal for the nine tools whose page the output budget cuts:
- *   get_iwc_workflows, get_tool_panel, list_history_ids, list_user_tools,
- *   list_workflows, recommend_iwc_workflows, search_iwc_workflows,
- *   search_tools_by_keywords and search_tools_by_name. The budget is measured on
- *   the whole envelope, message included, so a sentence eleven bytes longer on
- *   one side cuts one row fewer there -- the prose is part of the contract for
- *   exactly these nine and a fixture that stops at a boundary proves it.
- * * `message` a non-empty string, but NOT compared, for every other tool:
- *   get_histories, get_history_contents, get_invocations, get_tool_citations,
- *   get_tool_run_examples, list_page_revisions and list_pages. Nothing about
- *   those answers depends on the sentence's length, and aligning the rest of the
- *   prose is still its own piece of work.
+ * * `message` deep-equal, byte for byte. The sentence is part of the contract for
+ *   every tool: it is what an agent reads first, and for the nine tools whose page
+ *   the output budget cuts it also decides where the cut falls, because the budget
+ *   is measured on the whole envelope and a sentence eleven bytes longer on one
+ *   side cuts one row fewer there.
  *
  * Key ORDER is not part of the contract. JSON objects are unordered, no client
  * depends on it, and neither side promises one.
@@ -69,19 +62,6 @@ const readJson = <T>(name: string): T =>
   JSON.parse(readFileSync(fileURLToPath(new URL(name, FIXTURES)), "utf8")) as T;
 
 const index = readJson<{ caseCount: number; cases: CaseEntry[] }>("index.json");
-
-/** The tools whose message is part of the contract, because their budget is. */
-const MESSAGE_PARITY = new Set([
-  "get_iwc_workflows",
-  "get_tool_panel",
-  "list_history_ids",
-  "list_user_tools",
-  "list_workflows",
-  "recommend_iwc_workflows",
-  "search_iwc_workflows",
-  "search_tools_by_keywords",
-  "search_tools_by_name",
-]);
 
 /**
  * Answer a request from the case's table.
@@ -185,11 +165,7 @@ describe("the MCP envelope is the Python server's", () => {
       expect(parsed.pagination, "pagination").toEqual(expected.pagination);
       expect(typeof parsed.message, "message").toBe("string");
       expect((parsed.message as string).length).toBeGreaterThan(0);
-      // Compared for the budgeted tools, because their sentence decides where the
-      // page is cut; only required to exist for the rest. See the note at the top.
-      if (MESSAGE_PARITY.has(entry.tool)) {
-        expect(parsed.message, "message").toEqual(expected.message);
-      }
+      expect(parsed.message, "message").toEqual(expected.message);
     },
   );
 });

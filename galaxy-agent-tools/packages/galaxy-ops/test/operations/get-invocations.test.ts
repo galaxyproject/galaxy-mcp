@@ -236,13 +236,17 @@ describe("get_invocations", () => {
     // with or without a limit.
     expect(listMeta.pagination).toBeUndefined();
 
+    // One row and the plural stays, because the other server writes it either way.
     const oneMeta = getInvocationsOp.project!(page(1) as any, { limit: 5 } as any);
-    expect(oneMeta.message).toBe("Retrieved 1 workflow invocation");
+    expect(oneMeta.message).toBe("Retrieved 1 workflow invocations");
     expect(oneMeta.count).toBe(1);
     expect(oneMeta.pagination).toBeUndefined();
 
-    const detailMeta = getInvocationsOp.project!({ id: "inv1", state: "ok" } as any, {} as any);
-    expect(detailMeta.message).toBe("Invocation inv1 state=ok");
+    const detailMeta = getInvocationsOp.project!(
+      { id: "inv1", state: "ok" } as any,
+      { invocationId: "inv1" } as any,
+    );
+    expect(detailMeta.message).toBe("Retrieved invocation 'inv1'");
     expect(detailMeta.count).toBeUndefined();
     expect(detailMeta.pagination).toBeUndefined();
   });

@@ -1,0 +1,15 @@
+{
+  "data": {
+    "id": "wf000003",
+    "version": 1,
+    "owner": "curator",
+    "published": false,
+    "deleted": false,
+    "inputs": {},
+    "steps": {}
+  },
+  "success": true,
+  "message": "Retrieved details for workflow 'wf000003'",
+  "count": null,
+  "pagination": null
+}

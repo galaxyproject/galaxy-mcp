@@ -38,7 +38,9 @@ export const revertPageRevisionOp: Operation<typeof input, PageRevisionDetails> 
   requires: { galaxy: ">=26.1" },
   readOnly: false,
   run,
-  project: (rev, i) => ({ message: `Reverted page ${i.pageId} to revision ${i.revisionId} as ${rev.id}` }),
+  // server.py, revert_page_revision: the page and the revision that was restored.
+  // The new revision Galaxy wrote is in data, with its own id.
+  project: (_rev, i) => ({ message: `Reverted page '${i.pageId}' to revision '${i.revisionId}'` }),
 };
 
 register(revertPageRevisionOp as AnyOperation);

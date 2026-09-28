@@ -88,7 +88,7 @@ describe("list_pages", () => {
       previous_offset: 1,
       helper_text: "Showing 1 of 12 pages (offset 2). Use offset=3 for the next page.",
     });
-    expect(r.message).toBe("1 page(s)");
+    expect(r.message).toBe("Retrieved 1 pages");
   });
 
   /** An offset past the last page gets the sentence that says so, not a blank one. */

@@ -70,8 +70,31 @@ async function run(i: RunToolInput, ctx: GalaxyContext): Promise<ToolSubmission>
   return legacyPost<ToolSubmission>(ctx, "/api/tools", { body });
 }
 
-/** The jobs a submission queued, for the summary line. */
-const jobCount = (o: ToolSubmission): number => (Array.isArray(o.jobs) ? o.jobs.length : 0);
+/**
+ * The version that ran, when every job Galaxy returned names the same one.
+ *
+ * Port of `_reported_tool_version` in server.py, and its reasoning is the load-bearing
+ * part: POST /api/tools serialises each job with a visible `tool_version`, so the reply
+ * says what ran, while ASKING for a version does not -- Galaxy's toolbox hands back the
+ * newest installed version when the requested one is missing. One job that names no
+ * version, two that disagree, or a reply with no jobs all leave the provenance unknown,
+ * and there is no partly-known version to report, so the answer is null and the sentence
+ * says so.
+ */
+function reportedToolVersion(result: ToolSubmission): string | null {
+  const jobs = result.jobs;
+  if (!Array.isArray(jobs) || jobs.length === 0) return null;
+  const versions = new Set<string>();
+  for (const job of jobs) {
+    const version =
+      job !== null && typeof job === "object"
+        ? (job as { tool_version?: unknown }).tool_version
+        : undefined;
+    if (typeof version !== "string" || version === "") return null;
+    versions.add(version);
+  }
+  return versions.size === 1 ? [...versions][0]! : null;
+}
 
 export const runToolOp: Operation<typeof input, ToolSubmission> = {
   name: "run_tool", // parity: mcp-server-galaxy-py run_tool
@@ -84,9 +107,21 @@ export const runToolOp: Operation<typeof input, ToolSubmission> = {
   input,
   readOnly: false, // executes a tool -- not a read
   run,
-  project: (o, i) => ({
-    message: `Submitted ${i.toolId} to history ${i.historyId} (${jobCount(o)} job(s))`,
-  }),
+  project: (o, i) => {
+    // server.py, run_tool: the tool and the history, with a clause about the version
+    // only when one was asked for -- and that clause reports what the jobs say ran,
+    // never the request repeated back as if it were the answer. The two clauses the
+    // other server can add after this one (stored credentials, and inputs that went
+    // unchecked) belong to work this surface does not do; see the release notes.
+    let version = "";
+    if (i.toolVersion !== undefined) {
+      const ran = reportedToolVersion(o);
+      if (ran === null) version = ` at an unreported version (${i.toolVersion} requested)`;
+      else if (ran === i.toolVersion) version = ` at version ${ran}`;
+      else version = ` at version ${ran} (not the ${i.toolVersion} requested)`;
+    }
+    return { message: `Started tool '${i.toolId}'${version} in history '${i.historyId}'` };
+  },
 };
 
 register(runToolOp as AnyOperation);

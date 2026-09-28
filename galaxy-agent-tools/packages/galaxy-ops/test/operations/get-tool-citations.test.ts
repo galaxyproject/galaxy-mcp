@@ -34,15 +34,18 @@ describe("get_tool_citations", () => {
     expect(out.citations).toEqual([]);
   });
 
-  it("project message includes citation count and tool name", () => {
+  it("project message counts the citations and names the tool that was asked for", () => {
+    // Not the name Galaxy answered with, which is in data: the other server's
+    // sentence quotes the id, so a caller reading it knows what to ask again with.
     const result = { tool_name: "FastQC", tool_version: "0.74", citations: [{}] };
     const msg = getToolCitationsOp.project!(result as any, { toolId: "fastqc" });
-    expect(msg.message).toBe("1 citation(s) for FastQC");
+    expect(msg.message).toBe("Retrieved 1 citations for tool 'fastqc'");
   });
 
-  it("project falls back to toolId when tool_name is absent", () => {
-    const result = { citations: [] };
-    const msg = getToolCitationsOp.project!(result as any, { toolId: "cat1" });
-    expect(msg.message).toBe("0 citation(s) for cat1");
+  it("writes the plural for one citation, as the other server does", () => {
+    const result = { tool_name: "FastQC", citations: [{}] };
+    expect(getToolCitationsOp.project!(result as any, { toolId: "cat1" }).message).toBe(
+      "Retrieved 1 citations for tool 'cat1'",
+    );
   });
 });

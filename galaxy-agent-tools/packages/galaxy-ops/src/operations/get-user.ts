@@ -1,5 +1,6 @@
 import type { GalaxyContext } from "../context";
 import { classifyHttp, GalaxyAuthError } from "../errors";
+import { pyGet, pyStr } from "../python-values";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
@@ -42,7 +43,10 @@ export const getUserOp: Operation<typeof input, CurrentUser> = {
   summary: "Return the current authenticated Galaxy user, as Galaxy's own user record.",
   input,
   run,
-  project: (u) => ({ message: `Authenticated as ${u.username} <${u.email}>` }),
+  // server.py, get_user: the username through dict.get, so a record without one is
+  // announced as "unknown". run() has already refused an anonymous reply, so the
+  // fallback is unreachable on this path and is transcribed rather than relied on.
+  project: (u) => ({ message: `Retrieved user info for '${pyStr(pyGet(u, "username", "unknown"))}'` }),
 };
 
 register(getUserOp as AnyOperation);

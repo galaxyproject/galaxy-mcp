@@ -452,6 +452,19 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         lambda: search_tools_by_keywords_fn(["section 0 tool"], limit=10, offset=300),
         keyword_routes,
     )
+    # Two keywords, because the sentence joins them with ", " and one keyword cannot
+    # show that. The second matches nothing, and the first still matches every tool,
+    # so no detail lookup happens here either.
+    add(
+        "search_tools_by_keywords",
+        "two_keywords",
+        "two keywords, which the sentence lists in the order they were given",
+        {"keywords": ["section 0 tool", "nothing matches this"], "limit": 10, "offset": 0},
+        lambda: search_tools_by_keywords_fn(
+            ["section 0 tool", "nothing matches this"], limit=10, offset=0
+        ),
+        keyword_routes,
+    )
 
     # -- get_tool_panel ------------------------------------------------------
     panel = panel_sections(12, 4)
@@ -810,6 +823,22 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         [
             route("/api/histories/h0000", history_record),
             route("/api/histories/h0000/contents", []),
+        ],
+    )
+    # The name is read with dict.get and falls back to the id that was asked for, so a
+    # record carrying no name key at all is the branch that shows the fallback.
+    add(
+        "get_history_details",
+        "no_name_on_the_record",
+        "a history record with no name key, which the sentence names by its id",
+        {"history_id": "h0000"},
+        lambda: get_history_details_fn("h0000"),
+        [
+            route(
+                "/api/histories/h0000",
+                {k: v for k, v in history_record.items() if k != "name"},
+            ),
+            route("/api/histories/h0000/contents", content_rows(1)),
         ],
     )
 
@@ -1955,6 +1984,20 @@ def dataset_details_cases(add: AddCase) -> None:
         lambda: get_dataset_details_fn("d0000001", include_preview=False),
         [route("/api/datasets/d0000001", record)],
     )
+    # The name is read with dict.get and falls back to the id that was asked for.
+    add(
+        "get_dataset_details",
+        "no_name_on_the_record",
+        "a dataset record with no name key, which the sentence names by its id",
+        {"dataset_id": "d0000004", "include_preview": False},
+        lambda: get_dataset_details_fn("d0000004", include_preview=False),
+        [
+            route(
+                "/api/datasets/d0000004",
+                {k: v for k, v in record.items() if k != "name"} | {"id": "d0000004"},
+            )
+        ],
+    )
     add(
         "get_dataset_details",
         "state_not_ok",
@@ -2185,6 +2228,28 @@ def workflow_details_cases(add: AddCase) -> None:
                             },
                         },
                     },
+                },
+            )
+        ],
+    )
+    # The name is read with dict.get and falls back to the id that was asked for.
+    add(
+        "get_workflow_details",
+        "no_name_on_the_record",
+        "a workflow record with no name key, which the sentence names by its id",
+        {"workflow_id": "wf000003"},
+        lambda: get_workflow_details_fn("wf000003"),
+        [
+            route(
+                "/api/workflows/wf000003",
+                {
+                    "id": "wf000003",
+                    "version": 1,
+                    "owner": "curator",
+                    "published": False,
+                    "deleted": False,
+                    "inputs": {},
+                    "steps": {},
                 },
             )
         ],
@@ -2503,6 +2568,34 @@ def page_cases(add: AddCase) -> None:
             ),
         ],
     )
+    # The id in the sentence is read off the REPLY with dict.get, defaulted to the
+    # empty string, so a create Galaxy answers without one still makes a sentence.
+    add(
+        "create_page",
+        "reply_without_an_id",
+        "a create whose reply carries no id, which the sentence leaves empty",
+        {"title": "Untitled", "slug": "untitled"},
+        lambda: create_page_fn(title="Untitled", slug="untitled"),
+        [
+            VERSION_ROUTE,
+            route(
+                "/api/pages",
+                {
+                    k: v
+                    for k, v in page_record(
+                        title="Untitled",
+                        slug="untitled",
+                        history_id=None,
+                        content_editor="",
+                        content="",
+                        edit_source="user",
+                    ).items()
+                    if k != "id"
+                },
+                method="POST",
+            ),
+        ],
+    )
     add(
         "create_page",
         "standalone_report",
@@ -2615,6 +2708,23 @@ def user_tool_mutation_cases(add: AddCase) -> None:
         {"representation": representation},
         lambda: create_user_tool_fn(representation),
         [route("/api/unprivileged_tools", created_tool, method="POST")],
+    )
+    # The name is read off the REPRESENTATION with dict.get, falling back to its id.
+    # Both fields are required, so the fallback is unreachable -- but a field stated as
+    # null is present, and an f-string renders that None on both sides.
+    add(
+        "create_user_tool",
+        "name_stated_as_null",
+        "a representation whose name is null, which is present and so is not defaulted",
+        {"representation": {**representation, "name": None}},
+        lambda: create_user_tool_fn({**representation, "name": None}),
+        [
+            route(
+                "/api/unprivileged_tools",
+                {**created_tool, "representation": {**representation, "name": None}},
+                method="POST",
+            )
+        ],
     )
     add(
         "delete_user_tool",
@@ -2790,6 +2900,46 @@ def run_tool_cases(add: AddCase) -> None:
         },
         lambda: run_tool_fn("h0000", "fastqc", {"contaminants": ""}, tool_version="0.74+galaxy1"),
         [tools_post],
+    )
+    # Asking for a version does not make it so: Galaxy's toolbox falls back to an
+    # installed one, and only the jobs say which ran. Two more branches of that
+    # sentence -- a version that is not the one requested, and a reply that names none.
+    add(
+        "run_tool",
+        "version_galaxy_did_not_honour",
+        "a version asked for that the jobs came back naming differently",
+        {
+            "history_id": "h0000",
+            "tool_id": "fastqc",
+            "inputs": {"contaminants": ""},
+            "tool_version": "0.72",
+        },
+        lambda: run_tool_fn("h0000", "fastqc", {"contaminants": ""}, tool_version="0.72"),
+        [tools_post],
+    )
+    add(
+        "run_tool",
+        "version_no_job_reports",
+        "a version asked for and a reply whose job names none, so nothing is claimed",
+        {
+            "history_id": "h0000",
+            "tool_id": "fastqc",
+            "inputs": {"contaminants": ""},
+            "tool_version": "0.74+galaxy1",
+        },
+        lambda: run_tool_fn("h0000", "fastqc", {"contaminants": ""}, tool_version="0.74+galaxy1"),
+        [
+            route(
+                "/api/tools",
+                {
+                    **submission,
+                    "jobs": [
+                        {k: v for k, v in submission["jobs"][0].items() if k != "tool_version"}
+                    ],
+                },
+                method="POST",
+            )
+        ],
     )
 
 

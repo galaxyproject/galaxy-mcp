@@ -29,7 +29,7 @@ export const listPageRevisionsOp: Operation<typeof input, PageRevisionSummary[]>
   requires: { galaxy: ">=26.1" },
   run,
   project: (revs, i) => ({
-    message: `${revs.length} revision(s) for page ${i.pageId}`,
+    message: `Retrieved ${revs.length} revisions for page '${i.pageId}'`,
     count: revs.length,
   }),
 };

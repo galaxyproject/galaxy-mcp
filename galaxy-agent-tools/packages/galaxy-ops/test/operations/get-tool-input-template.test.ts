@@ -75,13 +75,16 @@ describe("get_tool_input_template", () => {
     ).rejects.toBeInstanceOf(GalaxyNotFoundError);
   });
 
-  it("project message includes toolId and parameter count", () => {
+  it("project message is the other server's, placeholder hint and all", () => {
     const out = {
       tool_id: "cat1",
       inputs_template: {},
       parameters: [{}, {}, {}],
     };
     const msg = getToolInputTemplateOp.project!(out as any, { toolId: "cat1" });
-    expect(msg.message).toBe("Input template for cat1 (3 top-level param(s))");
+    expect(msg.message).toBe(
+      "Built an input template for tool 'cat1'. Replace placeholders " +
+        "(e.g. <dataset_id>) and pass the result as `inputs` to run_tool.",
+    );
   });
 });

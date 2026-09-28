@@ -280,7 +280,7 @@ prints.
 {
   "data": [{ "id": "f2db41e1fa331b3e", "name": "RNA-seq" }],
   "success": true,
-  "message": "1 of 40 histories",
+  "message": "Retrieved 1 of 40 histories",
   "count": 1,
   "pagination": {
     "total_items": 40,
@@ -297,6 +297,8 @@ prints.
 ```
 
 `data` is the answer itself -- for a listing, the page, not a wrapper around it.
+`message` is the Python server's sentence for that tool, word for word, which is
+why it reads as prose rather than as a field dump.
 `count` is how many rows are in this answer, for the tools that count. `count`
 and `pagination` are always there, `null` where the tool has neither, so a
 missing key never has to be told apart from "this tool does not page". A page
