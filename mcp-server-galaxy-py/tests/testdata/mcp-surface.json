@@ -350,7 +350,7 @@
               }
             ],
             "default": null,
-            "description": "Filter by name pattern (case-sensitive partial match).\n  Example: name=\"RNA\" matches \"RNA-seq analysis\", \"my RNA data\""
+            "description": "Return only histories with exactly this name. The match is exact and\n  case-sensitive, not a substring: name=\"RNA\" does not match\n  \"RNA-seq analysis\"."
           }
         },
         "type": "object"

@@ -2346,8 +2346,9 @@ def get_histories(
         limit: Maximum histories to return. Default None returns all.
                Use with offset for pagination on large history lists.
         offset: Skip this many histories (for pagination). Default 0.
-        name: Filter by name pattern (case-sensitive partial match).
-              Example: name="RNA" matches "RNA-seq analysis", "my RNA data"
+        name: Return only histories with exactly this name. The match is exact and
+              case-sensitive, not a substring: name="RNA" does not match
+              "RNA-seq analysis".
 
     Returns:
         GalaxyResult with:
