@@ -1,0 +1,11 @@
+{
+  "data": {
+    "tool_id": "upload1",
+    "inputs_template": {},
+    "parameters": []
+  },
+  "success": true,
+  "message": "Built an input template for tool 'upload1'. Replace placeholders (e.g. <dataset_id>) and pass the result as `inputs` to run_tool.",
+  "count": null,
+  "pagination": null
+}

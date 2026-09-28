@@ -1,0 +1,52 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example/",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/histories/h0000/contents/d0000002/provenance",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "id": "d0000002",
+        "job_id": "j0000001",
+        "tool_id": "fastqc",
+        "uuid": "22222222-2222-2222-2222-222222222222",
+        "parameters": {}
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs/j0000001",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "id": "j0000001",
+        "state": "ok",
+        "tool_id": "fastqc",
+        "exit_code": 0,
+        "create_time": "2026-01-02T03:04:05.000000",
+        "update_time": "2026-01-02T03:14:05.000000",
+        "params": {
+          "input_file": "{\"values\": [{\"id\": 12, \"src\": \"hda\"}]}"
+        },
+        "inputs": {
+          "input_file": {
+            "id": "d0000001",
+            "src": "hda",
+            "uuid": null
+          }
+        },
+        "outputs": {
+          "html_file": {
+            "id": "d0000002",
+            "src": "hda",
+            "uuid": null
+          }
+        }
+      }
+    }
+  ]
+}

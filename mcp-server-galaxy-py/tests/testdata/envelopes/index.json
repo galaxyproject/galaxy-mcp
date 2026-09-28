@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 90,
+  "caseCount": 99,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -994,6 +994,100 @@
       },
       "envelope": "get_tool_citations/none.json",
       "replies": "get_tool_citations/none.galaxy.json"
+    },
+    {
+      "tool": "get_tool_details",
+      "case": "metadata_only",
+      "note": "the default: the tool record without its parameter list",
+      "input": {
+        "tool_id": "cat1"
+      },
+      "envelope": "get_tool_details/metadata_only.json",
+      "replies": "get_tool_details/metadata_only.galaxy.json"
+    },
+    {
+      "tool": "get_tool_details",
+      "case": "with_io_details",
+      "note": "io_details=True, so the parameter and output lists come too",
+      "input": {
+        "tool_id": "fastqc",
+        "io_details": true
+      },
+      "envelope": "get_tool_details/with_io_details.json",
+      "replies": "get_tool_details/with_io_details.galaxy.json"
+    },
+    {
+      "tool": "get_tool_input_template",
+      "case": "every_nesting",
+      "note": "a data param, a repeat, a conditional, a section and a select in one schema",
+      "input": {
+        "tool_id": "build_list"
+      },
+      "envelope": "get_tool_input_template/every_nesting.json",
+      "replies": "get_tool_input_template/every_nesting.galaxy.json"
+    },
+    {
+      "tool": "get_tool_input_template",
+      "case": "no_inputs",
+      "note": "a tool whose definition arrived without a parameter list at all",
+      "input": {
+        "tool_id": "upload1"
+      },
+      "envelope": "get_tool_input_template/no_inputs.json",
+      "replies": "get_tool_input_template/no_inputs.galaxy.json"
+    },
+    {
+      "tool": "get_workflow_details",
+      "case": "latest",
+      "note": "no version asked for, so Galaxy answers with the newest",
+      "input": {
+        "workflow_id": "wf000001"
+      },
+      "envelope": "get_workflow_details/latest.json",
+      "replies": "get_workflow_details/latest.galaxy.json"
+    },
+    {
+      "tool": "get_workflow_details",
+      "case": "pinned_version",
+      "note": "an older version asked for by number",
+      "input": {
+        "workflow_id": "wf000002",
+        "version": 1
+      },
+      "envelope": "get_workflow_details/pinned_version.json",
+      "replies": "get_workflow_details/pinned_version.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "from_provenance",
+      "note": "a history was named, so the provenance record answers with the job id",
+      "input": {
+        "dataset_id": "d0000002",
+        "history_id": "h0000"
+      },
+      "envelope": "get_job_details/from_provenance.json",
+      "replies": "get_job_details/from_provenance.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "from_creating_job",
+      "note": "no history named, so the dataset's own creating_job is read",
+      "input": {
+        "dataset_id": "d0000002"
+      },
+      "envelope": "get_job_details/from_creating_job.json",
+      "replies": "get_job_details/from_creating_job.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "provenance_without_a_job_id",
+      "note": "provenance answered, but named no job, so the dataset is read anyway",
+      "input": {
+        "dataset_id": "d0000002",
+        "history_id": "h0000"
+      },
+      "envelope": "get_job_details/provenance_without_a_job_id.json",
+      "replies": "get_job_details/provenance_without_a_job_id.galaxy.json"
     }
   ]
 }

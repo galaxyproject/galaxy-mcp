@@ -1,0 +1,107 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example/",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/tools/build_list",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "id": "build_list",
+        "name": "Build list",
+        "version": "1.2.0",
+        "inputs": [
+          {
+            "name": "input_file",
+            "type": "data",
+            "optional": false,
+            "multiple": false,
+            "extensions": [
+              "tabular"
+            ]
+          },
+          {
+            "name": "datasets",
+            "type": "repeat",
+            "title": "Dataset",
+            "inputs": [
+              {
+                "name": "input",
+                "type": "data",
+                "optional": false
+              },
+              {
+                "name": "id_cond",
+                "type": "conditional",
+                "test_param": {
+                  "name": "id_select",
+                  "type": "select",
+                  "value": "idx",
+                  "options": [
+                    [
+                      "use index",
+                      "idx",
+                      true
+                    ],
+                    [
+                      "manual",
+                      "manual",
+                      false
+                    ]
+                  ]
+                },
+                "cases": [
+                  {
+                    "value": "idx",
+                    "inputs": []
+                  },
+                  {
+                    "value": "manual",
+                    "inputs": [
+                      {
+                        "name": "identifier",
+                        "type": "text",
+                        "value": ""
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "advanced",
+            "type": "section",
+            "title": "Advanced",
+            "inputs": [
+              {
+                "name": "sort_by",
+                "type": "select",
+                "value": "name",
+                "options": [
+                  [
+                    "Name",
+                    "name",
+                    true
+                  ],
+                  [
+                    "Identifier",
+                    "identifier",
+                    false
+                  ]
+                ]
+              },
+              {
+                "name": "threshold",
+                "type": "integer",
+                "value": 5
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

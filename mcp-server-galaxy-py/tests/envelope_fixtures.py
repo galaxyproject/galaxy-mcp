@@ -54,9 +54,13 @@ from .test_helpers import (
     get_invocations_fn,
     get_iwc_workflow_details_fn,
     get_iwc_workflows_fn,
+    get_job_details_fn,
     get_tool_citations_fn,
+    get_tool_details_fn,
+    get_tool_input_template_fn,
     get_tool_panel_fn,
     get_tool_run_examples_fn,
+    get_workflow_details_fn,
     get_workflow_input_template_fn,
     list_history_ids_fn,
     list_page_revisions_fn,
@@ -131,6 +135,13 @@ class Case:
     input: dict[str, Any]
     call: Callable[[], GalaxyResult]
     routes: list[dict[str, Any]] = field(default_factory=list)
+
+
+# How a section below adds one case: the same six arguments ``cases()`` takes, so a
+# group can live in a function of its own without changing what a case looks like.
+AddCase = Callable[
+    [str, str, str, dict[str, Any], Callable[[], GalaxyResult], list[dict[str, Any]]], None
+]
 
 
 # ---------------------------------------------------------------------------
@@ -1696,7 +1707,347 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         ],
     )
 
+    single_record_cases(add)
+
     return out
+
+
+# ---------------------------------------------------------------------------
+# One record in, one record out
+#
+# Sections of their own rather than more of the table above: these tools answer with
+# a record or a small wrapper around one, so what a case pins is which fields a reply
+# may leave out rather than where a page was cut.
+# ---------------------------------------------------------------------------
+
+
+def single_record_cases(add: AddCase) -> None:
+    tool_details_cases(add)
+    tool_input_template_cases(add)
+    workflow_details_cases(add)
+    job_details_cases(add)
+
+
+def tool_details_cases(add: AddCase) -> None:
+    """Galaxy's tool record, passed through as it arrived.
+
+    ``io_details`` changes the request and not the answer, and the two clients spell a
+    boolean query parameter differently -- ``io_details=True`` from requests,
+    ``io_details=true`` from this side -- so a route narrowed on it would answer one
+    surface and 404 the other. The two cases therefore ask about two tools, each with
+    its own reply, which is what the flag is for anyway.
+    """
+    add(
+        "get_tool_details",
+        "metadata_only",
+        "the default: the tool record without its parameter list",
+        {"tool_id": "cat1"},
+        lambda: get_tool_details_fn("cat1"),
+        [
+            route(
+                "/api/tools/cat1",
+                {
+                    "id": "cat1",
+                    "name": "Concatenate datasets",
+                    "version": "1.0.0",
+                    "description": "tail-to-head",
+                    "model_class": "Tool",
+                    "panel_section_id": "text_manipulation",
+                    "panel_section_name": "Text Manipulation",
+                },
+            )
+        ],
+    )
+    add(
+        "get_tool_details",
+        "with_io_details",
+        "io_details=True, so the parameter and output lists come too",
+        {"tool_id": "fastqc", "io_details": True},
+        lambda: get_tool_details_fn("fastqc", io_details=True),
+        [
+            route(
+                "/api/tools/fastqc",
+                {
+                    "id": "fastqc",
+                    "name": "FastQC",
+                    "version": "0.74+galaxy1",
+                    "description": "Read Quality reports",
+                    "model_class": "Tool",
+                    "inputs": [
+                        {
+                            "name": "input_file",
+                            "label": "Short read data from your current history",
+                            "type": "data",
+                            "optional": False,
+                            "multiple": False,
+                            "extensions": ["fastqsanger", "bam"],
+                            "value": None,
+                        },
+                        {
+                            "name": "contaminants",
+                            "label": "Contaminant list",
+                            "type": "data",
+                            "optional": True,
+                            "multiple": False,
+                            "extensions": ["tabular"],
+                            "value": None,
+                        },
+                    ],
+                    "outputs": [
+                        {
+                            "name": "html_file",
+                            "format": "html",
+                            "label": "${tool.name} on ${on_string}: Webpage",
+                        },
+                        {
+                            "name": "text_file",
+                            "format": "txt",
+                            "label": "${tool.name} on ${on_string}: RawData",
+                        },
+                    ],
+                },
+            )
+        ],
+    )
+
+
+def tool_input_template_cases(add: AddCase) -> None:
+    """The skeleton and the compact parameter list, built from one io_details schema.
+
+    Every nesting the builder walks is in the first case -- a data param, a repeat, a
+    conditional inside it, a section, and a select whose options are capped inline --
+    because each of them decides a different flattened key.
+    """
+    add(
+        "get_tool_input_template",
+        "every_nesting",
+        "a data param, a repeat, a conditional, a section and a select in one schema",
+        {"tool_id": "build_list"},
+        lambda: get_tool_input_template_fn("build_list"),
+        [
+            route(
+                "/api/tools/build_list",
+                {
+                    "id": "build_list",
+                    "name": "Build list",
+                    "version": "1.2.0",
+                    "inputs": [
+                        {
+                            "name": "input_file",
+                            "type": "data",
+                            "optional": False,
+                            "multiple": False,
+                            "extensions": ["tabular"],
+                        },
+                        {
+                            "name": "datasets",
+                            "type": "repeat",
+                            "title": "Dataset",
+                            "inputs": [
+                                {"name": "input", "type": "data", "optional": False},
+                                {
+                                    "name": "id_cond",
+                                    "type": "conditional",
+                                    "test_param": {
+                                        "name": "id_select",
+                                        "type": "select",
+                                        "value": "idx",
+                                        "options": [
+                                            ["use index", "idx", True],
+                                            ["manual", "manual", False],
+                                        ],
+                                    },
+                                    "cases": [
+                                        {"value": "idx", "inputs": []},
+                                        {
+                                            "value": "manual",
+                                            "inputs": [
+                                                {"name": "identifier", "type": "text", "value": ""}
+                                            ],
+                                        },
+                                    ],
+                                },
+                            ],
+                        },
+                        {
+                            "name": "advanced",
+                            "type": "section",
+                            "title": "Advanced",
+                            "inputs": [
+                                {
+                                    "name": "sort_by",
+                                    "type": "select",
+                                    "value": "name",
+                                    "options": [
+                                        ["Name", "name", True],
+                                        ["Identifier", "identifier", False],
+                                    ],
+                                },
+                                {"name": "threshold", "type": "integer", "value": 5},
+                            ],
+                        },
+                    ],
+                },
+            )
+        ],
+    )
+    add(
+        "get_tool_input_template",
+        "no_inputs",
+        "a tool whose definition arrived without a parameter list at all",
+        {"tool_id": "upload1"},
+        lambda: get_tool_input_template_fn("upload1"),
+        [route("/api/tools/upload1", {"id": "upload1", "name": "Upload File", "version": "1.1.7"})],
+    )
+
+
+def workflow_details_cases(add: AddCase) -> None:
+    """A stored workflow, passed through.
+
+    ``version`` changes the request and not the answer, so -- as with io_details above
+    -- the two cases ask about two workflows rather than narrowing one path on a query
+    the two clients spell differently.
+    """
+    add(
+        "get_workflow_details",
+        "latest",
+        "no version asked for, so Galaxy answers with the newest",
+        {"workflow_id": "wf000001"},
+        lambda: get_workflow_details_fn("wf000001"),
+        [
+            route(
+                "/api/workflows/wf000001",
+                {
+                    "id": "wf000001",
+                    "name": "Reads QC",
+                    "version": 3,
+                    "owner": "curator",
+                    "annotation": "quality control over sequencing reads",
+                    "published": False,
+                    "deleted": False,
+                    "inputs": {"0": {"label": "Input FASTQ", "value": "", "uuid": None}},
+                    "steps": {
+                        "0": {
+                            "id": 0,
+                            "type": "data_input",
+                            "annotation": None,
+                            "input_steps": {},
+                        },
+                        "1": {
+                            "id": 1,
+                            "type": "tool",
+                            "tool_id": "fastqc",
+                            "annotation": None,
+                            "input_steps": {
+                                "input_file": {"source_step": 0, "step_output": "output"}
+                            },
+                        },
+                    },
+                },
+            )
+        ],
+    )
+    add(
+        "get_workflow_details",
+        "pinned_version",
+        "an older version asked for by number",
+        {"workflow_id": "wf000002", "version": 1},
+        lambda: get_workflow_details_fn("wf000002", version=1),
+        [
+            route(
+                "/api/workflows/wf000002",
+                {
+                    "id": "wf000002",
+                    "name": "Reads QC",
+                    "version": 1,
+                    "owner": "curator",
+                    "annotation": None,
+                    "published": False,
+                    "deleted": False,
+                    "inputs": {},
+                    "steps": {"0": {"id": 0, "type": "data_input", "input_steps": {}}},
+                },
+            )
+        ],
+    )
+
+
+def job_details_cases(add: AddCase) -> None:
+    """The job behind a dataset, found two ways.
+
+    With a history the provenance record is asked first and its ``job_id`` is used;
+    without one, or when provenance answers without a job id, the dataset's own
+    ``creating_job`` is read instead. Both paths end at the same GET /api/jobs/{id},
+    which this server reaches with requests rather than through bioblend -- joined onto
+    the session's stored address, which is why that address has to be the one connect
+    would have stored.
+    """
+    job = {
+        "id": "j0000001",
+        "state": "ok",
+        "tool_id": "fastqc",
+        "exit_code": 0,
+        "create_time": "2026-01-02T03:04:05.000000",
+        "update_time": "2026-01-02T03:14:05.000000",
+        "params": {"input_file": '{"values": [{"id": 12, "src": "hda"}]}'},
+        "inputs": {"input_file": {"id": "d0000001", "src": "hda", "uuid": None}},
+        "outputs": {"html_file": {"id": "d0000002", "src": "hda", "uuid": None}},
+    }
+    job_route = route("/api/jobs/j0000001", job)
+    dataset_route = route(
+        "/api/datasets/d0000002",
+        {
+            "id": "d0000002",
+            "name": "FastQC on data 1: Webpage",
+            "state": "ok",
+            "extension": "html",
+            "creating_job": "j0000001",
+            "history_id": "h0000",
+        },
+    )
+    add(
+        "get_job_details",
+        "from_provenance",
+        "a history was named, so the provenance record answers with the job id",
+        {"dataset_id": "d0000002", "history_id": "h0000"},
+        lambda: get_job_details_fn("d0000002", history_id="h0000"),
+        [
+            route(
+                "/api/histories/h0000/contents/d0000002/provenance",
+                {
+                    "id": "d0000002",
+                    "job_id": "j0000001",
+                    "tool_id": "fastqc",
+                    "uuid": "22222222-2222-2222-2222-222222222222",
+                    "parameters": {},
+                },
+            ),
+            job_route,
+        ],
+    )
+    add(
+        "get_job_details",
+        "from_creating_job",
+        "no history named, so the dataset's own creating_job is read",
+        {"dataset_id": "d0000002"},
+        lambda: get_job_details_fn("d0000002"),
+        [dataset_route, job_route],
+    )
+    add(
+        "get_job_details",
+        "provenance_without_a_job_id",
+        "provenance answered, but named no job, so the dataset is read anyway",
+        {"dataset_id": "d0000002", "history_id": "h0000"},
+        lambda: get_job_details_fn("d0000002", history_id="h0000"),
+        [
+            route(
+                "/api/histories/h0000/contents/d0000002/provenance",
+                {"id": "d0000002", "tool_id": "fastqc", "parameters": {}},
+            ),
+            dataset_route,
+            job_route,
+        ],
+    )
 
 
 # ---------------------------------------------------------------------------

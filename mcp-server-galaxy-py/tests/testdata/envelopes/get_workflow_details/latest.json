@@ -1,0 +1,42 @@
+{
+  "data": {
+    "id": "wf000001",
+    "name": "Reads QC",
+    "version": 3,
+    "owner": "curator",
+    "annotation": "quality control over sequencing reads",
+    "published": false,
+    "deleted": false,
+    "inputs": {
+      "0": {
+        "label": "Input FASTQ",
+        "value": "",
+        "uuid": null
+      }
+    },
+    "steps": {
+      "0": {
+        "id": 0,
+        "type": "data_input",
+        "annotation": null,
+        "input_steps": {}
+      },
+      "1": {
+        "id": 1,
+        "type": "tool",
+        "tool_id": "fastqc",
+        "annotation": null,
+        "input_steps": {
+          "input_file": {
+            "source_step": 0,
+            "step_output": "output"
+          }
+        }
+      }
+    }
+  },
+  "success": true,
+  "message": "Retrieved details for workflow 'Reads QC'",
+  "count": null,
+  "pagination": null
+}

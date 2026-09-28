@@ -1,0 +1,35 @@
+{
+  "data": {
+    "job": {
+      "id": "j0000001",
+      "state": "ok",
+      "tool_id": "fastqc",
+      "exit_code": 0,
+      "create_time": "2026-01-02T03:04:05.000000",
+      "update_time": "2026-01-02T03:14:05.000000",
+      "params": {
+        "input_file": "{\"values\": [{\"id\": 12, \"src\": \"hda\"}]}"
+      },
+      "inputs": {
+        "input_file": {
+          "id": "d0000001",
+          "src": "hda",
+          "uuid": null
+        }
+      },
+      "outputs": {
+        "html_file": {
+          "id": "d0000002",
+          "src": "hda",
+          "uuid": null
+        }
+      }
+    },
+    "dataset_id": "d0000002",
+    "job_id": "j0000001"
+  },
+  "success": true,
+  "message": "Retrieved job details for dataset 'd0000002'",
+  "count": null,
+  "pagination": null
+}
