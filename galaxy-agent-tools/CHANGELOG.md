@@ -9,7 +9,7 @@ entry covers all three; where something only affects one surface, it says which.
 Breaking on both surfaces. 0.2.0 has not been published, so one release will
 carry both entries.
 
-### The MCP and CLI envelopes are the Python server's (#NNN)
+### The MCP and CLI envelopes are the Python server's (#140)
 
 A prompt written against the Python MCP server reads `data[0]` and
 `pagination.next_offset`. Against these packages it got an object with the page

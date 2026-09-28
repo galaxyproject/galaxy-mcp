@@ -237,7 +237,7 @@ PROBE_SHAPES: tuple[Callable[[str], str], ...] = (
 
 # Sigma shapes that are not about one code point's properties: words that end in a
 # sigma, words that do not, the character that is both cased and case-ignorable, and
-# the pair a reviewer found this whole round with.
+# the pair this whole round turned on.
 LITERAL_PROBES: tuple[str, ...] = (
     "\u0391\u03a3",
     "\u0391\u03a3\u0391",
