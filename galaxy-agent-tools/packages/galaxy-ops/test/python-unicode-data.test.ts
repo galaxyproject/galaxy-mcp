@@ -15,8 +15,12 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
-import { PY_UNICODE_VERSION, PY_WORD_CHAR_RANGES } from "../src/python-unicode-data";
-import { isPyWordChar, isPySpace } from "../src/python-str";
+import {
+  PY_LOWER_EXCEPTION_RANGES,
+  PY_UNICODE_VERSION,
+  PY_WORD_CHAR_RANGES,
+} from "../src/python-unicode-data";
+import { isPyWordChar, isPySpace, pyLower } from "../src/python-str";
 
 const TESTDATA = new URL("../../../../mcp-server-galaxy-py/tests/testdata/", import.meta.url);
 
@@ -30,9 +34,12 @@ const names = readdirSync(fileURLToPath(TESTDATA)).filter(
   (name) => name.startsWith("python-unicode-") && name.endsWith(".json"),
 );
 
-const source = JSON.parse(
-  readFileSync(fileURLToPath(new URL(names[0]!, TESTDATA)), "utf8"),
-) as { unicode_version: string; word_chars: Table; whitespace: Table };
+const source = JSON.parse(readFileSync(fileURLToPath(new URL(names[0]!, TESTDATA)), "utf8")) as {
+  unicode_version: string;
+  word_chars: Table;
+  whitespace: Table;
+  lower_map: { count: number; rows: Array<[number, string]> };
+};
 
 describe("the pinned Unicode tables", () => {
   it("are one interpreter's, so there is one file to copy from", () => {
@@ -67,6 +74,40 @@ describe("the pinned Unicode tables", () => {
       if (isPySpace(code)) mine.add(code);
     }
     expect([...mine].sort((a, b) => a - b)).toEqual([...whitespace].sort((a, b) => a - b));
+  });
+});
+
+describe("the lowercasing exceptions", () => {
+  /**
+   * The list of code points to leave alone is worked out by comparing the two runtimes, so
+   * unlike the word table it is not complete by construction: a runtime whose Unicode data
+   * moves on could lowercase a 56th. This recomputes it over the whole code space against the
+   * interpreter's own mapping, so that arrives as a failure here with the command to
+   * regenerate, rather than as a search quietly matching something the other server does not.
+   */
+  it("are every code point this runtime and the interpreter case differently", () => {
+    const theirs = new Map(source.lower_map.rows);
+    const disagree: number[] = [];
+    for (let code = 0; code < 0x110000; code += 1) {
+      const character = String.fromCodePoint(code);
+      if ((theirs.get(code) ?? character) !== character.toLowerCase()) disagree.push(code);
+    }
+    const listed: number[] = [];
+    for (const [low, high] of PY_LOWER_EXCEPTION_RANGES) {
+      for (let code = low; code <= high; code += 1) listed.push(code);
+    }
+    expect(listed).toEqual(disagree);
+  });
+
+  it("make pyLower the interpreter's lower() for every code point in the space", () => {
+    const theirs = new Map(source.lower_map.rows);
+    const wrong: string[] = [];
+    for (let code = 0; code < 0x110000; code += 1) {
+      const character = String.fromCodePoint(code);
+      const expected = theirs.get(code) ?? character;
+      if (pyLower(character) !== expected) wrong.push(code.toString(16));
+    }
+    expect(wrong).toEqual([]);
   });
 });
 

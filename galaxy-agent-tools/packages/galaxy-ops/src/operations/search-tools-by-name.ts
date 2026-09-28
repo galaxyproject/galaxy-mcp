@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { legacyGet } from "../legacy";
+import { pyLower } from "../python-str";
 import { paginate, shrinkPaged, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
@@ -37,13 +38,16 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<ToolListItem>> {
   const tools = await legacyGet<ToolListItem[]>(ctx, "/api/tools", {
     params: { query: { in_panel: false } },
   });
-  const needle = i.query.toLowerCase();
+  // `pyLower`, not `toLowerCase`: the other server lowercases with tables that have not
+  // been told about 55 of the code points this runtime folds, and a needle and a haystack
+  // cased differently on the two sides match differently.
+  const needle = pyLower(i.query);
   // A 200 carrying something other than a list is Galaxy breaking its contract.
   const matches = (Array.isArray(tools) ? tools : []).filter(
     (t) =>
-      (t.name ?? "").toLowerCase().includes(needle) ||
-      (t.id ?? "").toLowerCase().includes(needle) ||
-      (t.description ?? "").toLowerCase().includes(needle),
+      pyLower(t.name ?? "").includes(needle) ||
+      pyLower(t.id ?? "").includes(needle) ||
+      pyLower(t.description ?? "").includes(needle),
   );
   return paginate(matches, { limit, offset, noun: "tools" });
 }

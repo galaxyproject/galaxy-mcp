@@ -12,6 +12,7 @@ import {
   comparePyStrings,
   isPySpace,
   pyIntFromDigits,
+  pyLower,
   pyRepr,
   pyReprList,
   pyStrip,
@@ -262,5 +263,58 @@ describe("pyUtf8EncodeError", () => {
     expect(pyUtf8EncodeError("x\udfff\udfff")).toBe(
       "'utf-8' codec can't encode characters in position 1-2: surrogates not allowed",
     );
+  });
+});
+
+/**
+ * `pyLower` against the contract interpreter, in the places a table alone would not settle.
+ *
+ * The expected strings came off that interpreter, from `"<the input>".lower()`:
+ *
+ *   >>> "rnaseq\ua7cb".lower()          -> 'rnaseq\ua7cb'
+ *   >>> "RNASEQ\ua7cb".lower()          -> 'rnaseq\ua7cb'
+ *   >>> "\u0391\u03a3\ua7cb".lower()    -> '\u03b1\u03c2\ua7cb'
+ *   >>> "\ua7cb\u03a3".lower()          -> '\ua7cb\u03c3'
+ *   >>> "\u0391\u03a3\ua7cb\u0391".lower() -> '\u03b1\u03c2\ua7cb\u03b1'
+ *
+ * The sigma cases are the reason `pyLower` splits the string at an untouched code point and
+ * hands the rest to `toLowerCase` rather than walking a mapping table: a final sigma is a rule
+ * about context, not an entry, and both languages apply it. A character the interpreter has no
+ * case data for is uncased there, so a sigma beside it is at the end of its word -- which is
+ * also what `toLowerCase` says about a sigma at the end of a slice.
+ */
+describe("pyLower", () => {
+  it("leaves alone a letter the contract interpreter was never told to lowercase", () => {
+    expect(pyLower("rnaseq\ua7cb")).toBe("rnaseq\ua7cb");
+    // This runtime folds it to the small rams horn, which has been a letter since 1.1.
+    expect("rnaseq\ua7cb".toLowerCase()).toBe("rnaseq\u0264");
+  });
+
+  it("lowercases everything around it", () => {
+    expect(pyLower("RNASEQ\ua7cb")).toBe("rnaseq\ua7cb");
+  });
+
+  it("keeps the final-sigma rule on both sides of an untouched code point", () => {
+    expect(pyLower("\u0391\u03a3\ua7cb")).toBe("\u03b1\u03c2\ua7cb");
+    expect(pyLower("\ua7cb\u03a3")).toBe("\ua7cb\u03c3");
+    // Still a FINAL sigma: the interpreter has no case data for what follows, so as far as
+    // it is concerned the word ends there, and splitting the string at that character is how
+    // this side reaches the same answer.
+    expect(pyLower("\u0391\u03a3\ua7cb\u0391")).toBe("\u03b1\u03c2\ua7cb\u03b1");
+  });
+
+  it("is toLowerCase everywhere else, astral letters and dotted capital I included", () => {
+    expect(pyLower("RNA-Seq DATA")).toBe("rna-seq data");
+    expect(pyLower("\u0130")).toBe("i\u0307");
+    expect(pyLower("\u{1D400}")).toBe("\u{1D400}");
+    expect(pyLower("\u0391\u03a3")).toBe("\u03b1\u03c2");
+  });
+
+  it("decides a substring search the way the other server decides it", () => {
+    // A query of the capital rams horn against a tool named with the small one. The
+    // interpreter has no case mapping for the capital, so it finds nothing; this runtime
+    // folds the two together and would report a match the other server never makes.
+    expect(pyLower("\u0264").includes(pyLower("\ua7cb"))).toBe(false);
+    expect("\u0264".toLowerCase().includes("\ua7cb".toLowerCase())).toBe(true);
   });
 });

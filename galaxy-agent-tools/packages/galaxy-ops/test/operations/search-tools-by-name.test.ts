@@ -51,6 +51,26 @@ describe("search_tools_by_name", () => {
     expect(out[0].id).toBe("cat1");
   });
 
+  /**
+   * Case folding is Unicode data too, and the two runtimes read different editions of it.
+   * The other server was asked directly:
+   *
+   *   >>> "\u0264".lower() in "RAMS HORN \ua7cb".lower()   -> False
+   *
+   * because it has no case mapping for the capital rams horn at all, while `toLowerCase`
+   * here folds it onto the small one and reports a match nobody else makes.
+   */
+  it("case-folds a needle the way the other server does, not the way this runtime does", async () => {
+    const client = mockClient({
+      GET: () => ({
+        data: [{ id: "rams_horn", name: "Rams Horn \ua7cb", description: "" }],
+        response: { status: 200 },
+      }),
+    });
+    const { items: out } = await searchToolsByName({ query: "\u0264" }, ctxWith(client));
+    expect(out).toHaveLength(0);
+  });
+
   it("returns empty array when no match", async () => {
     const client = mockClient({
       GET: () => ({ data: TOOLS, response: { status: 200 } }),

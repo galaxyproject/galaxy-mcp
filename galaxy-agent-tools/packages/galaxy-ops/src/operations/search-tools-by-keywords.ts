@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { legacyGet } from "../legacy";
+import { pyLower } from "../python-str";
 import { paginate, shrinkPaged, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
@@ -88,11 +89,12 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<ToolKeywordMatch>> 
 
   const allTools = flattenTools(panel).filter((t) => t.id);
 
-  const needles = i.keywords.map((k) => k.toLowerCase());
+  // The other server's `lower()`, which this runtime's differs from on 55 code points.
+  const needles = i.keywords.map((k) => pyLower(k));
 
   const matchesImmediately = (t: PanelNode) => {
-    const name = (t.name ?? "").toLowerCase();
-    const desc = (t.description ?? "").toLowerCase();
+    const name = pyLower(t.name ?? "");
+    const desc = pyLower(t.description ?? "");
     return needles.some((kw) => name.includes(kw) || desc.includes(kw));
   };
 
@@ -124,10 +126,10 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<ToolKeywordMatch>> 
         const matched = inputs.some((inp) => {
           const ext = inp.extensions;
           if (Array.isArray(ext)) {
-            return ext.some((e) => typeof e === "string" && needles.some((kw) => e.toLowerCase().includes(kw)));
+            return ext.some((e) => typeof e === "string" && needles.some((kw) => pyLower(e).includes(kw)));
           }
           if (typeof ext === "string" && ext) {
-            return needles.some((kw) => ext.toLowerCase().includes(kw));
+            return needles.some((kw) => pyLower(ext).includes(kw));
           }
           return false;
         });

@@ -8,7 +8,7 @@
  * spelling it looks like in a way that changes which container gets recommended.
  */
 import { GalaxyValidationError } from "./errors";
-import { PY_WORD_CHAR_RANGES } from "./python-unicode-data";
+import { PY_LOWER_EXCEPTION_RANGES, PY_WORD_CHAR_RANGES } from "./python-unicode-data";
 
 /**
  * The code points CPython's `str.isspace()` is true for -- bidirectional class WS, B or S, or
@@ -339,4 +339,42 @@ function inRanges(ranges: readonly (readonly [number, number])[], code: number):
  */
 export function isPyWordChar(code: number): boolean {
   return inRanges(PY_WORD_CHAR_RANGES, code);
+}
+
+/**
+ * Python's `str.lower()`, which is `toLowerCase()` except on the code points the contract
+ * interpreter has not been told to lowercase.
+ *
+ * The three search tools lower the needle and the haystack before asking whether one contains
+ * the other, so a code point the two runtimes case differently decides a match: this runtime
+ * folds the capital rams horn U+A7CB to the small one U+0264 and the interpreter leaves it
+ * standing, which makes a query of the capital find a tool named with the small letter here
+ * and find nothing there. The same Unicode data
+ * gap as the word table, in the other half of the search path -- 55 code points today, each
+ * one given a case mapping after 15.0.0, listed in `PY_LOWER_EXCEPTION_RANGES`.
+ *
+ * Those are left alone and everything between them is handed to `toLowerCase`, rather than
+ * lowercased code point by code point out of a table, because lowercasing has one rule that no
+ * table holds: a Greek capital sigma at the end of a word is a final sigma, and both languages
+ * apply it. Splitting the string at a character the interpreter treats as uncased and
+ * unassigned gives that rule the same answer it gives over there -- there is no cased
+ * character across the split either way. Checked against the interpreter's own output for
+ * every code point in the space (`test/python-unicode-data.test.ts`) and for the sigma
+ * contexts around each of the 55 (`test/python-str.test.ts`).
+ */
+export function pyLower(value: string): string {
+  let out = "";
+  let runStart = 0;
+  let index = 0;
+  for (const character of value) {
+    const code = character.codePointAt(0)!;
+    if (inRanges(PY_LOWER_EXCEPTION_RANGES, code)) {
+      out += value.slice(runStart, index).toLowerCase() + character;
+      runStart = index + character.length;
+    }
+    index += character.length;
+  }
+  // Nothing to keep: the whole string in one call, which is the common case by far.
+  if (runStart === 0) return value.toLowerCase();
+  return out + value.slice(runStart).toLowerCase();
 }
