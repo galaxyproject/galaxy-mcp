@@ -2462,6 +2462,24 @@ def history_mutation_cases(add: AddCase) -> None:
     )
     add(
         "update_history",
+        "one_field_set_one_null",
+        "a null beside a value: the null is unset, so the sentence names the one field sent",
+        {"history_id": "h0000new", "name": "RNA-seq Sample A (final)", "published": None},
+        lambda: update_history_fn("h0000new", name="RNA-seq Sample A (final)", published=None),
+        [
+            route(
+                "/api/histories/h0000new",
+                {
+                    **created,
+                    "name": "RNA-seq Sample A (final)",
+                    "update_time": "2026-01-03T00:00:00",
+                },
+                method="PUT",
+            )
+        ],
+    )
+    add(
+        "update_history",
         "several_fields",
         "an annotation, tags and published at once",
         {

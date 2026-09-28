@@ -82,7 +82,8 @@ quoted verbatim in the middle of it -- the text bioblend or requests raised.
   `get_job_details.history_id`, `get_tool_run_examples.tool_version`,
   `get_workflow_input_template.history_id`, `list_pages.history_id`, `list_pages.search`
   and `run_tool.tool_version`. Nothing that Python declares as a plain string or integer
-  takes one.
+  takes one. `update_history`'s message names only the fields it actually sent, so a field
+  passed as null is not reported as updated by the call that left it out.
 - **New requests, and two clauses that come with them.** `run_tool` reads the tool's schema
   before it submits -- only when an input looks like a dataset reference, which is the
   condition that decides whether the request happens at all -- and looks up the caller's
@@ -103,8 +104,8 @@ quoted verbatim in the middle of it -- the text bioblend or requests raised.
 - A failed request that never got a reply -- a refused connection, a DNS failure, an abort
   -- is now a typed failure with the shape of a Python one rather than an exception escaping
   as a bug. The text inside it is this runtime's and not requests', and no case pins either.
-- **Sixty-nine new cases** on both replay suites, which is a failure case for all 42 open
-  tools plus the refusals that make no request: 382 files, 221 cases, of which 64 are
+- **Seventy new cases** on both replay suites, which is a failure case for all 42 open
+  tools plus the refusals that make no request: 383 files, 222 cases, of which 64 are
   failures.
   The generator drives the real server through an in-memory MCP client for those, because a
   failure has no envelope to write down -- what it records is the `CallToolResult` the wire

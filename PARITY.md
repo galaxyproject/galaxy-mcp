@@ -143,7 +143,7 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `search_tools_by_name` |  | `7` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `search_tools_by_name` | `limit` |  | `type=integer required=false default=25` | `type=integer required=false default=25` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours pages the matches; Galaxy's returns them all. |
 | `search_tools_by_name` | `offset` |  | `type=integer required=false default=0` | `type=integer required=false default=0` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | The other half of that window; Galaxy's has none. |
-| `update_history` |  | `5` | `write (tag)` | `write (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Galaxy's server can create a history and read it, but cannot rename, annotate, tag, publish or delete one. |
+| `update_history` |  | `6` | `write (tag)` | `write (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Galaxy's server can create a history and read it, but cannot rename, annotate, tag, publish or delete one. |
 | `update_page` |  | `3` | `write (tag), requires >=26.1` | `write (hint), requires >=26.1` | `write (mcp default)` |  |  |  |
 | `upload_file` |  | `0` | `write (tag)` | `write (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Galaxy's server uploads only from a URL; there is no tool for a local path (the tus upload). |
 | `upload_file_from_url` |  | `0` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |

@@ -42,6 +42,48 @@ describe("update_history", () => {
     );
   });
 
+  /**
+   * A null is an unset field, and the sentence has to agree with the body.
+   *
+   * The body already dropped one -- `!= null` -- but the message counted anything that was
+   * not `undefined`, so a caller spelling "leave this alone" as `published: null` was told
+   * published had been updated by the same call that did not send it. The other server builds
+   * both out of one dict, so the two cannot disagree over there.
+   */
+  it("names only the fields it sent, so a null is not reported as updated", () => {
+    expect(
+      updateHistoryOp.project!({} as never, { historyId: "h1", name: "new", published: null }),
+    ).toEqual({ message: "Updated history h1 (name)" });
+  });
+
+  it("names none of the five when every one of them is null", () => {
+    // The refusal is what a caller actually gets here; this pins the projection alone, so a
+    // future field cannot be counted as updated on the strength of being mentioned.
+    expect(
+      updateHistoryOp.project!({} as never, {
+        historyId: "h1",
+        name: null,
+        annotation: null,
+        tags: null,
+        deleted: null,
+        published: null,
+      }),
+    ).toEqual({ message: "Updated history h1 ()" });
+  });
+
+  it("names all five when all five are set, in the other server's order", () => {
+    expect(
+      updateHistoryOp.project!({} as never, {
+        historyId: "h1",
+        published: false,
+        deleted: false,
+        tags: [],
+        annotation: "",
+        name: "new",
+      }),
+    ).toEqual({ message: "Updated history h1 (name, annotation, tags, deleted, published)" });
+  });
+
   it("sends tags and deleted when provided", async () => {
     const client = mockClient({
       PUT: (_path, init) => {

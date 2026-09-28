@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 221,
+  "caseCount": 222,
   "failureCaseCount": 64,
   "cases": [
     {
@@ -1392,6 +1392,19 @@
         "name": "RNA-seq Sample A (final)"
       },
       "envelope": "update_history/name_only.json",
+      "replies": "update_history/name_only.galaxy.json"
+    },
+    {
+      "tool": "update_history",
+      "case": "one_field_set_one_null",
+      "note": "a null beside a value: the null is unset, so the sentence names the one field sent",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0000new",
+        "name": "RNA-seq Sample A (final)",
+        "published": null
+      },
+      "envelope": "update_history/one_field_set_one_null.json",
       "replies": "update_history/name_only.galaxy.json"
     },
     {

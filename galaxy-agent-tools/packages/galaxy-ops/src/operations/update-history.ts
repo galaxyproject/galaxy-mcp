@@ -64,8 +64,12 @@ export const updateHistoryOp: Operation<typeof input, UpdatedHistory> = {
   readOnly: false,
   run,
   project: (_data, i) => {
+    // The same `!= null` the body is built with, and for the same reason: over there both
+    // come out of one dict with its Nones already dropped, so the sentence cannot name a
+    // field the PUT left out. `!== undefined` named one -- a caller spelling "leave this
+    // alone" as an explicit null was told it had been updated.
     const changed = (["name", "annotation", "tags", "deleted", "published"] as const).filter(
-      (k) => i[k] !== undefined,
+      (k) => i[k] != null,
     );
     return { message: `Updated history ${i.historyId} (${changed.join(", ")})` };
   },
