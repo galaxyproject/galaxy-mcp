@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 144,
+  "caseCount": 152,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -115,6 +115,21 @@
         "offset": 300
       },
       "envelope": "search_tools_by_keywords/past_the_end.json",
+      "replies": "search_tools_by_keywords/full_page.galaxy.json"
+    },
+    {
+      "tool": "search_tools_by_keywords",
+      "case": "two_keywords",
+      "note": "two keywords, which the sentence lists in the order they were given",
+      "input": {
+        "keywords": [
+          "section 0 tool",
+          "nothing matches this"
+        ],
+        "limit": 10,
+        "offset": 0
+      },
+      "envelope": "search_tools_by_keywords/two_keywords.json",
       "replies": "search_tools_by_keywords/full_page.galaxy.json"
     },
     {
@@ -427,6 +442,16 @@
       },
       "envelope": "get_history_details/empty.json",
       "replies": "get_history_details/empty.galaxy.json"
+    },
+    {
+      "tool": "get_history_details",
+      "case": "no_name_on_the_record",
+      "note": "a history record with no name key, which the sentence names by its id",
+      "input": {
+        "history_id": "h0000"
+      },
+      "envelope": "get_history_details/no_name_on_the_record.json",
+      "replies": "get_history_details/no_name_on_the_record.galaxy.json"
     },
     {
       "tool": "list_workflows",
@@ -1098,6 +1123,17 @@
     },
     {
       "tool": "get_dataset_details",
+      "case": "no_name_on_the_record",
+      "note": "a dataset record with no name key, which the sentence names by its id",
+      "input": {
+        "dataset_id": "d0000004",
+        "include_preview": false
+      },
+      "envelope": "get_dataset_details/no_name_on_the_record.json",
+      "replies": "get_dataset_details/no_name_on_the_record.galaxy.json"
+    },
+    {
+      "tool": "get_dataset_details",
       "case": "state_not_ok",
       "note": "a dataset still running, where no peek is taken whatever was asked for",
       "input": {
@@ -1156,6 +1192,16 @@
       },
       "envelope": "get_workflow_details/latest.json",
       "replies": "get_workflow_details/latest.galaxy.json"
+    },
+    {
+      "tool": "get_workflow_details",
+      "case": "no_name_on_the_record",
+      "note": "a workflow record with no name key, which the sentence names by its id",
+      "input": {
+        "workflow_id": "wf000003"
+      },
+      "envelope": "get_workflow_details/no_name_on_the_record.json",
+      "replies": "get_workflow_details/no_name_on_the_record.galaxy.json"
     },
     {
       "tool": "get_workflow_details",
@@ -1300,6 +1346,36 @@
       "replies": "run_tool/scalar_inputs.galaxy.json"
     },
     {
+      "tool": "run_tool",
+      "case": "version_galaxy_did_not_honour",
+      "note": "a version asked for that the jobs came back naming differently",
+      "input": {
+        "history_id": "h0000",
+        "tool_id": "fastqc",
+        "inputs": {
+          "contaminants": ""
+        },
+        "tool_version": "0.72"
+      },
+      "envelope": "run_tool/version_galaxy_did_not_honour.json",
+      "replies": "run_tool/scalar_inputs.galaxy.json"
+    },
+    {
+      "tool": "run_tool",
+      "case": "version_no_job_reports",
+      "note": "a version asked for and a reply whose job names none, so nothing is claimed",
+      "input": {
+        "history_id": "h0000",
+        "tool_id": "fastqc",
+        "inputs": {
+          "contaminants": ""
+        },
+        "tool_version": "0.74+galaxy1"
+      },
+      "envelope": "run_tool/version_no_job_reports.json",
+      "replies": "run_tool/version_no_job_reports.galaxy.json"
+    },
+    {
       "tool": "invoke_workflow",
       "case": "no_inputs",
       "note": "nothing supplied, so nothing to check -- one POST and the record back",
@@ -1393,6 +1469,17 @@
     },
     {
       "tool": "create_page",
+      "case": "reply_without_an_id",
+      "note": "a create whose reply carries no id, which the sentence leaves empty",
+      "input": {
+        "title": "Untitled",
+        "slug": "untitled"
+      },
+      "envelope": "create_page/reply_without_an_id.json",
+      "replies": "create_page/reply_without_an_id.galaxy.json"
+    },
+    {
+      "tool": "create_page",
       "case": "standalone_report",
       "note": "no history, so a report -- which needs both a title and a slug",
       "input": {
@@ -1461,6 +1548,43 @@
       },
       "envelope": "create_user_tool/created.json",
       "replies": "create_user_tool/created.galaxy.json"
+    },
+    {
+      "tool": "create_user_tool",
+      "case": "name_stated_as_null",
+      "note": "a representation whose name is null, which is present and so is not defaulted",
+      "input": {
+        "representation": {
+          "class": "GalaxyUserTool",
+          "id": "row_filter",
+          "version": "0.1.0",
+          "name": null,
+          "description": "Keep rows above a threshold",
+          "container": "quay.io/biocontainers/python:3.12",
+          "shell_command": "python3 -c 'pass'",
+          "inputs": [
+            {
+              "name": "table",
+              "type": "data",
+              "format": "tabular"
+            },
+            {
+              "name": "threshold",
+              "type": "integer"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "kept",
+              "type": "data",
+              "format": "tabular",
+              "from_work_dir": "out.tsv"
+            }
+          ]
+        }
+      },
+      "envelope": "create_user_tool/name_stated_as_null.json",
+      "replies": "create_user_tool/name_stated_as_null.galaxy.json"
     },
     {
       "tool": "delete_user_tool",

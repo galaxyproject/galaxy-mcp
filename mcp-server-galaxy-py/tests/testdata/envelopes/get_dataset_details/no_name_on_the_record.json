@@ -1,0 +1,21 @@
+{
+  "data": {
+    "dataset": {
+      "id": "d0000004",
+      "state": "ok",
+      "extension": "txt",
+      "file_size": 1024,
+      "history_id": "h0000",
+      "deleted": false,
+      "visible": true,
+      "hid": 1,
+      "misc_info": null,
+      "model_class": "HistoryDatasetAssociation"
+    },
+    "dataset_id": "d0000004"
+  },
+  "success": true,
+  "message": "Retrieved details for dataset 'd0000004'",
+  "count": null,
+  "pagination": null
+}
