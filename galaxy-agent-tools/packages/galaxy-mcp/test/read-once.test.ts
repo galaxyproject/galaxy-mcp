@@ -241,7 +241,7 @@ describe("a value that answers differently the second time it is read", () => {
     const reply = await rawCall(params);
 
     expect(reply?.result?.isError, rawText(reply)).toBe(false);
-    expect(rawText(reply)).toContain("Authenticated as u <u@example.org>");
+    expect(rawText(reply)).toContain("Retrieved user info for 'u'");
     expect(asked("/api/users/current")).toBe(true);
   });
 

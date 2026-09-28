@@ -85,14 +85,14 @@ describe("get_server_info", () => {
     await expect(getServerInfo({}, ctx)).rejects.toMatchObject({ kind: "auth" });
   });
 
-  it("reports a fetched version, and does not call it supplied", async () => {
-    // version_source is not a field of the answer -- the other server has no such key -- so
-    // where the version came from is only ever said in the summary line.
+  it("names the address it was connected to, and leaves the version to data", async () => {
+    // version_source is not a field of the answer -- the other server has no such key --
+    // and its sentence says nothing about the version either, so where the version came
+    // from is now nowhere in the envelope. Recorded as a loss in the release notes.
     const { ctx } = serverThatSays(always("26.0"));
     const out = await runWithEnvelope(getServerInfoOp as never, {}, ctx);
     expect("version_source" in (out.data as object)).toBe(false);
-    expect(out.message).toContain("version 26.0)");
-    expect(out.message).not.toContain("supplied");
+    expect(out.message).toBe("Retrieved server info for https://g.example");
   });
 
   it("says unknown when nothing readable came back", async () => {
@@ -118,7 +118,6 @@ describe("get_server_info", () => {
     const info = out.data as { version_known: boolean; version: { version_major?: string } };
     expect(info.version_known).toBe(true);
     expect(info.version.version_major).toBe("26.0");
-    expect(out.message).toContain("version 26.0, supplied");
   });
 
   it("normalises a supplied full version to a version_major", async () => {
@@ -191,7 +190,7 @@ describe("get_server_info and the guard cannot reach different answers", () => {
 });
 
 describe("get_server_info's summary line", () => {
-  const summary = (over: Record<string, unknown>, facts?: Map<symbol, unknown>) =>
+  const summary = (over: Record<string, unknown>) =>
     getServerInfoOp.project?.(
       {
         url: "u",
@@ -202,23 +201,22 @@ describe("get_server_info's summary line", () => {
         ...over,
       } as never,
       {} as never,
-      facts,
     )?.message;
 
-  it("counts the unsupported tools", () => {
-    expect(summary({})).not.toContain("unsupported");
+  it("is the address that was connected to, and nothing else", () => {
+    // The other server's sentence names the url and stops. The version, whether it
+    // could be read, and the tools this server is too old for are all in data, so
+    // repeating any of them here would be one surface saying more than the other.
+    expect(summary({})).toBe("Retrieved server info for u");
     expect(
       summary({ unsupported_tools: [{ name: "get_page_revision", requires: ">=26.1" }] }),
-    ).toContain("1 tool(s) unsupported");
+    ).toBe("Retrieved server info for u");
+    expect(summary({ version: {}, version_known: false })).toBe("Retrieved server info for u");
   });
 
-  it("prints a version nobody supplied without saying it was supplied", async () => {
-    // A projection called by hand carries no collector, which is the same as a version
-    // that was fetched: nothing recorded the fact, so nothing claims it.
-    expect(summary({})).toContain("version 26.0)");
-  });
-
-  it("prints the version a real supplied-version context reports", async () => {
+  it("says nothing about where the version came from, because data cannot either", async () => {
+    // A supplied version is enforced by the guard and reported in data like any other;
+    // that it was supplied rather than fetched is no longer anywhere in the envelope.
     const ctx = createGalaxyContext({
       baseUrl: "https://g.example",
       apiKey: "K",
@@ -230,8 +228,8 @@ describe("get_server_info's summary line", () => {
         })) as unknown as typeof fetch,
     });
     const out = await runWithEnvelope(getServerInfoOp as never, {}, ctx);
-    expect(out.message).toContain("version 26.0");
-    expect(out.message).not.toContain("version ?");
+    expect(out.message).toBe("Retrieved server info for https://g.example");
+    expect((out.data as { version: { version_major?: string } }).version.version_major).toBe("26.0");
   });
 });
 

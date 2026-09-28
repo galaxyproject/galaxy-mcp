@@ -64,19 +64,6 @@ const readJson = <T>(name: string): T =>
 const index = readJson<{ caseCount: number; cases: CaseEntry[] }>("index.json");
 
 /**
- * The tools whose sentence has not been carried over yet.
- *
- * Temporary, and it only shrinks: one commit per group of tools takes its names off
- * this list, so each of them is checked against the other server's bytes by the
- * commit that moves it. The list is empty by the end of the change that introduced
- * it, and then it goes.
- */
-const MESSAGE_NOT_YET_COMPARED = new Set([
-  "get_server_info",
-  "get_user",
-]);
-
-/**
  * Answer a request from the case's table.
  *
  * The same rule the generator registers its mocks under: method and path must
@@ -178,9 +165,7 @@ describe("the MCP envelope is the Python server's", () => {
       expect(parsed.pagination, "pagination").toEqual(expected.pagination);
       expect(typeof parsed.message, "message").toBe("string");
       expect((parsed.message as string).length).toBeGreaterThan(0);
-      if (!MESSAGE_NOT_YET_COMPARED.has(entry.tool)) {
-        expect(parsed.message, "message").toEqual(expected.message);
-      }
+      expect(parsed.message, "message").toEqual(expected.message);
     },
   );
 });

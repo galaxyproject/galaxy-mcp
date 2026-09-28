@@ -54,19 +54,6 @@ const readJson = <T>(name: string): T =>
 const index = readJson<{ cases: CaseEntry[] }>("index.json");
 const replayable = index.cases;
 
-/**
- * The tools whose sentence has not been carried over yet.
- *
- * Temporary, and it only shrinks: one commit per group of tools takes its names off
- * this list, so each of them is checked against the other server's bytes by the
- * commit that moves it. The list is empty by the end of the change that introduced
- * it, and then it goes.
- */
-const MESSAGE_NOT_YET_COMPARED = new Set([
-  "get_server_info",
-  "get_user",
-]);
-
 /** The canned replies, matched the way the generator registered them. */
 function replier(baseUrl: string, routes: Route[]): typeof fetch {
   return (async (input: unknown, init?: { method?: string }): Promise<Response> => {
@@ -199,9 +186,7 @@ describe("the CLI's json envelope is the Python server's", () => {
       expect(printed.count, "count").toEqual(expected.count);
       expect(printed.pagination, "pagination").toEqual(expected.pagination);
       expect(typeof printed.message, "message").toBe("string");
-      if (!MESSAGE_NOT_YET_COMPARED.has(entry.tool)) {
-        expect(printed.message, "message").toEqual(expected.message);
-      }
+      expect(printed.message, "message").toEqual(expected.message);
     },
   );
 });

@@ -2,18 +2,8 @@ import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
 import { satisfiesRequirement } from "../version";
-import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import { allOperations, register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
-
-/**
- * Whether the version being reported was supplied by the caller rather than fetched.
- *
- * The other server has no such field, so it is not part of the answer -- but the summary
- * line has to say it, or a caller reads a version we never asked the server for as one we
- * did. It travels beside the call, the way a total off a response header does.
- */
-const versionWasSupplied = envelopeFact<boolean>("get_server_info.versionWasSupplied");
 
 /** A tool this server is too old to run, and the bound it misses. */
 export interface UnsupportedTool {
@@ -105,13 +95,8 @@ async function run(_in: Record<string, never>, ctx: GalaxyContext): Promise<Serv
   // answers -- one good response cached here and a later 401 seen by the guard -- and then this
   // op reports a set of refusals that will not happen. One lookup, one answer, and the answer
   // this op obtains is the one every later guard sees.
-  const { version, payload, error, source } = (await ctx.galaxyVersion?.()) ?? {
-    source: "unknown" as const,
-  };
+  const { version, payload, error } = (await ctx.galaxyVersion?.()) ?? {};
   if (error) throw error;
-  // Not a field of the answer: the other server reports no such thing, and a key only one
-  // surface sends is a key an agent cannot rely on. It travels to the summary line instead.
-  if (source === "supplied") recordFact(ctx, versionWasSupplied, true);
   const c = await ctx.client.GET("/api/configuration", {});
   if (c.error || !c.data) throw classifyHttp(c.response.status, c.error);
   // Sorted by name, because the other server walks a dict of requirements through
@@ -148,14 +133,10 @@ export const getServerInfoOp: Operation<typeof input, ServerInfo> = {
     "to run.",
   input,
   run,
-  project: (s, _i, facts) => ({
-    message:
-      `Galaxy at ${s.url} (version ${(s.version as { version_major?: string }).version_major ?? "?"}` +
-      `${readFact(facts, versionWasSupplied) ? ", supplied" : ""})` +
-      (s.unsupported_tools.length > 0
-        ? `, ${s.unsupported_tools.length} tool(s) unsupported`
-        : ""),
-  }),
+  // server.py, get_server_info: the address that was connected to, and nothing else.
+  // The version, whether it could be read, and the tools this server is too old for are
+  // all in data, which is where a caller reads them.
+  project: (s) => ({ message: `Retrieved server info for ${s.url}` }),
 };
 
 register(getServerInfoOp as AnyOperation);
