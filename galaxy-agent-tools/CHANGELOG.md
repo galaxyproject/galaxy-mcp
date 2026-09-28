@@ -9,6 +9,117 @@ entry covers all three; where something only affects one surface, it says which.
 Breaking on both surfaces. 0.2.0 has not been published, so one release will
 carry both entries.
 
+### A failed call answers the way the Python server's failed call answers (#145)
+
+Measured before anything was designed: drive the Python server through an in-memory
+FastMCP client (fastmcp 3.4.2, `mask_error_details` false by default), call a tool under a
+mocked Galaxy that refuses, and the client gets
+
+```json
+{ "content": [{ "type": "text", "text": "Error calling tool 'get_page': Get page failed: 404 Client Error: Not Found for url: https://galaxy.example/api/pages/p1 (Resource not found - check IDs and URLs). Context: page_id=p1" }], "isError": true }
+```
+
+No envelope. No `structuredContent`. One text block, `isError`, and a sentence that is
+three layers deep: FastMCP's wrapper, then the tool's own action and context, then --
+quoted verbatim in the middle of it -- the text bioblend or requests raised.
+
+- **Breaking (MCP):** a failure is now an MCP error result. `isError` is true, the single
+  text block is that sentence, and there is nothing to parse. A client that read
+  `JSON.parse(text)` on a failure and looked at `success: false`, `message` or `errorKind`
+  now has to read `isError` and the text. The MCP SDK surfaces the block as
+  `result.content[0].text`; a client using `raise_on_error`-style helpers gets an
+  exception carrying the same string.
+- `errorKind` and the `GalaxyError` classes have not moved. They are still on the error a
+  library caller catches from `@galaxyproject/galaxy-ops`, and still in the CLI's json.
+  Only the MCP wire changed.
+- **The CLI's json failure shape is the CLI's own**, and stays
+  `{"success": false, "message": "...", "errorKind": "..."}` -- no data, no count, no
+  pagination. The Python server has no command line, so there is nothing to be in parity
+  with: the exit code has to be read off something, `errorKind` is what it is read off (see
+  the exit-code table), and what parity means here is the SENTENCE. `message` is now the
+  Python tool's sentence, word for word, without FastMCP's `Error calling tool '<name>': `
+  wrapper -- which belongs to the MCP surface and not to the tool.
+- **Every tool's failure sentence is that server's**, which means writing its client
+  libraries' prose too. Three shapes reach a caller and which one appears depends on how
+  the tool asked, not on what went wrong: a bioblend GET reports
+  `GET: error 404: b'<body>', 0 attempts left: <body>` -- the body twice, once as a Python
+  `bytes` repr -- a bioblend write reports `Unexpected HTTP status code: 404: <body>`, and
+  a request made with requests directly reports `404 Client Error: Not Found for url:
+  <url>`. Around that goes `<Action> failed:`, the hint for 401, 403, 404 and 500, and the
+  context dict rendered as `. Context: k=v, k2=v2`. Each operation declares its own action,
+  context and shape; `python-failure.ts` writes the library prose.
+- **Breaking:** `update_history` refusing an update with no fields in it, and a tool run
+  Galaxy refuses over its inputs, now report `errorKind: "validation"` where they reported
+  `"connection"`. The CLI exit code for both changes from 69 to 64. Both are usage errors:
+  an agent told "connection" backs off and retries a call that can never succeed.
+- **Breaking:** these sentences changed beyond the reformatting above, because one surface
+  was refusing what the other answered, or refusing it somewhere else:
+  - `get_user` no longer raises on the anonymous reply `/api/users/current` gives an
+    unauthenticated session. The record is handed back as it arrived and the sentence names
+    the user `'unknown'`, which is what the other server says.
+  - `create_page` no longer refuses a standalone report with no title or slug, and
+    `update_page` no longer refuses an edit with nothing in it. Neither refusal exists over
+    there: the request goes out and Galaxy answers with its own reason.
+  - `list_history_ids` raises `Failed to list history IDs: 'id'` for a history record with
+    no id, where it used to report the id as `""`. That sentence is a KeyError's text,
+    quoted the way the tool quotes it.
+  - `get_dataset_details` asks the collections API about an id it could not read as a
+    dataset, and says `The ID '<id>' is a dataset collection, not a dataset` with the
+    collection's name -- rather than reporting it as not found.
+  - `get_job_details` holds a provenance failure back instead of raising it: the dataset's
+    own record names the job that made it, so a history whose provenance is out of reach
+    still answers. The held failure is reported only if the fallback fails too, or finds no
+    job. A 404 anywhere in it keeps the tool's own sentence, which does not claim whether
+    the dataset or the permission was missing.
+  - `get_tool_panel`'s unknown section, the version guard's refusal (which now says
+    "Nothing was sent to Galaxy."), the five IWC tools' manifest failures and the two
+    trsID refusals, `create_user_tool`'s three argument refusals (a mistyped container now
+    names Python's type: `got int: 3`), and `get_invocations`' 200-with-an-error-body all
+    read as that server reads.
+- **Breaking:** every parameter the Python server declares a null branch for now accepts an
+  explicit `null` and treats it as unset, where thirteen of them across seven tools refused
+  it outright -- `update_history`'s five fields, `create_page`'s five, `update_page`'s two,
+  `get_job_details.history_id`, `get_tool_run_examples.tool_version`,
+  `get_workflow_input_template.history_id`, `list_pages.history_id`, `list_pages.search`
+  and `run_tool.tool_version`. Nothing that Python declares as a plain string or integer
+  takes one.
+- **New requests, and two clauses that come with them.** `run_tool` reads the tool's schema
+  before it submits -- only when an input looks like a dataset reference, which is the
+  condition that decides whether the request happens at all -- and looks up the caller's
+  stored credentials for the tool, sending them with the run. Its success message gains
+  ` (with credentials)` when it found some, and
+  ` (inputs not pre-checked: <why>)` when the schema could not be read, with all four
+  reasons worded as over there. `run_user_tool` gets the second clause from the
+  representation it already holds. A refused run gets the enriched explanation: the
+  parameter list read back, a structural example from one of the tool's own tests, the
+  warning about Galaxy's misleading wording, and -- for a refusal that mentions credentials
+  -- what to check about those instead.
+- **Not ported, and it shows in one place:** the input checker itself. Walking Galaxy's
+  parameter model -- conditionals, repeats, sections, datatype compatibility -- is its own
+  piece of work. So where the other server refuses a run on its own evidence, this one
+  submits it and lets Galaxy answer; and the two clauses that name which inputs the schema
+  proves wrong, and which keys it does not model, are absent from the enriched refusal.
+  Everything that does not depend on the check is there, including the requests.
+- A failed request that never got a reply -- a refused connection, a DNS failure, an abort
+  -- is now a typed failure with the shape of a Python one rather than an exception escaping
+  as a bug. The text inside it is this runtime's and not requests', and no case pins either.
+- **Sixty-six new cases** on both replay suites, which is a failure case for all 42 open
+  tools plus the refusals that make no request: 376 files, 218 cases, of which 62 are
+  failures.
+  The generator drives the real server through an in-memory MCP client for those, because a
+  failure has no envelope to write down -- what it records is the `CallToolResult` the wire
+  carries, plus the tool's own sentence with FastMCP's wrapper stripped off.
+- The Python server moved in one place, because it contradicted itself: the three raw
+  requests over the unprivileged-tools API did not check the status Galaxy answered with,
+  so `delete_user_tool` reported `deactivated: true` for a DELETE that 404'd,
+  `list_user_tools` sliced an error body as a page and reported
+  `List user tools failed: slice(0, 25, None)`, and `run_user_tool` read one as a tool
+  record and said no such tool existed. All three now fail like their siblings. See
+  `mcp-server-galaxy-py/CHANGELOG.md`.
+
+**The `#145` is a guess** -- #144 is the merge this branch starts from -- so correct it
+when the PR is opened.
+
 ### The MCP and CLI envelopes are the Python server's (#140)
 
 A prompt written against the Python MCP server reads `data[0]` and

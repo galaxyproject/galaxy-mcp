@@ -138,7 +138,10 @@ and a key/value block for single objects, with the status line on stderr.
 `--format json` prints the full result envelope
 (`{ data, success, message, count, pagination }`, the same one the MCP surface
 sends -- see [The result envelope](#the-result-envelope)) pretty-printed -- use
-this for scripting. `--quiet` drops the stderr status line.
+this for scripting. A failure prints
+`{ success: false, message, errorKind }` instead, which is this surface's own
+shape: the MCP surface sends an MCP error there instead of an envelope. `--quiet`
+drops the stderr status line.
 
 The process exit code reflects the outcome, following `sysexits.h` conventions:
 
@@ -309,6 +312,33 @@ A TypeScript caller importing an operation from `@galaxyproject/galaxy-ops`
 directly gets none of this: `run()` returns its own typed data, and a listing
 returns `Paged<T>` with camelCase pagination, unchanged.
 
+#### When a call fails
+
+There is no envelope. The Python server raises, FastMCP turns the exception into an
+MCP error result, and this surface sends the same thing: `isError` true and one text
+block carrying `Error calling tool '<name>': ` and then the tool's own sentence.
+
+```
+Error calling tool 'get_page': Get page failed: 404 Client Error: Not Found for url: https://galaxy.example/api/pages/p1 (Resource not found - check IDs and URLs). Context: page_id=p1
+```
+
+Nothing in there is JSON, so read `isError` and the text rather than parsing it. The
+sentence is that server's, which includes the prose of the client library it used: a
+bioblend GET quotes Galaxy's reply twice, once as a Python `bytes` repr, and a
+request made with requests names the URL it could not read. Around it goes the
+tool's action, the hint for 401, 403, 404 and 500, and its context dict.
+
+`galaxy-cli --format json` prints its own shape instead, because a command line has
+to say something an exit code can be read off:
+
+```json
+{ "success": false, "message": "Get page failed: 404 Client Error: ...", "errorKind": "not_found" }
+```
+
+`message` is the same sentence without FastMCP's wrapper; `errorKind` is what the
+exit code comes from (see [Output and exit codes](#output-and-exit-codes)). A TypeScript caller catches a
+`GalaxyError` carrying the library's own short message and its `kind`.
+
 ### Connection
 | Operation | What it does |
 | --- | --- |
@@ -444,8 +474,8 @@ $ echo $?
 ```
 
 The explanation goes to stderr, so `--quiet` leaves you with exit code 76 alone. Over MCP
-the same refusal arrives as the usual envelope with `success: false` and
-`errorKind: "version"`.
+the same refusal arrives as an MCP error carrying the Python server's sentence, which ends
+"Nothing was sent to Galaxy."
 
 The version comes from `/api/version`, asked once per connection. A server that will
 not answer leaves its version unknown, and an unknown version refuses nothing: the
