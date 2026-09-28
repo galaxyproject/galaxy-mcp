@@ -283,6 +283,13 @@ with no fixture at all, which is where a difference hides. Every open tool now h
 golden cases generated from the Python server and replayed on both surfaces, and
 the differences they turned up are below.
 
+- **Breaking:** `get_page`, `create_page` and `update_page` drop the expanded
+  `content` on an HTML page too. They dropped it only for a page that had a
+  `content_editor` to keep instead, which left an HTML page -- where Galaxy fills
+  content_editor on the markdown path only -- answering with its rendered body
+  where the Python tool answers without it. `content` is the expanded form either
+  way, so a caller editing it and sending it back bakes the expansion into the
+  page; `get_page`'s `includeRendered` is how to ask for it on purpose.
 - **Breaking:** `get_dataset_details` answers with `{ dataset, dataset_id }` and
   puts `preview` beside them, rather than spreading Galaxy's record at the top
   level with the preview mixed in. `data.dataset` is what Galaxy sent and

@@ -45,9 +45,10 @@ export interface PageSummary {
 /**
  * GET /api/pages/{id}, and what create/update answer with. `content_editor` is the editable
  * markdown; `content` is the same document with its embeds expanded, and the ops drop it unless
- * it was asked for -- so it is optional here rather than required. An HTML page is the exception:
- * Galaxy fills content_editor on the markdown path only, and the field defaults to the empty
- * string, so there the body is in `content` and the ops keep it.
+ * it was asked for -- so it is optional here rather than required. An HTML page has its body
+ * there and nowhere else, because Galaxy fills content_editor on the markdown path only and the
+ * field defaults to the empty string; the ops drop `content` there too, which is what the other
+ * server does and what `includeRendered` is for.
  */
 export interface PageDetail extends PageSummary {
   content_editor: string | null;
@@ -124,12 +125,15 @@ export function withEditableContent(rev: PageRevisionResponse): PageRevisionDeta
  * Drop the expanded render, keeping the editable `content_editor`.
  *
  * Callers edit content_editor and send it back; the rendered form is only worth its size when
- * it is asked for. Where there is no content_editor -- an HTML page, where Galaxy never fills
- * one -- `content` is the only body the page has, so it stays. Copies rather than handing back
- * the parsed response.
+ * it is asked for. The drop is unconditional, as the other server's is: an HTML page arrives
+ * with an empty content_editor, because Galaxy fills that field on the markdown path only, and
+ * its body is in `content` -- and `content` goes anyway. That is the one field this cannot
+ * keep on a hunch: a caller reading `content` from a page would be editing the expanded form
+ * and baking the expansion in when it sent it back, and get_page takes `includeRendered` for
+ * exactly the caller who does want it. Copies rather than handing back the parsed response.
  */
 export function stripRendered(page: PageDetail, includeRendered: boolean): PageDetail {
-  if (includeRendered || !page.content_editor) return { ...page };
+  if (includeRendered) return { ...page };
   const { content: _rendered, ...rest } = page;
   return rest;
 }

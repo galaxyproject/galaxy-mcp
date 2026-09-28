@@ -35,21 +35,26 @@ describe("get_page", () => {
     expect(out.content_editor).toBe("raw markdown");
   });
 
-  it("keeps content on an html page, which has no content_editor to keep instead", async () => {
-    const client = mockClient({
-      GET: () => ({
-        data: {
-          id: "page2",
-          title: "Old report",
-          content_format: "html",
-          content: "<h1>Results</h1>",
-          content_editor: "",
-        },
-        response: { status: 200 },
-      }),
-    });
+  it("drops content on an html page too, although that is the only body it has", async () => {
+    // The other server's drop is unconditional and so is this one. An HTML page's body is
+    // in `content` because Galaxy fills content_editor on the markdown path only -- and it
+    // is the expanded form either way, which a caller must not edit and send back. Asking
+    // for it is what includeRendered is for.
+    const html = {
+      id: "page2",
+      title: "Old report",
+      content_format: "html",
+      content: "<h1>Results</h1>",
+      content_editor: "",
+    };
+    const client = mockClient({ GET: () => ({ data: html, response: { status: 200 } }) });
     const out = await getPage({ pageId: "page2" }, ctxWith(client));
-    expect(out.content).toBe("<h1>Results</h1>");
+    expect(out.content).toBeUndefined();
+    expect("content" in out).toBe(false);
+
+    const asked = mockClient({ GET: () => ({ data: html, response: { status: 200 } }) });
+    const withRender = await getPage({ pageId: "page2", includeRendered: true }, ctxWith(asked));
+    expect(withRender.content).toBe("<h1>Results</h1>");
   });
 
   it("envelopes a missing page as not_found", async () => {

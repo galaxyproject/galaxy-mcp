@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 120,
+  "caseCount": 128,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -1204,6 +1204,93 @@
       },
       "envelope": "update_history/several_fields.json",
       "replies": "update_history/several_fields.galaxy.json"
+    },
+    {
+      "tool": "get_page",
+      "case": "markdown",
+      "note": "the default read: the editable markdown stays, the expanded render goes",
+      "input": {
+        "page_id": "pg000001"
+      },
+      "envelope": "get_page/markdown.json",
+      "replies": "get_page/markdown.galaxy.json"
+    },
+    {
+      "tool": "get_page",
+      "case": "with_rendered",
+      "note": "include_rendered, so the expanded render comes too",
+      "input": {
+        "page_id": "pg000001",
+        "include_rendered": true
+      },
+      "envelope": "get_page/with_rendered.json",
+      "replies": "get_page/markdown.galaxy.json"
+    },
+    {
+      "tool": "get_page",
+      "case": "html_page_without_content_editor",
+      "note": "an HTML page, whose only body is the expanded render -- which still goes",
+      "input": {
+        "page_id": "pg000002"
+      },
+      "envelope": "get_page/html_page_without_content_editor.json",
+      "replies": "get_page/html_page_without_content_editor.galaxy.json"
+    },
+    {
+      "tool": "get_page",
+      "case": "no_rendered_content_at_all",
+      "note": "a reply carrying no content key, where there is nothing to drop",
+      "input": {
+        "page_id": "pg000003"
+      },
+      "envelope": "get_page/no_rendered_content_at_all.json",
+      "replies": "get_page/no_rendered_content_at_all.galaxy.json"
+    },
+    {
+      "tool": "create_page",
+      "case": "notebook",
+      "note": "a page attached to a history, which is the notebook shape",
+      "input": {
+        "history_id": "h0000",
+        "title": "Reads QC report",
+        "content": "# Reads QC\n"
+      },
+      "envelope": "create_page/notebook.json",
+      "replies": "create_page/notebook.galaxy.json"
+    },
+    {
+      "tool": "create_page",
+      "case": "standalone_report",
+      "note": "no history, so a report -- which needs both a title and a slug",
+      "input": {
+        "title": "Cohort summary",
+        "slug": "cohort-summary",
+        "annotation": "for the paper"
+      },
+      "envelope": "create_page/standalone_report.json",
+      "replies": "create_page/standalone_report.galaxy.json"
+    },
+    {
+      "tool": "update_page",
+      "case": "content_changed",
+      "note": "new markdown, which writes a revision the agent is recorded against",
+      "input": {
+        "page_id": "pg000001",
+        "content": "# Reads QC\n\nrewritten\n"
+      },
+      "envelope": "update_page/content_changed.json",
+      "replies": "update_page/content_changed.galaxy.json"
+    },
+    {
+      "tool": "update_page",
+      "case": "title_only_on_an_html_page",
+      "note": "a title change on a page whose body is the expanded render, which still goes",
+      "input": {
+        "page_id": "pg000002",
+        "title": "Legacy report (renamed)"
+      },
+      "envelope": "update_page/title_only_on_an_html_page.json",
+      "replies": "update_page/title_only_on_an_html_page.galaxy.json"
     },
     {
       "tool": "create_user_tool",

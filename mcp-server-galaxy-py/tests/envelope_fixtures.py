@@ -49,6 +49,7 @@ from galaxy_mcp.version import clear_version_cache
 from .test_helpers import (
     cancel_workflow_invocation_fn,
     create_history_fn,
+    create_page_fn,
     create_user_tool_fn,
     delete_user_tool_fn,
     get_collection_details_fn,
@@ -60,6 +61,7 @@ from .test_helpers import (
     get_iwc_workflow_details_fn,
     get_iwc_workflows_fn,
     get_job_details_fn,
+    get_page_fn,
     get_page_revision_fn,
     get_tool_citations_fn,
     get_tool_details_fn,
@@ -82,6 +84,7 @@ from .test_helpers import (
     search_tools_by_keywords_fn,
     search_tools_fn,
     update_history_fn,
+    update_page_fn,
 )
 
 FIXTURE_ROOT = Path(__file__).parent / "testdata" / "envelopes"
@@ -2224,6 +2227,7 @@ def job_details_cases(add: AddCase) -> None:
 
 def mutation_cases(add: AddCase) -> None:
     history_mutation_cases(add)
+    page_cases(add)
     user_tool_mutation_cases(add)
     invocation_mutation_cases(add)
     revision_cases(add)
@@ -2293,6 +2297,201 @@ def history_mutation_cases(add: AddCase) -> None:
                 },
                 method="PUT",
             )
+        ],
+    )
+
+
+# A page, as Galaxy answers with one. `content` is the same document with its embeds
+# expanded for export and is the large half of the reply; `content_editor` is the
+# editable markdown a caller edits and sends back.
+PAGE_MARKDOWN = (
+    "# Reads QC\n\n```galaxy\nhistory_dataset_display(history_dataset_id=d0000002)\n```\n"
+)
+PAGE_RENDERED = "# Reads QC\n\n<div class='embedded'>expanded</div>\n"
+
+
+def page_record(**over: Any) -> dict[str, Any]:
+    record: dict[str, Any] = {
+        "id": "pg000001",
+        "title": "Reads QC report",
+        "slug": "reads-qc-report",
+        "history_id": "h0000",
+        "latest_revision_id": "rev00002",
+        "revision_ids": ["rev00001", "rev00002"],
+        "source_invocation_id": None,
+        "model_class": "Page",
+        "username": "curator",
+        "email_hash": "d41d8cd98f00b204e9800998ecf8427e",
+        "author_deleted": False,
+        "deleted": False,
+        "importable": False,
+        "published": False,
+        "tags": [],
+        "create_time": "2026-01-02T03:04:05.000000",
+        "update_time": "2026-01-02T03:14:05.000000",
+        "content_editor": PAGE_MARKDOWN,
+        "content": PAGE_RENDERED,
+        "content_format": "markdown",
+        "annotation": None,
+        "edit_source": "agent",
+        "generate_time": None,
+        "generate_version": None,
+    }
+    record.update(over)
+    return record
+
+
+def page_cases(add: AddCase) -> None:
+    """A page read, created and updated, and what happens to the expanded render.
+
+    The rendered ``content`` is dropped unless it was asked for, and asking is only
+    possible on the read -- create and update never return it. What the cases pin is
+    that the drop is unconditional: an HTML page arrives with an empty
+    ``content_editor``, because Galaxy fills that field on the markdown path only, and
+    its body is in ``content`` -- and ``content`` goes anyway. get_page is not refused
+    against an older Galaxy, so its cases are answered no version; create_page and
+    update_page are, so theirs are.
+    """
+    add(
+        "get_page",
+        "markdown",
+        "the default read: the editable markdown stays, the expanded render goes",
+        {"page_id": "pg000001"},
+        lambda: get_page_fn("pg000001"),
+        [route("/api/pages/pg000001", page_record())],
+    )
+    add(
+        "get_page",
+        "with_rendered",
+        "include_rendered, so the expanded render comes too",
+        {"page_id": "pg000001", "include_rendered": True},
+        lambda: get_page_fn("pg000001", include_rendered=True),
+        [route("/api/pages/pg000001", page_record())],
+    )
+    add(
+        "get_page",
+        "html_page_without_content_editor",
+        "an HTML page, whose only body is the expanded render -- which still goes",
+        {"page_id": "pg000002"},
+        lambda: get_page_fn("pg000002"),
+        [
+            route(
+                "/api/pages/pg000002",
+                page_record(
+                    id="pg000002",
+                    title="Legacy report",
+                    slug="legacy-report",
+                    history_id=None,
+                    content_format="html",
+                    content_editor="",
+                    content="<h1>Legacy report</h1>",
+                    edit_source="user",
+                ),
+            )
+        ],
+    )
+    add(
+        "get_page",
+        "no_rendered_content_at_all",
+        "a reply carrying no content key, where there is nothing to drop",
+        {"page_id": "pg000003"},
+        lambda: get_page_fn("pg000003"),
+        [
+            route(
+                "/api/pages/pg000003",
+                {k: v for k, v in page_record(id="pg000003").items() if k != "content"},
+            )
+        ],
+    )
+    add(
+        "create_page",
+        "notebook",
+        "a page attached to a history, which is the notebook shape",
+        {"history_id": "h0000", "title": "Reads QC report", "content": "# Reads QC\n"},
+        lambda: create_page_fn(history_id="h0000", title="Reads QC report", content="# Reads QC\n"),
+        [
+            VERSION_ROUTE,
+            route(
+                "/api/pages",
+                page_record(
+                    content_editor="# Reads QC\n",
+                    content="# Reads QC\n",
+                    latest_revision_id="rev00001",
+                    revision_ids=["rev00001"],
+                    edit_source="user",
+                ),
+                method="POST",
+            ),
+        ],
+    )
+    add(
+        "create_page",
+        "standalone_report",
+        "no history, so a report -- which needs both a title and a slug",
+        {"title": "Cohort summary", "slug": "cohort-summary", "annotation": "for the paper"},
+        lambda: create_page_fn(
+            title="Cohort summary", slug="cohort-summary", annotation="for the paper"
+        ),
+        [
+            VERSION_ROUTE,
+            route(
+                "/api/pages",
+                page_record(
+                    id="pg000004",
+                    title="Cohort summary",
+                    slug="cohort-summary",
+                    history_id=None,
+                    annotation="for the paper",
+                    content_editor="",
+                    content="",
+                    latest_revision_id="rev00010",
+                    revision_ids=["rev00010"],
+                    edit_source="user",
+                ),
+                method="POST",
+            ),
+        ],
+    )
+    add(
+        "update_page",
+        "content_changed",
+        "new markdown, which writes a revision the agent is recorded against",
+        {"page_id": "pg000001", "content": "# Reads QC\n\nrewritten\n"},
+        lambda: update_page_fn("pg000001", content="# Reads QC\n\nrewritten\n"),
+        [
+            VERSION_ROUTE,
+            route(
+                "/api/pages/pg000001",
+                page_record(
+                    content_editor="# Reads QC\n\nrewritten\n",
+                    latest_revision_id="rev00003",
+                    revision_ids=["rev00001", "rev00002", "rev00003"],
+                ),
+                method="PUT",
+            ),
+        ],
+    )
+    add(
+        "update_page",
+        "title_only_on_an_html_page",
+        "a title change on a page whose body is the expanded render, which still goes",
+        {"page_id": "pg000002", "title": "Legacy report (renamed)"},
+        lambda: update_page_fn("pg000002", title="Legacy report (renamed)"),
+        [
+            VERSION_ROUTE,
+            route(
+                "/api/pages/pg000002",
+                page_record(
+                    id="pg000002",
+                    title="Legacy report (renamed)",
+                    slug="legacy-report",
+                    history_id=None,
+                    content_format="html",
+                    content_editor="",
+                    content="<h1>Legacy report</h1>",
+                ),
+                method="PUT",
+            ),
         ],
     )
 

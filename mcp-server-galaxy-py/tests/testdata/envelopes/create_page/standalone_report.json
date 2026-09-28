@@ -1,0 +1,33 @@
+{
+  "data": {
+    "id": "pg000004",
+    "title": "Cohort summary",
+    "slug": "cohort-summary",
+    "history_id": null,
+    "latest_revision_id": "rev00010",
+    "revision_ids": [
+      "rev00010"
+    ],
+    "source_invocation_id": null,
+    "model_class": "Page",
+    "username": "curator",
+    "email_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "author_deleted": false,
+    "deleted": false,
+    "importable": false,
+    "published": false,
+    "tags": [],
+    "create_time": "2026-01-02T03:04:05.000000",
+    "update_time": "2026-01-02T03:14:05.000000",
+    "content_editor": "",
+    "content_format": "markdown",
+    "annotation": "for the paper",
+    "edit_source": "user",
+    "generate_time": null,
+    "generate_version": null
+  },
+  "success": true,
+  "message": "Created page 'pg000004'",
+  "count": null,
+  "pagination": null
+}
