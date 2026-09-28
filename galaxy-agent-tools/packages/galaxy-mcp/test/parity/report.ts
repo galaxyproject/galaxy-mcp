@@ -488,8 +488,9 @@ export function renderReport(input: ReportInput): string {
       "`mcp-server-galaxy-py/tests/testdata/envelopes` -- calls the Python server answered, " +
       "replayed through both surfaces here and compared key for key. It is not part of the " +
       "comparison above, which is about what a tool declares; it is how much of what a tool " +
-      "ANSWERS anybody checks. A `0` on a tool that is not in the registry's `fixtures.excluded` " +
-      "list fails the parity check.",
+      "ANSWERS anybody checks. A `0` fails the parity check for a tool the Python server " +
+      "serves, unless the registry's `fixtures.excluded` list names it; a tool only another " +
+      "surface has has nothing here to generate cases from, so its `0` says only that.",
     "",
     ...table(
       ["Tool", "Parameter", "Cases", ...surfaces.map((s) => s.title), "Difference", "Status", "Why"],

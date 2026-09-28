@@ -50,7 +50,7 @@ Every tool any surface has, against the surfaces that do not have it. A name her
 
 A row per tool, then a row per parameter the surfaces disagree about. `--` means that surface does not have it. A tool's own row says what it advertises about changing things and about the Galaxy it needs; a parameter's row says what each surface declares it to be, in the terms the comparison compares. A difference found against the built-in server says so in its kind.
 
-`Cases` is how many golden result envelopes that tool has under `mcp-server-galaxy-py/tests/testdata/envelopes` -- calls the Python server answered, replayed through both surfaces here and compared key for key. It is not part of the comparison above, which is about what a tool declares; it is how much of what a tool ANSWERS anybody checks. A `0` on a tool that is not in the registry's `fixtures.excluded` list fails the parity check.
+`Cases` is how many golden result envelopes that tool has under `mcp-server-galaxy-py/tests/testdata/envelopes` -- calls the Python server answered, replayed through both surfaces here and compared key for key. It is not part of the comparison above, which is about what a tool declares; it is how much of what a tool ANSWERS anybody checks. A `0` fails the parity check for a tool the Python server serves, unless the registry's `fixtures.excluded` list names it; a tool only another surface has has nothing here to generate cases from, so its `0` says only that.
 
 | Tool | Parameter | Cases | Python | TypeScript | Built-in | Difference | Status | Why |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
