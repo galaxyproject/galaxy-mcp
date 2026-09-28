@@ -173,6 +173,18 @@ def test_the_static_witness_alone_catches_a_loader_that_only_runs_when_called(tm
     assert not (loaded & NEVER_LOADED)
 
 
+def test_the_import_allow_list_is_what_stops_an_ordinary_stdlib_loader(tmp_path):
+    """pydoc.locate names no importer and loads nothing until called; it is refused because
+    pydoc is not something the layer may import at all."""
+    (tmp_path / "ops_locate.py").write_text(
+        "def load():\n    from pydoc import locate\n\n    return locate('galaxy_mcp.server.mcp')\n"
+    )
+
+    assert boundary_refusals(tmp_path, OPS_PACKAGE) == {"ops_locate.py": ["pydoc"]}
+    loaded = loaded_after("import ops_locate", tmp_path)
+    assert not (loaded & NEVER_LOADED)
+
+
 def write_fabricated_layer(layer: pathlib.Path) -> None:
     """A layer holding every escape review has found, plus what must keep passing."""
     layer.mkdir(exist_ok=True)
@@ -285,6 +297,19 @@ def write_fabricated_layer(layer: pathlib.Path) -> None:
     )
     (layer / "runpy_module.py").write_text(
         "import runpy\n\n\ndef load():\n    return runpy.run_module('galaxy_mcp.server')\n"
+    )
+    # Ordinary standard-library modules that resolve a dotted name when called: not machinery by
+    # name, refused for being outside the import allow-list.
+    (layer / "pydoc_locate.py").write_text(
+        "def load():\n    from pydoc import locate\n\n    return locate('galaxy_mcp.server.mcp')\n"
+    )
+    (layer / "pickle_restore.py").write_text(
+        "import pickle\n\n\ndef restore(payload):\n    return pickle.loads(payload)\n"
+    )
+    (layer / "mock_patch.py").write_text(
+        "from unittest import mock\n\n\n"
+        "def patched():\n"
+        "    return mock.patch('galaxy_mcp.server.mcp')\n"
     )
     (layer / "zip_loader.py").write_text(
         "import zipimport\n\n\n"
@@ -415,15 +440,18 @@ def test_the_check_refuses_a_reach_back_out_of_the_layer(tmp_path):
             refusal("zipimport", 5),
             refusal("zipimporter", 5),
         ],
+        "pydoc_locate.py": ["pydoc"],
+        "pickle_restore.py": ["pickle"],
+        "mock_patch.py": ["unittest"],
         "code_builtins.py": [
             refusal("compile", 2),
             refusal("eval", 2),
             refusal("globals", 2),
             refusal("vars", 2),
         ],
-        "module_table.py": [refusal(MODULE_TABLE, 3)],
-        "module_table_aliased.py": [refusal(MODULE_TABLE, 3)],
-        "module_table_from.py": [refusal(MODULE_TABLE, 1)],
+        "module_table.py": ["sys", refusal(MODULE_TABLE, 3)],
+        "module_table_aliased.py": ["sys", refusal(MODULE_TABLE, 3)],
+        "module_table_from.py": ["sys", refusal(MODULE_TABLE, 1)],
         "nested/helper.py": ["galaxy_mcp.server"],
         "nested/climbing_out.py": ["galaxy_mcp.server"],
     }

@@ -325,9 +325,11 @@ uv run pytest tests/test_real_integration.py
 input contracts (`tool_inputs`, `workflow_inputs`) today, and whatever else turns out to be
 reusable logic rather than transport or orchestration. Nothing in there may reach back for
 the server, a client, a session or a third-party package: `tests/test_ops_boundary.py`
-reads the imports out of the source and refuses anything outside the standard library and
-the layer's own modules, whichever way the import is written and however deep the package
-it sits in. The layer has no dynamic imports at all, so rather than work out what a call
+reads the imports out of the source and refuses anything outside a short allow-list of
+pure-data standard-library modules (`json`, `re`, `typing` and a few like them) and the
+layer's own modules, whichever way the import is written and however deep the package it
+sits in -- not "the standard library", because `pydoc`, `pickle` and `unittest.mock` can all
+turn a dotted name into a loaded module. The layer has no dynamic imports at all, so rather than work out what a call
 would load, the check refuses any mention of the machinery that could load one --
 `importlib`, `import_module`, `__import__`, `builtins`, `pkgutil.resolve_name`, `runpy`, `sys.modules`, `exec` and the like
 -- and then imports every module of the layer in a clean interpreter to see what actually

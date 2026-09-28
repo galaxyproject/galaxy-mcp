@@ -32,6 +32,10 @@ machinery is itself the refusal:
   call to one is a bare name; ``re.compile`` is a different function and is left alone.
 * any ``sys.modules``. Any attribute named ``modules`` is read as ``sys.modules``, since an
   aliased ``sys`` is still ``sys`` and nothing in this layer has a ``modules`` of its own.
+* a written import of anything outside ``ALLOWED_IMPORTS`` -- a short list of pure-data
+  standard-library modules, not the standard library. ``pydoc.locate``, ``pickle.loads`` and
+  ``unittest.mock.patch`` all turn a dotted name into a loaded module and none of them names an
+  importer; rather than list every such door, the layer imports only what it is allowed to.
 
 ``getattr`` is deliberately not refused outright: ``tool_inputs`` reads an optional
 ``status_code`` off an exception with it, which is honest work. Reaching the machinery through
@@ -59,6 +63,42 @@ OPS_DIR = pathlib.Path(__file__).resolve().parents[1] / "src" / "galaxy_mcp" / "
 # need json, re and typing -- and an entry here is a decision about what the layer is.
 ALLOWED_THIRD_PARTY: frozenset[str] = frozenset()
 
+# What the layer's own source may import. Not "the standard library": the standard library
+# holds pydoc, pickle, unittest.mock, pkgutil, runpy and other doors that turn a string into a
+# loaded module, and listing doors one at a time does not converge. So the written-import rule is
+# an allow-list of pure-data modules -- what the input contracts need today plus the obvious
+# companions -- and a module not on it is refused for that reason alone. Adding one is a decision
+# about what the layer is, made here.
+ALLOWED_IMPORTS: frozenset[str] = (
+    frozenset(
+        {
+            "abc",
+            "collections",
+            "copy",
+            "dataclasses",
+            "datetime",
+            "decimal",
+            "enum",
+            "fractions",
+            "functools",
+            "itertools",
+            "json",
+            "math",
+            "numbers",
+            "operator",
+            "re",
+            "string",
+            "textwrap",
+            "types",
+            "typing",
+        }
+    )
+    | ALLOWED_THIRD_PARTY
+)
+
+# What may be found in sys.modules after importing a layer module in a clean interpreter. Wider
+# than ALLOWED_IMPORTS on purpose: json, re and typing pull other standard-library modules in
+# transitively, and none of those is the thing the runtime witness exists to catch.
 ALLOWED_ROOTS = frozenset(sys.stdlib_module_names) | ALLOWED_THIRD_PARTY
 
 # Every way of naming the machinery that turns a string into a loaded module.
@@ -190,7 +230,7 @@ def machinery_mentions(tree: ast.Module) -> list[str]:
 def _is_allowed(name: str, package: str) -> bool:
     if name == package or name.startswith(f"{package}."):
         return True
-    return name.split(".")[0] in ALLOWED_ROOTS
+    return name.split(".")[0] in ALLOWED_IMPORTS
 
 
 def boundary_refusals(directory: pathlib.Path, package: str = OPS_PACKAGE) -> dict[str, list[str]]:
@@ -208,7 +248,8 @@ def boundary_refusals(directory: pathlib.Path, package: str = OPS_PACKAGE) -> di
                 name
                 for node in ast.walk(tree)
                 for name in _imported_names(node, own_package)
-                if not _is_allowed(name, package)
+                # A machinery module is reported by the mention rule below, once, with its line.
+                if not _is_allowed(name, package) and name.split(".")[0] not in MACHINERY
             }
         )
         mentions = machinery_mentions(tree)
