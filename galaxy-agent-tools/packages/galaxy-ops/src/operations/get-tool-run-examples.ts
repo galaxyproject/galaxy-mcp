@@ -38,6 +38,7 @@ export const getToolRunExamplesOp: Operation<typeof input, ToolRunExamples> = {
   run,
   project: (out, i) => ({
     message: `${out.test_cases.length} test case(s) for ${i.toolId}`,
+    count: out.test_cases.length,
   }),
 };
 

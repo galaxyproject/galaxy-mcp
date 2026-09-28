@@ -28,7 +28,10 @@ export const listPageRevisionsOp: Operation<typeof input, PageRevisionSummary[]>
   input,
   requires: { galaxy: ">=26.1" },
   run,
-  project: (revs, i) => ({ message: `${revs.length} revision(s) for page ${i.pageId}` }),
+  project: (revs, i) => ({
+    message: `${revs.length} revision(s) for page ${i.pageId}`,
+    count: revs.length,
+  }),
 };
 
 register(listPageRevisionsOp as AnyOperation);

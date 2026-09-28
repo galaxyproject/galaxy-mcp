@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { fetchIwcWorkflows, enrichWorkflowResult, type EnrichedIwcWorkflow } from "../iwc-manifest";
 import type { GalaxyContext } from "../context";
-import { paginate, shrinkPaged, validatePagination, type Paged } from "./pagination";
+import { pyLower } from "../python-str";
+import { paginate, shrinkPaged, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
 
@@ -27,15 +28,17 @@ async function run(i: In, _ctx: GalaxyContext): Promise<Paged<EnrichedIwcWorkflo
   const offset = i.offset ?? 0;
   validatePagination(limit, offset, { maxLimit: MAX_LIMIT });
   const workflows = await fetchIwcWorkflows();
-  const q = i.query.toLowerCase();
+  // The other server's `lower()`; this runtime's reads a newer edition of Unicode and
+  // answers differently about what to fold and about where a word ends.
+  const q = pyLower(i.query);
 
   const matches = workflows
     .filter((wf) => {
       const def = wf.definition ?? {};
-      const name = (def.name ?? "").toLowerCase();
-      const annotation = (def.annotation ?? "").toLowerCase();
-      const tags = (def.tags ?? []).map((t) => t.toLowerCase());
-      const readme = (wf.readme ?? "").toLowerCase();
+      const name = pyLower(def.name ?? "");
+      const annotation = pyLower(def.annotation ?? "");
+      const tags = (def.tags ?? []).map((t) => pyLower(t));
+      const readme = pyLower(wf.readme ?? "");
       return name.includes(q) || annotation.includes(q) || tags.some((t) => t.includes(q)) || readme.includes(q);
     })
     .map((wf) => enrichWorkflowResult(wf));
@@ -54,8 +57,13 @@ export const searchIwcWorkflowsOp: Operation<typeof input, Paged<EnrichedIwcWork
     shrink: (out, keep) => shrinkPaged(out, keep, "workflows"),
   },
   project: (out, i) => ({
-    message: `${out.items.length} of ${out.pagination.total} IWC workflows matching "${i.query}"`,
-    pagination: out.pagination,
+    data: out.items,
+    // The other server's sentence, word for word; the budget is measured on it too.
+    message:
+      `Found ${out.pagination.total} IWC workflows matching '${i.query}', ` +
+      `returning ${out.items.length}`,
+    count: out.items.length,
+    pagination: wirePagination(out.pagination),
   }),
 };
 

@@ -243,19 +243,24 @@ logger = logging.getLogger(__name__)
 # Bounded list tools share these. MCP clients cap tool output (one common adapter
 # truncates at 50 KB), and a truncated response reaches the model as broken JSON it
 # cannot page past, so every list tool returns a window plus enough metadata to walk it.
-def _validate_pagination(limit: int, offset: int, *, max_limit: int, pageable: bool = True) -> None:
+def _validate_pagination(
+    limit: int, offset: int, *, max_limit: int | None = None, pageable: bool = True
+) -> None:
     """Reject page windows nobody should be asking for.
 
     ``max_limit`` is a ceiling on the request, not a promise about the response. What
     comes back is bounded by OUTPUT_BUDGET_BYTES, measured on the way out, because an
-    item count cannot bound a response whose items have no maximum size.
+    item count cannot bound a response whose items have no maximum size. It is left
+    out for a listing this server does not cap, which then takes any positive limit --
+    the floor and the non-negative offset still apply, because the pagination the
+    listing reports is only arithmetic for a window that has both.
 
     ``pageable`` is False for a tool with no ``offset`` parameter, which cannot act
     on advice to page through the rest.
     """
     if limit < 1:
         raise ValueError(f"limit must be at least 1 (got {limit})")
-    if limit > max_limit:
+    if max_limit is not None and limit > max_limit:
         rest = " and use offset to page through the rest" if pageable else ""
         raise ValueError(
             f"limit must be at most {max_limit} (got {limit}); request {max_limit} or fewer{rest}"
@@ -2376,52 +2381,49 @@ def get_histories(
     gi: GalaxyInstance = state["gi"]
 
     try:
-        # Get histories with pagination and optional filtering
-        histories = gi.histories.get_histories(limit=limit, offset=offset, name=name)
+        # Filter first, then window. bioblend applies `name` client-side, AFTER Galaxy
+        # has already cut the window -- `[h for h in histories if h["name"] == name]`
+        # at the end of HistoryClient._get_histories -- so a name and a limit in the
+        # same call filter a page that was chosen before the filter ran: page one of
+        # name="B" over [A, B] came back empty while claiming there was more, and page
+        # two counted two matches where one history matched. Fetching the matches and
+        # windowing them here is also one request rather than two, because the count
+        # this tool has to report was already an unpaged fetch of the same thing.
+        matching = gi.histories.get_histories(name=name) or []
 
-        # If pagination is used, get total count for metadata
+        # If pagination is used, describe the window
         if limit is not None:
-            # Get total count without pagination
-            all_histories = gi.histories.get_histories(name=name)
-            total_items = len(all_histories) if all_histories else 0
-
-            # Calculate pagination metadata
-            has_next = (offset + limit) < total_items
-            has_previous = offset > 0
-            current_page = (offset // limit) + 1 if limit > 0 else 1
-            total_pages = ((total_items - 1) // limit) + 1 if limit > 0 and total_items > 0 else 1
-
-            pagination = PaginationInfo(
-                total_items=total_items,
-                returned_items=len(histories),
-                limit=limit,
-                offset=offset,
-                has_next=has_next,
-                has_previous=has_previous,
-                next_offset=offset + limit if has_next else None,
-                previous_offset=max(0, offset - limit) if has_previous else None,
-                helper_text=f"Page {current_page} of {total_pages}. "
-                + (
-                    f"Use offset={offset + limit} for next page."
-                    if has_next
-                    else "This is the last page."
-                ),
-            )
+            # A falsy limit means "no window" to bioblend (`if limit:`), which is why
+            # limit=0 has always returned everything; it now says so, reporting the
+            # page it actually returned instead of a window nothing could fit in.
+            page_size = limit or max(len(matching), 1)
+            # The same helper every other listing uses, so one sentence describes a
+            # page whichever tool returned it, and the navigation arithmetic cannot
+            # disagree from one tool to the next. The numbers are the ones the
+            # hand-written block computed, because the page is now a slice of the set
+            # it reports a total for.
+            page, pagination = _paginate(matching, limit=page_size, offset=offset, noun="histories")
 
             return GalaxyResult(
-                data=histories,
+                data=page,
                 success=True,
-                message=f"Retrieved {len(histories)} of {total_items} histories",
-                count=len(histories),
+                message=f"Retrieved {len(page)} of {len(matching)} histories",
+                count=len(page),
                 pagination=pagination,
             )
         else:
-            # No pagination requested
+            # No window to describe, but an offset still skips. bioblend handed this
+            # branch's offset to Galaxy and the caller got the rest of the list back,
+            # so fetching unpaged has to do the skipping here or the argument stops
+            # meaning anything. Still no pagination block, as before. A negative
+            # offset is left alone rather than read as "count back from the end",
+            # which is what a bare slice would quietly turn it into.
+            rest = matching[offset:] if offset > 0 else matching
             return GalaxyResult(
-                data=histories,
+                data=rest,
                 success=True,
-                message=f"Retrieved {len(histories)} histories",
-                count=len(histories),
+                message=f"Retrieved {len(rest)} histories",
+                count=len(rest),
             )
     except Exception as e:
         raise ValueError(
@@ -2575,6 +2577,14 @@ def get_history_contents(
         this may be slower than server-side pagination, but it is required to
         include dataset collections alongside datasets.
     """
+    # Like every other listing here. No ceiling -- this tool is not in MAX_PAGE_SIZE
+    # and does not budget its page -- but a window still has to be one: limit=0 asked
+    # for a page of nothing and got a walk that reported more to come and never
+    # advanced, and a negative offset sliced from the end of the list and then
+    # described itself with arithmetic that only holds for a window starting at or
+    # after zero (offset=-1 over five items claimed a next page at offset 0, back
+    # through what had just been returned).
+    _validate_pagination(limit, offset)
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
@@ -2632,31 +2642,17 @@ def get_history_contents(
         total_items = len(sorted_contents)
         paginated_contents = sorted_contents[offset : offset + limit]
 
-        # Calculate pagination metadata
-        has_next = (offset + limit) < total_items
-        has_previous = offset > 0
-        current_page = (offset // limit) + 1 if limit > 0 else 1
-        total_pages = ((total_items - 1) // limit) + 1 if limit > 0 and total_items > 0 else 1
+        logger.info(f"Retrieved {len(paginated_contents)} of {total_items} items (offset {offset})")
 
-        logger.info(
-            f"Retrieved {len(paginated_contents)} items (page {current_page} of {total_pages})"
-        )
-
-        pagination = PaginationInfo(
+        # The same helper every other listing uses, so one sentence describes a page
+        # whichever tool returned it, and the navigation arithmetic cannot disagree
+        # from one tool to the next.
+        pagination = _pagination_info(
             total_items=total_items,
             returned_items=len(paginated_contents),
             limit=limit,
             offset=offset,
-            has_next=has_next,
-            has_previous=has_previous,
-            next_offset=offset + limit if has_next else None,
-            previous_offset=max(0, offset - limit) if has_previous else None,
-            helper_text=f"Showing page {current_page} of {total_pages}. "
-            + (
-                f"Use offset={offset + limit} for next page."
-                if has_next
-                else "This is the last page."
-            ),
+            noun="items",
         )
 
         return GalaxyResult(

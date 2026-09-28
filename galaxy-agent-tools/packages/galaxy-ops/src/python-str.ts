@@ -8,6 +8,12 @@
  * spelling it looks like in a way that changes which container gets recommended.
  */
 import { GalaxyValidationError } from "./errors";
+import {
+  PY_CASED_RANGES,
+  PY_CASE_IGNORABLE_RANGES,
+  PY_LOWER_MAP,
+  PY_WORD_CHAR_RANGES,
+} from "./python-unicode-data";
 
 /**
  * The code points CPython's `str.isspace()` is true for -- bidirectional class WS, B or S, or
@@ -58,6 +64,35 @@ export function pyStrip(value: string): string {
   while (start < end && isPySpace(value.charCodeAt(start))) start += 1;
   while (end > start && isPySpace(value.charCodeAt(end - 1))) end -= 1;
   return start === 0 && end === value.length ? value : value.slice(start, end);
+}
+
+/**
+ * Python's `str.split()` with no separator: runs of whitespace, and no empty pieces.
+ *
+ * Not `split(/\s+/)`, twice over. The whitespace is `isPySpace`'s, which is not JavaScript's
+ * `\s` -- U+FEFF is a separator to one and an ordinary character to the other, and the four C0
+ * information separators are the reverse -- and the argument-less form also drops the leading
+ * and trailing empty pieces a regex split leaves behind, which is why `" ".join(text.split())`
+ * is Python's idiom for collapsing whitespace and `text.split(/\s+/).join(" ")` is not quite
+ * its translation.
+ */
+export function pySplitWhitespace(value: string): string[] {
+  const parts: string[] = [];
+  let start = -1;
+  for (let i = 0; i < value.length; i += 1) {
+    // Every code point Python calls whitespace is in the BMP, so a code unit is enough
+    // here and a surrogate half is never mistaken for one.
+    if (isPySpace(value.charCodeAt(i))) {
+      if (start >= 0) {
+        parts.push(value.slice(start, i));
+        start = -1;
+      }
+    } else if (start < 0) {
+      start = i;
+    }
+  }
+  if (start >= 0) parts.push(value.slice(start));
+  return parts;
 }
 
 /**
@@ -269,4 +304,167 @@ export function pyUtf8EncodeError(value: string): string | null {
       ? `character ${pyRepr(first)} in position ${start}`
       : `characters in position ${start}-${end}`;
   return `'utf-8' codec can't encode ${where}: surrogates not allowed`;
+}
+
+/** Is this code point inside one of the inclusive ranges? Binary search; the table is sorted. */
+function inRanges(ranges: readonly (readonly [number, number])[], code: number): boolean {
+  let low = 0;
+  let high = ranges.length - 1;
+  while (low <= high) {
+    const middle = (low + high) >> 1;
+    const range = ranges[middle]!;
+    if (code < range[0]) high = middle - 1;
+    else if (code > range[1]) low = middle + 1;
+    else return true;
+  }
+  return false;
+}
+
+/**
+ * Is this code point one Python's `\w` matches on a `str` -- and so one that a `\b` there
+ * counts as the inside of a word?
+ *
+ * Read from `PY_WORD_CHAR_RANGES`, which is the contract interpreter's own answer for every
+ * code point in the space, rather than from `[\p{L}\p{N}_]`. The class is the right *rule* --
+ * asked about all 1,114,112 code points, that interpreter's `\w` and categories L and N plus
+ * U+005F agree everywhere -- but the rule is not the question. Which code points are letters
+ * is Unicode *data*, and the two runtimes carry different editions of it: this one knows 9,661
+ * code points as letters or numbers that Unicode 15.0.0 had not assigned, U+A7CB and the Garay
+ * block among them. Spelled as a class, a boundary lands in a different place on each side and
+ * an intent of "rnaseq" followed by one of those letters is a term on one server and nothing
+ * to search for on the other. Read from the table, both sides answer what the contract
+ * interpreter answers, and the table moves only when someone regenerates it on purpose.
+ *
+ * The class matters most where a pattern never mentions it: `\b`. A boundary is a place where
+ * one side is a word character and the other is not, so `\b` inherits whichever `\w` its engine
+ * has -- which is why `re.findall(r"\b[a-zA-Z]{2,}\b", "café")` finds nothing there (the `é`
+ * continues the word) while the same pattern finds `caf` here. JavaScript has no Unicode `\b`
+ * to switch on, so a boundary is built out of this predicate instead, on code points rather
+ * than code units so half of an astral letter is never mistaken for a separator.
+ */
+export function isPyWordChar(code: number): boolean {
+  return inRanges(PY_WORD_CHAR_RANGES, code);
+}
+
+/** The code point ending just before `index`, or null at the start of the string. */
+export function codePointBefore(text: string, index: number): number | null {
+  if (index <= 0) return null;
+  const unit = text.charCodeAt(index - 1);
+  if (unit >= 0xdc00 && unit <= 0xdfff && index >= 2) {
+    const lead = text.charCodeAt(index - 2);
+    // A trail surrogate after a lead is the second half of one letter, not a character.
+    if (lead >= 0xd800 && lead <= 0xdbff) return (lead - 0xd800) * 0x400 + (unit - 0xdc00) + 0x10000;
+  }
+  return unit;
+}
+
+/** The contract interpreter's one-code-point lowercase mapping, as a lookup. */
+const PY_LOWER = new Map<number, string>(PY_LOWER_MAP);
+
+const CAPITAL_SIGMA = 0x03a3;
+const SMALL_SIGMA = "\u03c3";
+const FINAL_SIGMA = "\u03c2";
+
+/** Is this code point cased, in the sense the final-sigma rule asks about? */
+function isPyCased(code: number): boolean {
+  return inRanges(PY_CASED_RANGES, code);
+}
+
+/** Is this code point one the final-sigma rule walks straight past? */
+function isPyCaseIgnorable(code: number): boolean {
+  return inRanges(PY_CASE_IGNORABLE_RANGES, code);
+}
+
+/**
+ * Is the capital sigma at `index` a FINAL sigma -- the one case where what a character
+ * lowercases to depends on what is around it?
+ *
+ * `handle_capital_sigma` in the contract interpreter's `Objects/unicodeobject.c`, step for
+ * step. Its own comment states the context as
+ *
+ *     \p{cased} \p{case-ignorable}* U+03A3 !( \p{case-ignorable}* \p{cased} )
+ *
+ * and its two loops read it like this: walk back over case-ignorable characters and the sigma
+ * is final so far when the walk stops on a cased one (and not final when it runs off the start
+ * of the string); then walk forward the same way, and the sigma stays final when that walk
+ * runs off the end or stops on something uncased. Case-ignorable is asked first in both
+ * directions, so a character that is both cased and case-ignorable -- U+0345 -- is walked past
+ * rather than counted, which is why the cased table leaves those out.
+ *
+ * Both walks read the original string, not what has been lowercased so far, and both sets come
+ * from that interpreter's own answers rather than from this runtime's Unicode edition. That is
+ * the point of the round: U+1C8A has a case here and none there, so a sigma after it is final
+ * to this runtime's `toLowerCase` and ordinary to the other server, and a tool named
+ * "\u1c8a\u03a3" stops matching a query of "\u03c3" on one surface and not the other.
+ */
+function isFinalSigma(value: string, index: number): boolean {
+  let scan = index;
+  let behind: number | null = null;
+  while (scan > 0) {
+    const code = codePointBefore(value, scan);
+    if (code === null) break;
+    scan -= code > 0xffff ? 2 : 1;
+    if (isPyCaseIgnorable(code)) continue;
+    behind = code;
+    break;
+  }
+  if (behind === null || !isPyCased(behind)) return false;
+  // The sigma is one code unit wide, so what follows it starts at the next one.
+  let ahead = index + 1;
+  while (ahead < value.length) {
+    const code = value.codePointAt(ahead)!;
+    ahead += code > 0xffff ? 2 : 1;
+    if (isPyCaseIgnorable(code)) continue;
+    return !isPyCased(code);
+  }
+  return true;
+}
+
+/**
+ * Python's `str.lower()`, out of the contract interpreter's tables and nothing else.
+ *
+ * The three search tools lower the needle and the haystack before asking whether one contains
+ * the other, so a character the two runtimes case differently decides a match. There are two
+ * ways for them to differ and this delegates neither of them to `toLowerCase`:
+ *
+ *  - the mapping. This runtime folds the capital rams horn U+A7CB to the small one and the
+ *    other server leaves it standing, so a query of the capital finds a tool named with the
+ *    small letter here and finds nothing there. Every code point goes through `PY_LOWER_MAP`
+ *    instead, which is the interpreter's complete non-identity mapping -- 1,433 entries, U+0130
+ *    to two code points among them -- and anything not in it is left alone.
+ *  - the context. A sigma at the end of a word lowercases to a final sigma, and "the end of a
+ *    word" is a question about which characters are cased, which is Unicode data again:
+ *    `"\u1c8a\u03a3".lower()` is an ordinary sigma there and a final one under this runtime's
+ *    tables, so a tool named that matches a query of "\u03c3" on one server and not the other.
+ *    `isFinalSigma` applies the interpreter's rule over the interpreter's two sets.
+ *
+ * So no part of this asks this runtime what a character is. Checked against that interpreter's
+ * own output for every code point in the space and for the four contexts around every code
+ * point in the space (`test/python-unicode-data.test.ts`, plus the sampled oracle the other
+ * server writes), and the whole-space context check is run against the live interpreter on that
+ * side (`tests/test_python_unicode.py`).
+ */
+export function pyLower(value: string): string {
+  let out = "";
+  // Everything from here to the current character is unchanged, and gets copied in one slice
+  // when something finally changes -- so an already-lowercase name costs one comparison per
+  // code point and no string building at all.
+  let runStart = 0;
+  let index = 0;
+  while (index < value.length) {
+    const code = value.codePointAt(index)!;
+    const width = code > 0xffff ? 2 : 1;
+    const mapped =
+      code === CAPITAL_SIGMA
+        ? isFinalSigma(value, index)
+          ? FINAL_SIGMA
+          : SMALL_SIGMA
+        : PY_LOWER.get(code);
+    if (mapped !== undefined) {
+      out += value.slice(runStart, index) + mapped;
+      runStart = index + width;
+    }
+    index += width;
+  }
+  return runStart === 0 ? value : out + value.slice(runStart);
 }

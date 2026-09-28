@@ -1,0 +1,19 @@
+{
+  "data": {
+    "entries": []
+  },
+  "success": true,
+  "message": "Retrieved 0 of 12 tool panel entries; pass section_id to list a section's tools",
+  "count": 0,
+  "pagination": {
+    "total_items": 12,
+    "returned_items": 0,
+    "limit": 5,
+    "offset": 50,
+    "has_next": false,
+    "has_previous": true,
+    "next_offset": null,
+    "previous_offset": 45,
+    "helper_text": "offset 50 is past the end of 12 entries; use a smaller offset"
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "data": [
+    {
+      "id": "tool30",
+      "name": "Matchable Tool 30",
+      "description": "matchable tool number 30",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "tool31",
+      "name": "Matchable Tool 31",
+      "description": "matchable tool number 31",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "tool32",
+      "name": "Matchable Tool 32",
+      "description": "matchable tool number 32",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "tool33",
+      "name": "Matchable Tool 33",
+      "description": "matchable tool number 33",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "tool34",
+      "name": "Matchable Tool 34",
+      "description": "matchable tool number 34",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "tool35",
+      "name": "Matchable Tool 35",
+      "description": "matchable tool number 35",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "tool36",
+      "name": "Matchable Tool 36",
+      "description": "matchable tool number 36",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "tool37",
+      "name": "Matchable Tool 37",
+      "description": "matchable tool number 37",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "tool38",
+      "name": "Matchable Tool 38",
+      "description": "matchable tool number 38",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "tool39",
+      "name": "Matchable Tool 39",
+      "description": "matchable tool number 39",
+      "versions": [
+        "1.0.0"
+      ]
+    }
+  ],
+  "success": true,
+  "message": "Found 40 tools matching 'matchable', returning 10",
+  "count": 10,
+  "pagination": {
+    "total_items": 40,
+    "returned_items": 10,
+    "limit": 15,
+    "offset": 30,
+    "has_next": false,
+    "has_previous": true,
+    "next_offset": null,
+    "previous_offset": 15,
+    "helper_text": "Showing 10 of 40 tools (offset 30). This is the last page."
+  }
+}

@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
-import { paginate, type Paged } from "./pagination";
+import { paginate, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
 
@@ -57,11 +57,16 @@ export const getHistoriesOp: Operation<typeof input, Histories> = {
   summary: "List the current user's histories (id, name, counts). Optional exact-name filter.",
   input,
   run,
-  project: (out) => {
+  project: (out, i) => {
     const returned = out.items.length;
     return {
+      data: out.items,
       message: `${returned} of ${out.pagination.total} histor${out.pagination.total === 1 ? "y" : "ies"}`,
-      pagination: out.pagination,
+      count: returned,
+      // No limit, no window to describe: the Python tool returns no pagination
+      // block at all on that branch, and neither does this one. run() still
+      // windows, because a library caller wants a Paged either way.
+      pagination: i.limit == null ? null : wirePagination(out.pagination),
     };
   },
 };

@@ -4,34 +4,40 @@ export type Format = "table" | "json" | "text";
 export interface RenderOpts { format: Format; quiet: boolean; }
 
 /**
- * How this surface serialises a result, and therefore what the output budget has
- * to be measured against: the indented JSON below is the largest thing render can
- * print, so a page that fits this fits the table and text formats too.
+ * How this surface PRINTS a result. Not how it measures one.
+ *
+ * The output budget is measured on the compact single line -- the same bytes the
+ * MCP text block carries and the same bytes the Python server counts -- and only
+ * then is the page printed indented. Measuring the indentation instead cut the
+ * page a few rows shorter here than on the other two surfaces, which made the
+ * budget a property of who was reading rather than of what a model reads. The
+ * indented output can therefore run past 50,000 bytes, deliberately: whitespace
+ * added for a human is not a reason to hand back a shorter page.
  */
-export const serializeForCli = (result: GalaxyResult<unknown>): string => JSON.stringify(result, null, 2);
+export const printJson = (result: GalaxyResult<unknown>): string => JSON.stringify(result, null, 2);
 
 export function render(result: GalaxyResult<unknown>, opts: RenderOpts): void {
   if (opts.format === "json") {
-    console.log(serializeForCli(result));
+    console.log(printJson(result));
     return;
   }
   if (result.success) console.log(renderData(result.data));
   if (!opts.quiet && result.message) console.error(result.message);
-  if (!opts.quiet && result.pagination?.helperText) console.error(result.pagination.helperText);
+  if (!opts.quiet && result.pagination?.helper_text) console.error(result.pagination.helper_text);
 }
 
 /**
- * The rows of a paged op's result, if that is what this is.
+ * The rows of a listing whose data is an object rather than a bare array.
  *
- * A bounded list op returns its page under `items`, and get_tool_panel under
- * `entries` or `tools`, alongside a `pagination` object. Keyed-value rendering
- * would print that as `items [100]`, which is the shape of the result rather
- * than the result, so unwrap to the rows and let `pagination` go to the
- * message line instead of becoming a column.
+ * Most listings now put the page straight in `data`, which renders as a table
+ * without any help. Three do not: get_tool_panel names its rows `entries` or
+ * `tools` beside the section it opened, and get_history_contents names them
+ * `contents` beside the history they came from. Keyed-value rendering would
+ * print those as `entries [100]`, which is the shape of the answer rather than
+ * the answer, so unwrap to the rows -- the window is on the message line.
  */
 function pageRows(data: Record<string, unknown>): unknown[] | null {
-  if (!("pagination" in data)) return null;
-  for (const key of ["items", "entries", "tools"]) {
+  for (const key of ["entries", "tools", "contents"]) {
     const rows = data[key];
     if (Array.isArray(rows)) return rows;
   }

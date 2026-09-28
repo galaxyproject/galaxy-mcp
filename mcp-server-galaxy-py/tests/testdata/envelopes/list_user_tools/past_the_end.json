@@ -1,0 +1,17 @@
+{
+  "data": [],
+  "success": true,
+  "message": "Found 20 user-defined tool(s), returning 0",
+  "count": 0,
+  "pagination": {
+    "total_items": 20,
+    "returned_items": 0,
+    "limit": 5,
+    "offset": 400,
+    "has_next": false,
+    "has_previous": true,
+    "next_offset": null,
+    "previous_offset": 395,
+    "helper_text": "offset 400 is past the end of 20 user tools; use a smaller offset"
+  }
+}

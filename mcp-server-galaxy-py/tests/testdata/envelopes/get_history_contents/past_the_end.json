@@ -1,0 +1,20 @@
+{
+  "data": {
+    "history_id": "h0000",
+    "contents": []
+  },
+  "success": true,
+  "message": "Retrieved 0 items from history",
+  "count": 0,
+  "pagination": {
+    "total_items": 25,
+    "returned_items": 0,
+    "limit": 10,
+    "offset": 400,
+    "has_next": false,
+    "has_previous": true,
+    "next_offset": null,
+    "previous_offset": 390,
+    "helper_text": "offset 400 is past the end of 25 items; use a smaller offset"
+  }
+}

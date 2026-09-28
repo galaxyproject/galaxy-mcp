@@ -1,7 +1,14 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { legacyGet } from "../legacy";
-import { paginate, shrinkPaged, validatePagination, type Paged } from "./pagination";
+import {
+  paginate,
+  shrinkPaged,
+  validatePagination,
+  wirePagination,
+  withNoun,
+  type Paged,
+} from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
 
@@ -40,6 +47,9 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<UserTool>> {
   });
   // A 200 carrying something other than a list is Galaxy breaking its contract;
   // an empty page says so without crashing the whole MCP handler.
+  // "tools" is the library's noun and stays the library's noun -- the wire says
+  // "user tools" because the Python tool does, and that happens in the
+  // projection, where changing a sentence cannot change what run() returns.
   return paginate(Array.isArray(tools) ? tools : [], { limit, offset, noun: "tools" });
 }
 
@@ -54,8 +64,12 @@ export const listUserToolsOp: Operation<typeof input, Paged<UserTool>> = {
     shrink: (out, keep) => shrinkPaged(out, keep, "tools"),
   },
   project: (out) => ({
-    message: `${out.items.length} of ${out.pagination.total} user-defined tool(s)`,
-    pagination: out.pagination,
+    data: out.items,
+    // The other server's sentence, word for word; the budget is measured on it too.
+    message: `Found ${out.pagination.total} user-defined tool(s), returning ${out.items.length}`,
+    count: out.items.length,
+    // The other server's noun, on the wire only.
+    pagination: wirePagination(withNoun(out.pagination, "user tools")),
   }),
 };
 

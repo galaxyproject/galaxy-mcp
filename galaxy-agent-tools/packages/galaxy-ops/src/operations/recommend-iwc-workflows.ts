@@ -8,6 +8,7 @@ import {
 import { tokenizeForSearch, BM25Okapi } from "../bm25";
 import type { GalaxyContext } from "../context";
 import { validatePagination } from "./pagination";
+import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
 
@@ -64,10 +65,36 @@ function recommendationSummary(
   };
 }
 
-async function run(i: In, _ctx: GalaxyContext): Promise<Recommendations> {
+/**
+ * Why a ranking came back with nothing in it, when it is not "nothing scored".
+ *
+ * The other server says which of the three it was, and the three read very
+ * differently to an agent: an empty manifest is a broken or unreachable IWC, an
+ * intent of nothing but stop words is a query to rewrite, and a ranking that
+ * scored nothing is a query to make more specific. `run()` returns the same empty
+ * `Recommendations` for all three -- a library caller gets exactly what it always
+ * got -- so which branch it was travels beside the call instead.
+ */
+type EmptyReason = "empty_manifest" | "no_terms";
+const emptyReason = envelopeFact<EmptyReason>("recommend_iwc_workflows.empty_reason");
+
+async function run(i: In, ctx: GalaxyContext): Promise<Recommendations> {
   const limit = i.limit ?? DEFAULT_LIMIT;
   validatePagination(limit, 0, { maxLimit: MAX_LIMIT, pageable: false });
   const workflows = await fetchIwcWorkflows();
+  const empty = (total: number): Recommendations => ({
+    items: [],
+    pagination: recommendationSummary(total, 0, limit),
+  });
+
+  // The manifest is tested before the query, as it is on the other server, and for
+  // its reason: a corpus of nothing has no average document length, so the index
+  // cannot be built at all. An empty manifest and an empty intent together are an
+  // empty manifest.
+  if (workflows.length === 0) {
+    recordFact(ctx, emptyReason, "empty_manifest");
+    return empty(0);
+  }
 
   // Build corpus: name appears twice for 2x weighting
   const corpus = workflows.map((wf) => {
@@ -90,11 +117,10 @@ async function run(i: In, _ctx: GalaxyContext): Promise<Recommendations> {
 
   const bm25 = new BM25Okapi(corpus);
   const q = tokenizeForSearch(i.intent);
-  const empty = (total: number): Recommendations => ({
-    items: [],
-    pagination: recommendationSummary(total, 0, limit),
-  });
-  if (q.length === 0) return empty(0);
+  if (q.length === 0) {
+    recordFact(ctx, emptyReason, "no_terms");
+    return empty(0);
+  }
 
   const scores = bm25.getScores(q);
 
@@ -127,10 +153,28 @@ export const recommendIwcWorkflowsOp: Operation<typeof input, Recommendations> =
       pagination: recommendationSummary(out.pagination.total, keep, out.pagination.limit, true),
     }),
   },
-  project: (out, i) => ({
-    message: `${out.items.length} of ${out.pagination.total} recommended workflow(s) for "${i.intent}"`,
-    pagination: out.pagination,
-  }),
+  // A ranking is not a page. There is no offset to walk, so there is nothing
+  // truthful to put in a pagination block and the Python tool sends none -- which
+  // leaves the message as the only place a cut can be reported, and it is reported
+  // there rather than dropped.
+  project: (out, _i, facts) => {
+    // The other server's sentences, word for word and in its order; the budget is
+    // measured on them too, and this is the one listing whose cut is explained in
+    // the message rather than in a pagination block it does not send. Its two
+    // early returns say why there is nothing rather than reporting zero matches,
+    // which is a different thing and sends an agent looking in a different place.
+    const reason = readFact(facts, emptyReason);
+    const message =
+      reason === "empty_manifest"
+        ? "No workflows in IWC manifest"
+        : reason === "no_terms"
+          ? "No searchable terms in query"
+          : `Found ${out.items.length} workflows matching your intent` +
+            (out.pagination.trimmedForSize
+              ? "; additional matches were dropped to fit the output budget"
+              : "");
+    return { data: out.items, message, count: out.items.length, pagination: null };
+  },
 };
 
 register(recommendIwcWorkflowsOp as AnyOperation);

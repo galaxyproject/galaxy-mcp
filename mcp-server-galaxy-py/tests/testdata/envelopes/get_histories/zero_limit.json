@@ -1,0 +1,24 @@
+{
+  "data": [
+    {
+      "id": "h0000",
+      "name": "History 0",
+      "state": "ok",
+      "update_time": "2026-01-01T00:00:00"
+    }
+  ],
+  "success": true,
+  "message": "Retrieved 1 of 1 histories",
+  "count": 1,
+  "pagination": {
+    "total_items": 1,
+    "returned_items": 1,
+    "limit": 1,
+    "offset": 0,
+    "has_next": false,
+    "has_previous": false,
+    "next_offset": null,
+    "previous_offset": null,
+    "helper_text": "Showing 1 of 1 histories (offset 0). This is the last page."
+  }
+}

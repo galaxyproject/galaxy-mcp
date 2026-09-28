@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
-import { paginate, shrinkPaged, validatePagination, type Paged } from "./pagination";
+import { paginate, shrinkPaged, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import { getHistories } from "./get-histories";
 import type { AnyOperation, InputOf, Operation } from "./types";
@@ -46,8 +46,13 @@ export const listHistoryIdsOp: Operation<typeof input, Paged<HistoryRef>> = {
     shrink: (out, keep) => shrinkPaged(out, keep, "histories"),
   },
   project: (out) => ({
-    message: `${out.items.length} histor${out.items.length === 1 ? "y" : "ies"}`,
-    pagination: out.pagination,
+    data: out.items,
+    // The other server's sentence, word for word; the budget is measured on it too.
+    message: out.pagination.total
+      ? `Found ${out.items.length} of ${out.pagination.total} histories`
+      : "No histories found",
+    count: out.items.length,
+    pagination: wirePagination(out.pagination),
   }),
 };
 

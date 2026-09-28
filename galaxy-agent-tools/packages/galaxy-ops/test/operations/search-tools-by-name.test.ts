@@ -51,6 +51,51 @@ describe("search_tools_by_name", () => {
     expect(out[0].id).toBe("cat1");
   });
 
+  /**
+   * Case folding is Unicode data too, and the two runtimes read different editions of it.
+   * The other server was asked directly:
+   *
+   *   >>> "\u0264".lower() in "RAMS HORN \ua7cb".lower()   -> False
+   *
+   * because it has no case mapping for the capital rams horn at all, while `toLowerCase`
+   * here folds it onto the small one and reports a match nobody else makes.
+   */
+  it("case-folds a needle the way the other server does, not the way this runtime does", async () => {
+    const client = mockClient({
+      GET: () => ({
+        data: [{ id: "rams_horn", name: "Rams Horn \ua7cb", description: "" }],
+        response: { status: 200 },
+      }),
+    });
+    const { items: out } = await searchToolsByName({ query: "\u0264" }, ctxWith(client));
+    expect(out).toHaveLength(0);
+  });
+
+  /**
+   * And the other half of case folding, which a table of mappings does not cover: whether a
+   * sigma is at the end of a word. The other server was asked directly:
+   *
+   *   >>> "\u1c8a\u03a3".lower()          -> '\u1c8a\u03c3'
+   *   >>> "\u03c3" in "\u1c8a\u03a3".lower() -> True
+   *
+   * U+1C8A lowercases to itself on both runtimes, so it is not a mapping difference at all --
+   * it is a cased letter here and unassigned there, and this runtime therefore reads the sigma
+   * after it as final. A needle of a plain sigma then finds the tool on that server and not on
+   * this one. Also pinned end to end as the golden envelope
+   * `search_tools_by_name/sigma_after_a_letter_assigned_after_unicode_15`.
+   */
+  it("finds a sigma the other server does not make final", async () => {
+    const client = mockClient({
+      GET: () => ({
+        data: [{ id: "t", name: "\u1c8a\u03a3", description: "" }],
+        response: { status: 200 },
+      }),
+    });
+    const { items: out } = await searchToolsByName({ query: "\u03c3" }, ctxWith(client));
+    expect(out).toHaveLength(1);
+    expect(out[0]!.id).toBe("t");
+  });
+
   it("returns empty array when no match", async () => {
     const client = mockClient({
       GET: () => ({ data: TOOLS, response: { status: 200 } }),
@@ -69,7 +114,7 @@ describe("search_tools_by_name", () => {
   it("project returns message with count and query", () => {
     const paged = paginate([{ id: "t1", name: "Tool" }], { limit: 25, offset: 0, noun: "tools" });
     const msg = searchToolsByNameOp.project!(paged, { query: "tool" } as never);
-    expect(msg.message).toBe('1 of 1 tool(s) matching "tool"');
+    expect(msg.message).toBe("Found 1 tools matching 'tool', returning 1");
   });
 });
 

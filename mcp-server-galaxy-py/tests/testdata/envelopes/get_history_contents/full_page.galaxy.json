@@ -1,0 +1,265 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/histories/h0000/contents",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": [
+        {
+          "id": "d0000",
+          "hid": 1,
+          "name": "dataset 0",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0001",
+          "hid": 2,
+          "name": "dataset 1",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0002",
+          "hid": 3,
+          "name": "dataset 2",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0003",
+          "hid": 4,
+          "name": "dataset 3",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0004",
+          "hid": 5,
+          "name": "dataset 4",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0005",
+          "hid": 6,
+          "name": "dataset 5",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0006",
+          "hid": 7,
+          "name": "dataset 6",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0007",
+          "hid": 8,
+          "name": "dataset 7",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0008",
+          "hid": 9,
+          "name": "dataset 8",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0009",
+          "hid": 10,
+          "name": "dataset 9",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0010",
+          "hid": 11,
+          "name": "dataset 10",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0011",
+          "hid": 12,
+          "name": "dataset 11",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0012",
+          "hid": 13,
+          "name": "dataset 12",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0013",
+          "hid": 14,
+          "name": "dataset 13",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0014",
+          "hid": 15,
+          "name": "dataset 14",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0015",
+          "hid": 16,
+          "name": "dataset 15",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0016",
+          "hid": 17,
+          "name": "dataset 16",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0017",
+          "hid": 18,
+          "name": "dataset 17",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0018",
+          "hid": 19,
+          "name": "dataset 18",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0019",
+          "hid": 20,
+          "name": "dataset 19",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0020",
+          "hid": 21,
+          "name": "dataset 20",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0021",
+          "hid": 22,
+          "name": "dataset 21",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0022",
+          "hid": 23,
+          "name": "dataset 22",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0023",
+          "hid": 24,
+          "name": "dataset 23",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        },
+        {
+          "id": "d0024",
+          "hid": 25,
+          "name": "dataset 24",
+          "state": "ok",
+          "deleted": false,
+          "visible": true,
+          "history_content_type": "dataset",
+          "extension": "txt"
+        }
+      ]
+    }
+  ]
+}

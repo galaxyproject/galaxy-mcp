@@ -1,0 +1,17 @@
+{
+  "data": [],
+  "success": true,
+  "message": "Found 25 IWC workflows matching 'rnaseq', returning 0",
+  "count": 0,
+  "pagination": {
+    "total_items": 25,
+    "returned_items": 0,
+    "limit": 10,
+    "offset": 400,
+    "has_next": false,
+    "has_previous": true,
+    "next_offset": null,
+    "previous_offset": 390,
+    "helper_text": "offset 400 is past the end of 25 workflows; use a smaller offset"
+  }
+}

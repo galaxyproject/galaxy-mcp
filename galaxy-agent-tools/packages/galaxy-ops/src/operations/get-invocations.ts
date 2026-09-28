@@ -105,14 +105,17 @@ export const getInvocationsOp: Operation<typeof input, GetInvocationsResult> = {
     "View one workflow invocation by id, or list invocations, optionally filtered by workflow or history.",
   input,
   run,
-  project: (result, i) => {
+  project: (result) => {
     if (!Array.isArray(result)) {
       const inv = result as { id?: string; state?: string };
       return { message: `Invocation ${inv.id} state=${inv.state}` };
     }
+    // A count of what came back, and no pagination: Galaxy windows this index
+    // server-side and reports no total, so there is no window to describe. The
+    // Python tool answers the same way, limit or no limit.
     return {
       message: `Retrieved ${result.length} workflow invocation${result.length === 1 ? "" : "s"}`,
-      ...(i.limit == null ? {} : { pagination: { limit: i.limit } }),
+      count: result.length,
     };
   },
 };

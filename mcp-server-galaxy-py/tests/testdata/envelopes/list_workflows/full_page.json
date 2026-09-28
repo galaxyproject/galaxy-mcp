@@ -1,0 +1,98 @@
+{
+  "data": [
+    {
+      "id": "w0010",
+      "name": "Workflow 10",
+      "owner": "tester",
+      "published": false,
+      "deleted": false,
+      "tags": []
+    },
+    {
+      "id": "w0011",
+      "name": "Workflow 11",
+      "owner": "tester",
+      "published": false,
+      "deleted": false,
+      "tags": []
+    },
+    {
+      "id": "w0012",
+      "name": "Workflow 12",
+      "owner": "tester",
+      "published": false,
+      "deleted": false,
+      "tags": []
+    },
+    {
+      "id": "w0013",
+      "name": "Workflow 13",
+      "owner": "tester",
+      "published": false,
+      "deleted": false,
+      "tags": []
+    },
+    {
+      "id": "w0014",
+      "name": "Workflow 14",
+      "owner": "tester",
+      "published": false,
+      "deleted": false,
+      "tags": []
+    },
+    {
+      "id": "w0015",
+      "name": "Workflow 15",
+      "owner": "tester",
+      "published": false,
+      "deleted": false,
+      "tags": []
+    },
+    {
+      "id": "w0016",
+      "name": "Workflow 16",
+      "owner": "tester",
+      "published": false,
+      "deleted": false,
+      "tags": []
+    },
+    {
+      "id": "w0017",
+      "name": "Workflow 17",
+      "owner": "tester",
+      "published": false,
+      "deleted": false,
+      "tags": []
+    },
+    {
+      "id": "w0018",
+      "name": "Workflow 18",
+      "owner": "tester",
+      "published": false,
+      "deleted": false,
+      "tags": []
+    },
+    {
+      "id": "w0019",
+      "name": "Workflow 19",
+      "owner": "tester",
+      "published": false,
+      "deleted": false,
+      "tags": []
+    }
+  ],
+  "success": true,
+  "message": "Found 30 workflows, returning 10",
+  "count": 10,
+  "pagination": {
+    "total_items": 30,
+    "returned_items": 10,
+    "limit": 10,
+    "offset": 10,
+    "has_next": true,
+    "has_previous": true,
+    "next_offset": 20,
+    "previous_offset": 0,
+    "helper_text": "Showing 10 of 30 workflows (offset 10). Use offset=20 for the next page."
+  }
+}

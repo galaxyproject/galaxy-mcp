@@ -1,0 +1,14 @@
+{
+  "data": [
+    {
+      "id": "hB",
+      "name": "B",
+      "state": "ok",
+      "update_time": "2026-01-02T00:00:00"
+    }
+  ],
+  "success": true,
+  "message": "Retrieved 1 histories",
+  "count": 1,
+  "pagination": null
+}

@@ -111,9 +111,9 @@ describe("an integer argument, decoded the way the other surface decodes it", ()
       const { isError, text } = await call("list_history_ids", { limit: given as never });
       expect(isError, text).toBe(false);
       // The converted value, visible in what came back: ten histories, this many returned.
-      const page = JSON.parse(text) as { data: { items: unknown[]; pagination: { limit: number } } };
-      expect(page.data.pagination.limit).toBe(want);
-      expect(page.data.items).toHaveLength(Math.min(want, 10));
+      const page = JSON.parse(text) as { data: unknown[]; pagination: { limit: number } };
+      expect(page.pagination.limit).toBe(want);
+      expect(page.data).toHaveLength(Math.min(want, 10));
     },
   );
 
@@ -297,9 +297,9 @@ describe("an arguments container another realm parsed", () => {
       const reply = replies[0] as { result?: { isError?: boolean; content?: Array<{ text?: string }> } };
       const answer = (reply.result?.content ?? []).map((c) => c.text ?? "").join("");
       expect(reply.result?.isError, answer).toBe(false);
-      const page = JSON.parse(answer) as { data: { items: unknown[]; pagination: { limit: number } } };
-      expect(page.data.pagination.limit).toBe(5);
-      expect(page.data.items).toHaveLength(5);
+      const page = JSON.parse(answer) as { data: unknown[]; pagination: { limit: number } };
+      expect(page.pagination.limit).toBe(5);
+      expect(page.data).toHaveLength(5);
     }
   });
 });

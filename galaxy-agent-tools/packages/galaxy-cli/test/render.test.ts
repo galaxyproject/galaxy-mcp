@@ -69,7 +69,17 @@ describe("render a paged list op", () => {
 
   it("says (empty) for a page with no rows", () => {
     const out = vi.spyOn(console, "log").mockImplementation(() => {});
-    render({ data: { items: [], pagination: { total: 0 } }, success: true } as never, { format: "table", quiet: true });
+    render({ data: [], success: true } as never, { format: "table", quiet: true });
+    expect(out.mock.calls.flat().join("\n")).toBe("(empty)");
+    vi.restoreAllMocks();
+  });
+
+  it("says (empty) for a history whose page of contents is empty", () => {
+    const out = vi.spyOn(console, "log").mockImplementation(() => {});
+    render({ data: { history_id: "h1", contents: [] }, success: true } as never, {
+      format: "table",
+      quiet: true,
+    });
     expect(out.mock.calls.flat().join("\n")).toBe("(empty)");
     vi.restoreAllMocks();
   });
@@ -91,7 +101,6 @@ describe("render a paged list op", () => {
           section_id: "s1",
           section_name: "Mapping",
           tools: [{ id: "bwa", name: "BWA", description: "map reads", versions: ["1.0"] }],
-          pagination: { total: 1 },
         },
         success: true,
       } as never,
@@ -105,33 +114,41 @@ describe("render a paged list op", () => {
 });
 
 /**
- * The output budget exists so what reaches the other end is readable, and this
- * surface prints indented JSON -- about a fifth larger than the single line the
- * MCP text block carries. Measuring the compact form and printing the indented
- * one put 58 KB on stdout for a page trimmed to just under 50 KB, so the
- * serializer is a parameter of the run and this checks the one the CLI passes.
+ * The budget is measured on the compact line, not on the indented printing.
+ *
+ * This surface prints JSON about a fifth larger than the single line the MCP
+ * text block carries, and it used to measure what it printed -- so the same call
+ * came back with fewer rows here than there, and a page became a property of who
+ * was reading it. It measures what a model reads now: the same bytes, the same
+ * rows, and stdout is simply allowed to be bigger than the budget.
  */
-describe("a paged op through the CLI's own serializer", () => {
+describe("a paged op through the CLI", () => {
   const histories = Array.from({ length: 1000 }, (_, k) => ({
     id: String(k).padStart(16, "a"),
     name: `ゲノム解析パイプライン`.repeat(4) + ` (imported from GSE123456, replicate ${k})`,
   }));
 
-  it("prints no more bytes than the budget it was trimmed to", async () => {
+  it("cuts the page where the MCP surface cuts it, then prints it indented", async () => {
     const { listHistoryIdsOp, runWithEnvelope, DEFAULT_POLL, OUTPUT_BUDGET_BYTES } = await import(
       "@galaxyproject/galaxy-ops"
     );
-    const { serializeForCli } = await import("../src/render");
+    const { printJson } = await import("../src/render");
     const client = { GET: async () => ({ data: histories, response: { status: 200 } }) } as never;
-    const result = await runWithEnvelope(
-      listHistoryIdsOp as never,
-      { limit: 500, offset: 0 } as never,
-      { client, poll: DEFAULT_POLL },
-      serializeForCli as never,
-    );
-    const printed = serializeForCli(result as never);
-    expect(new TextEncoder().encode(printed).length).toBeLessThanOrEqual(OUTPUT_BUDGET_BYTES);
+    const ctx = { client, poll: DEFAULT_POLL };
+    const input = { limit: 500, offset: 0 };
+
+    // What the CLI does: no serializer of its own.
+    const cli = await runWithEnvelope(listHistoryIdsOp as never, input as never, ctx as never);
+    // What the MCP surface does, which is the same thing.
+    const mcp = await runWithEnvelope(listHistoryIdsOp as never, input as never, ctx as never);
+    expect((cli.data as unknown[]).length).toBe((mcp.data as unknown[]).length);
     // And it really did have to cut something, or this proves nothing.
-    expect((result.data as { items: unknown[] }).items.length).toBeLessThan(500);
+    expect((cli.data as unknown[]).length).toBeLessThan(500);
+
+    const encoder = new TextEncoder();
+    expect(encoder.encode(JSON.stringify(cli)).length).toBeLessThanOrEqual(OUTPUT_BUDGET_BYTES);
+    // The indentation is for a human and is allowed to push the printing past the
+    // budget; what was measured is what a model would have read.
+    expect(encoder.encode(printJson(cli as never)).length).toBeGreaterThan(OUTPUT_BUDGET_BYTES);
   });
 });

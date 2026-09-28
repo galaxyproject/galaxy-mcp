@@ -1,0 +1,965 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "https://iwc.galaxyproject.org/workflow_manifest.json",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": [
+        {
+          "repo": "repo0",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf0/main",
+              "definition": {
+                "name": "Workflow 0",
+                "annotation": "rnaseq analysis number 0",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 0 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo1",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf1/main",
+              "definition": {
+                "name": "Workflow 1",
+                "annotation": "rnaseq analysis number 1",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 1 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo2",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf2/main",
+              "definition": {
+                "name": "Workflow 2",
+                "annotation": "rnaseq analysis number 2",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 2 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo3",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf3/main",
+              "definition": {
+                "name": "Workflow 3",
+                "annotation": "rnaseq analysis number 3",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 3 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo4",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf4/main",
+              "definition": {
+                "name": "Workflow 4",
+                "annotation": "rnaseq analysis number 4",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 4 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo5",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf5/main",
+              "definition": {
+                "name": "Workflow 5",
+                "annotation": "rnaseq analysis number 5",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 5 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo6",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf6/main",
+              "definition": {
+                "name": "Workflow 6",
+                "annotation": "rnaseq analysis number 6",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 6 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo7",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf7/main",
+              "definition": {
+                "name": "Workflow 7",
+                "annotation": "rnaseq analysis number 7",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 7 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo8",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf8/main",
+              "definition": {
+                "name": "Workflow 8",
+                "annotation": "rnaseq analysis number 8",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 8 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo9",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf9/main",
+              "definition": {
+                "name": "Workflow 9",
+                "annotation": "rnaseq analysis number 9",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 9 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo10",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf10/main",
+              "definition": {
+                "name": "Workflow 10",
+                "annotation": "rnaseq analysis number 10",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 10 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo11",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf11/main",
+              "definition": {
+                "name": "Workflow 11",
+                "annotation": "rnaseq analysis number 11",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 11 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo12",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf12/main",
+              "definition": {
+                "name": "Workflow 12",
+                "annotation": "rnaseq analysis number 12",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 12 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo13",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf13/main",
+              "definition": {
+                "name": "Workflow 13",
+                "annotation": "rnaseq analysis number 13",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 13 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo14",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf14/main",
+              "definition": {
+                "name": "Workflow 14",
+                "annotation": "rnaseq analysis number 14",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 14 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo15",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf15/main",
+              "definition": {
+                "name": "Workflow 15",
+                "annotation": "rnaseq analysis number 15",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 15 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo16",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf16/main",
+              "definition": {
+                "name": "Workflow 16",
+                "annotation": "rnaseq analysis number 16",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 16 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo17",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf17/main",
+              "definition": {
+                "name": "Workflow 17",
+                "annotation": "rnaseq analysis number 17",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 17 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo18",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf18/main",
+              "definition": {
+                "name": "Workflow 18",
+                "annotation": "rnaseq analysis number 18",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 18 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo19",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf19/main",
+              "definition": {
+                "name": "Workflow 19",
+                "annotation": "rnaseq analysis number 19",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 19 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo20",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf20/main",
+              "definition": {
+                "name": "Workflow 20",
+                "annotation": "rnaseq analysis number 20",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 20 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo21",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf21/main",
+              "definition": {
+                "name": "Workflow 21",
+                "annotation": "rnaseq analysis number 21",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 21 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo22",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf22/main",
+              "definition": {
+                "name": "Workflow 22",
+                "annotation": "rnaseq analysis number 22",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 22 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo23",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf23/main",
+              "definition": {
+                "name": "Workflow 23",
+                "annotation": "rnaseq analysis number 23",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 23 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        },
+        {
+          "repo": "repo24",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf24/main",
+              "definition": {
+                "name": "Workflow 24",
+                "annotation": "rnaseq analysis number 24",
+                "tags": [
+                  "transcriptomics",
+                  "rnaseq"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "0": {
+                    "type": "tool",
+                    "tool_id": "fastqc"
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "hisat2"
+                  }
+                }
+              },
+              "readme": "Workflow 24 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

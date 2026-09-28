@@ -1,0 +1,335 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/tools",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": [
+        {
+          "id": "tool0",
+          "name": "Matchable Tool 0",
+          "description": "matchable tool number 0",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool1",
+          "name": "Matchable Tool 1",
+          "description": "matchable tool number 1",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool2",
+          "name": "Matchable Tool 2",
+          "description": "matchable tool number 2",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool3",
+          "name": "Matchable Tool 3",
+          "description": "matchable tool number 3",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool4",
+          "name": "Matchable Tool 4",
+          "description": "matchable tool number 4",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool5",
+          "name": "Matchable Tool 5",
+          "description": "matchable tool number 5",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool6",
+          "name": "Matchable Tool 6",
+          "description": "matchable tool number 6",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool7",
+          "name": "Matchable Tool 7",
+          "description": "matchable tool number 7",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool8",
+          "name": "Matchable Tool 8",
+          "description": "matchable tool number 8",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool9",
+          "name": "Matchable Tool 9",
+          "description": "matchable tool number 9",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool10",
+          "name": "Matchable Tool 10",
+          "description": "matchable tool number 10",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool11",
+          "name": "Matchable Tool 11",
+          "description": "matchable tool number 11",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool12",
+          "name": "Matchable Tool 12",
+          "description": "matchable tool number 12",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool13",
+          "name": "Matchable Tool 13",
+          "description": "matchable tool number 13",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool14",
+          "name": "Matchable Tool 14",
+          "description": "matchable tool number 14",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool15",
+          "name": "Matchable Tool 15",
+          "description": "matchable tool number 15",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool16",
+          "name": "Matchable Tool 16",
+          "description": "matchable tool number 16",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool17",
+          "name": "Matchable Tool 17",
+          "description": "matchable tool number 17",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool18",
+          "name": "Matchable Tool 18",
+          "description": "matchable tool number 18",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool19",
+          "name": "Matchable Tool 19",
+          "description": "matchable tool number 19",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool20",
+          "name": "Matchable Tool 20",
+          "description": "matchable tool number 20",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool21",
+          "name": "Matchable Tool 21",
+          "description": "matchable tool number 21",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool22",
+          "name": "Matchable Tool 22",
+          "description": "matchable tool number 22",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool23",
+          "name": "Matchable Tool 23",
+          "description": "matchable tool number 23",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool24",
+          "name": "Matchable Tool 24",
+          "description": "matchable tool number 24",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool25",
+          "name": "Matchable Tool 25",
+          "description": "matchable tool number 25",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool26",
+          "name": "Matchable Tool 26",
+          "description": "matchable tool number 26",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool27",
+          "name": "Matchable Tool 27",
+          "description": "matchable tool number 27",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool28",
+          "name": "Matchable Tool 28",
+          "description": "matchable tool number 28",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool29",
+          "name": "Matchable Tool 29",
+          "description": "matchable tool number 29",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool30",
+          "name": "Matchable Tool 30",
+          "description": "matchable tool number 30",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool31",
+          "name": "Matchable Tool 31",
+          "description": "matchable tool number 31",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool32",
+          "name": "Matchable Tool 32",
+          "description": "matchable tool number 32",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool33",
+          "name": "Matchable Tool 33",
+          "description": "matchable tool number 33",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool34",
+          "name": "Matchable Tool 34",
+          "description": "matchable tool number 34",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool35",
+          "name": "Matchable Tool 35",
+          "description": "matchable tool number 35",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool36",
+          "name": "Matchable Tool 36",
+          "description": "matchable tool number 36",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool37",
+          "name": "Matchable Tool 37",
+          "description": "matchable tool number 37",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool38",
+          "name": "Matchable Tool 38",
+          "description": "matchable tool number 38",
+          "versions": [
+            "1.0.0"
+          ]
+        },
+        {
+          "id": "tool39",
+          "name": "Matchable Tool 39",
+          "description": "matchable tool number 39",
+          "versions": [
+            "1.0.0"
+          ]
+        }
+      ]
+    }
+  ]
+}

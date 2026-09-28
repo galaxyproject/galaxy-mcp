@@ -6,7 +6,15 @@ import { DEFAULT_POLL } from "../../src/context";
 import type { GalaxyContext } from "../../src/context";
 
 const ctxWith = (client: any): GalaxyContext => ({ client, poll: DEFAULT_POLL });
-const ok = (data: unknown) => ({ data, response: { status: 200 } });
+const ok = (data: unknown, totalMatches?: number) => ({
+  data,
+  response: {
+    status: 200,
+    // Galaxy reports how many pages matched on a header rather than in the body,
+    // which is where the envelope's total comes from.
+    headers: new Headers(totalMatches === undefined ? {} : { total_matches: String(totalMatches) }),
+  },
+});
 
 describe("list_pages", () => {
   it("is read-only, so the MCP surface annotates it as one", () => {
@@ -61,12 +69,68 @@ describe("list_pages", () => {
     expect(await listPages({ showShared: true }, ctxWith(client))).toEqual([]);
   });
 
-  it("reports the requested window as pagination", async () => {
-    const client = mockClient({ GET: () => ok([{ id: "page3" }]) });
+  it("reports the window, and the total the response header carried", async () => {
+    const client = mockClient({ GET: () => ok([{ id: "page3" }], 12) });
     const r = await runWithEnvelope(listPagesOp as any, { limit: 1, offset: 2 }, ctxWith(client));
     expect(r.success).toBe(true);
-    expect(r.pagination).toEqual({ offset: 2, limit: 1 });
+    expect(r.count).toBe(1);
+    // The Python tool builds this block by hand: it advances by the limit rather
+    // than by what came back, and sends no helper text at all.
+    expect(r.pagination).toEqual({
+      total_items: 12,
+      returned_items: 1,
+      limit: 1,
+      offset: 2,
+      has_next: true,
+      has_previous: true,
+      next_offset: 3,
+      previous_offset: 1,
+      helper_text: null,
+    });
     expect(r.message).toBe("1 page(s)");
+  });
+
+  it("falls back to the page it was handed when no total came back", async () => {
+    const client = mockClient({ GET: () => ok([{ id: "page3" }]) });
+    const r = await runWithEnvelope(listPagesOp as any, { limit: 5, offset: 0 }, ctxWith(client));
+    expect(r.pagination).toMatchObject({ total_items: 1, returned_items: 1, has_next: false });
+  });
+
+  /**
+   * Two calls in flight at once, each with its own total.
+   *
+   * The fact the envelope needs -- how many pages matched -- arrives on a response
+   * header and cannot travel in what run() returns without changing what every
+   * library caller gets. It used to be parked in a module-level WeakMap keyed by
+   * the array run() returned, and a client that answers two calls with the SAME
+   * array (a cache handing out one frozen page) gave both of them whichever total
+   * was written last. The channel is per call now, so it cannot be.
+   */
+  it("keeps two concurrent calls' totals apart, even sharing one page array", async () => {
+    // One array, frozen, handed to both calls: object identity cannot tell them
+    // apart, which is the whole point.
+    const shared = Object.freeze([{ id: "page1", title: "Shared" }]);
+    let arrived = 0;
+    let release!: () => void;
+    const both = new Promise<void>((resolve) => (release = resolve));
+    const totals = [10, 20];
+    const client = mockClient({
+      GET: async () => {
+        const total = totals[arrived] ?? 0;
+        arrived += 1;
+        if (arrived === totals.length) release();
+        // Neither call comes back until both have been made, so the two runs
+        // really are interleaved rather than one after the other.
+        await both;
+        return ok(shared, total);
+      },
+    });
+
+    const [first, second] = await Promise.all([
+      runWithEnvelope(listPagesOp as any, { limit: 1, offset: 0 }, ctxWith(client)),
+      runWithEnvelope(listPagesOp as any, { limit: 1, offset: 0 }, ctxWith(client)),
+    ]);
+    expect([first.pagination?.total_items, second.pagination?.total_items]).toEqual([10, 20]);
   });
 
   it("envelopes an auth failure instead of throwing", async () => {

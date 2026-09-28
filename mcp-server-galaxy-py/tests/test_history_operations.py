@@ -2,6 +2,7 @@
 Test history-related operations
 """
 
+import asyncio
 from unittest.mock import patch
 
 import bioblend
@@ -10,6 +11,7 @@ import pytest
 from .test_helpers import (
     galaxy_state,
     get_histories_fn,
+    get_history_contents_fn,
     get_history_details_fn,
     list_history_ids_fn,
     update_history_fn,
@@ -337,4 +339,437 @@ class TestHistoryOperations:
 
             mock_galaxy_instance.histories.show_history.assert_called_once_with(
                 "test_history_1", contents=True
+            )
+
+
+class TestSharedPaginationWording:
+    """Both history listings describe a page the way every other listing does.
+
+    These two used to hand-write "Page N of M." and "Showing page N of M." with
+    navigation arithmetic of their own, so an agent reading one listing learned a
+    sentence the next listing did not use. The helper is the wording now, and these
+    pin it: the same noun-and-offset sentence, the same last-page and past-the-end
+    branches, and next_offset that follows what was actually returned.
+    """
+
+    def _histories(self, count):
+        return [{"id": f"h{i}", "name": f"History {i}"} for i in range(count)]
+
+    def _contents(self, count):
+        return [{"id": f"d{i}", "hid": i, "visible": True, "deleted": False} for i in range(count)]
+
+    def test_get_histories_page_reads_like_the_others(self, mock_galaxy_instance):
+        everything = self._histories(25)
+        mock_galaxy_instance.histories.get_histories.side_effect = (
+            lambda limit=None, offset=0, name=None: (
+                everything[offset : offset + limit] if limit is not None else everything
+            )
+        )
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_histories_fn(limit=10, offset=10)
+
+        assert result.pagination.helper_text == (
+            "Showing 10 of 25 histories (offset 10). Use offset=20 for the next page."
+        )
+        assert result.pagination.next_offset == 20
+        assert result.pagination.previous_offset == 0
+
+    def test_get_histories_last_page(self, mock_galaxy_instance):
+        everything = self._histories(25)
+        mock_galaxy_instance.histories.get_histories.side_effect = (
+            lambda limit=None, offset=0, name=None: (
+                everything[offset : offset + limit] if limit is not None else everything
+            )
+        )
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_histories_fn(limit=10, offset=20)
+
+        assert result.pagination.helper_text == (
+            "Showing 5 of 25 histories (offset 20). This is the last page."
+        )
+        assert result.pagination.has_next is False
+        assert result.pagination.next_offset is None
+
+    def test_get_histories_past_the_end(self, mock_galaxy_instance):
+        everything = self._histories(5)
+        mock_galaxy_instance.histories.get_histories.side_effect = (
+            lambda limit=None, offset=0, name=None: (
+                everything[offset : offset + limit] if limit is not None else everything
+            )
+        )
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_histories_fn(limit=10, offset=50)
+
+        assert result.pagination.helper_text == (
+            "offset 50 is past the end of 5 histories; use a smaller offset"
+        )
+
+    def test_get_histories_without_a_limit_has_no_page_to_describe(self, mock_galaxy_instance):
+        mock_galaxy_instance.histories.get_histories.return_value = self._histories(3)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_histories_fn()
+
+        assert result.pagination is None
+        assert result.count == 3
+
+    def test_get_history_contents_page_reads_like_the_others(self, mock_galaxy_instance):
+        mock_galaxy_instance.histories.show_history.return_value = self._contents(25)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            from tests.test_helpers import get_history_contents_fn
+
+            result = get_history_contents_fn("test_history_1", limit=10, offset=10)
+
+        assert result.pagination.helper_text == (
+            "Showing 10 of 25 items (offset 10). Use offset=20 for the next page."
+        )
+        assert result.pagination.previous_offset == 0
+
+    def test_get_history_contents_last_page(self, mock_galaxy_instance):
+        mock_galaxy_instance.histories.show_history.return_value = self._contents(25)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            from tests.test_helpers import get_history_contents_fn
+
+            result = get_history_contents_fn("test_history_1", limit=10, offset=20)
+
+        assert result.pagination.helper_text == (
+            "Showing 5 of 25 items (offset 20). This is the last page."
+        )
+        assert result.pagination.next_offset is None
+
+    def test_get_history_contents_past_the_end(self, mock_galaxy_instance):
+        mock_galaxy_instance.histories.show_history.return_value = self._contents(5)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            from tests.test_helpers import get_history_contents_fn
+
+            result = get_history_contents_fn("test_history_1", limit=10, offset=50)
+
+        assert result.pagination.helper_text == (
+            "offset 50 is past the end of 5 items; use a smaller offset"
+        )
+
+
+def _bioblend_get_histories(everything):
+    """bioblend's own order of operations, which is the whole point of these tests.
+
+    ``HistoryClient._get_histories`` sends limit and offset to Galaxy and then runs
+    ``[h for h in histories if h["name"] == name]`` over whatever came back, so the
+    name filter sees a window that was chosen before the filter existed. A falsy
+    limit or offset is not sent at all (``if limit:``).
+    """
+
+    def get_histories(limit=None, offset=0, name=None, **_kwargs):
+        window = everything
+        if offset:
+            window = window[offset:]
+        if limit:
+            window = window[:limit]
+        if name is not None:
+            window = [h for h in window if h["name"] == name]
+        return list(window)
+
+    return get_histories
+
+
+class TestNameFilterPagesTheMatches:
+    """A name filter has to run before the window, or the window cannot page it.
+
+    bioblend filters the page Galaxy already cut, so asking for one name and one
+    page at a time used to answer from the wrong set: page one of ``name="B"``
+    over ``[A, B]`` came back empty and claimed there was more, and page two
+    reported a total of two matches when only one history matched. The tool fetches
+    the matches and windows them itself now, so count, total and the navigation all
+    describe the same set.
+    """
+
+    AB = [{"id": "hA", "name": "A"}, {"id": "hB", "name": "B"}]
+
+    def test_first_page_of_a_name_filter_holds_the_match(self, mock_galaxy_instance):
+        mock_galaxy_instance.histories.get_histories.side_effect = _bioblend_get_histories(self.AB)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_histories_fn(limit=1, offset=0, name="B")
+
+        assert result.count == 1
+        assert [h["id"] for h in result.data] == ["hB"]
+        assert result.pagination.total_items == 1
+        assert result.pagination.has_next is False
+        assert result.pagination.next_offset is None
+
+    def test_second_page_of_a_name_filter_counts_only_the_matches(self, mock_galaxy_instance):
+        mock_galaxy_instance.histories.get_histories.side_effect = _bioblend_get_histories(self.AB)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_histories_fn(limit=1, offset=1, name="B")
+
+        # One history matches, so the total is one however far past the end the
+        # caller asked. The shared helper's floor -- items in hand prove a total at
+        # least offset + returned -- was reading a window that belonged to a
+        # different set, and reported two.
+        assert result.pagination.total_items == 1
+        assert result.pagination.has_next is False
+        assert result.pagination.previous_offset == 0
+        assert result.data == []
+
+    def test_a_zero_limit_describes_the_page_it_actually_returns(self, mock_galaxy_instance):
+        one = [{"id": "hA", "name": "A"}]
+        mock_galaxy_instance.histories.get_histories.side_effect = _bioblend_get_histories(one)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_histories_fn(limit=0, offset=0)
+
+        # bioblend drops a falsy limit, so zero has always meant "no window" and
+        # has always returned everything. What it used to report was limit=0, a
+        # window no page could fit in.
+        assert [h["id"] for h in result.data] == ["hA"]
+        assert result.pagination.limit == 1
+        assert result.pagination.has_next is False
+        assert result.pagination.next_offset is None
+
+
+class TestTheNoLimitBranchStillSkips:
+    """An offset with no limit skips, the way it did before the unpaged fetch.
+
+    bioblend sent this branch's offset to Galaxy (``if offset:``) and the caller
+    got the rest of the list back. Fetching unpaged so the name filter can run
+    first took the skipping away with it, and ``[A, B]`` with ``offset=1`` started
+    answering with both histories.
+    """
+
+    AB = [{"id": "hA", "name": "A"}, {"id": "hB", "name": "B"}]
+
+    def test_an_offset_without_a_limit_skips_the_histories_before_it(self, mock_galaxy_instance):
+        mock_galaxy_instance.histories.get_histories.side_effect = _bioblend_get_histories(self.AB)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_histories_fn(offset=1)
+
+        assert [h["id"] for h in result.data] == ["hB"]
+        assert result.count == 1
+        assert result.message == "Retrieved 1 histories"
+        # Still the branch with nothing to describe: no window was asked for.
+        assert result.pagination is None
+
+    def test_an_offset_past_the_end_without_a_limit_is_empty(self, mock_galaxy_instance):
+        mock_galaxy_instance.histories.get_histories.side_effect = _bioblend_get_histories(self.AB)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_histories_fn(offset=5)
+
+        assert result.data == []
+        assert result.count == 0
+        assert result.pagination is None
+
+    def test_no_offset_still_returns_everything(self, mock_galaxy_instance):
+        mock_galaxy_instance.histories.get_histories.side_effect = _bioblend_get_histories(self.AB)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_histories_fn()
+
+        assert [h["id"] for h in result.data] == ["hA", "hB"]
+        assert result.count == 2
+
+
+class TestGetHistoryContentsRefusesAWindowThatIsNotOne:
+    """A page of nothing, or one starting before the beginning, is not a page.
+
+    This was the last listing here that validated nothing. ``limit=0`` returned an
+    empty page that reported more to come and a next offset equal to the one asked
+    for, so a walk sat on the same offset for ever; ``offset=-1`` sliced from the
+    end of the list and then described itself with arithmetic that only holds from
+    zero upwards -- five items, ``limit=10, offset=-1`` said has_next with a next
+    offset of 0, sending the caller back through what it had just been handed.
+    Both are refused now, in the words every other listing here uses, which are
+    also the words the TypeScript surfaces use.
+    """
+
+    @staticmethod
+    def _five(mock_galaxy_instance):
+        mock_galaxy_instance.histories.show_history.return_value = [
+            {"id": f"d{i}", "hid": i, "visible": True, "deleted": False} for i in range(5)
+        ]
+
+    def test_a_negative_offset_is_refused(self, mock_galaxy_instance):
+        self._five(mock_galaxy_instance)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError) as caught:
+                get_history_contents_fn("test_history_1", limit=10, offset=-1)
+
+        assert str(caught.value) == "offset must be 0 or greater (got -1)"
+
+    def test_a_zero_limit_is_refused(self, mock_galaxy_instance):
+        self._five(mock_galaxy_instance)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError) as caught:
+                get_history_contents_fn("test_history_1", limit=0)
+
+        assert str(caught.value) == "limit must be at least 1 (got 0)"
+
+    def test_the_smallest_window_there_is_still_works(self, mock_galaxy_instance):
+        self._five(mock_galaxy_instance)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_history_contents_fn("test_history_1", limit=1, offset=0)
+
+        assert result.count == 1
+        assert result.pagination.limit == 1
+        assert result.pagination.offset == 0
+        assert result.pagination.has_next is True
+        assert result.pagination.next_offset == 1
+
+    def test_no_ceiling_here_because_this_server_does_not_cap_this_tool(self, mock_galaxy_instance):
+        self._five(mock_galaxy_instance)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_history_contents_fn("test_history_1", limit=100_000)
+
+        assert result.count == 5
+
+    @pytest.mark.parametrize("field", ["limit", "offset"])
+    def test_a_fractional_window_never_reaches_the_tool(self, field):
+        """The third refusal, and this server's is the schema's rather than the body's.
+
+        ``_validate_pagination`` never sees a float: the parameters are typed ``int``
+        and pydantic turns 1.5 away at the tool boundary, before ``ensure_connected``
+        and before any window arithmetic. The TypeScript surfaces declare the same
+        integer parameters and refuse it at the same place, so the two agree on which
+        windows exist -- they word the refusal differently, which is the failure
+        envelope that is still to be aligned. Written down because the release notes
+        now claim exactly this.
+        """
+        from fastmcp import Client
+        from fastmcp.exceptions import ToolError
+
+        from galaxy_mcp.server import mcp
+
+        async def _dispatch():
+            async with Client(mcp) as client:
+                return await client.call_tool(
+                    "get_history_contents", {"history_id": "test_history_1", field: 1.5}
+                )
+
+        with pytest.raises(ToolError) as caught:
+            asyncio.run(_dispatch())
+
+        message = str(caught.value)
+        assert field in message
+        assert "Input should be a valid integer, got a number with a fractional part" in message
+
+
+class TestBothHistoryListingsKeepTheirNumbers:
+    """Only the sentence was supposed to move onto the shared helper.
+
+    The numbers either listing reports are still the ones the hand-written blocks
+    computed: a total that is the size of the set being paged, has_next from the
+    window, and offsets that step by the limit. This walks a grid of windows over
+    both tools and checks every field against that arithmetic, written out here
+    rather than imported, so a change to the helper has to answer for it.
+
+    The grid is non-negative on purpose, and that is now a precondition rather
+    than a choice of examples: the arithmetic written out below holds for a window
+    that starts at or after zero and asks for at least one item, and
+    get_history_contents refuses anything else outright (get_histories' name
+    filter and unpaged fetch keep it inside the same range). A window from outside
+    it has no correct answer to compare against.
+    """
+
+    @staticmethod
+    def _expected(total, limit, offset):
+        """What the hand-written pagination blocks computed, spelled out."""
+        has_next = (offset + limit) < total
+        has_previous = offset > 0
+        return {
+            "total_items": total,
+            "has_next": has_next,
+            "has_previous": has_previous,
+            "next_offset": offset + limit if has_next else None,
+            "previous_offset": max(0, offset - limit) if has_previous else None,
+        }
+
+    @staticmethod
+    def _seen(pagination):
+        return {
+            "total_items": pagination.total_items,
+            "has_next": pagination.has_next,
+            "has_previous": pagination.has_previous,
+            "next_offset": pagination.next_offset,
+            "previous_offset": pagination.previous_offset,
+        }
+
+    GRID = [
+        (25, 10, 0),
+        (25, 10, 10),
+        (25, 10, 20),
+        (25, 10, 30),
+        (25, 25, 0),
+        (5, 10, 0),
+        (5, 10, 50),
+        (1, 1, 0),
+        (1, 1, 1),
+        (0, 10, 0),
+    ]
+
+    def test_get_histories(self, mock_galaxy_instance):
+        for total, limit, offset in self.GRID:
+            everything = [{"id": f"h{i}", "name": "same"} for i in range(total)]
+            mock_galaxy_instance.histories.get_histories.side_effect = _bioblend_get_histories(
+                everything
+            )
+
+            with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+                plain = get_histories_fn(limit=limit, offset=offset)
+                filtered = get_histories_fn(limit=limit, offset=offset, name="same")
+
+            expected = self._expected(total, limit, offset)
+            assert self._seen(plain.pagination) == expected, (total, limit, offset)
+            # And a name every history carries pages exactly like no name at all.
+            assert self._seen(filtered.pagination) == expected, (total, limit, offset)
+
+    def test_get_histories_with_a_name_only_some_histories_carry(self, mock_galaxy_instance):
+        everything = [
+            {"id": f"h{i}", "name": "pick" if i % 8 == 0 else f"History {i}"} for i in range(25)
+        ]
+        matches = 4  # i = 0, 8, 16, 24
+
+        for limit, offset in [(2, 0), (2, 2), (2, 4), (10, 0), (1, 3)]:
+            mock_galaxy_instance.histories.get_histories.side_effect = _bioblend_get_histories(
+                everything
+            )
+
+            with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+                result = get_histories_fn(limit=limit, offset=offset, name="pick")
+
+            # The set being paged is the matching one, so the arithmetic is the same
+            # arithmetic over a total of four.
+            assert self._seen(result.pagination) == self._expected(matches, limit, offset), (
+                limit,
+                offset,
+            )
+            assert result.count == len(result.data)
+            assert all(h["name"] == "pick" for h in result.data)
+
+    def test_get_history_contents(self, mock_galaxy_instance):
+        from tests.test_helpers import get_history_contents_fn
+
+        for total, limit, offset in self.GRID:
+            contents = [
+                {"id": f"d{i}", "hid": i, "visible": True, "deleted": False} for i in range(total)
+            ]
+            mock_galaxy_instance.histories.show_history.return_value = contents
+
+            with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+                result = get_history_contents_fn("test_history_1", limit=limit, offset=offset)
+
+            assert self._seen(result.pagination) == self._expected(total, limit, offset), (
+                total,
+                limit,
+                offset,
             )

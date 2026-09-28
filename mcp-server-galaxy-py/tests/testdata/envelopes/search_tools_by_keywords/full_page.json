@@ -1,0 +1,98 @@
+{
+  "data": [
+    {
+      "id": "sec0_tool0",
+      "name": "Section 0 Tool 0",
+      "description": "tool 0 of section 0",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "sec0_tool1",
+      "name": "Section 0 Tool 1",
+      "description": "tool 1 of section 0",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "sec0_tool2",
+      "name": "Section 0 Tool 2",
+      "description": "tool 2 of section 0",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "sec0_tool3",
+      "name": "Section 0 Tool 3",
+      "description": "tool 3 of section 0",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "sec0_tool4",
+      "name": "Section 0 Tool 4",
+      "description": "tool 4 of section 0",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "sec0_tool5",
+      "name": "Section 0 Tool 5",
+      "description": "tool 5 of section 0",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "sec0_tool6",
+      "name": "Section 0 Tool 6",
+      "description": "tool 6 of section 0",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "sec0_tool7",
+      "name": "Section 0 Tool 7",
+      "description": "tool 7 of section 0",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "sec0_tool8",
+      "name": "Section 0 Tool 8",
+      "description": "tool 8 of section 0",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
+      "id": "sec0_tool9",
+      "name": "Section 0 Tool 9",
+      "description": "tool 9 of section 0",
+      "versions": [
+        "1.0.0"
+      ]
+    }
+  ],
+  "success": true,
+  "message": "Found 30 tools matching keywords: section 0 tool, returning 10",
+  "count": 10,
+  "pagination": {
+    "total_items": 30,
+    "returned_items": 10,
+    "limit": 10,
+    "offset": 0,
+    "has_next": true,
+    "has_previous": false,
+    "next_offset": 10,
+    "previous_offset": null,
+    "helper_text": "Showing 10 of 30 tools (offset 0). Use offset=10 for the next page."
+  }
+}

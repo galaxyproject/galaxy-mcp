@@ -1,0 +1,121 @@
+{
+  "data": {
+    "history_id": "h0000",
+    "contents": [
+      {
+        "id": "d0010",
+        "hid": 11,
+        "name": "dataset 10",
+        "state": "ok",
+        "deleted": false,
+        "visible": true,
+        "history_content_type": "dataset",
+        "extension": "txt"
+      },
+      {
+        "id": "d0011",
+        "hid": 12,
+        "name": "dataset 11",
+        "state": "ok",
+        "deleted": false,
+        "visible": true,
+        "history_content_type": "dataset",
+        "extension": "txt"
+      },
+      {
+        "id": "d0012",
+        "hid": 13,
+        "name": "dataset 12",
+        "state": "ok",
+        "deleted": false,
+        "visible": true,
+        "history_content_type": "dataset",
+        "extension": "txt"
+      },
+      {
+        "id": "d0013",
+        "hid": 14,
+        "name": "dataset 13",
+        "state": "ok",
+        "deleted": false,
+        "visible": true,
+        "history_content_type": "dataset",
+        "extension": "txt"
+      },
+      {
+        "id": "d0014",
+        "hid": 15,
+        "name": "dataset 14",
+        "state": "ok",
+        "deleted": false,
+        "visible": true,
+        "history_content_type": "dataset",
+        "extension": "txt"
+      },
+      {
+        "id": "d0015",
+        "hid": 16,
+        "name": "dataset 15",
+        "state": "ok",
+        "deleted": false,
+        "visible": true,
+        "history_content_type": "dataset",
+        "extension": "txt"
+      },
+      {
+        "id": "d0016",
+        "hid": 17,
+        "name": "dataset 16",
+        "state": "ok",
+        "deleted": false,
+        "visible": true,
+        "history_content_type": "dataset",
+        "extension": "txt"
+      },
+      {
+        "id": "d0017",
+        "hid": 18,
+        "name": "dataset 17",
+        "state": "ok",
+        "deleted": false,
+        "visible": true,
+        "history_content_type": "dataset",
+        "extension": "txt"
+      },
+      {
+        "id": "d0018",
+        "hid": 19,
+        "name": "dataset 18",
+        "state": "ok",
+        "deleted": false,
+        "visible": true,
+        "history_content_type": "dataset",
+        "extension": "txt"
+      },
+      {
+        "id": "d0019",
+        "hid": 20,
+        "name": "dataset 19",
+        "state": "ok",
+        "deleted": false,
+        "visible": true,
+        "history_content_type": "dataset",
+        "extension": "txt"
+      }
+    ]
+  },
+  "success": true,
+  "message": "Retrieved 10 items from history",
+  "count": 10,
+  "pagination": {
+    "total_items": 25,
+    "returned_items": 10,
+    "limit": 10,
+    "offset": 10,
+    "has_next": true,
+    "has_previous": true,
+    "next_offset": 20,
+    "previous_offset": 0,
+    "helper_text": "Showing 10 of 25 items (offset 10). Use offset=20 for the next page."
+  }
+}

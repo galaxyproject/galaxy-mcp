@@ -27,6 +27,96 @@ describe("tokenizeForSearch", () => {
   });
 });
 
+/**
+ * The same text, tokenised by the other server.
+ *
+ * Every expected list below came off the installed interpreter rather than out of a
+ * reading of the pattern, from this script:
+ *
+ *   import re
+ *   stop_words = {"the","and","for","with","from","have","want",
+ *                 "data","this","that","are","was","will"}
+ *   def tok(text):
+ *       return [w.lower() for w in re.findall(r"\b[a-zA-Z]{2,}\b", text)
+ *               if w.lower() not in stop_words]
+ *
+ * which is `_tokenize_for_search` with its imports inlined. The cases are the ones where
+ * `\b` decides the answer, because that is the half of the pattern JavaScript spells
+ * differently: `re` counts every Unicode letter and digit as a word character, so a run of
+ * ASCII letters touching one is not a word, and an ASCII `\b` would hand back the Latin
+ * prefix of it.
+ */
+describe("tokenizeForSearch draws word boundaries where the other server draws them", () => {
+  const cases: Array<[string, string[]]> = [
+    // 'café' -> []
+    ["café", []],
+    // 'café au lait' -> ['au', 'lait']
+    ["café au lait", ["au", "lait"]],
+    // 'naïve RNA-seq' -> ['rna', 'seq']
+    ["naïve RNA-seq", ["rna", "seq"]],
+    // '!!! --- ???' -> []
+    ["!!! --- ???", []],
+    // '測序 分析' -> []
+    ["測序 分析", []],
+    // 'bwa2' -> []
+    ["bwa2", []],
+    // '2bwa' -> []
+    ["2bwa", []],
+    // 'bwa 2' -> ['bwa']
+    ["bwa 2", ["bwa"]],
+    // 'RNA-Seq DATA Analysis' -> ['rna', 'seq', 'analysis']
+    ["RNA-Seq DATA Analysis", ["rna", "seq", "analysis"]],
+    // 'rna²' -> []
+    ["rna²", []],
+    // 'RNA_seq' -> []
+    ["RNA_seq", []],
+    // 'İstanbul' -> []
+    ["İstanbul", []],
+    // 'straße rnaseq' -> ['rnaseq']
+    ["straße rnaseq", ["rnaseq"]],
+    // 'α-helix alignment' -> ['helix', 'alignment']
+    ["α-helix alignment", ["helix", "alignment"]],
+  ];
+
+  for (const [text, expected] of cases) {
+    it(`tokenises ${JSON.stringify(text)} to ${JSON.stringify(expected)}`, () => {
+      expect(tokenizeForSearch(text)).toEqual(expected);
+    });
+  }
+
+  /**
+   * The boundary is the contract interpreter's data, not this runtime's.
+   *
+   * These three came off that interpreter the same way the table above did:
+   *
+   *   >>> tok("rnaseqꟋ")   -> ['rnaseq']
+   *   >>> tok("rnaseqꟊ")   -> []
+   *   >>> tok("ꟋrnaseqꟋ quality") -> ['rnaseq', 'quality']
+   *
+   * U+A7CB is a letter Unicode assigned after 15.0.0, so `\p{L}` here says yes and the pinned
+   * table says no. Reading the table is what makes "rnaseq" a term on both servers; reading
+   * `\p{L}` made this side see one long word, find no searchable term, and answer a different
+   * question from the one the other server answered.
+   */
+  it("treats a letter assigned after the pinned Unicode edition as a separator", () => {
+    expect(tokenizeForSearch("rnaseqꟋ")).toEqual(["rnaseq"]);
+    expect(tokenizeForSearch("ꟋrnaseqꟋ quality")).toEqual(["rnaseq", "quality"]);
+  });
+
+  it("treats a letter assigned before it as part of the word", () => {
+    // U+A7CA has been a letter since Unicode 5.1, so both sides continue the word through it.
+    expect(tokenizeForSearch("rnaseqꟊ")).toEqual([]);
+  });
+
+  it("reads a letter outside the Basic Multilingual Plane as one character, not two", () => {
+    // 'rna𝐚' is one letter after the three, so there is no word here at all -- and a
+    // boundary test without the u flag would inspect the high surrogate, find it in no
+    // class, and call 'rna' a word.
+    expect(tokenizeForSearch("rna\u{1D41A}")).toEqual([]);
+    expect(tokenizeForSearch("rna \u{1D41A}")).toEqual(["rna"]);
+  });
+});
+
 describe("BM25Okapi", () => {
   it("returns empty array when corpus is empty", () => {
     const bm25 = new BM25Okapi([]);

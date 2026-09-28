@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { GalaxyNotFoundError } from "../errors";
 import { legacyGet } from "../legacy";
-import { paginate, paginationInfo, validatePagination, type PaginationInfo } from "./pagination";
+import { paginate, paginationInfo, validatePagination, wirePagination, type PaginationInfo } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
 
@@ -173,12 +173,27 @@ export const getToolPanelOp: Operation<typeof input, ToolPanelResult> = {
         ? { ...out, ...shrinkTools(out, keep) }
         : { ...out, ...shrinkEntries(out, keep) },
   },
-  project: (out) =>
+  // Two shapes on the wire as well, and neither carries its own pagination: the
+  // window travels beside the data, once, as it does for every other listing.
+  // Both sentences are the other server's, word for word; the budget is measured
+  // on them too, so a page cut at the boundary is cut at the same row there.
+  project: (out, i) =>
     "entries" in out
-      ? { message: `${out.entries.length} of ${out.pagination.total} tool panel entries`, pagination: out.pagination }
+      ? {
+          data: { entries: out.entries },
+          message:
+            `Retrieved ${out.entries.length} of ${out.pagination.total} tool panel entries; ` +
+            "pass section_id to list a section's tools",
+          count: out.entries.length,
+          pagination: wirePagination(out.pagination),
+        }
       : {
-          message: `${out.tools.length} of ${out.pagination.total} tools in ${out.section_name}`,
-          pagination: out.pagination,
+          data: { section_id: out.section_id, section_name: out.section_name, tools: out.tools },
+          message:
+            `Retrieved ${out.tools.length} of ${out.pagination.total} tools in ` +
+            `section '${i.sectionId}'`,
+          count: out.tools.length,
+          pagination: wirePagination(out.pagination),
         },
 };
 

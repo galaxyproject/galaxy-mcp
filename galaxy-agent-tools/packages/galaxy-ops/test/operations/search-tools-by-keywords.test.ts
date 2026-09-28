@@ -171,7 +171,7 @@ describe("search_tools_by_keywords", () => {
   it("project returns message with match count", () => {
     const paged = paginate([{ id: "t1" }, { id: "t2" }], { limit: 50, offset: 0, noun: "tools" });
     const msg = searchToolsByKeywordsOp.project!(paged, { keywords: ["fastqc"] } as never);
-    expect(msg.message).toBe("2 of 2 tool(s) matching keywords");
+    expect(msg.message).toBe("Found 2 tools matching keywords: fastqc, returning 2");
   });
 });
 

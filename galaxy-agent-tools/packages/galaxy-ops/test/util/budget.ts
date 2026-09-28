@@ -22,8 +22,10 @@ export async function walkEveryPage(opts: {
   ctx: GalaxyContext;
   /** The op's input for one page. */
   input: (limit: number, offset: number) => Record<string, unknown>;
-  /** The rows inside a result's data, whatever key this op puts them under. */
+  /** The rows inside a result's data, whatever shape this op projects it into. */
   rows: (data: unknown) => unknown[];
+  /** The rows inside what run() returned, which is the library shape, not the wire one. */
+  uncutRows: (out: unknown) => unknown[];
   /** A stable identity per row, so a duplicate is visible. */
   id: (row: unknown) => string;
   /** The ceiling to ask for, which is the number the Python tool caps this tool at. */
@@ -47,14 +49,14 @@ export async function walkEveryPage(opts: {
     );
     const rows = opts.rows(result.data);
     seen.push(...rows.map(opts.id));
-    if (!result.pagination?.hasNext) {
+    if (!result.pagination?.has_next) {
       expect(new Set(seen).size, `${opts.label} returned an item twice`).toBe(seen.length);
       return seen;
     }
-    expect(result.pagination.nextOffset, `${opts.label} advanced past what it returned`).toBe(
+    expect(result.pagination.next_offset, `${opts.label} advanced past what it returned`).toBe(
       offset + rows.length,
     );
-    offset = result.pagination.nextOffset!;
+    offset = result.pagination.next_offset!;
   }
   throw new Error(`${opts.label} never reached its last page`);
 }
@@ -68,12 +70,12 @@ export async function walkEveryPage(opts: {
  * trims it.
  */
 async function assertTheFixtureIsOverBudget(
-  opts: { op: AnyOperation; ctx: GalaxyContext; input: (l: number, o: number) => Record<string, unknown>; rows: (d: unknown) => unknown[]; limit: number; label: string },
+  opts: { op: AnyOperation; ctx: GalaxyContext; input: (l: number, o: number) => Record<string, unknown>; rows: (d: unknown) => unknown[]; uncutRows: (o: unknown) => unknown[]; limit: number; label: string },
   call: (limit: number, offset: number) => Promise<GalaxyResult<unknown>>,
 ): Promise<void> {
   const input = opts.input(opts.limit, 0);
   const uncut = await opts.op.run(input as never, opts.ctx);
-  expect(opts.rows(uncut).length, `${opts.label}: the fixture produced nothing to cut`).toBeGreaterThan(0);
+  expect(opts.uncutRows(uncut).length, `${opts.label}: the fixture produced nothing to cut`).toBeGreaterThan(0);
   const size = mcpBytesOf(opts.op, uncut, input);
   expect(size, `${opts.label}: an uncut page is only ${size} bytes, so the budget is never reached`).toBeGreaterThan(
     OUTPUT_BUDGET_BYTES,
@@ -82,7 +84,11 @@ async function assertTheFixtureIsOverBudget(
   // the op quietly returned fewer rows than it was asked for.
   const cut = await call(opts.limit, 0);
   expect(opts.rows(cut.data).length, `${opts.label}: the page was not cut`).toBeLessThan(
-    opts.rows(uncut).length,
+    opts.uncutRows(uncut).length,
   );
-  expect(cut.pagination?.trimmedForSize, `${opts.label}: a cut page must say it was cut`).toBe(true);
+  // The wire has no trimmedForSize flag any more -- the other server has none and
+  // says it in the sentence instead, so that is what a cut page has to carry.
+  expect(cut.pagination?.helper_text, `${opts.label}: a cut page must say it was cut`).toContain(
+    "cut short to fit the output budget",
+  );
 }

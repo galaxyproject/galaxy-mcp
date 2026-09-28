@@ -1,0 +1,268 @@
+{
+  "data": [
+    {
+      "trsID": "#workflow/github.com/iwc-workflows/wf0/main",
+      "name": "Workflow 0",
+      "description": "rnaseq analysis number 0",
+      "tags": [
+        "transcriptomics",
+        "rnaseq"
+      ],
+      "readme_summary": "Workflow 0 runs rnaseq quality control.",
+      "step_count": 2,
+      "authors": [
+        {
+          "name": "IWC",
+          "orcid": ""
+        }
+      ],
+      "categories": [
+        "Transcriptomics"
+      ],
+      "license": "MIT",
+      "tools_used": [
+        "fastqc",
+        "hisat2"
+      ]
+    },
+    {
+      "trsID": "#workflow/github.com/iwc-workflows/wf1/main",
+      "name": "Workflow 1",
+      "description": "rnaseq analysis number 1",
+      "tags": [
+        "transcriptomics",
+        "rnaseq"
+      ],
+      "readme_summary": "Workflow 1 runs rnaseq quality control.",
+      "step_count": 2,
+      "authors": [
+        {
+          "name": "IWC",
+          "orcid": ""
+        }
+      ],
+      "categories": [
+        "Transcriptomics"
+      ],
+      "license": "MIT",
+      "tools_used": [
+        "fastqc",
+        "hisat2"
+      ]
+    },
+    {
+      "trsID": "#workflow/github.com/iwc-workflows/wf2/main",
+      "name": "Workflow 2",
+      "description": "rnaseq analysis number 2",
+      "tags": [
+        "transcriptomics",
+        "rnaseq"
+      ],
+      "readme_summary": "Workflow 2 runs rnaseq quality control.",
+      "step_count": 2,
+      "authors": [
+        {
+          "name": "IWC",
+          "orcid": ""
+        }
+      ],
+      "categories": [
+        "Transcriptomics"
+      ],
+      "license": "MIT",
+      "tools_used": [
+        "fastqc",
+        "hisat2"
+      ]
+    },
+    {
+      "trsID": "#workflow/github.com/iwc-workflows/wf3/main",
+      "name": "Workflow 3",
+      "description": "rnaseq analysis number 3",
+      "tags": [
+        "transcriptomics",
+        "rnaseq"
+      ],
+      "readme_summary": "Workflow 3 runs rnaseq quality control.",
+      "step_count": 2,
+      "authors": [
+        {
+          "name": "IWC",
+          "orcid": ""
+        }
+      ],
+      "categories": [
+        "Transcriptomics"
+      ],
+      "license": "MIT",
+      "tools_used": [
+        "fastqc",
+        "hisat2"
+      ]
+    },
+    {
+      "trsID": "#workflow/github.com/iwc-workflows/wf4/main",
+      "name": "Workflow 4",
+      "description": "rnaseq analysis number 4",
+      "tags": [
+        "transcriptomics",
+        "rnaseq"
+      ],
+      "readme_summary": "Workflow 4 runs rnaseq quality control.",
+      "step_count": 2,
+      "authors": [
+        {
+          "name": "IWC",
+          "orcid": ""
+        }
+      ],
+      "categories": [
+        "Transcriptomics"
+      ],
+      "license": "MIT",
+      "tools_used": [
+        "fastqc",
+        "hisat2"
+      ]
+    },
+    {
+      "trsID": "#workflow/github.com/iwc-workflows/wf5/main",
+      "name": "Workflow 5",
+      "description": "rnaseq analysis number 5",
+      "tags": [
+        "transcriptomics",
+        "rnaseq"
+      ],
+      "readme_summary": "Workflow 5 runs rnaseq quality control.",
+      "step_count": 2,
+      "authors": [
+        {
+          "name": "IWC",
+          "orcid": ""
+        }
+      ],
+      "categories": [
+        "Transcriptomics"
+      ],
+      "license": "MIT",
+      "tools_used": [
+        "fastqc",
+        "hisat2"
+      ]
+    },
+    {
+      "trsID": "#workflow/github.com/iwc-workflows/wf6/main",
+      "name": "Workflow 6",
+      "description": "rnaseq analysis number 6",
+      "tags": [
+        "transcriptomics",
+        "rnaseq"
+      ],
+      "readme_summary": "Workflow 6 runs rnaseq quality control.",
+      "step_count": 2,
+      "authors": [
+        {
+          "name": "IWC",
+          "orcid": ""
+        }
+      ],
+      "categories": [
+        "Transcriptomics"
+      ],
+      "license": "MIT",
+      "tools_used": [
+        "fastqc",
+        "hisat2"
+      ]
+    },
+    {
+      "trsID": "#workflow/github.com/iwc-workflows/wf7/main",
+      "name": "Workflow 7",
+      "description": "rnaseq analysis number 7",
+      "tags": [
+        "transcriptomics",
+        "rnaseq"
+      ],
+      "readme_summary": "Workflow 7 runs rnaseq quality control.",
+      "step_count": 2,
+      "authors": [
+        {
+          "name": "IWC",
+          "orcid": ""
+        }
+      ],
+      "categories": [
+        "Transcriptomics"
+      ],
+      "license": "MIT",
+      "tools_used": [
+        "fastqc",
+        "hisat2"
+      ]
+    },
+    {
+      "trsID": "#workflow/github.com/iwc-workflows/wf8/main",
+      "name": "Workflow 8",
+      "description": "rnaseq analysis number 8",
+      "tags": [
+        "transcriptomics",
+        "rnaseq"
+      ],
+      "readme_summary": "Workflow 8 runs rnaseq quality control.",
+      "step_count": 2,
+      "authors": [
+        {
+          "name": "IWC",
+          "orcid": ""
+        }
+      ],
+      "categories": [
+        "Transcriptomics"
+      ],
+      "license": "MIT",
+      "tools_used": [
+        "fastqc",
+        "hisat2"
+      ]
+    },
+    {
+      "trsID": "#workflow/github.com/iwc-workflows/wf9/main",
+      "name": "Workflow 9",
+      "description": "rnaseq analysis number 9",
+      "tags": [
+        "transcriptomics",
+        "rnaseq"
+      ],
+      "readme_summary": "Workflow 9 runs rnaseq quality control.",
+      "step_count": 2,
+      "authors": [
+        {
+          "name": "IWC",
+          "orcid": ""
+        }
+      ],
+      "categories": [
+        "Transcriptomics"
+      ],
+      "license": "MIT",
+      "tools_used": [
+        "fastqc",
+        "hisat2"
+      ]
+    }
+  ],
+  "success": true,
+  "message": "Found 25 IWC workflows matching 'rnaseq', returning 10",
+  "count": 10,
+  "pagination": {
+    "total_items": 25,
+    "returned_items": 10,
+    "limit": 10,
+    "offset": 0,
+    "has_next": true,
+    "has_previous": false,
+    "next_offset": 10,
+    "previous_offset": null,
+    "helper_text": "Showing 10 of 25 workflows (offset 0). Use offset=10 for the next page."
+  }
+}

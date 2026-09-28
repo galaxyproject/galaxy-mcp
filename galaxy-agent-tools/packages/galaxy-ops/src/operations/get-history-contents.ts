@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
-import { paginate, type Paged } from "./pagination";
+import { paginate, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
 
@@ -95,6 +95,12 @@ async function run(i: In, ctx: GalaxyContext): Promise<HistoryContents> {
   const limit = i.limit ?? DEFAULT_LIMIT;
   const offset = i.offset ?? 0;
   const order = i.order ?? "hid-asc";
+  // No ceiling, because neither server caps this one -- but a window still has to
+  // be one. A limit of zero asks for a page of nothing and gets a walk that
+  // reports more to come and never moves; a negative offset slices from the end
+  // and is then described by arithmetic that only holds from zero upwards. Both
+  // surfaces refuse them, in the same words.
+  validatePagination(limit, offset);
   // The whole contents index, unfiltered and unwindowed, which is what
   // show_history(contents=True) fetches on the other surface: no query parameters
   // at all. Everything below happens here, so both surfaces answer the same way
@@ -126,9 +132,14 @@ export const getHistoryContentsOp: Operation<typeof input, HistoryContents> = {
   summary: "List the datasets and collections in a history, one page at a time.",
   input,
   run,
-  project: (out) => ({
+  // This tool's data is an object rather than the bare page: the Python tool names
+  // the history the contents came from beside them, and a caller holding one page
+  // of several should not have to remember which history it asked about.
+  project: (out, i) => ({
+    data: { history_id: i.historyId, contents: out.items },
     message: `${out.items.length} of ${out.pagination.total} item(s)`,
-    pagination: out.pagination,
+    count: out.items.length,
+    pagination: wirePagination(out.pagination),
   }),
 };
 

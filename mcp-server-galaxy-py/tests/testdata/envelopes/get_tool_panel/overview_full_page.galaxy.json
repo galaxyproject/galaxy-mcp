@@ -1,0 +1,531 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/tools",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": [
+        {
+          "id": "section0",
+          "name": "Section 0",
+          "model_class": "ToolSection",
+          "elems": [
+            {
+              "id": "sec0_tool0",
+              "name": "Section 0 Tool 0",
+              "description": "tool 0 of section 0",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec0_tool1",
+              "name": "Section 0 Tool 1",
+              "description": "tool 1 of section 0",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec0_tool2",
+              "name": "Section 0 Tool 2",
+              "description": "tool 2 of section 0",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec0_tool3",
+              "name": "Section 0 Tool 3",
+              "description": "tool 3 of section 0",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            }
+          ]
+        },
+        {
+          "id": "section1",
+          "name": "Section 1",
+          "model_class": "ToolSection",
+          "elems": [
+            {
+              "id": "sec1_tool0",
+              "name": "Section 1 Tool 0",
+              "description": "tool 0 of section 1",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec1_tool1",
+              "name": "Section 1 Tool 1",
+              "description": "tool 1 of section 1",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec1_tool2",
+              "name": "Section 1 Tool 2",
+              "description": "tool 2 of section 1",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec1_tool3",
+              "name": "Section 1 Tool 3",
+              "description": "tool 3 of section 1",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            }
+          ]
+        },
+        {
+          "id": "section2",
+          "name": "Section 2",
+          "model_class": "ToolSection",
+          "elems": [
+            {
+              "id": "sec2_tool0",
+              "name": "Section 2 Tool 0",
+              "description": "tool 0 of section 2",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec2_tool1",
+              "name": "Section 2 Tool 1",
+              "description": "tool 1 of section 2",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec2_tool2",
+              "name": "Section 2 Tool 2",
+              "description": "tool 2 of section 2",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec2_tool3",
+              "name": "Section 2 Tool 3",
+              "description": "tool 3 of section 2",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            }
+          ]
+        },
+        {
+          "id": "section3",
+          "name": "Section 3",
+          "model_class": "ToolSection",
+          "elems": [
+            {
+              "id": "sec3_tool0",
+              "name": "Section 3 Tool 0",
+              "description": "tool 0 of section 3",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec3_tool1",
+              "name": "Section 3 Tool 1",
+              "description": "tool 1 of section 3",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec3_tool2",
+              "name": "Section 3 Tool 2",
+              "description": "tool 2 of section 3",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec3_tool3",
+              "name": "Section 3 Tool 3",
+              "description": "tool 3 of section 3",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            }
+          ]
+        },
+        {
+          "id": "section4",
+          "name": "Section 4",
+          "model_class": "ToolSection",
+          "elems": [
+            {
+              "id": "sec4_tool0",
+              "name": "Section 4 Tool 0",
+              "description": "tool 0 of section 4",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec4_tool1",
+              "name": "Section 4 Tool 1",
+              "description": "tool 1 of section 4",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec4_tool2",
+              "name": "Section 4 Tool 2",
+              "description": "tool 2 of section 4",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec4_tool3",
+              "name": "Section 4 Tool 3",
+              "description": "tool 3 of section 4",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            }
+          ]
+        },
+        {
+          "id": "section5",
+          "name": "Section 5",
+          "model_class": "ToolSection",
+          "elems": [
+            {
+              "id": "sec5_tool0",
+              "name": "Section 5 Tool 0",
+              "description": "tool 0 of section 5",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec5_tool1",
+              "name": "Section 5 Tool 1",
+              "description": "tool 1 of section 5",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec5_tool2",
+              "name": "Section 5 Tool 2",
+              "description": "tool 2 of section 5",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec5_tool3",
+              "name": "Section 5 Tool 3",
+              "description": "tool 3 of section 5",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            }
+          ]
+        },
+        {
+          "id": "section6",
+          "name": "Section 6",
+          "model_class": "ToolSection",
+          "elems": [
+            {
+              "id": "sec6_tool0",
+              "name": "Section 6 Tool 0",
+              "description": "tool 0 of section 6",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec6_tool1",
+              "name": "Section 6 Tool 1",
+              "description": "tool 1 of section 6",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec6_tool2",
+              "name": "Section 6 Tool 2",
+              "description": "tool 2 of section 6",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec6_tool3",
+              "name": "Section 6 Tool 3",
+              "description": "tool 3 of section 6",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            }
+          ]
+        },
+        {
+          "id": "section7",
+          "name": "Section 7",
+          "model_class": "ToolSection",
+          "elems": [
+            {
+              "id": "sec7_tool0",
+              "name": "Section 7 Tool 0",
+              "description": "tool 0 of section 7",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec7_tool1",
+              "name": "Section 7 Tool 1",
+              "description": "tool 1 of section 7",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec7_tool2",
+              "name": "Section 7 Tool 2",
+              "description": "tool 2 of section 7",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec7_tool3",
+              "name": "Section 7 Tool 3",
+              "description": "tool 3 of section 7",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            }
+          ]
+        },
+        {
+          "id": "section8",
+          "name": "Section 8",
+          "model_class": "ToolSection",
+          "elems": [
+            {
+              "id": "sec8_tool0",
+              "name": "Section 8 Tool 0",
+              "description": "tool 0 of section 8",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec8_tool1",
+              "name": "Section 8 Tool 1",
+              "description": "tool 1 of section 8",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec8_tool2",
+              "name": "Section 8 Tool 2",
+              "description": "tool 2 of section 8",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec8_tool3",
+              "name": "Section 8 Tool 3",
+              "description": "tool 3 of section 8",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            }
+          ]
+        },
+        {
+          "id": "section9",
+          "name": "Section 9",
+          "model_class": "ToolSection",
+          "elems": [
+            {
+              "id": "sec9_tool0",
+              "name": "Section 9 Tool 0",
+              "description": "tool 0 of section 9",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec9_tool1",
+              "name": "Section 9 Tool 1",
+              "description": "tool 1 of section 9",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec9_tool2",
+              "name": "Section 9 Tool 2",
+              "description": "tool 2 of section 9",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec9_tool3",
+              "name": "Section 9 Tool 3",
+              "description": "tool 3 of section 9",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            }
+          ]
+        },
+        {
+          "id": "section10",
+          "name": "Section 10",
+          "model_class": "ToolSection",
+          "elems": [
+            {
+              "id": "sec10_tool0",
+              "name": "Section 10 Tool 0",
+              "description": "tool 0 of section 10",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec10_tool1",
+              "name": "Section 10 Tool 1",
+              "description": "tool 1 of section 10",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec10_tool2",
+              "name": "Section 10 Tool 2",
+              "description": "tool 2 of section 10",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec10_tool3",
+              "name": "Section 10 Tool 3",
+              "description": "tool 3 of section 10",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            }
+          ]
+        },
+        {
+          "id": "section11",
+          "name": "Section 11",
+          "model_class": "ToolSection",
+          "elems": [
+            {
+              "id": "sec11_tool0",
+              "name": "Section 11 Tool 0",
+              "description": "tool 0 of section 11",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec11_tool1",
+              "name": "Section 11 Tool 1",
+              "description": "tool 1 of section 11",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec11_tool2",
+              "name": "Section 11 Tool 2",
+              "description": "tool 2 of section 11",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            },
+            {
+              "id": "sec11_tool3",
+              "name": "Section 11 Tool 3",
+              "description": "tool 3 of section 11",
+              "versions": [
+                "1.0.0"
+              ],
+              "model_class": "Tool"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

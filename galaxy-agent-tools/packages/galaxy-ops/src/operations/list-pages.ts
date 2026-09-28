@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
+import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import type { PageSummary } from "./pages-common";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
@@ -24,6 +25,16 @@ type In = {
   showShared?: boolean;
 };
 
+/**
+ * How many pages matched the filters, for the window run() just returned.
+ *
+ * Galaxy reports the total on a `total_matches` RESPONSE HEADER rather than in the
+ * body, and run() returns the body -- an array of pages, which is what every
+ * library caller has always got and what it goes on returning. So the header is
+ * recorded beside the call and the projection of that same call reads it back.
+ */
+const totalMatches = envelopeFact<number>("list_pages.total_matches");
+
 async function run(i: In, ctx: GalaxyContext): Promise<PageSummary[]> {
   const { data, error, response } = await ctx.client.GET("/api/pages", {
     params: {
@@ -45,7 +56,14 @@ async function run(i: In, ctx: GalaxyContext): Promise<PageSummary[]> {
     },
   });
   if (error || !data) throw classifyHttp(response.status, error);
-  return data as PageSummary[];
+  const pages = data as PageSummary[];
+  // Number(null) is 0, which would report an empty server rather than an absent
+  // header, so the missing case is checked before the parse. No header means the
+  // page is all we know about, which is the fallback the Python tool takes too.
+  const header = response.headers.get("total_matches");
+  const total = header === null ? Number.NaN : Number(header);
+  recordFact(ctx, totalMatches, Number.isInteger(total) ? total : pages.length);
+  return pages;
 }
 
 export const listPagesOp: Operation<typeof input, PageSummary[]> = {
@@ -58,12 +76,33 @@ export const listPagesOp: Operation<typeof input, PageSummary[]> = {
   input,
   requires: { galaxy: ">=26.1" },
   run,
-  project: (pages, i) => ({
-    message: `${pages.length} page(s)`,
-    // No total: the server reports it on a total_matches response header, which project()
-    // never sees. Returning limit/offset lets a caller page; a full count needs the header.
-    pagination: { offset: i.offset ?? 0, limit: i.limit ?? DEFAULT_LIMIT },
-  }),
+  project: (pages, i, facts) => {
+    const offset = i.offset ?? 0;
+    const limit = i.limit ?? DEFAULT_LIMIT;
+    const total = readFact(facts, totalMatches) ?? pages.length;
+    const hasNext = offset + pages.length < total;
+    const hasPrevious = offset > 0;
+    return {
+      message: `${pages.length} page(s)`,
+      count: pages.length,
+      // Built by hand rather than through paginationInfo, because the Python tool
+      // builds it by hand too: it advances by the limit asked for rather than by
+      // what came back, and it sends no helper text at all. Matching the envelope
+      // means matching that, oddities included -- see the report for the two the
+      // other server should probably lose.
+      pagination: {
+        total_items: total,
+        returned_items: pages.length,
+        limit,
+        offset,
+        has_next: hasNext,
+        has_previous: hasPrevious,
+        next_offset: hasNext ? offset + limit : null,
+        previous_offset: hasPrevious ? Math.max(0, offset - limit) : null,
+        helper_text: null,
+      },
+    };
+  },
 };
 
 register(listPagesOp as AnyOperation);

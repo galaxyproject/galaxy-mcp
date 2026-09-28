@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { fetchIwcWorkflows, enrichWorkflowResult, type EnrichedIwcWorkflow } from "../iwc-manifest";
 import type { GalaxyContext } from "../context";
-import { paginate, shrinkPaged, validatePagination, type Paged } from "./pagination";
+import { paginate, shrinkPaged, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
 
@@ -45,8 +45,11 @@ export const getIwcWorkflowsOp: Operation<typeof input, Paged<EnrichedIwcWorkflo
     shrink: (out, keep) => shrinkPaged(out, keep, "workflows"),
   },
   project: (out) => ({
-    message: `${out.items.length} of ${out.pagination.total} IWC workflows`,
-    pagination: out.pagination,
+    data: out.items,
+    // The other server's sentence, word for word; the budget is measured on it too.
+    message: `Retrieved ${out.items.length} of ${out.pagination.total} workflows from IWC`,
+    count: out.items.length,
+    pagination: wirePagination(out.pagination),
   }),
 };
 

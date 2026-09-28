@@ -169,19 +169,82 @@ describe("get_history_contents", () => {
   });
 
   /**
-   * The Python tool validates nothing here either: limit 0 slices to nothing and a
-   * negative limit or offset is whatever Python's slice does with it. Refusing
-   * these would be a refusal only this surface makes.
+   * A window has to be a window, and the sentence saying so is the other server's.
+   *
+   * This listing used to take anything: limit 0 sliced to nothing and then reported
+   * more to come with a next offset equal to the one asked for, and offset -1 took
+   * the last item and described it with arithmetic that only holds from zero
+   * upwards -- five items with limit 10 and offset -1 claimed a next page at offset
+   * 0, back through what had just been handed over. The Python tool took them too;
+   * it validates now, and these are the strings its `_validate_pagination` raises,
+   * written out rather than imported so the two have to be kept the same by hand
+   * and a change to either is visible here.
+   *
+   * There is still no ceiling: neither server caps this tool.
    */
-  it("takes the windows Python takes, including the silly ones", async () => {
-    const client = serving(8);
-    expect((await getHistoryContents({ historyId: "h1", limit: 0 }, ctxWith(client))).items).toEqual([]);
-    expect((await getHistoryContents({ historyId: "h1", limit: -5 }, ctxWith(client))).items).toEqual([]);
-    const fromTheEnd = await getHistoryContents({ historyId: "h1", offset: -1 }, ctxWith(client));
-    expect(fromTheEnd.items).toHaveLength(1);
-    expect((await getHistoryContents({ historyId: "h1", limit: 5000 }, ctxWith(client))).items).toHaveLength(
-      live(8),
-    );
+  describe("a window that is not a window", () => {
+    it("refuses a limit below one, in the Python server's words", async () => {
+      const client = serving(8);
+      await expect(getHistoryContents({ historyId: "h1", limit: 0 }, ctxWith(client))).rejects.toThrow(
+        "limit must be at least 1 (got 0)",
+      );
+      await expect(getHistoryContents({ historyId: "h1", limit: -5 }, ctxWith(client))).rejects.toThrow(
+        "limit must be at least 1 (got -5)",
+      );
+    });
+
+    it("refuses a negative offset, in the Python server's words", async () => {
+      const client = serving(8);
+      await expect(
+        getHistoryContents({ historyId: "h1", limit: 10, offset: -1 }, ctxWith(client)),
+      ).rejects.toThrow("offset must be 0 or greater (got -1)");
+    });
+
+    // The third refusal in the rule, and the one the release notes left out: a window
+    // has to be a whole number of rows. On the wire nothing changed -- both servers
+    // declare these parameters as integers and refuse a fraction at the schema, the
+    // other one with pydantic's "Input should be a valid integer, got a number with a
+    // fractional part" -- so this is the library path, where it used to return a page.
+    // The two sentences are written out rather than imported, so a change to either
+    // has to be made here as well as in the notes that quote them.
+    it("refuses a limit that is not a whole number of rows", async () => {
+      const client = serving(8);
+      await expect(getHistoryContents({ historyId: "h1", limit: 1.5 }, ctxWith(client))).rejects.toThrow(
+        "limit must be a whole number (got 1.5)",
+      );
+    });
+
+    it("refuses a fractional offset with the sentence it refuses a negative one with", async () => {
+      const client = serving(8);
+      await expect(
+        getHistoryContents({ historyId: "h1", limit: 10, offset: 0.5 }, ctxWith(client)),
+      ).rejects.toThrow("offset must be 0 or greater (got 0.5)");
+    });
+
+    it("refuses before it asks Galaxy anything", async () => {
+      let asked = 0;
+      const counting = mockClient({
+        GET: () => {
+          asked += 1;
+          return { data: [], response: { status: 200 } };
+        },
+      });
+      await expect(getHistoryContents({ historyId: "h1", limit: 0 }, ctxWith(counting))).rejects.toThrow();
+      expect(asked).toBe(0);
+    });
+
+    it("still takes a limit no ceiling would allow, because neither server caps this one", async () => {
+      const client = serving(8);
+      expect((await getHistoryContents({ historyId: "h1", limit: 5000 }, ctxWith(client))).items).toHaveLength(
+        live(8),
+      );
+    });
+
+    it("takes the smallest window there is", async () => {
+      const out = await getHistoryContents({ historyId: "h1", limit: 1, offset: 0 }, ctxWith(serving(8)));
+      expect(out.items).toHaveLength(1);
+      expect(out.pagination).toMatchObject({ limit: 1, offset: 0, hasNext: true, nextOffset: 1 });
+    });
   });
 
   it("handles an empty history", async () => {
@@ -209,8 +272,8 @@ describe("get_history_contents", () => {
     const out = await getHistoryContents(input, ctxWith(serving(500)));
     const result = await runWithEnvelope(getHistoryContentsOp as never, input as never, ctxWith(serving(500)));
     expect(out.items).toHaveLength(100);
-    expect((result.data as { items: unknown[] }).items).toHaveLength(100);
-    expect(result.pagination?.trimmedForSize).toBeUndefined();
+    expect((result.data as { contents: unknown[] }).contents).toHaveLength(100);
+    expect(result.pagination?.helper_text).not.toContain("cut short");
     expect(mcpPayloadBytes(getHistoryContentsOp, out, input)).toBeGreaterThan(OUTPUT_BUDGET_BYTES);
   });
 });

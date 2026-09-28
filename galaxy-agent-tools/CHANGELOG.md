@@ -4,6 +4,207 @@
 `@galaxyproject/galaxy-mcp` share a version and are published together, so one
 entry covers all three; where something only affects one surface, it says which.
 
+## 0.3.0 (unreleased)
+
+Breaking on both surfaces. 0.2.0 has not been published, so one release will
+carry both entries.
+
+### The MCP and CLI envelopes are the Python server's (#140)
+
+A prompt written against the Python MCP server reads `data[0]` and
+`pagination.next_offset`. Against these packages it got an object with the page
+inside it under `items`, a pagination block in camelCase under different names,
+a second copy of that block travelling inside `data`, and no `count` at all. Two
+servers, the same tool names, two answers. The envelope is now that server's,
+key for key, on the MCP text block and on `galaxy-cli --format json` alike.
+
+- **Breaking:** a listing's `data` is the page itself, not `{ items, pagination }`.
+  `data[0]` is the first row. The exceptions are the tools where the Python
+  server returns an object too: `get_tool_panel` answers with `{ entries }` or
+  `{ section_id, section_name, tools }`, and `get_history_contents` with
+  `{ history_id, contents }` -- in each case without the pagination block that
+  used to travel inside `data` as well.
+- **Breaking:** the pagination keys are the Python server's names. Old to new:
+  `total` -> `total_items`, `returned` -> `returned_items`,
+  `hasNext` -> `has_next`, `hasPrevious` -> `has_previous`,
+  `nextOffset` -> `next_offset`, `previousOffset` -> `previous_offset`,
+  `helperText` -> `helper_text`. `limit` and `offset` keep their names. Every
+  field is always present, `null` where there is nothing to say, rather than
+  absent -- which is what the pydantic model on the other side serialises to.
+- **Breaking:** `trimmedForSize` is gone from the wire. The Python server has no
+  such field and folds the fact into the helper text, which this side already
+  matched word for word: a cut page's `helper_text` says "This page was cut short
+  to fit the output budget, not because there is nothing more." That sentence is
+  how a cut page is told apart, and in numbers it is `has_next` true while
+  `returned_items` is under the `limit` asked for. A short page on its own says
+  nothing -- an ordinary last page is short too, and reports `has_next: false` --
+  so comparing `returned_items` with `limit` and stopping there will call the end
+  of a walk a cut. `recommend_iwc_workflows` has no pagination block at all -- a
+  ranking has no offset to walk -- so its cut is reported at the end of `message`
+  instead.
+- **New:** `count`, the number of rows in this answer, for the tools the Python
+  server counts: every listing, plus `get_tool_run_examples` (test cases),
+  `get_tool_citations` (citations), `get_collection_details` (elements returned,
+  after truncation), `get_workflow_input_template` (input slots),
+  `get_invocations` (the list, not a single invocation), `list_pages`,
+  `list_page_revisions`, and `get_history_details` -- which counts everything in
+  the history, and now pays for the same second request the Python tool pays for
+  to get it.
+- `list_pages` reports a real `total_items`, taken from the `total_matches`
+  response header, where before it returned only the window it had asked for.
+  Its block is hand-built to match the Python tool exactly, which means it
+  advances by the `limit` asked for rather than by what came back, and carries no
+  helper text.
+- `get_invocations` no longer sends a pagination block carrying just the `limit`.
+  Galaxy windows that index itself and reports no total, so there was never a
+  window to describe; the Python tool sends none either.
+- `list_user_tools` sends "user tools" in its helper text where it sent "tools",
+  which is the noun the Python tool uses. The noun changes on the way out: a
+  direct `run()` caller still gets "tools" in `Paged.pagination.helperText`.
+- **Breaking for anyone importing them:** `runWithEnvelope` now returns
+  `GalaxyResult<unknown>` (a projection may emit something other than what `run`
+  returned), `GalaxyResult` has gained `count`, `Pagination` is the wire shape
+  above, and `Operation.project` returns the whole envelope body rather than just
+  a message and a window. It also takes an optional third argument, the
+  collector `runWithEnvelope` puts on the context for that one call, through
+  which an op hands its projection a fact its return value has no room for -- a
+  total off a response header, a count from a second request. Optional at both
+  ends: a context built by hand carries none and an existing projection compiles
+  unchanged.
+- **Breaking:** `get_history_contents` checks its window before it asks Galaxy
+  anything, where it used to check nothing at all. The whole rule, which is
+  `validatePagination`'s and which most of the other listings were already under
+  (the list is below): the `limit` must be a whole number ("limit must be a whole number (got
+  1.5)") and at least 1 ("limit must be at least 1 (got 0)"), and the `offset`
+  must be a whole number and 0 or greater, both refused with the one sentence
+  ("offset must be 0 or greater (got -1)", "offset must be 0 or greater (got
+  0.5)"). None of those windows had a page to describe: `limit: 0` reported more
+  to come with a next offset equal to the one asked for, so a walk sat where it
+  was for ever; a negative offset sliced from the end of the list and then
+  claimed a next page back inside what it had just returned; and a fractional one
+  is not a row count. There is still no ceiling on the limit, because neither
+  server caps this tool.
+
+  A fraction is where the two servers agree by different means, and it is worth
+  knowing which: `_validate_pagination` over there never sees one, because the
+  tool is typed `int` and pydantic refuses `1.5` at the boundary with "Input
+  should be a valid integer, got a number with a fractional part". These surfaces
+  declare `z.number().int()` for the same parameters, so a fractional window
+  never reached the operation from the MCP or CLI wire either -- what is new is
+  the library path, where `getHistoryContents({ historyId, limit: 1.5 })` used to
+  return a page and now throws. Both sides refuse the same windows; only the
+  sentence and the shape of the refusal differ, which is the failure envelope
+  named at the end of this entry.
+
+  Not every listing is under that rule, and the earlier claim that they all were
+  was too broad. Ten check the window themselves, the same ten on both servers:
+  `get_history_contents`, `get_iwc_workflows`, `get_tool_panel`,
+  `list_history_ids`, `list_user_tools`, `list_workflows`,
+  `recommend_iwc_workflows` (a limit and no offset -- a ranking has no window to
+  walk), `search_iwc_workflows`, `search_tools_by_keywords` and
+  `search_tools_by_name`. `list_pages` hands its `limit` and `offset` to Galaxy
+  instead of slicing a page itself, so the window is Galaxy's to judge, and
+  `get_invocations` likewise passes its limit along and takes no offset at all.
+  And `get_histories` still validates nothing on either side: `limit: null` there
+  means "every history" rather than a page size, so the floor is not its rule,
+  and on that no-limit branch a negative offset is read differently by each
+  server -- a divergence older than this entry, left alone deliberately rather
+  than settled by a rule nobody has chosen yet.
+- **Unchanged, with four exceptions:** every operation's `run()` result,
+  `Paged<T>` and its camelCase `PaginationInfo`. A TypeScript caller importing an
+  op directly, and code mode with it, sees exactly what it saw before -- the same
+  wire-versus-library split as the parameter-name change above -- except for the
+  four places where the library was not doing what the Python server does and so
+  had to move with it:
+  - `getHistoryContents` throws for the windows above instead of returning a page.
+  - `recommendIwcWorkflows` tokenises intents and readmes by Unicode word
+    boundaries, as `re` does and as JavaScript's `\b` does not. An intent of
+    "café" has no searchable term in it rather than the term `caf`, a readme
+    saying "protéomique" no longer indexes `prot`, and a ranking over text that is
+    not plain ASCII can come back in a different order or not at all. Plain ASCII
+    text, which is nearly all of the IWC manifest, ranks exactly as before.
+  - `searchToolsByName`, `searchToolsByKeywords` and `searchIwcWorkflows` fold
+    case with the Python server's `str.lower()` rather than `toLowerCase`, both
+    the mapping and the final-sigma rule (below). A query of a capital letter
+    Unicode gave a case mapping after that server's edition no longer matches a
+    tool named with the small one -- the other server never made that match --
+    and a capital sigma is final or not according to which characters that
+    server calls cased, so a tool named U+1C8A followed by U+03A3 lowercases to
+    an ordinary sigma and a query of an ordinary sigma finds it.
+  - `cleanReadmeSummary` is `_clean_readme_summary`'s output now, which moves
+    `readme_summary` on the four operations that enrich a manifest entry
+    (`get_iwc_workflows`, `get_iwc_workflow_details`, `recommend_iwc_workflows`,
+    `search_iwc_workflows`) and the summary line of a workflow guide. Whitespace
+    is Python's set -- a leading byte order mark no longer hides a markdown
+    heading, a next-line character now does -- and the 300-character cut is
+    measured and taken in code points, so a summary carrying an emoji keeps it
+    whole rather than ending in half of one.
+- The `message` of the nine listings the output budget can cut --
+  `get_iwc_workflows`, `get_tool_panel`, `list_history_ids`, `list_user_tools`,
+  `list_workflows`, `recommend_iwc_workflows`, `search_iwc_workflows`,
+  `search_tools_by_keywords`, `search_tools_by_name` -- is now the Python
+  server's sentence word for word. That is not cosmetic: the budget is measured
+  on the whole envelope, `message` included, so prose of a different length cuts
+  the page at a different row. A page of two histories weighing exactly 50,000
+  bytes with one sentence and 50,011 with the other returned two rows on one
+  surface and one on the other. That includes a tool's early returns:
+  `recommend_iwc_workflows` says "No workflows in IWC manifest" when the IWC
+  manifest is empty and "No searchable terms in query" when the intent tokenises
+  to nothing, rather than reporting that nothing matched -- three different
+  reasons to get an empty ranking, and only one of them is the query being too
+  broad. `list_history_ids` says "No histories found" for an account with none.
+- **The Unicode data is the Python server's, by table rather than by rule.** A
+  word boundary, the whitespace a summary is split on and a lowercased needle are
+  all decided by Unicode data, and the two runtimes read different editions of it
+  -- Node 22 is on 17.0, CPython 3.12 reports 15.0.0, and 9,661 code points are
+  word characters to the first and not to the second. Spelling `\w` out as
+  `[\p{L}\p{N}_]` therefore still put a word boundary in a different place on
+  each side: an intent of "rnaseq" followed by one of those letters was five
+  ranked workflows on one server and "No searchable terms in query" on the other.
+  So the tokeniser and the text helpers read a table instead, generated from the
+  contract interpreter's own answer for every code point in the space
+  (`mcp-server-galaxy-py/tests/testdata/python-unicode-15.0.0.json`, written by
+  `uv run python -m tests.python_unicode`) and copied into
+  `packages/galaxy-ops/src/python-unicode-data.ts`, with a test comparing the two
+  copies row for row. Whitespace needed no new table: `isPySpace` was already a
+  written-down copy of that interpreter's 29 code points and still matches it
+  exactly, and it is now compared against the file too. Lowercasing takes two
+  tables and a rule, because `str.lower()` is two things: a mapping, shipped
+  whole (1,433 code points, U+0130 to two of them), and one context-sensitive
+  case -- a capital sigma is a FINAL sigma when a cased character stands behind
+  it and none in front, with only case-ignorable characters in between. Which
+  characters those are is Unicode data again, so both sets are read off the
+  contract interpreter (4,259 cased code points in 150 ranges, 2,707
+  case-ignorable in 437) and the rule is applied over them. Nothing in
+  `pyLower` calls `toLowerCase` or a Unicode property class any more: a list of
+  exceptions only covers the code points whose own lowercase differs, and in a
+  name ending U+1C8A followed by a capital sigma neither character's own
+  lowercase differs at all -- the name still ends in a final sigma under this
+  runtime's tables and an ordinary one under that server's, which is one search
+  result against none. The tables are held
+  to the interpreter at both ends: it checks that the rule over them reproduces
+  its `lower()` for every code point in the space in four contexts each, and
+  the checked-in sample of its own output
+  (`python-lower-probes-15.0.0.json`, 6,392 strings) is what this side's copy
+  is compared against. Moving to an interpreter with newer tables is a
+  deliberate regeneration and a note here, not a silent change of answer.
+- **Not aligned yet, and not claimed to be:** the `message` text of every other
+  tool, which the two servers still word differently, and the failure envelope --
+  Python raises and FastMCP turns that into an MCP error, while these surfaces
+  answer with `{ success: false, message, errorKind }`. Both are named as the
+  next result-shape rows rather than quietly left out.
+
+Backed by golden fixtures rather than by reading both sides: the Python suite
+generates what its tools emit for a set of calls, with the Galaxy replies they
+were answered with (`uv run python -m tests.envelope_fixtures`), and the MCP
+server and the CLI each replay all 68 of those cases against those replies and
+compare keys, `data`, `count` and `pagination` exactly, plus `message` for the
+nine listings above. Nothing is skipped on either surface, the pages the budget
+cut included -- which is also why `galaxy-cli` measures the budget against the
+compact line the other surfaces measure and prints indented afterwards, rather
+than measuring its own indentation and cutting a shorter page than MCP would
+for the same call.
+
 ## 0.2.0 (unreleased)
 
 Breaking, and the first release since the packages went up on npm. Everything in

@@ -36,10 +36,18 @@ const histories = await getHistories({ limit: 10 }, ctx);
 ```
 
 Each operation is a small function `(input, ctx) => Promise<data>` that returns
-typed data or throws a typed `GalaxyError`. For the surface-style envelope
-(`{ data, success, message, errorKind }`) used by the CLI and MCP server, wrap a
-registered op with `runWithEnvelope`; iterate `allOperations` to enumerate the
-full set.
+typed data or throws a typed `GalaxyError`. A listing returns `Paged<T>` --
+`{ items, pagination }`, camelCase -- which is the library shape and is not what
+goes over a wire.
+
+For the surface envelope used by the CLI and MCP server, wrap a registered op
+with `runWithEnvelope`; iterate `allOperations` to enumerate the full set. That
+envelope is the Python MCP server's, key for key:
+`{ data, success, message, count, pagination }`, where a listing's `data` is the
+bare page and `pagination` is spelled the way that server spells it
+(`total_items`, `returned_items`, `has_next`, `next_offset`, `helper_text`, and
+so on), always present and `null` where the tool has none. On a failure it is
+`{ data: undefined, success: false, message, errorKind }`.
 
 An operation may declare a minimum Galaxy version (`requires: { galaxy: ">=26.1" }`).
 That is checked before the operation runs -- through the direct call above as much as

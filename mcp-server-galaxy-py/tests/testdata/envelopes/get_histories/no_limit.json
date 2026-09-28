@@ -1,0 +1,26 @@
+{
+  "data": [
+    {
+      "id": "h0000",
+      "name": "History 0",
+      "state": "ok",
+      "update_time": "2026-01-01T00:00:00"
+    },
+    {
+      "id": "h0001",
+      "name": "History 1",
+      "state": "ok",
+      "update_time": "2026-01-02T00:00:00"
+    },
+    {
+      "id": "h0002",
+      "name": "History 2",
+      "state": "ok",
+      "update_time": "2026-01-03T00:00:00"
+    }
+  ],
+  "success": true,
+  "message": "Retrieved 3 histories",
+  "count": 3,
+  "pagination": null
+}

@@ -1,0 +1,771 @@
+{
+  "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
+  "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
+  "caseCount": 68,
+  "cases": [
+    {
+      "tool": "search_tools_by_name",
+      "case": "full_page",
+      "note": "a full page in the middle of the matches",
+      "input": {
+        "query": "matchable",
+        "limit": 10,
+        "offset": 10
+      },
+      "envelope": "search_tools_by_name/full_page.json",
+      "replies": "search_tools_by_name/full_page.galaxy.json"
+    },
+    {
+      "tool": "search_tools_by_name",
+      "case": "last_short_page",
+      "note": "the last page, shorter than the limit asked for",
+      "input": {
+        "query": "matchable",
+        "limit": 15,
+        "offset": 30
+      },
+      "envelope": "search_tools_by_name/last_short_page.json",
+      "replies": "search_tools_by_name/full_page.galaxy.json"
+    },
+    {
+      "tool": "search_tools_by_name",
+      "case": "empty",
+      "note": "nothing matched at all",
+      "input": {
+        "query": "nothing matches this",
+        "limit": 10,
+        "offset": 0
+      },
+      "envelope": "search_tools_by_name/empty.json",
+      "replies": "search_tools_by_name/full_page.galaxy.json"
+    },
+    {
+      "tool": "search_tools_by_name",
+      "case": "past_the_end",
+      "note": "an offset past the last match",
+      "input": {
+        "query": "matchable",
+        "limit": 10,
+        "offset": 400
+      },
+      "envelope": "search_tools_by_name/past_the_end.json",
+      "replies": "search_tools_by_name/full_page.galaxy.json"
+    },
+    {
+      "tool": "search_tools_by_name",
+      "case": "cut_by_the_budget",
+      "note": "a page cut short to fit the output budget, which the helper text has to say",
+      "input": {
+        "query": "matchable",
+        "limit": 100,
+        "offset": 0
+      },
+      "envelope": "search_tools_by_name/cut_by_the_budget.json",
+      "replies": "search_tools_by_name/cut_by_the_budget.galaxy.json"
+    },
+    {
+      "tool": "search_tools_by_name",
+      "case": "sigma_after_a_letter_assigned_after_unicode_15",
+      "note": "a query whose match depends on which characters count as cased",
+      "input": {
+        "query": "σ",
+        "limit": 10,
+        "offset": 0
+      },
+      "envelope": "search_tools_by_name/sigma_after_a_letter_assigned_after_unicode_15.json",
+      "replies": "search_tools_by_name/sigma_after_a_letter_assigned_after_unicode_15.galaxy.json"
+    },
+    {
+      "tool": "search_tools_by_keywords",
+      "case": "full_page",
+      "note": "a full page of keyword matches",
+      "input": {
+        "keywords": [
+          "section 0 tool"
+        ],
+        "limit": 10,
+        "offset": 0
+      },
+      "envelope": "search_tools_by_keywords/full_page.json",
+      "replies": "search_tools_by_keywords/full_page.galaxy.json"
+    },
+    {
+      "tool": "search_tools_by_keywords",
+      "case": "last_short_page",
+      "note": "the last page of keyword matches",
+      "input": {
+        "keywords": [
+          "section 0 tool"
+        ],
+        "limit": 20,
+        "offset": 20
+      },
+      "envelope": "search_tools_by_keywords/last_short_page.json",
+      "replies": "search_tools_by_keywords/full_page.galaxy.json"
+    },
+    {
+      "tool": "search_tools_by_keywords",
+      "case": "past_the_end",
+      "note": "an offset past the last keyword match",
+      "input": {
+        "keywords": [
+          "section 0 tool"
+        ],
+        "limit": 10,
+        "offset": 300
+      },
+      "envelope": "search_tools_by_keywords/past_the_end.json",
+      "replies": "search_tools_by_keywords/full_page.galaxy.json"
+    },
+    {
+      "tool": "get_tool_panel",
+      "case": "overview_full_page",
+      "note": "the sections themselves, one page of them",
+      "input": {
+        "limit": 5,
+        "offset": 0
+      },
+      "envelope": "get_tool_panel/overview_full_page.json",
+      "replies": "get_tool_panel/overview_full_page.galaxy.json"
+    },
+    {
+      "tool": "get_tool_panel",
+      "case": "overview_last_page",
+      "note": "the last page of sections",
+      "input": {
+        "limit": 5,
+        "offset": 10
+      },
+      "envelope": "get_tool_panel/overview_last_page.json",
+      "replies": "get_tool_panel/overview_full_page.galaxy.json"
+    },
+    {
+      "tool": "get_tool_panel",
+      "case": "overview_past_the_end",
+      "note": "an offset past the last section",
+      "input": {
+        "limit": 5,
+        "offset": 50
+      },
+      "envelope": "get_tool_panel/overview_past_the_end.json",
+      "replies": "get_tool_panel/overview_full_page.galaxy.json"
+    },
+    {
+      "tool": "get_tool_panel",
+      "case": "section_full_page",
+      "note": "one section's tools, which is a different data shape from the overview",
+      "input": {
+        "section_id": "section3",
+        "limit": 3,
+        "offset": 0
+      },
+      "envelope": "get_tool_panel/section_full_page.json",
+      "replies": "get_tool_panel/overview_full_page.galaxy.json"
+    },
+    {
+      "tool": "get_tool_panel",
+      "case": "section_cut_by_the_budget",
+      "note": "a section's tools cut short to fit the output budget",
+      "input": {
+        "section_id": "section0",
+        "limit": 500,
+        "offset": 0
+      },
+      "envelope": "get_tool_panel/section_cut_by_the_budget.json",
+      "replies": "get_tool_panel/section_cut_by_the_budget.galaxy.json"
+    },
+    {
+      "tool": "list_history_ids",
+      "case": "full_page",
+      "note": "a full page of history ids",
+      "input": {
+        "limit": 10,
+        "offset": 10
+      },
+      "envelope": "list_history_ids/full_page.json",
+      "replies": "list_history_ids/full_page.galaxy.json"
+    },
+    {
+      "tool": "list_history_ids",
+      "case": "last_short_page",
+      "note": "the last, short page of history ids",
+      "input": {
+        "limit": 15,
+        "offset": 30
+      },
+      "envelope": "list_history_ids/last_short_page.json",
+      "replies": "list_history_ids/full_page.galaxy.json"
+    },
+    {
+      "tool": "list_history_ids",
+      "case": "empty",
+      "note": "an account with no histories at all",
+      "input": {
+        "limit": 10,
+        "offset": 0
+      },
+      "envelope": "list_history_ids/empty.json",
+      "replies": "list_history_ids/empty.galaxy.json"
+    },
+    {
+      "tool": "list_history_ids",
+      "case": "past_the_end",
+      "note": "an offset past the last history",
+      "input": {
+        "limit": 10,
+        "offset": 400
+      },
+      "envelope": "list_history_ids/past_the_end.json",
+      "replies": "list_history_ids/full_page.galaxy.json"
+    },
+    {
+      "tool": "list_history_ids",
+      "case": "budget_boundary",
+      "note": "two histories whose full page lands within a few bytes of the output budget",
+      "input": {
+        "limit": 2,
+        "offset": 0
+      },
+      "envelope": "list_history_ids/budget_boundary.json",
+      "replies": "list_history_ids/budget_boundary.galaxy.json"
+    },
+    {
+      "tool": "get_histories",
+      "case": "limited_full_page",
+      "note": "a limit and an offset, so a pagination block comes back",
+      "input": {
+        "limit": 10,
+        "offset": 10
+      },
+      "envelope": "get_histories/limited_full_page.json",
+      "replies": "list_history_ids/full_page.galaxy.json"
+    },
+    {
+      "tool": "get_histories",
+      "case": "limited_last_page",
+      "note": "the last page under a limit",
+      "input": {
+        "limit": 15,
+        "offset": 30
+      },
+      "envelope": "get_histories/limited_last_page.json",
+      "replies": "list_history_ids/full_page.galaxy.json"
+    },
+    {
+      "tool": "get_histories",
+      "case": "limited_past_the_end",
+      "note": "an offset past the last history, under a limit",
+      "input": {
+        "limit": 10,
+        "offset": 400
+      },
+      "envelope": "get_histories/limited_past_the_end.json",
+      "replies": "list_history_ids/full_page.galaxy.json"
+    },
+    {
+      "tool": "get_histories",
+      "case": "no_limit",
+      "note": "no limit asked for, which is the branch with no pagination block at all",
+      "input": {},
+      "envelope": "get_histories/no_limit.json",
+      "replies": "get_histories/no_limit.galaxy.json"
+    },
+    {
+      "tool": "get_histories",
+      "case": "empty",
+      "note": "an account with no histories, under a limit",
+      "input": {
+        "limit": 10,
+        "offset": 0
+      },
+      "envelope": "get_histories/empty.json",
+      "replies": "list_history_ids/empty.galaxy.json"
+    },
+    {
+      "tool": "get_histories",
+      "case": "no_limit_with_offset",
+      "note": "an offset and no limit, which skips without describing a window",
+      "input": {
+        "offset": 1
+      },
+      "envelope": "get_histories/no_limit_with_offset.json",
+      "replies": "get_histories/no_limit_with_offset.galaxy.json"
+    },
+    {
+      "tool": "get_histories",
+      "case": "name_filter_first_page",
+      "note": "page one of a name filter whose only match is not in the first window",
+      "input": {
+        "limit": 1,
+        "offset": 0,
+        "name": "B"
+      },
+      "envelope": "get_histories/name_filter_first_page.json",
+      "replies": "get_histories/no_limit_with_offset.galaxy.json"
+    },
+    {
+      "tool": "get_histories",
+      "case": "name_filter_past_the_end",
+      "note": "the page after the only match, which still totals one",
+      "input": {
+        "limit": 1,
+        "offset": 1,
+        "name": "B"
+      },
+      "envelope": "get_histories/name_filter_past_the_end.json",
+      "replies": "get_histories/no_limit_with_offset.galaxy.json"
+    },
+    {
+      "tool": "get_histories",
+      "case": "zero_limit",
+      "note": "limit=0, which bioblend reads as no window at all: one page holding everything",
+      "input": {
+        "limit": 0,
+        "offset": 0
+      },
+      "envelope": "get_histories/zero_limit.json",
+      "replies": "get_histories/zero_limit.galaxy.json"
+    },
+    {
+      "tool": "get_history_contents",
+      "case": "full_page",
+      "note": "a page of contents, wrapped in this tool's own data shape",
+      "input": {
+        "history_id": "h0000",
+        "limit": 10,
+        "offset": 10
+      },
+      "envelope": "get_history_contents/full_page.json",
+      "replies": "get_history_contents/full_page.galaxy.json"
+    },
+    {
+      "tool": "get_history_contents",
+      "case": "last_short_page",
+      "note": "the last, short page of contents",
+      "input": {
+        "history_id": "h0000",
+        "limit": 10,
+        "offset": 20
+      },
+      "envelope": "get_history_contents/last_short_page.json",
+      "replies": "get_history_contents/full_page.galaxy.json"
+    },
+    {
+      "tool": "get_history_contents",
+      "case": "empty",
+      "note": "an empty history",
+      "input": {
+        "history_id": "h0000",
+        "limit": 10,
+        "offset": 0
+      },
+      "envelope": "get_history_contents/empty.json",
+      "replies": "get_history_contents/empty.galaxy.json"
+    },
+    {
+      "tool": "get_history_contents",
+      "case": "past_the_end",
+      "note": "an offset past the last item",
+      "input": {
+        "history_id": "h0000",
+        "limit": 10,
+        "offset": 400
+      },
+      "envelope": "get_history_contents/past_the_end.json",
+      "replies": "get_history_contents/full_page.galaxy.json"
+    },
+    {
+      "tool": "list_workflows",
+      "case": "full_page",
+      "note": "a full page of workflows",
+      "input": {
+        "limit": 10,
+        "offset": 10
+      },
+      "envelope": "list_workflows/full_page.json",
+      "replies": "list_workflows/full_page.galaxy.json"
+    },
+    {
+      "tool": "list_workflows",
+      "case": "last_short_page",
+      "note": "the last, short page of workflows",
+      "input": {
+        "limit": 20,
+        "offset": 20
+      },
+      "envelope": "list_workflows/last_short_page.json",
+      "replies": "list_workflows/full_page.galaxy.json"
+    },
+    {
+      "tool": "list_workflows",
+      "case": "empty",
+      "note": "no workflows at all",
+      "input": {
+        "limit": 10,
+        "offset": 0
+      },
+      "envelope": "list_workflows/empty.json",
+      "replies": "list_workflows/empty.galaxy.json"
+    },
+    {
+      "tool": "list_workflows",
+      "case": "past_the_end",
+      "note": "an offset past the last workflow",
+      "input": {
+        "limit": 10,
+        "offset": 400
+      },
+      "envelope": "list_workflows/past_the_end.json",
+      "replies": "list_workflows/full_page.galaxy.json"
+    },
+    {
+      "tool": "list_user_tools",
+      "case": "full_page",
+      "note": "a full page of user-defined tools",
+      "input": {
+        "limit": 5,
+        "offset": 5
+      },
+      "envelope": "list_user_tools/full_page.json",
+      "replies": "list_user_tools/full_page.galaxy.json"
+    },
+    {
+      "tool": "list_user_tools",
+      "case": "last_short_page",
+      "note": "the last, short page of user-defined tools",
+      "input": {
+        "limit": 15,
+        "offset": 15
+      },
+      "envelope": "list_user_tools/last_short_page.json",
+      "replies": "list_user_tools/full_page.galaxy.json"
+    },
+    {
+      "tool": "list_user_tools",
+      "case": "empty",
+      "note": "no user-defined tools",
+      "input": {
+        "limit": 5,
+        "offset": 0
+      },
+      "envelope": "list_user_tools/empty.json",
+      "replies": "list_user_tools/empty.galaxy.json"
+    },
+    {
+      "tool": "list_user_tools",
+      "case": "past_the_end",
+      "note": "an offset past the last user-defined tool",
+      "input": {
+        "limit": 5,
+        "offset": 400
+      },
+      "envelope": "list_user_tools/past_the_end.json",
+      "replies": "list_user_tools/full_page.galaxy.json"
+    },
+    {
+      "tool": "get_iwc_workflows",
+      "case": "full_page",
+      "note": "a page of IWC summaries",
+      "input": {
+        "limit": 10,
+        "offset": 10
+      },
+      "envelope": "get_iwc_workflows/full_page.json",
+      "replies": "get_iwc_workflows/full_page.galaxy.json"
+    },
+    {
+      "tool": "get_iwc_workflows",
+      "case": "last_short_page",
+      "note": "the last, short page of IWC summaries",
+      "input": {
+        "limit": 10,
+        "offset": 20
+      },
+      "envelope": "get_iwc_workflows/last_short_page.json",
+      "replies": "get_iwc_workflows/full_page.galaxy.json"
+    },
+    {
+      "tool": "get_iwc_workflows",
+      "case": "empty",
+      "note": "an empty IWC manifest",
+      "input": {
+        "limit": 10,
+        "offset": 0
+      },
+      "envelope": "get_iwc_workflows/empty.json",
+      "replies": "get_iwc_workflows/empty.galaxy.json"
+    },
+    {
+      "tool": "get_iwc_workflows",
+      "case": "past_the_end",
+      "note": "an offset past the last IWC workflow",
+      "input": {
+        "limit": 10,
+        "offset": 400
+      },
+      "envelope": "get_iwc_workflows/past_the_end.json",
+      "replies": "get_iwc_workflows/full_page.galaxy.json"
+    },
+    {
+      "tool": "search_iwc_workflows",
+      "case": "full_page",
+      "note": "a page of IWC search matches",
+      "input": {
+        "query": "rnaseq",
+        "limit": 10,
+        "offset": 0
+      },
+      "envelope": "search_iwc_workflows/full_page.json",
+      "replies": "get_iwc_workflows/full_page.galaxy.json"
+    },
+    {
+      "tool": "search_iwc_workflows",
+      "case": "last_short_page",
+      "note": "the last, short page of IWC search matches",
+      "input": {
+        "query": "rnaseq",
+        "limit": 10,
+        "offset": 20
+      },
+      "envelope": "search_iwc_workflows/last_short_page.json",
+      "replies": "get_iwc_workflows/full_page.galaxy.json"
+    },
+    {
+      "tool": "search_iwc_workflows",
+      "case": "empty",
+      "note": "an IWC query nothing matches",
+      "input": {
+        "query": "nothing matches this",
+        "limit": 10,
+        "offset": 0
+      },
+      "envelope": "search_iwc_workflows/empty.json",
+      "replies": "get_iwc_workflows/full_page.galaxy.json"
+    },
+    {
+      "tool": "search_iwc_workflows",
+      "case": "past_the_end",
+      "note": "an offset past the last IWC match",
+      "input": {
+        "query": "rnaseq",
+        "limit": 10,
+        "offset": 400
+      },
+      "envelope": "search_iwc_workflows/past_the_end.json",
+      "replies": "get_iwc_workflows/full_page.galaxy.json"
+    },
+    {
+      "tool": "recommend_iwc_workflows",
+      "case": "ranked",
+      "note": "a ranking, which carries no pagination block at all",
+      "input": {
+        "intent": "rnaseq quality control",
+        "limit": 5
+      },
+      "envelope": "recommend_iwc_workflows/ranked.json",
+      "replies": "recommend_iwc_workflows/ranked.galaxy.json"
+    },
+    {
+      "tool": "recommend_iwc_workflows",
+      "case": "cut_by_the_budget",
+      "note": "a ranking cut to fit the output budget, which this tool explains in the message",
+      "input": {
+        "intent": "rnaseq quality control",
+        "limit": 25
+      },
+      "envelope": "recommend_iwc_workflows/cut_by_the_budget.json",
+      "replies": "recommend_iwc_workflows/cut_by_the_budget.galaxy.json"
+    },
+    {
+      "tool": "recommend_iwc_workflows",
+      "case": "no_terms_match",
+      "note": "an intent nothing scores against",
+      "input": {
+        "intent": "zzzz",
+        "limit": 5
+      },
+      "envelope": "recommend_iwc_workflows/no_terms_match.json",
+      "replies": "recommend_iwc_workflows/ranked.galaxy.json"
+    },
+    {
+      "tool": "recommend_iwc_workflows",
+      "case": "empty_manifest",
+      "note": "an IWC manifest with nothing in it, which is not the same as nothing matching",
+      "input": {
+        "intent": "rnaseq quality control",
+        "limit": 5
+      },
+      "envelope": "recommend_iwc_workflows/empty_manifest.json",
+      "replies": "get_iwc_workflows/empty.galaxy.json"
+    },
+    {
+      "tool": "recommend_iwc_workflows",
+      "case": "no_searchable_terms",
+      "note": "an intent that tokenises to nothing, over a manifest that is not empty",
+      "input": {
+        "intent": "",
+        "limit": 5
+      },
+      "envelope": "recommend_iwc_workflows/no_searchable_terms.json",
+      "replies": "recommend_iwc_workflows/ranked.galaxy.json"
+    },
+    {
+      "tool": "recommend_iwc_workflows",
+      "case": "only_stop_words",
+      "note": "an intent that is nothing but the words the tokeniser drops",
+      "input": {
+        "intent": "the and for with",
+        "limit": 5
+      },
+      "envelope": "recommend_iwc_workflows/only_stop_words.json",
+      "replies": "recommend_iwc_workflows/ranked.galaxy.json"
+    },
+    {
+      "tool": "recommend_iwc_workflows",
+      "case": "accented_intent",
+      "note": "an intent of one accented word, which tokenises to nothing at all",
+      "input": {
+        "intent": "café",
+        "limit": 5
+      },
+      "envelope": "recommend_iwc_workflows/accented_intent.json",
+      "replies": "recommend_iwc_workflows/ranked.galaxy.json"
+    },
+    {
+      "tool": "recommend_iwc_workflows",
+      "case": "letter_added_after_unicode_15",
+      "note": "an intent ending in a letter this interpreter has not been told about",
+      "input": {
+        "intent": "rnaseqꟋ",
+        "limit": 5
+      },
+      "envelope": "recommend_iwc_workflows/letter_added_after_unicode_15.json",
+      "replies": "recommend_iwc_workflows/ranked.galaxy.json"
+    },
+    {
+      "tool": "get_invocations",
+      "case": "list",
+      "note": "a list of invocations: a count, and no pagination block",
+      "input": {
+        "limit": 5
+      },
+      "envelope": "get_invocations/list.json",
+      "replies": "get_invocations/list.galaxy.json"
+    },
+    {
+      "tool": "get_invocations",
+      "case": "single",
+      "note": "one invocation by id: no count and no pagination",
+      "input": {
+        "invocation_id": "inv0000"
+      },
+      "envelope": "get_invocations/single.json",
+      "replies": "get_invocations/single.galaxy.json"
+    },
+    {
+      "tool": "get_invocations",
+      "case": "empty",
+      "note": "no invocations",
+      "input": {
+        "limit": 5
+      },
+      "envelope": "get_invocations/empty.json",
+      "replies": "get_invocations/empty.galaxy.json"
+    },
+    {
+      "tool": "list_pages",
+      "case": "full_page",
+      "note": "a page of pages, whose total comes from the total_matches header",
+      "input": {
+        "limit": 5,
+        "offset": 0
+      },
+      "envelope": "list_pages/full_page.json",
+      "replies": "list_pages/full_page.galaxy.json"
+    },
+    {
+      "tool": "list_pages",
+      "case": "last_page",
+      "note": "the last page of pages",
+      "input": {
+        "limit": 5,
+        "offset": 10
+      },
+      "envelope": "list_pages/last_page.json",
+      "replies": "list_pages/last_page.galaxy.json"
+    },
+    {
+      "tool": "list_pages",
+      "case": "empty",
+      "note": "no pages, and a total_matches of zero",
+      "input": {
+        "limit": 5,
+        "offset": 0
+      },
+      "envelope": "list_pages/empty.json",
+      "replies": "list_pages/empty.galaxy.json"
+    },
+    {
+      "tool": "list_page_revisions",
+      "case": "some",
+      "note": "a page's revisions: a count, and no pagination block",
+      "input": {
+        "page_id": "p0000"
+      },
+      "envelope": "list_page_revisions/some.json",
+      "replies": "list_page_revisions/some.galaxy.json"
+    },
+    {
+      "tool": "list_page_revisions",
+      "case": "empty",
+      "note": "a page with no revisions recorded",
+      "input": {
+        "page_id": "p0000"
+      },
+      "envelope": "list_page_revisions/empty.json",
+      "replies": "list_page_revisions/empty.galaxy.json"
+    },
+    {
+      "tool": "get_tool_run_examples",
+      "case": "with_version",
+      "note": "test cases counted, with the version the caller asked for echoed back",
+      "input": {
+        "tool_id": "cat1",
+        "tool_version": "1.0.0"
+      },
+      "envelope": "get_tool_run_examples/with_version.json",
+      "replies": "get_tool_run_examples/with_version.galaxy.json"
+    },
+    {
+      "tool": "get_tool_run_examples",
+      "case": "none",
+      "note": "a tool with no test cases",
+      "input": {
+        "tool_id": "cat1",
+        "tool_version": "1.0.0"
+      },
+      "envelope": "get_tool_run_examples/none.json",
+      "replies": "get_tool_run_examples/none.galaxy.json"
+    },
+    {
+      "tool": "get_tool_citations",
+      "case": "some",
+      "note": "citations counted",
+      "input": {
+        "tool_id": "cat1"
+      },
+      "envelope": "get_tool_citations/some.json",
+      "replies": "get_tool_citations/some.galaxy.json"
+    },
+    {
+      "tool": "get_tool_citations",
+      "case": "none",
+      "note": "a tool that cites nothing",
+      "input": {
+        "tool_id": "cat1"
+      },
+      "envelope": "get_tool_citations/none.json",
+      "replies": "get_tool_citations/none.galaxy.json"
+    }
+  ]
+}

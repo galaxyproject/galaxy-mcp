@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
-import { paginate, shrinkPaged, validatePagination, type Paged } from "./pagination";
+import { paginate, shrinkPaged, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
 
@@ -63,8 +63,11 @@ export const listWorkflowsOp: Operation<typeof input, Paged<WorkflowItem>> = {
     shrink: (out, keep) => shrinkPaged(out, keep, "workflows"),
   },
   project: (out) => ({
-    message: `${out.items.length} of ${out.pagination.total} workflow(s)`,
-    pagination: out.pagination,
+    data: out.items,
+    // The other server's sentence, word for word; the budget is measured on it too.
+    message: `Found ${out.pagination.total} workflows, returning ${out.items.length}`,
+    count: out.items.length,
+    pagination: wirePagination(out.pagination),
   }),
 };
 

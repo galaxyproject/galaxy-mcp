@@ -1,0 +1,30 @@
+{
+  "data": {
+    "tool_id": "cat1",
+    "requested_version": "1.0.0",
+    "test_cases": [
+      {
+        "test_index": 0,
+        "inputs": {
+          "input1": "1.bed"
+        },
+        "outputs": {
+          "out_file1": "2.bed"
+        }
+      },
+      {
+        "test_index": 1,
+        "inputs": {
+          "input1": "3.bed"
+        },
+        "outputs": {
+          "out_file1": "4.bed"
+        }
+      }
+    ]
+  },
+  "success": true,
+  "message": "Retrieved 2 test cases for tool 'cat1'",
+  "count": 2,
+  "pagination": null
+}

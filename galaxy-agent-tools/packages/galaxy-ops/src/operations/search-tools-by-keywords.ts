@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { legacyGet } from "../legacy";
-import { paginate, shrinkPaged, validatePagination, type Paged } from "./pagination";
+import { pyLower } from "../python-str";
+import { paginate, shrinkPaged, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
 
@@ -88,11 +89,13 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<ToolKeywordMatch>> 
 
   const allTools = flattenTools(panel).filter((t) => t.id);
 
-  const needles = i.keywords.map((k) => k.toLowerCase());
+  // The other server's `lower()`, mapping and final-sigma rule alike, which this runtime's
+  // answers differently because it reads a newer edition of Unicode.
+  const needles = i.keywords.map((k) => pyLower(k));
 
   const matchesImmediately = (t: PanelNode) => {
-    const name = (t.name ?? "").toLowerCase();
-    const desc = (t.description ?? "").toLowerCase();
+    const name = pyLower(t.name ?? "");
+    const desc = pyLower(t.description ?? "");
     return needles.some((kw) => name.includes(kw) || desc.includes(kw));
   };
 
@@ -124,10 +127,10 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<ToolKeywordMatch>> 
         const matched = inputs.some((inp) => {
           const ext = inp.extensions;
           if (Array.isArray(ext)) {
-            return ext.some((e) => typeof e === "string" && needles.some((kw) => e.toLowerCase().includes(kw)));
+            return ext.some((e) => typeof e === "string" && needles.some((kw) => pyLower(e).includes(kw)));
           }
           if (typeof ext === "string" && ext) {
-            return needles.some((kw) => ext.toLowerCase().includes(kw));
+            return needles.some((kw) => pyLower(ext).includes(kw));
           }
           return false;
         });
@@ -164,9 +167,14 @@ export const searchToolsByKeywordsOp: Operation<typeof input, Paged<ToolKeywordM
     rows: (out) => out.items.length,
     shrink: (out, keep) => shrinkPaged(out, keep, "tools"),
   },
-  project: (out) => ({
-    message: `${out.items.length} of ${out.pagination.total} tool(s) matching keywords`,
-    pagination: out.pagination,
+  project: (out, i) => ({
+    data: out.items,
+    // The other server's sentence, word for word; the budget is measured on it too.
+    message:
+      `Found ${out.pagination.total} tools matching keywords: ` +
+      `${i.keywords.join(", ")}, returning ${out.items.length}`,
+    count: out.items.length,
+    pagination: wirePagination(out.pagination),
   }),
 };
 

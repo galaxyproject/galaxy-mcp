@@ -1,0 +1,58 @@
+{
+  "data": [
+    {
+      "id": "p0000",
+      "title": "Page 0",
+      "slug": "page-0",
+      "history_id": "h0000",
+      "latest_revision_id": "r0000",
+      "revision_ids": [
+        "r0000"
+      ],
+      "model_class": "Page",
+      "username": "tester",
+      "email_hash": "00000000000000000000000000000000",
+      "author_deleted": false,
+      "deleted": false,
+      "importable": false,
+      "published": false,
+      "tags": [],
+      "create_time": "2026-01-01T00:00:00",
+      "update_time": "2026-01-02T00:00:00"
+    },
+    {
+      "id": "p0001",
+      "title": "Page 1",
+      "slug": "page-1",
+      "history_id": "h0000",
+      "latest_revision_id": "r0001",
+      "revision_ids": [
+        "r0001"
+      ],
+      "model_class": "Page",
+      "username": "tester",
+      "email_hash": "00000000000000000000000000000000",
+      "author_deleted": false,
+      "deleted": false,
+      "importable": false,
+      "published": false,
+      "tags": [],
+      "create_time": "2026-01-01T00:00:00",
+      "update_time": "2026-01-02T00:00:00"
+    }
+  ],
+  "success": true,
+  "message": "Retrieved 2 pages",
+  "count": 2,
+  "pagination": {
+    "total_items": 12,
+    "returned_items": 2,
+    "limit": 5,
+    "offset": 10,
+    "has_next": false,
+    "has_previous": true,
+    "next_offset": null,
+    "previous_offset": 5,
+    "helper_text": null
+  }
+}

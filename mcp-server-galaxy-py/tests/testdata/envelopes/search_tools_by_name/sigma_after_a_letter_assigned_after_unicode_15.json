@@ -1,0 +1,23 @@
+{
+  "data": [
+    {
+      "id": "t",
+      "name": "ᲊΣ",
+      "description": ""
+    }
+  ],
+  "success": true,
+  "message": "Found 1 tools matching 'σ', returning 1",
+  "count": 1,
+  "pagination": {
+    "total_items": 1,
+    "returned_items": 1,
+    "limit": 10,
+    "offset": 0,
+    "has_next": false,
+    "has_previous": false,
+    "next_offset": null,
+    "previous_offset": null,
+    "helper_text": "Showing 1 of 1 tools (offset 0). This is the last page."
+  }
+}

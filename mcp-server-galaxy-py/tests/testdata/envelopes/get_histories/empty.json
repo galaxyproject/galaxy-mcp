@@ -1,0 +1,17 @@
+{
+  "data": [],
+  "success": true,
+  "message": "Retrieved 0 of 0 histories",
+  "count": 0,
+  "pagination": {
+    "total_items": 0,
+    "returned_items": 0,
+    "limit": 10,
+    "offset": 0,
+    "has_next": false,
+    "has_previous": false,
+    "next_offset": null,
+    "previous_offset": null,
+    "helper_text": "Showing 0 of 0 histories (offset 0). This is the last page."
+  }
+}

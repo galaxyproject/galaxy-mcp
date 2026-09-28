@@ -104,6 +104,68 @@ describe("get_histories", () => {
     expect((await getHistories({ limit: 5000 }, ctxWith(client))).items).toHaveLength(3);
   });
 
+  /**
+   * The filter runs before the window on both surfaces now.
+   *
+   * The other server used to hand bioblend a limit and a name in one call, and
+   * bioblend sends the window to Galaxy and filters what comes back -- so page one
+   * of name="B" over [A, B] filtered A's page and answered empty while claiming
+   * there was more, and the page after the only match counted two. These are that
+   * server's inputs, through this surface's envelope, so the two cannot drift apart
+   * again without one of them failing.
+   */
+  describe("a name filter over [A, B]", () => {
+    const ab = () => serving([{ id: "hA", name: "A" }, { id: "hB", name: "B" }]);
+
+    it("answers page one with the match, not with the page the match is not on", async () => {
+      const input = { limit: 1, offset: 0, name: "B" };
+      const result = await runWithEnvelope(getHistoriesOp as never, input as never, ctxWith(ab()));
+      expect((result.data as { id: string }[]).map((h) => h.id)).toEqual(["hB"]);
+      expect(result.count).toBe(1);
+      expect(result.pagination).toMatchObject({ total_items: 1, has_next: false, next_offset: null });
+    });
+
+    it("totals one match on the page after it, not one plus the offset", async () => {
+      const input = { limit: 1, offset: 1, name: "B" };
+      const result = await runWithEnvelope(getHistoriesOp as never, input as never, ctxWith(ab()));
+      expect(result.data).toEqual([]);
+      expect(result.pagination).toMatchObject({
+        total_items: 1,
+        returned_items: 0,
+        has_next: false,
+        has_previous: true,
+        previous_offset: 0,
+      });
+    });
+
+    it("reports limit=0 as the page it returned, which is everything", async () => {
+      const input = { limit: 0, offset: 0 };
+      const result = await runWithEnvelope(
+        getHistoriesOp as never,
+        input as never,
+        ctxWith(serving([{ id: "hA", name: "A" }])),
+      );
+      expect(result.data).toHaveLength(1);
+      expect(result.pagination).toMatchObject({ limit: 1, has_next: false, next_offset: null });
+    });
+
+    /**
+     * No limit is not no offset. The other server used to hand bioblend the offset
+     * on this branch and got the rest of the list back; when it started fetching
+     * unpaged so its name filter could run first, `[A, B]` with offset=1 began
+     * answering with both. This side always skipped, and pins it so neither can
+     * drop it again.
+     */
+    it("skips the histories before the offset even with no limit to describe", async () => {
+      const input = { offset: 1 };
+      const result = await runWithEnvelope(getHistoriesOp as never, input as never, ctxWith(ab()));
+      expect((result.data as { id: string }[]).map((h) => h.id)).toEqual(["hB"]);
+      expect(result.count).toBe(1);
+      // The branch with no window asked for still sends no block at all.
+      expect(result.pagination).toBeNull();
+    });
+  });
+
   it("handles a user with no histories", async () => {
     const out = await getHistories({}, ctxWith(serving([])));
     expect(out.items).toEqual([]);
@@ -127,8 +189,9 @@ describe("get_histories", () => {
     const input = { limit: 300, offset: 0 };
     const out = await getHistories(input, ctxWith(serving(rows)));
     const result = await runWithEnvelope(getHistoriesOp as never, input as never, ctxWith(serving(rows)));
-    expect((result.data as { items: unknown[] }).items).toHaveLength(300);
-    expect(result.pagination?.trimmedForSize).toBeUndefined();
+    expect(result.data as unknown[]).toHaveLength(300);
+    expect(result.count).toBe(300);
+    expect(result.pagination?.helper_text).not.toContain("cut short");
     expect(mcpPayloadBytes(getHistoriesOp, out, input)).toBeGreaterThan(OUTPUT_BUDGET_BYTES);
   });
 });
