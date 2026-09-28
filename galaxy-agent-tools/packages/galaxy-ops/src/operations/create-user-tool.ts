@@ -2,7 +2,7 @@ import type { GalaxyContext } from "../context";
 import { GalaxyConnectionError } from "../errors";
 import { jsonObject } from "../json-object";
 import { legacyPost } from "../legacy";
-import { pyGet, pyStr } from "../python-values";
+import { pyGet, pyStr, pyTypeName } from "../python-values";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
@@ -38,7 +38,8 @@ function validate(rep: Record<string, unknown>): void {
   }
   if (typeof rep["container"] !== "string") {
     throw new GalaxyConnectionError(
-      `container must be a string (e.g. 'python:3.12-slim'), got ${typeof rep["container"]}: ${JSON.stringify(rep["container"])}`,
+      `container must be a string (e.g. 'python:3.12-slim'), ` +
+        `got ${pyTypeName(rep["container"])}: ${pyStr(rep["container"])}`,
       400,
     );
   }

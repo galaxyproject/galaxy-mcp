@@ -3362,7 +3362,10 @@ def fail(
 
 def failure_cases(add: AddFailure) -> None:
     http_failure_cases(add)
+    more_http_failure_cases(add)
+    iwc_failure_cases(add)
     refusal_cases(add)
+    argument_refusal_cases(add)
 
 
 def http_failure_cases(add: AddFailure) -> None:
@@ -3490,6 +3493,228 @@ def http_failure_cases(add: AddFailure) -> None:
     )
 
 
+def more_http_failure_cases(add: AddFailure) -> None:
+    """The rest of the tools' refused requests, one shape each."""
+    add(
+        "search_tools_by_keywords",
+        "server_error",
+        "its own sentence over the panel fetch",
+        {"keywords": ["align"]},
+        [fail("/api/tools", 500, BROKEN)],
+    )
+    add(
+        "get_tool_input_template",
+        "not_found",
+        "the schema read that the template is built from",
+        {"tool_id": "nosuchtool"},
+        [fail("/api/tools/nosuchtool", 404, MISSING)],
+    )
+    add(
+        "get_tool_citations",
+        "not_found",
+        "the same record, read by another tool",
+        {"tool_id": "nosuchtool"},
+        [fail("/api/tools/nosuchtool", 404, MISSING)],
+    )
+    add(
+        "list_history_ids",
+        "server_error",
+        "its own sentence over the listing get_histories reads",
+        {},
+        [fail("/api/histories", 500, BROKEN)],
+    )
+    add(
+        "get_server_info",
+        "configuration_refused",
+        "the configuration is read first, so a server that answers the version still fails",
+        {},
+        [VERSION_ROUTE, fail("/api/configuration", 500, BROKEN)],
+    )
+    add(
+        "get_collection_details",
+        "not_found",
+        "the tool's own 404 sentence",
+        {"collection_id": "c0000404"},
+        [fail("/api/dataset_collections/c0000404", 404, MISSING)],
+    )
+    add(
+        "get_collection_details",
+        "permission_denied",
+        "and format_error's, for a status it has nothing of its own to say about",
+        {"collection_id": "c0000403"},
+        [fail("/api/dataset_collections/c0000403", 403, DENIED)],
+    )
+    add(
+        "create_history",
+        "refused_by_galaxy",
+        "the one tool with no try block, so bioblend's text is the whole sentence",
+        {"history_name": "nope"},
+        [fail("/api/histories", 400, DENIED, method="POST")],
+    )
+    add(
+        "run_tool",
+        "permission_denied",
+        "a status Galaxy refuses a run with that is not about the inputs",
+        {
+            "tool_id": "cat1",
+            "history_id": "h0001",
+            "inputs": {"input1": {"src": "hda", "id": "d1"}},
+        },
+        [fail("/api/tools", 403, DENIED, method="POST")],
+    )
+    add(
+        "get_workflow_input_template",
+        "server_error",
+        "the export the template falls back to, which is the only request that can fail here",
+        {"workflow_id": "w0000500"},
+        # The same export, spelled the two ways the two clients spell it: bioblend builds
+        # /api/workflows/download/<id> and the other side asks /api/workflows/<id>/download.
+        [
+            fail("/api/workflows/download/w0000500", 500, BROKEN),
+            fail("/api/workflows/w0000500/download", 500, BROKEN),
+        ],
+    )
+    add(
+        "invoke_workflow",
+        "refused_by_galaxy",
+        "every argument that decides where the run went is in the context",
+        {"workflow_id": "w0000400", "history_id": "h0001"},
+        [fail("/api/workflows/w0000400/invocations", 400, DENIED, method="POST")],
+    )
+    add(
+        "create_user_tool",
+        "refused_by_galaxy",
+        "the context names the id out of the representation, with dict.get",
+        {
+            "representation": {
+                "class": "GalaxyUserTool",
+                "id": "utool",
+                "version": "0.1.0",
+                "name": "A user tool",
+                "container": "python:3.12-slim",
+                "shell_command": "echo hi",
+            }
+        },
+        [fail("/api/unprivileged_tools", 400, DENIED, method="POST")],
+    )
+    add(
+        "list_pages",
+        "permission_denied",
+        "a raw GET whose text names the URL, query string and all",
+        {},
+        [fail("/api/pages", 403, DENIED)],
+    )
+    add(
+        "create_page",
+        "refused_by_galaxy",
+        "a write, so the sentence is the status and the body",
+        {"title": "A report", "slug": "a-report", "content": "# hi"},
+        [VERSION_ROUTE, fail("/api/pages", 400, DENIED, method="POST")],
+    )
+    add(
+        "update_page",
+        "not_found",
+        "a write to a page that is not there",
+        {"page_id": "p0000404", "title": "Renamed"},
+        [VERSION_ROUTE, fail("/api/pages/p0000404", 404, MISSING, method="PUT")],
+    )
+    add(
+        "list_page_revisions",
+        "not_found",
+        "the URL in the text carries the sort_desc this tool always sends",
+        {"page_id": "p0000404"},
+        [VERSION_ROUTE, fail("/api/pages/p0000404/revisions", 404, MISSING)],
+    )
+    add(
+        "get_page_revision",
+        "not_found",
+        "two ids in the context",
+        {"page_id": "p0001", "revision_id": "r0000404"},
+        [VERSION_ROUTE, fail("/api/pages/p0001/revisions/r0000404", 404, MISSING)],
+    )
+    add(
+        "revert_page_revision",
+        "not_found",
+        "a write, with the same two ids",
+        {"page_id": "p0001", "revision_id": "r0000404"},
+        [
+            VERSION_ROUTE,
+            fail("/api/pages/p0001/revisions/r0000404/revert", 404, MISSING, method="POST"),
+        ],
+    )
+    add(
+        "get_job_details",
+        "dataset_not_found",
+        "a 404 keeps the tool's own sentence, which does not claim which of the two it was",
+        {"dataset_id": "d0000404"},
+        [fail("/api/datasets/d0000404", 404, MISSING)],
+    )
+    add(
+        "get_job_details",
+        "no_job_made_this_dataset",
+        "a dataset that reads fine and names no job -- a refusal, not a failed request",
+        {"dataset_id": "d0001"},
+        [route("/api/datasets/d0001", {"id": "d0001", "name": "uploaded.txt", "state": "ok"})],
+    )
+    add(
+        "get_job_details",
+        "the_job_read_refused",
+        "the jobs API is asked through requests itself, so its failure reads differently",
+        {"dataset_id": "d0002"},
+        [
+            route(
+                "/api/datasets/d0002",
+                {"id": "d0002", "name": "out.txt", "state": "ok", "creating_job": "j0000500"},
+            ),
+            fail("/api/jobs/j0000500", 500, BROKEN),
+        ],
+    )
+
+
+def iwc_failure_cases(add: AddFailure) -> None:
+    """The four manifest tools, which reach past Galaxy to the IWC.
+
+    The manifest is fetched with requests and checked with raise_for_status, so all four
+    quote requests' own text -- and each wraps it in a sentence of its own.
+    """
+    manifest = absolute(IWC_MANIFEST_URL)
+    for tool, name, inp in (
+        ("get_iwc_workflows", "manifest_refused", {}),
+        ("search_iwc_workflows", "manifest_refused", {"query": "rna"}),
+        ("recommend_iwc_workflows", "manifest_refused", {"intent": "assemble a genome"}),
+        ("get_iwc_workflow_details", "manifest_refused", {"trs_id": "#workflow/x/y/1"}),
+        ("import_workflow_from_iwc", "manifest_refused", {"trs_id": "#workflow/x/y/1"}),
+    ):
+        add(tool, name, "the manifest itself refused", inp, [fail(manifest, 500, BROKEN)])
+    add(
+        "get_iwc_workflow_details",
+        "no_such_trs_id",
+        "a refusal raised inside the try, so the tool's own sentence wraps it too",
+        {"trs_id": "#workflow/nobody/has/this"},
+        [route(IWC_MANIFEST_URL, iwc_manifest(2))],
+    )
+    add(
+        "import_workflow_from_iwc",
+        "no_such_trs_id",
+        "the same refusal, worded by the tool that was asked",
+        {"trs_id": "#workflow/nobody/has/this"},
+        [route(IWC_MANIFEST_URL, iwc_manifest(2))],
+    )
+    add(
+        "import_workflow_from_iwc",
+        "refused_by_galaxy",
+        "the import itself refused, which is a bioblend write",
+        {"trs_id": "#workflow/github.com/iwc-workflows/wf0/main"},
+        # Registered under both spellings of the same create, as the success cases are:
+        # bioblend posts to /api/workflows/upload and the other side to /api/workflows.
+        [
+            route(IWC_MANIFEST_URL, iwc_manifest(2)),
+            fail("/api/workflows/upload", 400, DENIED, method="POST"),
+            fail("/api/workflows", 400, DENIED, method="POST"),
+        ],
+    )
+
+
 def refusal_cases(add: AddFailure) -> None:
     """What a tool says before it asks Galaxy anything, or instead of answering.
 
@@ -3550,6 +3775,56 @@ def refusal_cases(add: AddFailure) -> None:
                 {"id": "c0001", "name": "My collection", "collection_type": "list"},
             ),
         ],
+    )
+
+
+def argument_refusal_cases(add: AddFailure) -> None:
+    """Arguments this server refuses on its own terms, before it asks Galaxy anything."""
+    add(
+        "create_user_tool",
+        "representation_missing_a_field",
+        "the first of six required fields that is not there",
+        {"representation": {"class": "GalaxyUserTool", "id": "utool"}},
+        [],
+    )
+    add(
+        "create_user_tool",
+        "wrong_class",
+        "a representation of something else",
+        {
+            "representation": {
+                "class": "GalaxyTool",
+                "id": "utool",
+                "version": "0.1.0",
+                "name": "A user tool",
+                "container": "python:3.12-slim",
+                "shell_command": "echo hi",
+            }
+        },
+        [],
+    )
+    add(
+        "create_user_tool",
+        "container_is_not_a_string",
+        "the type is named the way Python names a type",
+        {
+            "representation": {
+                "class": "GalaxyUserTool",
+                "id": "utool",
+                "version": "0.1.0",
+                "name": "A user tool",
+                "container": 3,
+                "shell_command": "echo hi",
+            }
+        },
+        [],
+    )
+    add(
+        "recommend_biocontainer",
+        "package_entry_with_no_name",
+        "the entry is quoted with repr, so the sentence shows what arrived",
+        {"packages": ["=1.17"]},
+        [],
     )
 
 

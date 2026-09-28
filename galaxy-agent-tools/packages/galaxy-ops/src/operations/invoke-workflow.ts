@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
-import { GalaxyConnectionError, GalaxyValidationError } from "../errors";
+import { httpError, GalaxyValidationError } from "../errors";
 import { jsonObject } from "../json-object";
 import { legacyGet } from "../legacy";
 import { validateInputs, buildWorkflowInputTemplate, type DatatypesMapping } from "../workflow-inputs";
@@ -271,13 +271,10 @@ async function run(i: In, ctx: GalaxyContext): Promise<InvokeWorkflowResult> {
     },
   );
 
-  if (error || !data) {
-    const msg =
-      error && typeof error === "object" && "err_msg" in error
-        ? String((error as { err_msg: unknown }).err_msg)
-        : `HTTP ${response.status}`;
-    throw new GalaxyConnectionError(`Failed to invoke workflow: ${msg}`, response.status);
-  }
+  // Worded by the op's failure contract, like every other refused request: server.py's
+  // invoke_workflow catches this one and hands it to format_error with the four arguments
+  // that decide where the run went.
+  if (error || !data) throw httpError(response, error);
 
   // One invocation, or the list a batch expanded to, as it arrived.
   return data as InvokeWorkflowResult;

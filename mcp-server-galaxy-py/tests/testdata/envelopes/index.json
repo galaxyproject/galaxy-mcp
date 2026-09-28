@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 173,
-  "failureCaseCount": 21,
+  "caseCount": 206,
+  "failureCaseCount": 54,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -2056,6 +2056,339 @@
       "replies": "get_invocations/error_body_under_a_200.galaxy.json"
     },
     {
+      "tool": "search_tools_by_keywords",
+      "case": "server_error",
+      "note": "its own sentence over the panel fetch",
+      "outcome": "failure",
+      "input": {
+        "keywords": [
+          "align"
+        ]
+      },
+      "envelope": "search_tools_by_keywords/server_error.json",
+      "replies": "search_tools_by_keywords/server_error.galaxy.json"
+    },
+    {
+      "tool": "get_tool_input_template",
+      "case": "not_found",
+      "note": "the schema read that the template is built from",
+      "outcome": "failure",
+      "input": {
+        "tool_id": "nosuchtool"
+      },
+      "envelope": "get_tool_input_template/not_found.json",
+      "replies": "get_tool_input_template/not_found.galaxy.json"
+    },
+    {
+      "tool": "get_tool_citations",
+      "case": "not_found",
+      "note": "the same record, read by another tool",
+      "outcome": "failure",
+      "input": {
+        "tool_id": "nosuchtool"
+      },
+      "envelope": "get_tool_citations/not_found.json",
+      "replies": "get_tool_input_template/not_found.galaxy.json"
+    },
+    {
+      "tool": "list_history_ids",
+      "case": "server_error",
+      "note": "its own sentence over the listing get_histories reads",
+      "outcome": "failure",
+      "input": {},
+      "envelope": "list_history_ids/server_error.json",
+      "replies": "get_histories/server_error.galaxy.json"
+    },
+    {
+      "tool": "get_server_info",
+      "case": "configuration_refused",
+      "note": "the configuration is read first, so a server that answers the version still fails",
+      "outcome": "failure",
+      "input": {},
+      "envelope": "get_server_info/configuration_refused.json",
+      "replies": "get_server_info/configuration_refused.galaxy.json"
+    },
+    {
+      "tool": "get_collection_details",
+      "case": "not_found",
+      "note": "the tool's own 404 sentence",
+      "outcome": "failure",
+      "input": {
+        "collection_id": "c0000404"
+      },
+      "envelope": "get_collection_details/not_found.json",
+      "replies": "get_collection_details/not_found.galaxy.json"
+    },
+    {
+      "tool": "get_collection_details",
+      "case": "permission_denied",
+      "note": "and format_error's, for a status it has nothing of its own to say about",
+      "outcome": "failure",
+      "input": {
+        "collection_id": "c0000403"
+      },
+      "envelope": "get_collection_details/permission_denied.json",
+      "replies": "get_collection_details/permission_denied.galaxy.json"
+    },
+    {
+      "tool": "create_history",
+      "case": "refused_by_galaxy",
+      "note": "the one tool with no try block, so bioblend's text is the whole sentence",
+      "outcome": "failure",
+      "input": {
+        "history_name": "nope"
+      },
+      "envelope": "create_history/refused_by_galaxy.json",
+      "replies": "create_history/refused_by_galaxy.galaxy.json"
+    },
+    {
+      "tool": "run_tool",
+      "case": "permission_denied",
+      "note": "a status Galaxy refuses a run with that is not about the inputs",
+      "outcome": "failure",
+      "input": {
+        "tool_id": "cat1",
+        "history_id": "h0001",
+        "inputs": {
+          "input1": {
+            "src": "hda",
+            "id": "d1"
+          }
+        }
+      },
+      "envelope": "run_tool/permission_denied.json",
+      "replies": "run_tool/permission_denied.galaxy.json"
+    },
+    {
+      "tool": "get_workflow_input_template",
+      "case": "server_error",
+      "note": "the export the template falls back to, which is the only request that can fail here",
+      "outcome": "failure",
+      "input": {
+        "workflow_id": "w0000500"
+      },
+      "envelope": "get_workflow_input_template/server_error.json",
+      "replies": "get_workflow_input_template/server_error.galaxy.json"
+    },
+    {
+      "tool": "invoke_workflow",
+      "case": "refused_by_galaxy",
+      "note": "every argument that decides where the run went is in the context",
+      "outcome": "failure",
+      "input": {
+        "workflow_id": "w0000400",
+        "history_id": "h0001"
+      },
+      "envelope": "invoke_workflow/refused_by_galaxy.json",
+      "replies": "invoke_workflow/refused_by_galaxy.galaxy.json"
+    },
+    {
+      "tool": "create_user_tool",
+      "case": "refused_by_galaxy",
+      "note": "the context names the id out of the representation, with dict.get",
+      "outcome": "failure",
+      "input": {
+        "representation": {
+          "class": "GalaxyUserTool",
+          "id": "utool",
+          "version": "0.1.0",
+          "name": "A user tool",
+          "container": "python:3.12-slim",
+          "shell_command": "echo hi"
+        }
+      },
+      "envelope": "create_user_tool/refused_by_galaxy.json",
+      "replies": "create_user_tool/refused_by_galaxy.galaxy.json"
+    },
+    {
+      "tool": "list_pages",
+      "case": "permission_denied",
+      "note": "a raw GET whose text names the URL, query string and all",
+      "outcome": "failure",
+      "input": {},
+      "envelope": "list_pages/permission_denied.json",
+      "replies": "list_pages/permission_denied.galaxy.json"
+    },
+    {
+      "tool": "create_page",
+      "case": "refused_by_galaxy",
+      "note": "a write, so the sentence is the status and the body",
+      "outcome": "failure",
+      "input": {
+        "title": "A report",
+        "slug": "a-report",
+        "content": "# hi"
+      },
+      "envelope": "create_page/refused_by_galaxy.json",
+      "replies": "create_page/refused_by_galaxy.galaxy.json"
+    },
+    {
+      "tool": "update_page",
+      "case": "not_found",
+      "note": "a write to a page that is not there",
+      "outcome": "failure",
+      "input": {
+        "page_id": "p0000404",
+        "title": "Renamed"
+      },
+      "envelope": "update_page/not_found.json",
+      "replies": "update_page/not_found.galaxy.json"
+    },
+    {
+      "tool": "list_page_revisions",
+      "case": "not_found",
+      "note": "the URL in the text carries the sort_desc this tool always sends",
+      "outcome": "failure",
+      "input": {
+        "page_id": "p0000404"
+      },
+      "envelope": "list_page_revisions/not_found.json",
+      "replies": "list_page_revisions/not_found.galaxy.json"
+    },
+    {
+      "tool": "get_page_revision",
+      "case": "not_found",
+      "note": "two ids in the context",
+      "outcome": "failure",
+      "input": {
+        "page_id": "p0001",
+        "revision_id": "r0000404"
+      },
+      "envelope": "get_page_revision/not_found.json",
+      "replies": "get_page_revision/not_found.galaxy.json"
+    },
+    {
+      "tool": "revert_page_revision",
+      "case": "not_found",
+      "note": "a write, with the same two ids",
+      "outcome": "failure",
+      "input": {
+        "page_id": "p0001",
+        "revision_id": "r0000404"
+      },
+      "envelope": "revert_page_revision/not_found.json",
+      "replies": "revert_page_revision/not_found.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "dataset_not_found",
+      "note": "a 404 keeps the tool's own sentence, which does not claim which of the two it was",
+      "outcome": "failure",
+      "input": {
+        "dataset_id": "d0000404"
+      },
+      "envelope": "get_job_details/dataset_not_found.json",
+      "replies": "get_job_details/dataset_not_found.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "no_job_made_this_dataset",
+      "note": "a dataset that reads fine and names no job -- a refusal, not a failed request",
+      "outcome": "failure",
+      "input": {
+        "dataset_id": "d0001"
+      },
+      "envelope": "get_job_details/no_job_made_this_dataset.json",
+      "replies": "get_job_details/no_job_made_this_dataset.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "the_job_read_refused",
+      "note": "the jobs API is asked through requests itself, so its failure reads differently",
+      "outcome": "failure",
+      "input": {
+        "dataset_id": "d0002"
+      },
+      "envelope": "get_job_details/the_job_read_refused.json",
+      "replies": "get_job_details/the_job_read_refused.galaxy.json"
+    },
+    {
+      "tool": "get_iwc_workflows",
+      "case": "manifest_refused",
+      "note": "the manifest itself refused",
+      "outcome": "failure",
+      "input": {},
+      "envelope": "get_iwc_workflows/manifest_refused.json",
+      "replies": "get_iwc_workflows/manifest_refused.galaxy.json"
+    },
+    {
+      "tool": "search_iwc_workflows",
+      "case": "manifest_refused",
+      "note": "the manifest itself refused",
+      "outcome": "failure",
+      "input": {
+        "query": "rna"
+      },
+      "envelope": "search_iwc_workflows/manifest_refused.json",
+      "replies": "get_iwc_workflows/manifest_refused.galaxy.json"
+    },
+    {
+      "tool": "recommend_iwc_workflows",
+      "case": "manifest_refused",
+      "note": "the manifest itself refused",
+      "outcome": "failure",
+      "input": {
+        "intent": "assemble a genome"
+      },
+      "envelope": "recommend_iwc_workflows/manifest_refused.json",
+      "replies": "get_iwc_workflows/manifest_refused.galaxy.json"
+    },
+    {
+      "tool": "get_iwc_workflow_details",
+      "case": "manifest_refused",
+      "note": "the manifest itself refused",
+      "outcome": "failure",
+      "input": {
+        "trs_id": "#workflow/x/y/1"
+      },
+      "envelope": "get_iwc_workflow_details/manifest_refused.json",
+      "replies": "get_iwc_workflows/manifest_refused.galaxy.json"
+    },
+    {
+      "tool": "import_workflow_from_iwc",
+      "case": "manifest_refused",
+      "note": "the manifest itself refused",
+      "outcome": "failure",
+      "input": {
+        "trs_id": "#workflow/x/y/1"
+      },
+      "envelope": "import_workflow_from_iwc/manifest_refused.json",
+      "replies": "get_iwc_workflows/manifest_refused.galaxy.json"
+    },
+    {
+      "tool": "get_iwc_workflow_details",
+      "case": "no_such_trs_id",
+      "note": "a refusal raised inside the try, so the tool's own sentence wraps it too",
+      "outcome": "failure",
+      "input": {
+        "trs_id": "#workflow/nobody/has/this"
+      },
+      "envelope": "get_iwc_workflow_details/no_such_trs_id.json",
+      "replies": "get_iwc_workflow_details/no_such_trs_id.galaxy.json"
+    },
+    {
+      "tool": "import_workflow_from_iwc",
+      "case": "no_such_trs_id",
+      "note": "the same refusal, worded by the tool that was asked",
+      "outcome": "failure",
+      "input": {
+        "trs_id": "#workflow/nobody/has/this"
+      },
+      "envelope": "import_workflow_from_iwc/no_such_trs_id.json",
+      "replies": "get_iwc_workflow_details/no_such_trs_id.galaxy.json"
+    },
+    {
+      "tool": "import_workflow_from_iwc",
+      "case": "refused_by_galaxy",
+      "note": "the import itself refused, which is a bioblend write",
+      "outcome": "failure",
+      "input": {
+        "trs_id": "#workflow/github.com/iwc-workflows/wf0/main"
+      },
+      "envelope": "import_workflow_from_iwc/refused_by_galaxy.json",
+      "replies": "import_workflow_from_iwc/refused_by_galaxy.galaxy.json"
+    },
+    {
       "tool": "list_workflows",
       "case": "limit_above_the_ceiling",
       "note": "the page ceiling, with the advice to use offset that a pageable tool gets",
@@ -2133,6 +2466,69 @@
       },
       "envelope": "get_dataset_details/is_a_collection.json",
       "replies": "get_dataset_details/is_a_collection.galaxy.json"
+    },
+    {
+      "tool": "create_user_tool",
+      "case": "representation_missing_a_field",
+      "note": "the first of six required fields that is not there",
+      "outcome": "failure",
+      "input": {
+        "representation": {
+          "class": "GalaxyUserTool",
+          "id": "utool"
+        }
+      },
+      "envelope": "create_user_tool/representation_missing_a_field.json",
+      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+    },
+    {
+      "tool": "create_user_tool",
+      "case": "wrong_class",
+      "note": "a representation of something else",
+      "outcome": "failure",
+      "input": {
+        "representation": {
+          "class": "GalaxyTool",
+          "id": "utool",
+          "version": "0.1.0",
+          "name": "A user tool",
+          "container": "python:3.12-slim",
+          "shell_command": "echo hi"
+        }
+      },
+      "envelope": "create_user_tool/wrong_class.json",
+      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+    },
+    {
+      "tool": "create_user_tool",
+      "case": "container_is_not_a_string",
+      "note": "the type is named the way Python names a type",
+      "outcome": "failure",
+      "input": {
+        "representation": {
+          "class": "GalaxyUserTool",
+          "id": "utool",
+          "version": "0.1.0",
+          "name": "A user tool",
+          "container": 3,
+          "shell_command": "echo hi"
+        }
+      },
+      "envelope": "create_user_tool/container_is_not_a_string.json",
+      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+    },
+    {
+      "tool": "recommend_biocontainer",
+      "case": "package_entry_with_no_name",
+      "note": "the entry is quoted with repr, so the sentence shows what arrived",
+      "outcome": "failure",
+      "input": {
+        "packages": [
+          "=1.17"
+        ]
+      },
+      "envelope": "recommend_biocontainer/package_entry_with_no_name.json",
+      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
     }
   ]
 }

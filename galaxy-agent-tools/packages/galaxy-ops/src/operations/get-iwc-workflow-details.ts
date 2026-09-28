@@ -24,7 +24,15 @@ const INPUT_TYPES = new Set(["data_input", "data_collection_input", "parameter_i
 async function run(i: In, _ctx: GalaxyContext): Promise<IwcWorkflowDetail> {
   const workflows = await fetchIwcWorkflows();
   const wf = workflows.find((w) => w.trsID === i.trsId);
-  if (!wf) throw new GalaxyNotFoundError(`IWC workflow ${i.trsId} not found`);
+  // server.py, get_iwc_workflow_details: this refusal is raised INSIDE its try, so the
+  // tool's own sentence wraps it -- the same prefix a refused manifest fetch gets.
+  if (!wf) {
+    throw new GalaxyNotFoundError(
+      "Failed to get IWC workflow details: " +
+        `Workflow with trsID '${i.trsId}' not found in IWC manifest. ` +
+        "Check the trsID format and use search_iwc_workflows() to find valid IDs.",
+    );
+  }
 
   const enriched = enrichWorkflowResult(wf, { fullReadme: true });
 

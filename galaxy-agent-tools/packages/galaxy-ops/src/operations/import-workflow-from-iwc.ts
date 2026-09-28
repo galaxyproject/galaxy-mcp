@@ -21,7 +21,15 @@ type In = { trsId: string };
 async function run(i: In, ctx: GalaxyContext): Promise<ImportedWorkflow> {
   const workflows = await fetchIwcWorkflows();
   const wf = workflows.find((w) => w.trsID === i.trsId);
-  if (!wf) throw new GalaxyNotFoundError(`IWC workflow ${i.trsId} not found`);
+  // server.py, import_workflow_from_iwc: raised inside its try as well, so wrapped.
+  if (!wf) {
+    throw new GalaxyNotFoundError(
+      "Failed to import workflow from IWC: " +
+        `Workflow with trsID '${i.trsId}' not found in IWC manifest. ` +
+        "Check the trsID format and that it exists in the IWC. " +
+        "You can search workflows using search_iwc_workflows() first.",
+    );
+  }
 
   return legacyPost<ImportedWorkflow>(ctx, "/api/workflows", {
     body: { workflow: wf.definition },

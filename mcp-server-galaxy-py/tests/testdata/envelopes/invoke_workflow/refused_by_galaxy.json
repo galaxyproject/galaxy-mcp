@@ -1,0 +1,14 @@
+{
+  "$comment": "A failed tool call from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `result` is the CallToolResult the MCP wire carries, dumped the way the SDK dumps it (by alias, JSON mode, None-valued fields left out). `sentence` is the same text with FastMCP's own wrapper removed, which is what the tool itself said.",
+  "outcome": "failure",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Error calling tool 'invoke_workflow': Invoke workflow failed: Unexpected HTTP status code: 400: {\"err_msg\": \"History is not accessible by user\", \"err_code\": 403002}. Context: workflow_id=w0000400, history_id=h0001, history_name=None, inputs_by=step_index"
+      }
+    ],
+    "isError": true
+  },
+  "sentence": "Invoke workflow failed: Unexpected HTTP status code: 400: {\"err_msg\": \"History is not accessible by user\", \"err_code\": 403002}. Context: workflow_id=w0000400, history_id=h0001, history_name=None, inputs_by=step_index"
+}
