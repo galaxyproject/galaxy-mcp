@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { runUserToolOp, runUserTool } from "../../src/operations/run-user-tool";
 import { GalaxyNotFoundError } from "../../src/errors";
+import { runWithEnvelope } from "../../src/operations/registry";
 import { mockClient } from "../util/mock-client";
 import { DEFAULT_POLL } from "../../src/context";
 import type { GalaxyContext } from "../../src/context";
@@ -81,11 +82,24 @@ describe("run_user_tool", () => {
     expect(capturedVersion).toBe("0.1.0");
   });
 
-  it("projects history and toolUuid into the message", () => {
-    const result = { outputs: [], jobs: [] };
-    expect(
-      runUserToolOp.project!(result, { historyId: HISTORY_ID, toolUuid: TOOL_UUID, inputs: {} }),
-    ).toEqual({ message: `Submitted user tool ${TOOL_UUID} to history ${HISTORY_ID}` });
+  it("names the tool_id the lookup found, beside the uuid and the history", async () => {
+    // The tool_id is the one thing in the other server's sentence that the arguments
+    // do not carry, so it rides the per-call facts collector runWithEnvelope sets up.
+    const client = mockClient({
+      GET: () => ({
+        data: { tool_id: "row_filter", representation: { version: "1.0" } },
+        response: { status: 200 },
+      }),
+      POST: () => ({ data: { outputs: [], jobs: [] }, response: { status: 200 } }),
+    });
+    const out = await runWithEnvelope(
+      runUserToolOp as never,
+      { historyId: HISTORY_ID, toolUuid: TOOL_UUID, inputs: {} },
+      ctxWith(client),
+    );
+    expect(out.message).toBe(
+      `Started user tool 'row_filter' (UUID: ${TOOL_UUID}) in history '${HISTORY_ID}'`,
+    );
   });
 
   it("throws GalaxyNotFoundError when lookup returns 200 without tool_id (no POST fired)", async () => {

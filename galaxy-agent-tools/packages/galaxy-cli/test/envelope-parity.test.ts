@@ -63,12 +63,8 @@ const replayable = index.cases;
  * it, and then it goes.
  */
 const MESSAGE_NOT_YET_COMPARED = new Set([
-  "create_user_tool",
-  "delete_user_tool",
   "get_server_info",
   "get_user",
-  "run_tool",
-  "run_user_tool",
 ]);
 
 /** The canned replies, matched the way the generator registered them. */

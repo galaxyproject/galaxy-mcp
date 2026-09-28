@@ -2,6 +2,7 @@ import type { GalaxyContext } from "../context";
 import { GalaxyConnectionError } from "../errors";
 import { jsonObject } from "../json-object";
 import { legacyPost } from "../legacy";
+import { pyGet, pyStr } from "../python-values";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
@@ -57,7 +58,15 @@ export const createUserToolOp: Operation<typeof input, CreatedUserTool> = {
   input,
   readOnly: false,
   run,
-  project: (out) => ({ message: `Created user tool ${out.uuid ?? out.id ?? ""}` }),
+  // server.py, create_user_tool: the name out of the REPRESENTATION that was sent,
+  // falling back to its id and then to "unknown" -- both reads are dict.get, so a
+  // representation stating a null name is announced as None rather than defaulted.
+  // The uuid Galaxy assigned is in data, which is what delete_user_tool takes.
+  project: (_out, i) => ({
+    message: `Created user-defined tool '${pyStr(
+      pyGet(i.representation, "name", pyGet(i.representation, "id", "unknown")),
+    )}'`,
+  }),
 };
 
 register(createUserToolOp as AnyOperation);

@@ -29,7 +29,7 @@ export const deleteUserToolOp: Operation<typeof input, DeletedUserTool> = {
   readOnly: false,
   destructive: true,
   run,
-  project: (_out, i) => ({ message: `Deactivated user tool ${i.uuid}` }),
+  project: (_out, i) => ({ message: `Deactivated user-defined tool '${i.uuid}'` }),
 };
 
 register(deleteUserToolOp as AnyOperation);

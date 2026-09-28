@@ -96,9 +96,28 @@ describe("run_tool", () => {
     expect("tool_version" in (body ?? {})).toBe(false);
   });
 
-  it("counts the queued jobs in its summary line", () => {
+  it("names the tool and the history, and says nothing about a version nobody asked for", () => {
     const message = runToolOp.project?.(SUBMISSION, { toolId: "fastqc", historyId: "h1", inputs: {} })
       ?.message;
-    expect(message).toBe("Submitted fastqc to history h1 (1 job(s))");
+    expect(message).toBe("Started tool 'fastqc' in history 'h1'");
+  });
+
+  it("reports the version the JOBS name, not the one that was requested", () => {
+    // Galaxy's toolbox hands back the newest installed version when the requested one
+    // is missing, so repeating the request back is how a caller records a run at a
+    // version that never ran. Three answers, and only the reply decides which.
+    const p = (out: unknown, toolVersion: string) =>
+      runToolOp.project?.(out as never, { toolId: "fastqc", historyId: "h1", inputs: {}, toolVersion })
+        ?.message;
+
+    expect(p(SUBMISSION, "0.74")).toBe("Started tool 'fastqc' at version 0.74 in history 'h1'");
+    expect(p(SUBMISSION, "0.72")).toBe(
+      "Started tool 'fastqc' at version 0.74 (not the 0.72 requested) in history 'h1'",
+    );
+    // No jobs, a job with no version, and two jobs that disagree: all unknown.
+    const unreported = "Started tool 'fastqc' at an unreported version (0.74 requested) in history 'h1'";
+    expect(p({ jobs: [] }, "0.74")).toBe(unreported);
+    expect(p({ jobs: [{ id: "j1" }] }, "0.74")).toBe(unreported);
+    expect(p({ jobs: [{ tool_version: "0.74" }, { tool_version: "0.73" }] }, "0.74")).toBe(unreported);
   });
 });

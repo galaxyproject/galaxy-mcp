@@ -27,7 +27,7 @@ describe("delete_user_tool", () => {
 
   it("projects the uuid into the message", () => {
     expect(deleteUserToolOp.project!({ uuid: "aaaa-1111", deactivated: true }, { uuid: "aaaa-1111" })).toEqual({
-      message: "Deactivated user tool aaaa-1111",
+      message: "Deactivated user-defined tool 'aaaa-1111'",
     });
   });
 
