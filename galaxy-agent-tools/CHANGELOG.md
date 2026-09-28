@@ -283,6 +283,12 @@ with no fixture at all, which is where a difference hides. Every open tool now h
 golden cases generated from the Python server and replayed on both surfaces, and
 the differences they turned up are below.
 
+- **Breaking:** `get_dataset_details` answers with `{ dataset, dataset_id }` and
+  puts `preview` beside them, rather than spreading Galaxy's record at the top
+  level with the preview mixed in. `data.dataset` is what Galaxy sent and
+  `data.dataset_id` is the id that was asked for, so it is there even for a record
+  that carries no id -- and a Galaxy that grew a `preview` field of its own could
+  no longer collide with ours. The preview itself has not moved.
 - **Breaking:** `get_user` answers with Galaxy's whole user record rather than
   `{ id, email, username }`. A DetailedUserModel carries the disk usage, the
   quota, the tags in use and the stored preferences, and the Python tool passes

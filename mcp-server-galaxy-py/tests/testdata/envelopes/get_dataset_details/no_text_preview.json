@@ -1,0 +1,27 @@
+{
+  "data": {
+    "dataset": {
+      "id": "d0000002",
+      "name": "alignment.bam",
+      "state": "ok",
+      "extension": "bam",
+      "file_size": 1024,
+      "history_id": "h0000",
+      "deleted": false,
+      "visible": true,
+      "hid": 1,
+      "misc_info": null,
+      "model_class": "HistoryDatasetAssociation"
+    },
+    "dataset_id": "d0000002",
+    "preview": {
+      "lines": null,
+      "error": "No text preview: Galaxy previews text datatypes only",
+      "content_truncated_by_galaxy": false
+    }
+  },
+  "success": true,
+  "message": "Retrieved details for dataset 'alignment.bam'",
+  "count": null,
+  "pagination": null
+}

@@ -1,0 +1,28 @@
+{
+  "data": {
+    "dataset": {
+      "id": "d0000001",
+      "name": "reads.txt",
+      "state": "ok",
+      "extension": "txt",
+      "file_size": 1024,
+      "history_id": "h0000",
+      "deleted": false,
+      "visible": true,
+      "hid": 1,
+      "misc_info": null,
+      "model_class": "HistoryDatasetAssociation"
+    },
+    "dataset_id": "d0000001",
+    "preview": {
+      "lines": "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10",
+      "preview_lines": 10,
+      "truncated": true,
+      "content_truncated_by_galaxy": false
+    }
+  },
+  "success": true,
+  "message": "Retrieved details for dataset 'reads.txt'",
+  "count": null,
+  "pagination": null
+}

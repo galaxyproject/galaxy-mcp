@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 114,
+  "caseCount": 120,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -1010,6 +1010,69 @@
       "input": {},
       "envelope": "get_user/bare.json",
       "replies": "get_user/bare.galaxy.json"
+    },
+    {
+      "tool": "get_dataset_details",
+      "case": "peek_sliced",
+      "note": "twelve lines of peek cut to the ten asked for by default",
+      "input": {
+        "dataset_id": "d0000001"
+      },
+      "envelope": "get_dataset_details/peek_sliced.json",
+      "replies": "get_dataset_details/peek_sliced.galaxy.json"
+    },
+    {
+      "tool": "get_dataset_details",
+      "case": "peek_shorter_than_asked_for",
+      "note": "fewer lines than the slice, so nothing is cut and the count is what arrived",
+      "input": {
+        "dataset_id": "d0000001",
+        "preview_lines": 20
+      },
+      "envelope": "get_dataset_details/peek_shorter_than_asked_for.json",
+      "replies": "get_dataset_details/peek_sliced.galaxy.json"
+    },
+    {
+      "tool": "get_dataset_details",
+      "case": "galaxy_cut_the_peek_itself",
+      "note": "Galaxy's own truncated flag, which is not the same fact as our line slice",
+      "input": {
+        "dataset_id": "d0000001",
+        "preview_lines": 20
+      },
+      "envelope": "get_dataset_details/galaxy_cut_the_peek_itself.json",
+      "replies": "get_dataset_details/galaxy_cut_the_peek_itself.galaxy.json"
+    },
+    {
+      "tool": "get_dataset_details",
+      "case": "no_text_preview",
+      "note": "a datatype Galaxy previews nothing for, so item_data is null",
+      "input": {
+        "dataset_id": "d0000002"
+      },
+      "envelope": "get_dataset_details/no_text_preview.json",
+      "replies": "get_dataset_details/no_text_preview.galaxy.json"
+    },
+    {
+      "tool": "get_dataset_details",
+      "case": "preview_not_asked_for",
+      "note": "include_preview false, so the text route is never asked and there is no preview key",
+      "input": {
+        "dataset_id": "d0000001",
+        "include_preview": false
+      },
+      "envelope": "get_dataset_details/preview_not_asked_for.json",
+      "replies": "get_dataset_details/preview_not_asked_for.galaxy.json"
+    },
+    {
+      "tool": "get_dataset_details",
+      "case": "state_not_ok",
+      "note": "a dataset still running, where no peek is taken whatever was asked for",
+      "input": {
+        "dataset_id": "d0000003"
+      },
+      "envelope": "get_dataset_details/state_not_ok.json",
+      "replies": "get_dataset_details/state_not_ok.galaxy.json"
     },
     {
       "tool": "get_tool_details",

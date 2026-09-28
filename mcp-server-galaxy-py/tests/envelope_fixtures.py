@@ -52,6 +52,7 @@ from .test_helpers import (
     create_user_tool_fn,
     delete_user_tool_fn,
     get_collection_details_fn,
+    get_dataset_details_fn,
     get_histories_fn,
     get_history_contents_fn,
     get_history_details_fn,
@@ -1734,6 +1735,7 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
 
 def single_record_cases(add: AddCase) -> None:
     user_cases(add)
+    dataset_details_cases(add)
     tool_details_cases(add)
     tool_input_template_cases(add)
     workflow_details_cases(add)
@@ -1785,6 +1787,104 @@ def user_cases(add: AddCase) -> None:
             route(
                 "/api/users/current",
                 {"id": "u0000001", "username": "curator", "email": "curator@galaxy.example"},
+            )
+        ],
+    )
+
+
+def dataset_details_cases(add: AddCase) -> None:
+    """A dataset's metadata, wrapped, with Galaxy's text peek sliced beside it.
+
+    The record does not come back on its own: it arrives under ``dataset`` next to the
+    id that was asked for, so a caller reading ``data.state`` is reading the wrapper
+    and not the dataset. The peek is only taken for a dataset in the ok state and only
+    when it was asked for, and it has three shapes -- sliced text, a datatype Galaxy
+    has no text for, and a peek that could not be taken -- so the cases are the
+    branches rather than one happy path.
+    """
+    record = {
+        "id": "d0000001",
+        "name": "reads.txt",
+        "state": "ok",
+        "extension": "txt",
+        "file_size": 1024,
+        "history_id": "h0000",
+        "deleted": False,
+        "visible": True,
+        "hid": 1,
+        "misc_info": None,
+        "model_class": "HistoryDatasetAssociation",
+    }
+    twelve = "\n".join(f"line{n}" for n in range(1, 13))
+    text_route = route(
+        "/api/datasets/d0000001/get_content_as_text",
+        {"item_data": twelve, "truncated": False, "item_url": "/datasets/d0000001/display"},
+    )
+    add(
+        "get_dataset_details",
+        "peek_sliced",
+        "twelve lines of peek cut to the ten asked for by default",
+        {"dataset_id": "d0000001"},
+        lambda: get_dataset_details_fn("d0000001"),
+        [route("/api/datasets/d0000001", record), text_route],
+    )
+    add(
+        "get_dataset_details",
+        "peek_shorter_than_asked_for",
+        "fewer lines than the slice, so nothing is cut and the count is what arrived",
+        {"dataset_id": "d0000001", "preview_lines": 20},
+        lambda: get_dataset_details_fn("d0000001", preview_lines=20),
+        [route("/api/datasets/d0000001", record), text_route],
+    )
+    add(
+        "get_dataset_details",
+        "galaxy_cut_the_peek_itself",
+        "Galaxy's own truncated flag, which is not the same fact as our line slice",
+        {"dataset_id": "d0000001", "preview_lines": 20},
+        lambda: get_dataset_details_fn("d0000001", preview_lines=20),
+        [
+            route("/api/datasets/d0000001", record),
+            route(
+                "/api/datasets/d0000001/get_content_as_text",
+                {"item_data": "line1\nline2\n", "truncated": True},
+            ),
+        ],
+    )
+    add(
+        "get_dataset_details",
+        "no_text_preview",
+        "a datatype Galaxy previews nothing for, so item_data is null",
+        {"dataset_id": "d0000002"},
+        lambda: get_dataset_details_fn("d0000002"),
+        [
+            route(
+                "/api/datasets/d0000002",
+                {**record, "id": "d0000002", "name": "alignment.bam", "extension": "bam"},
+            ),
+            route(
+                "/api/datasets/d0000002/get_content_as_text",
+                {"item_data": None, "truncated": False},
+            ),
+        ],
+    )
+    add(
+        "get_dataset_details",
+        "preview_not_asked_for",
+        "include_preview false, so the text route is never asked and there is no preview key",
+        {"dataset_id": "d0000001", "include_preview": False},
+        lambda: get_dataset_details_fn("d0000001", include_preview=False),
+        [route("/api/datasets/d0000001", record)],
+    )
+    add(
+        "get_dataset_details",
+        "state_not_ok",
+        "a dataset still running, where no peek is taken whatever was asked for",
+        {"dataset_id": "d0000003"},
+        lambda: get_dataset_details_fn("d0000003"),
+        [
+            route(
+                "/api/datasets/d0000003",
+                {**record, "id": "d0000003", "name": "half.txt", "state": "running"},
             )
         ],
     )
