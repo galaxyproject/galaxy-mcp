@@ -49,6 +49,7 @@ from galaxy_mcp.version import clear_version_cache
 from .test_helpers import (
     get_histories_fn,
     get_history_contents_fn,
+    get_history_details_fn,
     get_invocations_fn,
     get_iwc_workflows_fn,
     get_tool_citations_fn,
@@ -646,6 +647,47 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         {"history_id": "h0000", "limit": 10, "offset": 400},
         lambda: get_history_contents_fn("h0000", limit=10, offset=400),
         contents_route,
+    )
+
+    # -- get_history_details -------------------------------------------------
+    # Two requests, in this order: the history itself, then its contents, which are
+    # fetched only to be counted. The count is every item the history holds, deleted
+    # and hidden included, which is why the metadata's own numbers will not do.
+    history_record = {
+        "id": "h0000",
+        "name": "History 0",
+        "state": "ok",
+        "deleted": False,
+        "purged": False,
+        "published": False,
+        "annotation": None,
+        "tags": [],
+        "size": 2048,
+        "create_time": "2026-01-01T00:00:00",
+        "update_time": "2026-01-02T00:00:00",
+        "contents_active": {"active": 3, "deleted": 1, "hidden": 0},
+    }
+    add(
+        "get_history_details",
+        "with_contents",
+        "a history and the number of items in it, wrapped in this tool's own data shape",
+        {"history_id": "h0000"},
+        lambda: get_history_details_fn("h0000"),
+        [
+            route("/api/histories/h0000", history_record),
+            route("/api/histories/h0000/contents", content_rows(4)),
+        ],
+    )
+    add(
+        "get_history_details",
+        "empty",
+        "a history with nothing in it, which still carries the same note",
+        {"history_id": "h0000"},
+        lambda: get_history_details_fn("h0000"),
+        [
+            route("/api/histories/h0000", history_record),
+            route("/api/histories/h0000/contents", []),
+        ],
     )
 
     # -- list_workflows ------------------------------------------------------
