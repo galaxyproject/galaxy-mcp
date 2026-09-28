@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 70,
+  "caseCount": 74,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -766,6 +766,47 @@
       },
       "envelope": "get_tool_run_examples/none.json",
       "replies": "get_tool_run_examples/none.galaxy.json"
+    },
+    {
+      "tool": "get_collection_details",
+      "case": "some_elements",
+      "note": "a collection whose elements all fit under the cap",
+      "input": {
+        "collection_id": "dc000001"
+      },
+      "envelope": "get_collection_details/some_elements.json",
+      "replies": "get_collection_details/some_elements.galaxy.json"
+    },
+    {
+      "tool": "get_collection_details",
+      "case": "truncated",
+      "note": "more elements than max_elements, which the note and the flag both have to say",
+      "input": {
+        "collection_id": "dc000001",
+        "max_elements": 2
+      },
+      "envelope": "get_collection_details/truncated.json",
+      "replies": "get_collection_details/truncated.galaxy.json"
+    },
+    {
+      "tool": "get_collection_details",
+      "case": "nested_collection",
+      "note": "a list of pairs, where an element's object is another collection and is not walked",
+      "input": {
+        "collection_id": "dc000002"
+      },
+      "envelope": "get_collection_details/nested_collection.json",
+      "replies": "get_collection_details/nested_collection.galaxy.json"
+    },
+    {
+      "tool": "get_collection_details",
+      "case": "sparse_record",
+      "note": "a collection Galaxy answered with almost nothing, so every default shows",
+      "input": {
+        "collection_id": "dc000004"
+      },
+      "envelope": "get_collection_details/sparse_record.json",
+      "replies": "get_collection_details/sparse_record.galaxy.json"
     },
     {
       "tool": "get_tool_citations",

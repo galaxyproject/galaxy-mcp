@@ -1,0 +1,99 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/dataset_collections/dc000001",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "id": "dc000001",
+        "name": "Sample list",
+        "collection_type": "list",
+        "element_count": 5,
+        "populated": true,
+        "state": "ok",
+        "history_content_type": "dataset_collection",
+        "elements": [
+          {
+            "id": "dce0",
+            "element_index": 0,
+            "element_identifier": "sample0",
+            "element_type": "hda",
+            "model_class": "DatasetCollectionElement",
+            "object": {
+              "id": "d0000",
+              "name": "sample0.txt",
+              "state": "ok",
+              "extension": "txt",
+              "file_size": 1024,
+              "history_id": "h0000"
+            }
+          },
+          {
+            "id": "dce1",
+            "element_index": 1,
+            "element_identifier": "sample1",
+            "element_type": "hda",
+            "model_class": "DatasetCollectionElement",
+            "object": {
+              "id": "d0001",
+              "name": "sample1.txt",
+              "state": "ok",
+              "extension": "txt",
+              "file_size": 1024,
+              "history_id": "h0000"
+            }
+          },
+          {
+            "id": "dce2",
+            "element_index": 2,
+            "element_identifier": "sample2",
+            "element_type": "hda",
+            "model_class": "DatasetCollectionElement",
+            "object": {
+              "id": "d0002",
+              "name": "sample2.txt",
+              "state": "ok",
+              "extension": "txt",
+              "file_size": 1024,
+              "history_id": "h0000"
+            }
+          },
+          {
+            "id": "dce3",
+            "element_index": 3,
+            "element_identifier": "sample3",
+            "element_type": "hda",
+            "model_class": "DatasetCollectionElement",
+            "object": {
+              "id": "d0003",
+              "name": "sample3.txt",
+              "state": "ok",
+              "extension": "txt",
+              "file_size": 1024,
+              "history_id": "h0000"
+            }
+          },
+          {
+            "id": "dce4",
+            "element_index": 4,
+            "element_identifier": "sample4",
+            "element_type": "hda",
+            "model_class": "DatasetCollectionElement",
+            "object": {
+              "id": "d0004",
+              "name": "sample4.txt",
+              "state": "ok",
+              "extension": "txt",
+              "file_size": 1024,
+              "history_id": "h0000"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

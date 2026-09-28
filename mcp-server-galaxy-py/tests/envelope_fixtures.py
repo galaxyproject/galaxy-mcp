@@ -47,6 +47,7 @@ from galaxy_mcp.server import GalaxyResult, galaxy_state
 from galaxy_mcp.version import clear_version_cache
 
 from .test_helpers import (
+    get_collection_details_fn,
     get_histories_fn,
     get_history_contents_fn,
     get_history_details_fn,
@@ -1026,6 +1027,118 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         {"tool_id": "cat1", "tool_version": "1.0.0"},
         lambda: get_tool_run_examples_fn("cat1", tool_version="1.0.0"),
         [route("/api/tools/cat1/test_data", [])],
+    )
+
+    # -- get_collection_details ----------------------------------------------
+    # The elements come back normalised rather than as Galaxy sent them: one flat
+    # record per element, its index counted from the head of the returned list, and
+    # the dataset behind it read one level deep and no further. A nested collection
+    # is an element whose object is another collection, and it stays that way -- the
+    # fields a dataset would fill are simply empty.
+    def collection_element(index: int, *, size: int | None = 1024) -> dict[str, Any]:
+        return {
+            "id": f"dce{index}",
+            "element_index": index,
+            "element_identifier": f"sample{index}",
+            "element_type": "hda",
+            "model_class": "DatasetCollectionElement",
+            "object": {
+                "id": f"d{index:04d}",
+                "name": f"sample{index}.txt",
+                "state": "ok",
+                "extension": "txt",
+                "file_size": size,
+                "history_id": "h0000",
+            },
+        }
+
+    def collection_record(elements: list[dict[str, Any]], **over: Any) -> dict[str, Any]:
+        record = {
+            "id": "dc000001",
+            "name": "Sample list",
+            "collection_type": "list",
+            "element_count": len(elements),
+            "populated": True,
+            "state": "ok",
+            "history_content_type": "dataset_collection",
+            "elements": elements,
+        }
+        record.update(over)
+        return record
+
+    add(
+        "get_collection_details",
+        "some_elements",
+        "a collection whose elements all fit under the cap",
+        {"collection_id": "dc000001"},
+        lambda: get_collection_details_fn("dc000001"),
+        [
+            route(
+                "/api/dataset_collections/dc000001",
+                collection_record([collection_element(i) for i in range(3)]),
+            )
+        ],
+    )
+    add(
+        "get_collection_details",
+        "truncated",
+        "more elements than max_elements, which the note and the flag both have to say",
+        {"collection_id": "dc000001", "max_elements": 2},
+        lambda: get_collection_details_fn("dc000001", max_elements=2),
+        [
+            route(
+                "/api/dataset_collections/dc000001",
+                collection_record([collection_element(i) for i in range(5)]),
+            )
+        ],
+    )
+    add(
+        "get_collection_details",
+        "nested_collection",
+        "a list of pairs, where an element's object is another collection and is not walked",
+        {"collection_id": "dc000002"},
+        lambda: get_collection_details_fn("dc000002"),
+        [
+            route(
+                "/api/dataset_collections/dc000002",
+                collection_record(
+                    [
+                        {
+                            "id": "dce0",
+                            "element_index": 0,
+                            "element_identifier": "pair0",
+                            "element_type": "dataset_collection",
+                            "model_class": "DatasetCollectionElement",
+                            "object": {
+                                "id": "dc000003",
+                                "collection_type": "paired",
+                                "element_count": 2,
+                                "populated": True,
+                                "elements": [collection_element(0), collection_element(1)],
+                            },
+                        }
+                    ],
+                    id="dc000002",
+                    name="Paired samples",
+                    collection_type="list:paired",
+                ),
+            )
+        ],
+    )
+    # Every field of the normalised collection missing at once: the defaults are not
+    # all the same, and only a reply that leaves them out says which is which.
+    add(
+        "get_collection_details",
+        "sparse_record",
+        "a collection Galaxy answered with almost nothing, so every default shows",
+        {"collection_id": "dc000004"},
+        lambda: get_collection_details_fn("dc000004"),
+        [
+            route(
+                "/api/dataset_collections/dc000004",
+                {"elements": [{"element_identifier": "lonely", "object": {}}]},
+            )
+        ],
     )
 
     # -- get_tool_citations --------------------------------------------------

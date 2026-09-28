@@ -1,0 +1,42 @@
+{
+  "data": {
+    "collection_id": "dc000001",
+    "history_content_type": "dataset_collection",
+    "collection": {
+      "id": "dc000001",
+      "name": "Sample list",
+      "collection_type": "list",
+      "element_count": 5,
+      "populated": true,
+      "state": "ok"
+    },
+    "elements": [
+      {
+        "element_index": 0,
+        "element_identifier": "sample0",
+        "element_type": "hda",
+        "object_id": "d0000",
+        "name": "sample0.txt",
+        "state": "ok",
+        "extension": "txt",
+        "file_size": 1024
+      },
+      {
+        "element_index": 1,
+        "element_identifier": "sample1",
+        "element_type": "hda",
+        "object_id": "d0001",
+        "name": "sample1.txt",
+        "state": "ok",
+        "extension": "txt",
+        "file_size": 1024
+      }
+    ],
+    "elements_truncated": true,
+    "note": "Use get_dataset_details(object_id) to get full details for individual datasets in this collection."
+  },
+  "success": true,
+  "message": "Retrieved collection 'Sample list'",
+  "count": 2,
+  "pagination": null
+}

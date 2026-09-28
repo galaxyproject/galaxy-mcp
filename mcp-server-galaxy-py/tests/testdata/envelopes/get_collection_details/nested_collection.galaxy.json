@@ -1,0 +1,69 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/dataset_collections/dc000002",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "id": "dc000002",
+        "name": "Paired samples",
+        "collection_type": "list:paired",
+        "element_count": 1,
+        "populated": true,
+        "state": "ok",
+        "history_content_type": "dataset_collection",
+        "elements": [
+          {
+            "id": "dce0",
+            "element_index": 0,
+            "element_identifier": "pair0",
+            "element_type": "dataset_collection",
+            "model_class": "DatasetCollectionElement",
+            "object": {
+              "id": "dc000003",
+              "collection_type": "paired",
+              "element_count": 2,
+              "populated": true,
+              "elements": [
+                {
+                  "id": "dce0",
+                  "element_index": 0,
+                  "element_identifier": "sample0",
+                  "element_type": "hda",
+                  "model_class": "DatasetCollectionElement",
+                  "object": {
+                    "id": "d0000",
+                    "name": "sample0.txt",
+                    "state": "ok",
+                    "extension": "txt",
+                    "file_size": 1024,
+                    "history_id": "h0000"
+                  }
+                },
+                {
+                  "id": "dce1",
+                  "element_index": 1,
+                  "element_identifier": "sample1",
+                  "element_type": "hda",
+                  "model_class": "DatasetCollectionElement",
+                  "object": {
+                    "id": "d0001",
+                    "name": "sample1.txt",
+                    "state": "ok",
+                    "extension": "txt",
+                    "file_size": 1024,
+                    "history_id": "h0000"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "data": {
+    "collection_id": "dc000002",
+    "history_content_type": "dataset_collection",
+    "collection": {
+      "id": "dc000002",
+      "name": "Paired samples",
+      "collection_type": "list:paired",
+      "element_count": 1,
+      "populated": true,
+      "state": "ok"
+    },
+    "elements": [
+      {
+        "element_index": 0,
+        "element_identifier": "pair0",
+        "element_type": "dataset_collection",
+        "object_id": "dc000003",
+        "name": "",
+        "state": "",
+        "extension": "",
+        "file_size": null
+      }
+    ],
+    "elements_truncated": false,
+    "note": "Use get_dataset_details(object_id) to get full details for individual datasets in this collection."
+  },
+  "success": true,
+  "message": "Retrieved collection 'Paired samples'",
+  "count": 1,
+  "pagination": null
+}
