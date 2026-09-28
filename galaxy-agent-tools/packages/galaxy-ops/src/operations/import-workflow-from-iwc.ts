@@ -35,9 +35,9 @@ export const importWorkflowFromIwcOp: Operation<typeof input, ImportedWorkflow> 
   input,
   readOnly: false,
   run,
-  project: (out) => ({
-    message: `Imported workflow ${out.id}${out.name ? ` (${out.name})` : ""}`,
-  }),
+  // server.py, import_workflow_from_iwc: the TRS id that was asked for. The id
+  // Galaxy gave the imported copy is in data, which is where a caller goes next.
+  project: (_out, i) => ({ message: `Successfully imported workflow '${i.trsId}'` }),
 };
 
 register(importWorkflowFromIwcOp as AnyOperation);

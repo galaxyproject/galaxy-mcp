@@ -72,16 +72,10 @@ const index = readJson<{ caseCount: number; cases: CaseEntry[] }>("index.json");
  * it, and then it goes.
  */
 const MESSAGE_NOT_YET_COMPARED = new Set([
-  "cancel_workflow_invocation",
   "create_user_tool",
   "delete_user_tool",
-  "get_invocations",
   "get_server_info",
   "get_user",
-  "get_workflow_details",
-  "get_workflow_input_template",
-  "import_workflow_from_iwc",
-  "invoke_workflow",
   "run_tool",
   "run_user_tool",
 ]);

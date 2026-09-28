@@ -283,13 +283,6 @@ async function run(i: In, ctx: GalaxyContext): Promise<InvokeWorkflowResult> {
   return data as InvokeWorkflowResult;
 }
 
-/** The ids in the summary line: one invocation, or the several a batch made. */
-function describeInvoked(out: InvokeWorkflowResult): string {
-  const ids = (Array.isArray(out) ? out : [out]).map((inv) => inv.id).filter(Boolean);
-  if (ids.length === 0) return "";
-  return ids.length === 1 ? ` (invocation ${ids[0]})` : ` (${ids.length} invocations: ${ids.join(", ")})`;
-}
-
 export const invokeWorkflowOp: Operation<typeof input, InvokeWorkflowResult> = {
   name: "invoke_workflow",
   domain: "workflows",
@@ -298,9 +291,10 @@ export const invokeWorkflowOp: Operation<typeof input, InvokeWorkflowResult> = {
   input,
   readOnly: false,
   run,
-  project: (out, i) => ({
-    message: `Invoked workflow ${i.workflowId}${describeInvoked(out)}`,
-  }),
+  // server.py, invoke_workflow: the workflow that was invoked, and nothing about
+  // what came back -- one invocation or the list a batch expanded to, the ids are in
+  // data either way.
+  project: (_out, i) => ({ message: `Invoked workflow '${i.workflowId}'` }),
 };
 
 register(invokeWorkflowOp as AnyOperation);

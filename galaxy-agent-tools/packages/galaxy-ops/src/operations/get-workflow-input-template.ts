@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
 import { legacyGet } from "../legacy";
+import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import {
   normalizeRunModel,
   normalizeGaSteps,
@@ -35,6 +36,17 @@ interface WorkflowDict {
 // ---------------------------------------------------------------------------
 // resolveWorkflowSlots -- shared with Wave F3 (invoke_workflow)
 // ---------------------------------------------------------------------------
+
+/**
+ * Which of the two sources the slots came from, for the summary line.
+ *
+ * `run()` returns the template and not how it was built, and the other server's
+ * sentence names the source ("source: style=run"), so it travels beside the call the
+ * way list_pages' total does.
+ */
+const slotProvenance = envelopeFact<"style=run" | "ga-fallback">(
+  "get_workflow_input_template.provenance",
+);
 
 export interface ResolvedSlots {
   slots: WorkflowSlot[];
@@ -109,7 +121,8 @@ async function run(i: In, ctx: GalaxyContext): Promise<WorkflowInputTemplate> {
   const verbose = i.verbose ?? false;
 
   // Three independent best-effort reads of the same workflow (mirrors Python).
-  const { slots, runModel } = await resolveWorkflowSlots(ctx, i.workflowId, i.historyId);
+  const { slots, provenance, runModel } = await resolveWorkflowSlots(ctx, i.workflowId, i.historyId);
+  recordFact(ctx, slotProvenance, provenance);
 
   // .ga export for legacy warnings (best-effort)
   let warnings: Array<{ kind: string; message: string }> = [];
@@ -147,10 +160,25 @@ export const getWorkflowInputTemplateOp: Operation<typeof input, WorkflowInputTe
     "Return a ready-to-fill input template plus a run guide for a workflow. Call this before invoke_workflow. Each slot lists its label, expected src (hda/hdca), accepted datatypes, collection type, and -- for parameters -- selectable options.",
   input,
   run,
-  project: (out, i) => ({
-    message: `${(out.slots as unknown[]).length} input slot(s) for workflow ${i.workflowId}`,
-    count: (out.slots as unknown[]).length,
-  }),
+  project: (out, i, facts) => {
+    // A caller that projected by hand left no fact behind, and the answer is still in
+    // the output: buildGuide adds `notes` exactly when there was no run model, which
+    // is exactly the .ga fallback path.
+    const guide = out.guide as { notes?: unknown } | undefined;
+    const provenance =
+      readFact(facts, slotProvenance) ??
+      (guide && "notes" in guide ? "ga-fallback" : "style=run");
+    const slots = (out.slots as unknown[]).length;
+    return {
+      // server.py, get_workflow_input_template, sentence for sentence -- including the
+      // "(s)" this one really does write, and the quoted inputs_by hint.
+      message:
+        `Built an input template for workflow '${i.workflowId}' ` +
+        `(${slots} slot(s), source: ${provenance}). Fill inputs_template ` +
+        "and invoke with inputs_by='step_index|step_uuid'.",
+      count: slots,
+    };
+  },
 };
 
 register(getWorkflowInputTemplateOp as AnyOperation);

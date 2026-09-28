@@ -258,7 +258,7 @@ describe("get_workflow_input_template", () => {
     ).rejects.toBeInstanceOf(GalaxyNotFoundError);
   });
 
-  it("project message includes slot count and workflowId", () => {
+  it("project message is the other server's, source and invoke hint included", () => {
     const fakeOut = {
       inputs_template: { "0": { src: "hda", id: "<dataset_id>" } },
       slots: [{}],
@@ -266,7 +266,24 @@ describe("get_workflow_input_template", () => {
       warnings: [],
     };
     const msg = getWorkflowInputTemplateOp.project!(fakeOut as any, { workflowId: "wf42" });
-    expect(msg.message).toBe("1 input slot(s) for workflow wf42");
+    expect(msg.message).toBe(
+      "Built an input template for workflow 'wf42' (1 slot(s), source: style=run). " +
+        "Fill inputs_template and invoke with inputs_by='step_index|step_uuid'.",
+    );
+  });
+
+  it("reads the source off the guide when nobody collected the fact", () => {
+    // buildGuide adds `notes` exactly when there was no run model, which is exactly
+    // the .ga fallback -- so a hand projection still names the right source.
+    const fakeOut = {
+      inputs_template: {},
+      slots: [],
+      inputs_by: "step_index|step_uuid",
+      warnings: [],
+      guide: { summary: "", notes: ["options resolve at run time"] },
+    };
+    const msg = getWorkflowInputTemplateOp.project!(fakeOut as any, { workflowId: "wf42" });
+    expect(msg.message).toContain("(0 slot(s), source: ga-fallback)");
   });
 
   it("verbose=true leaves option lists uncapped and returns full readme", async () => {
