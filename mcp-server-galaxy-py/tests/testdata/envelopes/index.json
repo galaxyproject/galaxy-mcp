@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 90,
+  "caseCount": 144,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -994,6 +994,640 @@
       },
       "envelope": "get_tool_citations/none.json",
       "replies": "get_tool_citations/none.galaxy.json"
+    },
+    {
+      "tool": "get_server_info",
+      "case": "current_galaxy",
+      "note": "a server new enough for everything, so nothing is ruled out",
+      "input": {},
+      "envelope": "get_server_info/current_galaxy.json",
+      "replies": "get_server_info/current_galaxy.galaxy.json"
+    },
+    {
+      "tool": "get_server_info",
+      "case": "too_old_for_the_page_tools",
+      "note": "one minor version short, so the six declared tools are named",
+      "input": {},
+      "envelope": "get_server_info/too_old_for_the_page_tools.json",
+      "replies": "get_server_info/too_old_for_the_page_tools.galaxy.json"
+    },
+    {
+      "tool": "get_server_info",
+      "case": "version_unreadable",
+      "note": "a version route that says nothing, where nothing is known and nothing is refused",
+      "input": {},
+      "envelope": "get_server_info/version_unreadable.json",
+      "replies": "get_server_info/version_unreadable.galaxy.json"
+    },
+    {
+      "tool": "get_server_info",
+      "case": "bare_configuration",
+      "note": "a configuration carrying almost nothing, so every default shows",
+      "input": {},
+      "envelope": "get_server_info/bare_configuration.json",
+      "replies": "get_server_info/bare_configuration.galaxy.json"
+    },
+    {
+      "tool": "get_user",
+      "case": "detailed",
+      "note": "the whole user record, every field Galaxy sent",
+      "input": {},
+      "envelope": "get_user/detailed.json",
+      "replies": "get_user/detailed.galaxy.json"
+    },
+    {
+      "tool": "get_user",
+      "case": "bare",
+      "note": "a record carrying only the three fields anything reading it needs",
+      "input": {},
+      "envelope": "get_user/bare.json",
+      "replies": "get_user/bare.galaxy.json"
+    },
+    {
+      "tool": "get_dataset_details",
+      "case": "peek_sliced",
+      "note": "twelve lines of peek cut to the ten asked for by default",
+      "input": {
+        "dataset_id": "d0000001"
+      },
+      "envelope": "get_dataset_details/peek_sliced.json",
+      "replies": "get_dataset_details/peek_sliced.galaxy.json"
+    },
+    {
+      "tool": "get_dataset_details",
+      "case": "peek_shorter_than_asked_for",
+      "note": "fewer lines than the slice, so nothing is cut and the count is what arrived",
+      "input": {
+        "dataset_id": "d0000001",
+        "preview_lines": 20
+      },
+      "envelope": "get_dataset_details/peek_shorter_than_asked_for.json",
+      "replies": "get_dataset_details/peek_sliced.galaxy.json"
+    },
+    {
+      "tool": "get_dataset_details",
+      "case": "galaxy_cut_the_peek_itself",
+      "note": "Galaxy's own truncated flag, which is not the same fact as our line slice",
+      "input": {
+        "dataset_id": "d0000001",
+        "preview_lines": 20
+      },
+      "envelope": "get_dataset_details/galaxy_cut_the_peek_itself.json",
+      "replies": "get_dataset_details/galaxy_cut_the_peek_itself.galaxy.json"
+    },
+    {
+      "tool": "get_dataset_details",
+      "case": "no_text_preview",
+      "note": "a datatype Galaxy previews nothing for, so item_data is null",
+      "input": {
+        "dataset_id": "d0000002"
+      },
+      "envelope": "get_dataset_details/no_text_preview.json",
+      "replies": "get_dataset_details/no_text_preview.galaxy.json"
+    },
+    {
+      "tool": "get_dataset_details",
+      "case": "preview_not_asked_for",
+      "note": "include_preview false, so the text route is never asked and there is no preview key",
+      "input": {
+        "dataset_id": "d0000001",
+        "include_preview": false
+      },
+      "envelope": "get_dataset_details/preview_not_asked_for.json",
+      "replies": "get_dataset_details/preview_not_asked_for.galaxy.json"
+    },
+    {
+      "tool": "get_dataset_details",
+      "case": "state_not_ok",
+      "note": "a dataset still running, where no peek is taken whatever was asked for",
+      "input": {
+        "dataset_id": "d0000003"
+      },
+      "envelope": "get_dataset_details/state_not_ok.json",
+      "replies": "get_dataset_details/state_not_ok.galaxy.json"
+    },
+    {
+      "tool": "get_tool_details",
+      "case": "metadata_only",
+      "note": "the default: the tool record without its parameter list",
+      "input": {
+        "tool_id": "cat1"
+      },
+      "envelope": "get_tool_details/metadata_only.json",
+      "replies": "get_tool_details/metadata_only.galaxy.json"
+    },
+    {
+      "tool": "get_tool_details",
+      "case": "with_io_details",
+      "note": "io_details=True, so the parameter and output lists come too",
+      "input": {
+        "tool_id": "fastqc",
+        "io_details": true
+      },
+      "envelope": "get_tool_details/with_io_details.json",
+      "replies": "get_tool_details/with_io_details.galaxy.json"
+    },
+    {
+      "tool": "get_tool_input_template",
+      "case": "every_nesting",
+      "note": "a data param, a repeat, a conditional, a section and a select in one schema",
+      "input": {
+        "tool_id": "build_list"
+      },
+      "envelope": "get_tool_input_template/every_nesting.json",
+      "replies": "get_tool_input_template/every_nesting.galaxy.json"
+    },
+    {
+      "tool": "get_tool_input_template",
+      "case": "no_inputs",
+      "note": "a tool whose definition arrived without a parameter list at all",
+      "input": {
+        "tool_id": "upload1"
+      },
+      "envelope": "get_tool_input_template/no_inputs.json",
+      "replies": "get_tool_input_template/no_inputs.galaxy.json"
+    },
+    {
+      "tool": "get_workflow_details",
+      "case": "latest",
+      "note": "no version asked for, so Galaxy answers with the newest",
+      "input": {
+        "workflow_id": "wf000001"
+      },
+      "envelope": "get_workflow_details/latest.json",
+      "replies": "get_workflow_details/latest.galaxy.json"
+    },
+    {
+      "tool": "get_workflow_details",
+      "case": "pinned_version",
+      "note": "an older version asked for by number",
+      "input": {
+        "workflow_id": "wf000002",
+        "version": 1
+      },
+      "envelope": "get_workflow_details/pinned_version.json",
+      "replies": "get_workflow_details/pinned_version.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "from_provenance",
+      "note": "a history was named, so the provenance record answers with the job id",
+      "input": {
+        "dataset_id": "d0000002",
+        "history_id": "h0000"
+      },
+      "envelope": "get_job_details/from_provenance.json",
+      "replies": "get_job_details/from_provenance.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "from_creating_job",
+      "note": "no history named, so the dataset's own creating_job is read",
+      "input": {
+        "dataset_id": "d0000002"
+      },
+      "envelope": "get_job_details/from_creating_job.json",
+      "replies": "get_job_details/from_creating_job.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "provenance_without_a_job_id",
+      "note": "provenance answered, but named no job, so the dataset is read anyway",
+      "input": {
+        "dataset_id": "d0000002",
+        "history_id": "h0000"
+      },
+      "envelope": "get_job_details/provenance_without_a_job_id.json",
+      "replies": "get_job_details/provenance_without_a_job_id.galaxy.json"
+    },
+    {
+      "tool": "create_history",
+      "case": "named",
+      "note": "a new history, which is one POST and the record Galaxy answers with",
+      "input": {
+        "history_name": "RNA-seq Sample A"
+      },
+      "envelope": "create_history/named.json",
+      "replies": "create_history/named.galaxy.json"
+    },
+    {
+      "tool": "update_history",
+      "case": "name_only",
+      "note": "one field changed, which the message has to name and the record has to show",
+      "input": {
+        "history_id": "h0000new",
+        "name": "RNA-seq Sample A (final)"
+      },
+      "envelope": "update_history/name_only.json",
+      "replies": "update_history/name_only.galaxy.json"
+    },
+    {
+      "tool": "update_history",
+      "case": "several_fields",
+      "note": "an annotation, tags and published at once",
+      "input": {
+        "history_id": "h0000new",
+        "annotation": "QC'd and ready",
+        "tags": [
+          "rnaseq",
+          "final"
+        ],
+        "published": true
+      },
+      "envelope": "update_history/several_fields.json",
+      "replies": "update_history/several_fields.galaxy.json"
+    },
+    {
+      "tool": "run_tool",
+      "case": "scalar_inputs",
+      "note": "nothing that looks like a dataset, so the schema is never fetched",
+      "input": {
+        "history_id": "h0000",
+        "tool_id": "fastqc",
+        "inputs": {
+          "contaminants": "",
+          "limits": ""
+        }
+      },
+      "envelope": "run_tool/scalar_inputs.json",
+      "replies": "run_tool/scalar_inputs.galaxy.json"
+    },
+    {
+      "tool": "run_tool",
+      "case": "dataset_input_checked_first",
+      "note": "a dataset reference, so the tool's schema is read and the inputs are checked",
+      "input": {
+        "history_id": "h0000",
+        "tool_id": "fastqc",
+        "inputs": {
+          "input_file": {
+            "src": "hda",
+            "id": "d0000001"
+          }
+        }
+      },
+      "envelope": "run_tool/dataset_input_checked_first.json",
+      "replies": "run_tool/dataset_input_checked_first.galaxy.json"
+    },
+    {
+      "tool": "run_tool",
+      "case": "section_inputs_legacy_keys",
+      "note": "a parameter inside a section, spelled the flat legacy way the tool sends it",
+      "input": {
+        "history_id": "h0000",
+        "tool_id": "fastqc",
+        "inputs": {
+          "advanced|threshold": 9,
+          "contaminants": ""
+        }
+      },
+      "envelope": "run_tool/section_inputs_legacy_keys.json",
+      "replies": "run_tool/scalar_inputs.galaxy.json"
+    },
+    {
+      "tool": "run_tool",
+      "case": "pinned_version",
+      "note": "a version asked for by name, which this server posts itself rather than bioblend",
+      "input": {
+        "history_id": "h0000",
+        "tool_id": "fastqc",
+        "inputs": {
+          "contaminants": ""
+        },
+        "tool_version": "0.74+galaxy1"
+      },
+      "envelope": "run_tool/pinned_version.json",
+      "replies": "run_tool/scalar_inputs.galaxy.json"
+    },
+    {
+      "tool": "invoke_workflow",
+      "case": "no_inputs",
+      "note": "nothing supplied, so nothing to check -- one POST and the record back",
+      "input": {
+        "workflow_id": "wf000001",
+        "history_id": "h0000"
+      },
+      "envelope": "invoke_workflow/no_inputs.json",
+      "replies": "invoke_workflow/no_inputs.galaxy.json"
+    },
+    {
+      "tool": "invoke_workflow",
+      "case": "inputs_checked_before_submitting",
+      "note": "a dataset supplied for the one slot, checked against the run model first",
+      "input": {
+        "workflow_id": "wf000001",
+        "history_id": "h0000",
+        "inputs": {
+          "0": {
+            "id": "d0000001",
+            "src": "hda"
+          }
+        }
+      },
+      "envelope": "invoke_workflow/inputs_checked_before_submitting.json",
+      "replies": "invoke_workflow/inputs_checked_before_submitting.galaxy.json"
+    },
+    {
+      "tool": "invoke_workflow",
+      "case": "batch_answers_with_a_list",
+      "note": "Galaxy expanded the run, so the answer is every invocation it made",
+      "input": {
+        "workflow_id": "wf000001",
+        "history_id": "h0000"
+      },
+      "envelope": "invoke_workflow/batch_answers_with_a_list.json",
+      "replies": "invoke_workflow/batch_answers_with_a_list.galaxy.json"
+    },
+    {
+      "tool": "get_page",
+      "case": "markdown",
+      "note": "the default read: the editable markdown stays, the expanded render goes",
+      "input": {
+        "page_id": "pg000001"
+      },
+      "envelope": "get_page/markdown.json",
+      "replies": "get_page/markdown.galaxy.json"
+    },
+    {
+      "tool": "get_page",
+      "case": "with_rendered",
+      "note": "include_rendered, so the expanded render comes too",
+      "input": {
+        "page_id": "pg000001",
+        "include_rendered": true
+      },
+      "envelope": "get_page/with_rendered.json",
+      "replies": "get_page/markdown.galaxy.json"
+    },
+    {
+      "tool": "get_page",
+      "case": "html_page_without_content_editor",
+      "note": "an HTML page, whose only body is the expanded render -- which still goes",
+      "input": {
+        "page_id": "pg000002"
+      },
+      "envelope": "get_page/html_page_without_content_editor.json",
+      "replies": "get_page/html_page_without_content_editor.galaxy.json"
+    },
+    {
+      "tool": "get_page",
+      "case": "no_rendered_content_at_all",
+      "note": "a reply carrying no content key, where there is nothing to drop",
+      "input": {
+        "page_id": "pg000003"
+      },
+      "envelope": "get_page/no_rendered_content_at_all.json",
+      "replies": "get_page/no_rendered_content_at_all.galaxy.json"
+    },
+    {
+      "tool": "create_page",
+      "case": "notebook",
+      "note": "a page attached to a history, which is the notebook shape",
+      "input": {
+        "history_id": "h0000",
+        "title": "Reads QC report",
+        "content": "# Reads QC\n"
+      },
+      "envelope": "create_page/notebook.json",
+      "replies": "create_page/notebook.galaxy.json"
+    },
+    {
+      "tool": "create_page",
+      "case": "standalone_report",
+      "note": "no history, so a report -- which needs both a title and a slug",
+      "input": {
+        "title": "Cohort summary",
+        "slug": "cohort-summary",
+        "annotation": "for the paper"
+      },
+      "envelope": "create_page/standalone_report.json",
+      "replies": "create_page/standalone_report.galaxy.json"
+    },
+    {
+      "tool": "update_page",
+      "case": "content_changed",
+      "note": "new markdown, which writes a revision the agent is recorded against",
+      "input": {
+        "page_id": "pg000001",
+        "content": "# Reads QC\n\nrewritten\n"
+      },
+      "envelope": "update_page/content_changed.json",
+      "replies": "update_page/content_changed.galaxy.json"
+    },
+    {
+      "tool": "update_page",
+      "case": "title_only_on_an_html_page",
+      "note": "a title change on a page whose body is the expanded render, which still goes",
+      "input": {
+        "page_id": "pg000002",
+        "title": "Legacy report (renamed)"
+      },
+      "envelope": "update_page/title_only_on_an_html_page.json",
+      "replies": "update_page/title_only_on_an_html_page.galaxy.json"
+    },
+    {
+      "tool": "create_user_tool",
+      "case": "created",
+      "note": "a representation POSTed, and the record Galaxy answers with",
+      "input": {
+        "representation": {
+          "class": "GalaxyUserTool",
+          "id": "row_filter",
+          "version": "0.1.0",
+          "name": "Row filter",
+          "description": "Keep rows above a threshold",
+          "container": "quay.io/biocontainers/python:3.12",
+          "shell_command": "python3 -c 'pass'",
+          "inputs": [
+            {
+              "name": "table",
+              "type": "data",
+              "format": "tabular"
+            },
+            {
+              "name": "threshold",
+              "type": "integer"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "kept",
+              "type": "data",
+              "format": "tabular",
+              "from_work_dir": "out.tsv"
+            }
+          ]
+        }
+      },
+      "envelope": "create_user_tool/created.json",
+      "replies": "create_user_tool/created.galaxy.json"
+    },
+    {
+      "tool": "delete_user_tool",
+      "case": "deactivated",
+      "note": "a soft delete, where the answer is built here rather than read from Galaxy",
+      "input": {
+        "uuid": "61d15277-a911-45ef-aa66-5385146578cc"
+      },
+      "envelope": "delete_user_tool/deactivated.json",
+      "replies": "delete_user_tool/deactivated.galaxy.json"
+    },
+    {
+      "tool": "run_user_tool",
+      "case": "scalar_input",
+      "note": "a run whose inputs are all scalars, so the checker has nothing to resolve",
+      "input": {
+        "history_id": "h0000",
+        "tool_uuid": "61d15277-a911-45ef-aa66-5385146578cc",
+        "inputs": {
+          "threshold": 5
+        }
+      },
+      "envelope": "run_user_tool/scalar_input.json",
+      "replies": "run_user_tool/scalar_input.galaxy.json"
+    },
+    {
+      "tool": "run_user_tool",
+      "case": "dataset_input",
+      "note": "a dataset handed to a data parameter, checked against the tool's own definition",
+      "input": {
+        "history_id": "h0000",
+        "tool_uuid": "61d15277-a911-45ef-aa66-5385146578cc",
+        "inputs": {
+          "table": {
+            "src": "hda",
+            "id": "d0000001"
+          },
+          "threshold": 5
+        }
+      },
+      "envelope": "run_user_tool/dataset_input.json",
+      "replies": "run_user_tool/scalar_input.galaxy.json"
+    },
+    {
+      "tool": "cancel_workflow_invocation",
+      "case": "cancelled",
+      "note": "a DELETE, and the invocation Galaxy answers with wrapped beside a flag",
+      "input": {
+        "invocation_id": "inv00001"
+      },
+      "envelope": "cancel_workflow_invocation/cancelled.json",
+      "replies": "cancel_workflow_invocation/cancelled.galaxy.json"
+    },
+    {
+      "tool": "import_workflow_from_iwc",
+      "case": "imported",
+      "note": "a definition found in the IWC manifest and POSTed to Galaxy",
+      "input": {
+        "trs_id": "#workflow/github.com/iwc-workflows/wf0/main"
+      },
+      "envelope": "import_workflow_from_iwc/imported.json",
+      "replies": "import_workflow_from_iwc/imported.galaxy.json"
+    },
+    {
+      "tool": "get_page_revision",
+      "case": "content_editor_from_the_server",
+      "note": "the revision carries its own editable markdown",
+      "input": {
+        "page_id": "pg000001",
+        "revision_id": "rev00002"
+      },
+      "envelope": "get_page_revision/content_editor_from_the_server.json",
+      "replies": "get_page_revision/content_editor_from_the_server.galaxy.json"
+    },
+    {
+      "tool": "get_page_revision",
+      "case": "content_editor_from_content",
+      "note": "an older server sent no content_editor, so the expanded content stands in",
+      "input": {
+        "page_id": "pg000001",
+        "revision_id": "rev00001"
+      },
+      "envelope": "get_page_revision/content_editor_from_content.json",
+      "replies": "get_page_revision/content_editor_from_content.galaxy.json"
+    },
+    {
+      "tool": "get_page_revision",
+      "case": "no_content_at_all",
+      "note": "a revision carrying neither field, where content_editor is null",
+      "input": {
+        "page_id": "pg000001",
+        "revision_id": "rev00000"
+      },
+      "envelope": "get_page_revision/no_content_at_all.json",
+      "replies": "get_page_revision/no_content_at_all.galaxy.json"
+    },
+    {
+      "tool": "revert_page_revision",
+      "case": "restored",
+      "note": "the new revision a restore writes, read back the same way",
+      "input": {
+        "page_id": "pg000001",
+        "revision_id": "rev00001"
+      },
+      "envelope": "revert_page_revision/restored.json",
+      "replies": "revert_page_revision/restored.galaxy.json"
+    },
+    {
+      "tool": "recommend_biocontainer",
+      "case": "single_pinned",
+      "note": "one package at a version that is built, which is an exact match",
+      "input": {
+        "packages": [
+          "samtools=1.17"
+        ]
+      },
+      "envelope": "recommend_biocontainer/single_pinned.json",
+      "replies": "recommend_biocontainer/single_pinned.galaxy.json"
+    },
+    {
+      "tool": "recommend_biocontainer",
+      "case": "single_unpinned",
+      "note": "one package with no version, so the newest built tag and a name-only match",
+      "input": {
+        "packages": [
+          "samtools"
+        ]
+      },
+      "envelope": "recommend_biocontainer/single_unpinned.json",
+      "replies": "recommend_biocontainer/single_pinned.galaxy.json"
+    },
+    {
+      "tool": "recommend_biocontainer",
+      "case": "version_never_built",
+      "note": "a version nobody built, which falls back to the newest and says so in a note",
+      "input": {
+        "packages": [
+          "samtools=9.9"
+        ]
+      },
+      "envelope": "recommend_biocontainer/version_never_built.json",
+      "replies": "recommend_biocontainer/single_pinned.galaxy.json"
+    },
+    {
+      "tool": "recommend_biocontainer",
+      "case": "no_such_repository",
+      "note": "a package with no biocontainer at all: no image, and nothing to verify",
+      "input": {
+        "packages": [
+          "nosuchpackage"
+        ]
+      },
+      "envelope": "recommend_biocontainer/no_such_repository.json",
+      "replies": "recommend_biocontainer/no_such_repository.galaxy.json"
+    },
+    {
+      "tool": "recommend_biocontainer",
+      "case": "two_packages",
+      "note": "a pinned pair, which is a mulled-v2 repository and a hashed tag",
+      "input": {
+        "packages": [
+          "bwa=0.7.17",
+          "samtools=1.17"
+        ]
+      },
+      "envelope": "recommend_biocontainer/two_packages.json",
+      "replies": "recommend_biocontainer/two_packages.galaxy.json"
     }
   ]
 }

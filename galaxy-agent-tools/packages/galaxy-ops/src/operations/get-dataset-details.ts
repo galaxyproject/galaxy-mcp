@@ -36,12 +36,22 @@ export interface DatasetPreview {
 }
 
 /**
- * The dataset payload, with the preview alongside it when one was asked for and taken.
+ * The dataset record wrapped, with the preview alongside it when one was asked for and taken.
+ *
+ * Python answers with `{dataset, dataset_id}` and puts `preview` beside them, rather than
+ * spreading Galaxy's record at the top level: `data.state` is then a field of the wrapper
+ * and not of the dataset, and a Galaxy that grew a `preview` or a `dataset_id` field of its
+ * own could not collide with either. `dataset_id` is the ARGUMENT, so it is there even for
+ * a record that carries no id.
  *
  * Galaxy's OpenAPI types this route's 200 body as `unknown`, so `DatasetDetail` carries no
- * fields to intersect with and the record is spelled out here instead.
+ * fields to intersect with and the record is carried as a plain object instead.
  */
-export type DatasetDetailsResult = Record<string, unknown> & { preview?: DatasetPreview };
+export interface DatasetDetailsResult {
+  dataset: Record<string, unknown>;
+  dataset_id: string;
+  preview?: DatasetPreview;
+}
 
 const DEFAULT_PREVIEW_LINES = 10;
 
@@ -158,16 +168,18 @@ async function run(i: In, ctx: GalaxyContext): Promise<DatasetDetailsResult> {
   const includePreview = i.includePreview ?? true;
   const previewLines = i.previewLines ?? DEFAULT_PREVIEW_LINES;
   const payload = dataset as Record<string, unknown>;
-  if (!includePreview || payload.state !== "ok") return payload;
+  const wrapped: DatasetDetailsResult = { dataset: payload, dataset_id: i.datasetId };
+  if (!includePreview || payload.state !== "ok") return wrapped;
 
-  return { ...payload, preview: await previewFor(ctx, i.datasetId, previewLines) };
+  return { ...wrapped, preview: await previewFor(ctx, i.datasetId, previewLines) };
 }
 
 export const getDatasetDetailsOp: Operation<typeof input, DatasetDetailsResult> = {
   name: "get_dataset_details",
   domain: "datasets",
   summary:
-    "Show a dataset's metadata by id (state, extension, name), with an optional content preview. " +
+    "Show a dataset's metadata by id under `dataset` (state, extension, name), beside the "+
+    "`dataset_id` asked for, with an optional content preview. " +
     "The preview is Galaxy's own text peek -- up to about 1 MB of text read from the start of the " +
     "dataset, never the dataset itself -- sliced to previewLines lines, and only for a dataset in " +
     "the 'ok' state. preview.lines is null for a datatype Galaxy has no text preview for; " +
@@ -177,7 +189,9 @@ export const getDatasetDetailsOp: Operation<typeof input, DatasetDetailsResult> 
     "statement about how much of the dataset this is.",
   input,
   run,
-  project: (d) => ({ message: `Dataset ${(d as { id?: string }).id} state=${(d as { state?: string }).state}` }),
+  project: (d) => ({
+    message: `Dataset ${d.dataset_id} state=${String(d.dataset.state)}`,
+  }),
 };
 
 register(getDatasetDetailsOp as AnyOperation);

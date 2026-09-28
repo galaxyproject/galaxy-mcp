@@ -1,0 +1,102 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example/",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/workflows/wf000001/download",
+      "query": {
+        "style": "run"
+      },
+      "status": 200,
+      "headers": {},
+      "body": {
+        "id": "wf000001",
+        "name": "Reads QC",
+        "has_upgrade_messages": false,
+        "step_version_changes": [],
+        "steps": {
+          "0": {
+            "step_type": "data_input",
+            "step_index": 0,
+            "step_label": "Input FASTQ",
+            "uuid": "11111111-1111-1111-1111-111111111111",
+            "inputs": [
+              {
+                "extensions": [
+                  "fastqsanger"
+                ],
+                "acceptable_extensions": [
+                  "fastqsanger",
+                  "fastqsanger.gz"
+                ],
+                "optional": false
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/datatypes/types_and_mapping",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "datatypes_mapping": {
+          "ext_to_class_name": {
+            "fastqsanger": "galaxy.datatypes.sequence.FastqSanger"
+          },
+          "class_to_classes": {
+            "galaxy.datatypes.sequence.FastqSanger": {
+              "galaxy.datatypes.sequence.FastqSanger": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/datasets/d0000001",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "id": "d0000001",
+        "name": "reads.fastqsanger",
+        "extension": "fastqsanger"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/workflows/wf000001/invocations",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "id": "inv00002",
+        "state": "new",
+        "model_class": "WorkflowInvocation",
+        "workflow_id": "wf000001",
+        "history_id": "h0000",
+        "uuid": "33333333-3333-3333-3333-333333333333",
+        "create_time": "2026-01-02T03:04:05.000000",
+        "update_time": "2026-01-02T03:04:05.000000",
+        "inputs": {},
+        "steps": [
+          {
+            "id": "st000001",
+            "order_index": 0,
+            "state": "new",
+            "job_id": null,
+            "workflow_step_label": "Input FASTQ",
+            "model_class": "WorkflowInvocationStep"
+          }
+        ],
+        "outputs": {},
+        "output_collections": {}
+      }
+    }
+  ]
+}

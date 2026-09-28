@@ -8,17 +8,28 @@ import type { GalaxyContext } from "../../src/context";
 const ctxWith = (client: any): GalaxyContext => ({ client, poll: DEFAULT_POLL });
 
 describe("get_user", () => {
-  it("has parity name and returns id/email/username", async () => {
+  it("has parity name and hands back the record Galaxy sent", async () => {
     expect(getUserOp.name).toBe("get_user");
+    // Every field, not the three the guard reads: the Python tool answers with the whole
+    // record, and a caller after the quota or the disk usage has it without asking twice.
+    const record = {
+      id: "u1",
+      email: "a@b.c",
+      username: "alice",
+      total_disk_usage: 1048576,
+      nice_total_disk_usage: "1.0 MB",
+      quota_percent: 12.5,
+      tags_used: ["rnaseq"],
+    };
     const client = mockClient({
       GET: (path, init) => {
         expect(path).toBe("/api/users/{user_id}");
         expect(init.params.path.user_id).toBe("current");
-        return { data: { id: "u1", email: "a@b.c", username: "alice" }, response: { status: 200 } };
+        return { data: record, response: { status: 200 } };
       },
     });
     const out = await getUser({}, ctxWith(client));
-    expect(out).toEqual({ id: "u1", email: "a@b.c", username: "alice" });
+    expect(out).toEqual(record);
   });
 
   it("throws GalaxyAuthError on 401", async () => {

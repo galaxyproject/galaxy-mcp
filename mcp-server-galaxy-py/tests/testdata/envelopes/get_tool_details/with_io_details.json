@@ -1,0 +1,50 @@
+{
+  "data": {
+    "id": "fastqc",
+    "name": "FastQC",
+    "version": "0.74+galaxy1",
+    "description": "Read Quality reports",
+    "model_class": "Tool",
+    "inputs": [
+      {
+        "name": "input_file",
+        "label": "Short read data from your current history",
+        "type": "data",
+        "optional": false,
+        "multiple": false,
+        "extensions": [
+          "fastqsanger",
+          "bam"
+        ],
+        "value": null
+      },
+      {
+        "name": "contaminants",
+        "label": "Contaminant list",
+        "type": "data",
+        "optional": true,
+        "multiple": false,
+        "extensions": [
+          "tabular"
+        ],
+        "value": null
+      }
+    ],
+    "outputs": [
+      {
+        "name": "html_file",
+        "format": "html",
+        "label": "${tool.name} on ${on_string}: Webpage"
+      },
+      {
+        "name": "text_file",
+        "format": "txt",
+        "label": "${tool.name} on ${on_string}: RawData"
+      }
+    ]
+  },
+  "success": true,
+  "message": "Retrieved details for tool 'fastqc'",
+  "count": null,
+  "pagination": null
+}

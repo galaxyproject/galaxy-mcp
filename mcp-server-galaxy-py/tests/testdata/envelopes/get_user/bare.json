@@ -1,0 +1,11 @@
+{
+  "data": {
+    "id": "u0000001",
+    "username": "curator",
+    "email": "curator@galaxy.example"
+  },
+  "success": true,
+  "message": "Retrieved user info for 'curator'",
+  "count": null,
+  "pagination": null
+}

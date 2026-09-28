@@ -50,13 +50,17 @@ function datasetClient(
 
 const previewOf = (out: unknown) => (out as { preview?: DatasetPreview }).preview;
 
+/** The dataset record, which travels under `dataset` rather than at the top level. */
+const recordOf = (out: unknown) => (out as { dataset: Record<string, unknown> }).dataset;
+
 describe("get_dataset_details", () => {
   it("shows a dataset by id", async () => {
     const out = await getDatasetDetails(
       { datasetId: "d1", includePreview: false },
       ctxWith(datasetClient({ id: "d1", state: "ok", file_ext: "txt" })),
     );
-    expect((out as any).id).toBe("d1");
+    expect(recordOf(out).id).toBe("d1");
+    expect((out as any).dataset_id).toBe("d1");
   });
 
   it("slices the peek to previewLines and reports both truncation facts", async () => {
@@ -69,7 +73,7 @@ describe("get_dataset_details", () => {
         ),
       ),
     );
-    expect((out as any).name).toBe("test_data.txt");
+    expect(recordOf(out).name).toBe("test_data.txt");
     const preview = previewOf(out)!;
     expect(preview.lines).toBe("line1\nline2\nline3");
     expect(preview.preview_lines).toBe(3);
@@ -127,7 +131,7 @@ describe("get_dataset_details", () => {
         ),
       ),
     );
-    expect((out as any).name).toBe("test_data.txt");
+    expect(recordOf(out).name).toBe("test_data.txt");
     const preview = previewOf(out)!;
     expect(preview.error).toContain("Preview unavailable");
     expect(preview.lines).toBeNull();
@@ -144,7 +148,7 @@ describe("get_dataset_details", () => {
         datasetClient({ id: "dataset123", name: "test_data.txt", state: "ok" }, { item_data: 42 }),
       ),
     );
-    expect((out as any).name).toBe("test_data.txt");
+    expect(recordOf(out).name).toBe("test_data.txt");
     const preview = previewOf(out)!;
     expect(preview.lines).toBeNull();
     expect(preview.error).toContain("Preview unavailable");
@@ -165,7 +169,7 @@ describe("get_dataset_details", () => {
       { datasetId: "d1" },
       ctxWith(datasetClient({ id: "d1", name: "test_data.txt", state: "ok" }, { body })),
     );
-    expect((out as any).name).toBe("test_data.txt");
+    expect(recordOf(out).name).toBe("test_data.txt");
     const preview = previewOf(out)!;
     expect(preview.lines).toBeNull();
     expect(preview.error).toContain("Preview unavailable");
@@ -181,7 +185,7 @@ describe("get_dataset_details", () => {
       { datasetId: "d1", previewLines: 2.5 },
       ctxWith(datasetClient({ id: "d1", name: "test_data.txt", state: "ok" }, { item_data: "a\nb\nc" })),
     );
-    expect((out as any).name).toBe("test_data.txt");
+    expect(recordOf(out).name).toBe("test_data.txt");
     const preview = previewOf(out)!;
     expect(preview.lines).toBeNull();
     expect(preview.error).toContain("Preview unavailable");

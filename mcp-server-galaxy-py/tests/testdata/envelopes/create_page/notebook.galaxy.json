@@ -1,0 +1,52 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example/",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/version",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "version_major": "26.1",
+        "version_minor": "1"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/pages",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "id": "pg000001",
+        "title": "Reads QC report",
+        "slug": "reads-qc-report",
+        "history_id": "h0000",
+        "latest_revision_id": "rev00001",
+        "revision_ids": [
+          "rev00001"
+        ],
+        "source_invocation_id": null,
+        "model_class": "Page",
+        "username": "curator",
+        "email_hash": "d41d8cd98f00b204e9800998ecf8427e",
+        "author_deleted": false,
+        "deleted": false,
+        "importable": false,
+        "published": false,
+        "tags": [],
+        "create_time": "2026-01-02T03:04:05.000000",
+        "update_time": "2026-01-02T03:14:05.000000",
+        "content_editor": "# Reads QC\n",
+        "content": "# Reads QC\n",
+        "content_format": "markdown",
+        "annotation": null,
+        "edit_source": "user",
+        "generate_time": null,
+        "generate_version": null
+      }
+    }
+  ]
+}

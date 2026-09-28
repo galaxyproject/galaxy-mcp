@@ -1,0 +1,23 @@
+{
+  "data": {
+    "id": "wf000002",
+    "name": "Reads QC",
+    "version": 1,
+    "owner": "curator",
+    "annotation": null,
+    "published": false,
+    "deleted": false,
+    "inputs": {},
+    "steps": {
+      "0": {
+        "id": 0,
+        "type": "data_input",
+        "input_steps": {}
+      }
+    }
+  },
+  "success": true,
+  "message": "Retrieved details for workflow 'Reads QC'",
+  "count": null,
+  "pagination": null
+}

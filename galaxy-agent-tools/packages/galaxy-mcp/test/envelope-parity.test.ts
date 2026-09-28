@@ -35,11 +35,12 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { buildServer } from "../src/server";
-// The IWC manifest is memoised for the life of the process, as it is on the other
-// side, so a case that serves its own manifest has to start from nothing
-// remembered. Reached directly because it is a test hook and not part of the
-// package's public surface.
+// The IWC manifest and the container recommender are both memoised for the life of
+// the process, as they are on the other side, so a case that serves its own manifest
+// or its own tag list has to start from nothing remembered. Reached directly because
+// they are test hooks and not part of the package's public surface.
 import { __resetIwcCacheForTest } from "../../galaxy-ops/src/iwc-manifest";
+import { __clearRecommendationCacheForTest } from "../../galaxy-ops/src/mulled";
 
 const FIXTURES = new URL(
   "../../../../mcp-server-galaxy-py/tests/testdata/envelopes/",
@@ -154,6 +155,7 @@ async function callThroughMcp(
 afterEach(() => {
   vi.unstubAllGlobals();
   __resetIwcCacheForTest();
+  __clearRecommendationCacheForTest();
 });
 
 describe("the MCP envelope is the Python server's", () => {
@@ -168,6 +170,7 @@ describe("the MCP envelope is the Python server's", () => {
       const expected = readJson<Record<string, unknown>>(entry.envelope);
       const replies = readJson<{ baseUrl: string; routes: Route[] }>(entry.replies);
       __resetIwcCacheForTest();
+      __clearRecommendationCacheForTest();
       vi.stubGlobal("fetch", replier(replies.baseUrl, replies.routes));
 
       const { parsed, isError } = await callThroughMcp(replies.baseUrl, entry.tool, entry.input);

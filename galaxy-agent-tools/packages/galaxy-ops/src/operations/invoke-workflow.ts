@@ -103,6 +103,15 @@ export interface InvocationResult {
   [k: string]: unknown;
 }
 
+/**
+ * What the endpoint answers with: one invocation, or every invocation a batch expanded to.
+ *
+ * Both travel as they arrived. Taking the first element of a list would answer a batch run
+ * with one of the invocations it made and silently lose the rest, and the other server
+ * hands back whatever Galaxy sent.
+ */
+export type InvokeWorkflowResult = InvocationResult | InvocationResult[];
+
 // ---------------------------------------------------------------------------
 // Op
 // ---------------------------------------------------------------------------
@@ -199,7 +208,7 @@ function describeJson(value: unknown): string {
   return Array.isArray(value) ? "an array" : `a ${typeof value}`;
 }
 
-async function run(i: In, ctx: GalaxyContext): Promise<InvocationResult> {
+async function run(i: In, ctx: GalaxyContext): Promise<InvokeWorkflowResult> {
   const inputs = coerceJsonObject(i.inputs, "inputs");
   const params = coerceJsonObject(i.params, "params");
 
@@ -270,13 +279,18 @@ async function run(i: In, ctx: GalaxyContext): Promise<InvocationResult> {
     throw new GalaxyConnectionError(`Failed to invoke workflow: ${msg}`, response.status);
   }
 
-  // The API can return a single invocation or an array (batch mode).
-  // We return the first/only invocation dict.
-  const result = Array.isArray(data) ? data[0] : data;
-  return result as InvocationResult;
+  // One invocation, or the list a batch expanded to, as it arrived.
+  return data as InvokeWorkflowResult;
 }
 
-export const invokeWorkflowOp: Operation<typeof input, InvocationResult> = {
+/** The ids in the summary line: one invocation, or the several a batch made. */
+function describeInvoked(out: InvokeWorkflowResult): string {
+  const ids = (Array.isArray(out) ? out : [out]).map((inv) => inv.id).filter(Boolean);
+  if (ids.length === 0) return "";
+  return ids.length === 1 ? ` (invocation ${ids[0]})` : ` (${ids.length} invocations: ${ids.join(", ")})`;
+}
+
+export const invokeWorkflowOp: Operation<typeof input, InvokeWorkflowResult> = {
   name: "invoke_workflow",
   domain: "workflows",
   summary:
@@ -285,7 +299,7 @@ export const invokeWorkflowOp: Operation<typeof input, InvocationResult> = {
   readOnly: false,
   run,
   project: (out, i) => ({
-    message: `Invoked workflow ${i.workflowId}${out.id ? ` (invocation ${out.id})` : ""}`,
+    message: `Invoked workflow ${i.workflowId}${describeInvoked(out)}`,
   }),
 };
 

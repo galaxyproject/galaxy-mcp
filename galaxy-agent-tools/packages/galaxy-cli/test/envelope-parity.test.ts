@@ -80,7 +80,12 @@ function replier(baseUrl: string, routes: Route[]): typeof fetch {
           ? input.href
           : (input as { url: string }).url;
     const url = new URL(href);
-    const method = (init?.method ?? "GET").toUpperCase();
+    // openapi-fetch builds a Request and calls fetch with it, so a write's method is on
+    // the Request and not in an init the caller passed -- read `init` alone and every
+    // POST, PUT and DELETE in the table is looked up as a GET and answered with a 404.
+    const method = (
+      init?.method ?? (input instanceof Request ? input.method : "GET")
+    ).toUpperCase();
     const target = routes
       .filter((route) => {
         if (route.method.toUpperCase() !== method) return false;
@@ -133,18 +138,20 @@ function argvFor(op: AnyOperation, input: Record<string, unknown>): string[] {
   return [op.name, ...positionals, ...options, "--format", "json"];
 }
 
-async function runCli(argv: string[], fetchImpl: typeof fetch) {
+async function runCli(argv: string[], baseUrl: string, fetchImpl: typeof fetch) {
   const out = vi.spyOn(console, "log").mockImplementation(() => {});
   const err = vi.spyOn(console, "error").mockImplementation(() => {});
-  // The context's client takes the canned fetch as an argument; the IWC manifest
-  // does not -- it goes through the global. Both are answered from the table, so
-  // no case here can reach the network.
+  // The context's client takes the canned fetch as an argument; the IWC manifest and
+  // quay.io do not -- they go through the global. All of them are answered from the
+  // table, so no case here can reach the network.
   vi.stubGlobal("fetch", fetchImpl);
   process.exitCode = 0;
   try {
     await buildProgram({
-      makeContext: () =>
-        createGalaxyContext({ baseUrl: "https://galaxy.example", apiKey: "not-a-key", fetchImpl }),
+      // The table's own base, spelled as it spells it: get_server_info answers with the
+      // address it was given, so a trailing slash dropped here would be a difference in
+      // the harness rather than in the surface.
+      makeContext: () => createGalaxyContext({ baseUrl, apiKey: "not-a-key", fetchImpl }),
     }).parseAsync(["node", "galaxy-cli", ...argv]);
     return {
       stdout: out.mock.calls.flat().join(""),
@@ -171,12 +178,19 @@ describe("the CLI's json envelope is the Python server's", () => {
       const replies = readJson<{ baseUrl: string; routes: Route[] }>(entry.replies);
       const op = allOperations.find((o) => o.name === entry.tool);
       expect(op, `no op named ${entry.tool}`).toBeDefined();
-      // The IWC manifest is memoised for the life of the process; a case serving
-      // its own has to start from nothing remembered.
+      // The IWC manifest and the container recommender are both memoised for the life
+      // of the process; a case serving its own manifest or its own tag list has to
+      // start from nothing remembered.
       const { __resetIwcCacheForTest } = await import("../../galaxy-ops/src/iwc-manifest");
+      const { __clearRecommendationCacheForTest } = await import("../../galaxy-ops/src/mulled");
       __resetIwcCacheForTest();
+      __clearRecommendationCacheForTest();
 
-      const run = await runCli(argvFor(op!, entry.input), replier(replies.baseUrl, replies.routes));
+      const run = await runCli(
+        argvFor(op!, entry.input),
+        replies.baseUrl,
+        replier(replies.baseUrl, replies.routes),
+      );
       expect(run.exitCode, run.stderr || run.stdout).toBe(0);
       const printed = JSON.parse(run.stdout) as Record<string, unknown>;
 
@@ -210,7 +224,7 @@ describe("the table view still says how to page on", () => {
     const op = allOperations.find((o) => o.name === entry.tool)!;
     const argv = argvFor(op, entry.input).slice(0, -2); // drop --format json: table is the default
 
-    const run = await runCli(argv, replier(replies.baseUrl, replies.routes));
+    const run = await runCli(argv, replies.baseUrl, replier(replies.baseUrl, replies.routes));
     expect(run.stderr).toContain(expected.pagination.helper_text);
     // And the rows are a table of the page itself, not the shape around it.
     expect(run.stdout).toMatch(/id\s+name/);
@@ -224,7 +238,7 @@ describe("the table view still says how to page on", () => {
     const op = allOperations.find((o) => o.name === entry.tool)!;
     const argv = argvFor(op, entry.input).slice(0, -2);
 
-    const run = await runCli(argv, replier(replies.baseUrl, replies.routes));
+    const run = await runCli(argv, replies.baseUrl, replier(replies.baseUrl, replies.routes));
     expect(run.stdout).toMatch(/id\s+hid/);
     expect(run.stdout).not.toContain("contents");
   });

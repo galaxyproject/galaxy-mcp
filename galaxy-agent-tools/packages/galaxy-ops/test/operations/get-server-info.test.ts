@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import "../../src/operations/all"; // every op has to be registered for unsupported_ops to mean anything
+import "../../src/operations/all"; // every op has to be registered for unsupported_tools to mean anything
 import { getServerInfoOp, getServerInfo } from "../../src/operations/get-server-info";
-import { allOperations } from "../../src/operations/registry";
+import { allOperations, runWithEnvelope } from "../../src/operations/registry";
 import { listPages } from "../../src/operations/list-pages";
 import { createGalaxyContext, type GalaxyContext } from "../../src/context";
 import { GalaxyVersionError } from "../../src/errors";
@@ -54,15 +54,15 @@ describe("get_server_info", () => {
     const { ctx } = serverThatSays(always("26.0"));
     const out = await getServerInfo({}, ctx);
     expect(out.version_known).toBe(true);
-    expect(out.unsupported_ops.map((o) => o.name).sort()).toEqual([...gatedNames].sort());
-    expect(out.unsupported_ops.every((o) => o.requires === ">=26.1")).toBe(true);
+    expect(out.unsupported_tools.map((o) => o.name).sort()).toEqual([...gatedNames].sort());
+    expect(out.unsupported_tools.every((o) => o.requires === ">=26.1")).toBe(true);
   });
 
   it("lists nothing on a server new enough for everything", async () => {
     const { ctx } = serverThatSays(always("26.1"));
     const out = await getServerInfo({}, ctx);
     expect(out.version_known).toBe(true);
-    expect(out.unsupported_ops).toEqual([]);
+    expect(out.unsupported_tools).toEqual([]);
   });
 
   it("says the version is unknown rather than implying everything works", async () => {
@@ -70,7 +70,7 @@ describe("get_server_info", () => {
       const { ctx } = serverThatSays(always(reported));
       const out = await getServerInfo({}, ctx);
       expect(out.version_known).toBe(false);
-      expect(out.unsupported_ops).toEqual([]);
+      expect(out.unsupported_tools).toEqual([]);
     }
   });
 
@@ -85,17 +85,19 @@ describe("get_server_info", () => {
     await expect(getServerInfo({}, ctx)).rejects.toMatchObject({ kind: "auth" });
   });
 
-  it("reports a fetched version as coming from the server", async () => {
+  it("reports a fetched version, and does not call it supplied", async () => {
+    // version_source is not a field of the answer -- the other server has no such key -- so
+    // where the version came from is only ever said in the summary line.
     const { ctx } = serverThatSays(always("26.0"));
-    const out = await getServerInfo({}, ctx);
-    expect(out.version_source).toBe("server");
-    expect((out.version as { version_major?: string }).version_major).toBe("26.0");
+    const out = await runWithEnvelope(getServerInfoOp as never, {}, ctx);
+    expect("version_source" in (out.data as object)).toBe(false);
+    expect(out.message).toContain("version 26.0)");
+    expect(out.message).not.toContain("supplied");
   });
 
   it("says unknown when nothing readable came back", async () => {
     const { ctx } = serverThatSays(always("who knows"));
     const out = await getServerInfo({}, ctx);
-    expect(out.version_source).toBe("unknown");
     expect(out.version_known).toBe(false);
   });
 
@@ -112,10 +114,11 @@ describe("get_server_info", () => {
           headers: { "content-type": "application/json" },
         })) as unknown as typeof fetch,
     });
-    const out = await getServerInfo({}, ctx);
-    expect(out.version_known).toBe(true);
-    expect(out.version_source).toBe("supplied");
-    expect((out.version as { version_major?: string }).version_major).toBe("26.0");
+    const out = await runWithEnvelope(getServerInfoOp as never, {}, ctx);
+    const info = out.data as { version_known: boolean; version: { version_major?: string } };
+    expect(info.version_known).toBe(true);
+    expect(info.version.version_major).toBe("26.0");
+    expect(out.message).toContain("version 26.0, supplied");
   });
 
   it("normalises a supplied full version to a version_major", async () => {
@@ -131,7 +134,7 @@ describe("get_server_info", () => {
     });
     const out = await getServerInfo({}, ctx);
     expect((out.version as { version_major?: string }).version_major).toBe("26.1");
-    expect(out.unsupported_ops).toEqual([]);
+    expect(out.unsupported_tools).toEqual([]);
   });
 
   it("agrees with the guard when the caller overrode the version", async () => {
@@ -147,7 +150,7 @@ describe("get_server_info", () => {
         })) as unknown as typeof fetch,
     });
     const out = await getServerInfo({}, ctx);
-    expect(out.unsupported_ops.map((o) => o.name).sort()).toEqual([...gatedNames].sort());
+    expect(out.unsupported_tools.map((o) => o.name).sort()).toEqual([...gatedNames].sort());
     await expect(listPages({}, ctx)).rejects.toBeInstanceOf(GalaxyVersionError);
   });
 });
@@ -163,7 +166,7 @@ describe("get_server_info and the guard cannot reach different answers", () => {
     const { ctx, paths } = serverThatSays(goodThen401);
     const out = await getServerInfo({}, ctx);
     expect(out.version_known).toBe(true);
-    expect(out.unsupported_ops).toHaveLength(gatedNames.length);
+    expect(out.unsupported_tools).toHaveLength(gatedNames.length);
     // The guard must not now decide the version is unknown and let a gated op through.
     await expect(listPages({ historyId: "H" }, ctx)).rejects.toBeInstanceOf(GalaxyVersionError);
     expect(paths.filter((p) => p === "/api/version")).toHaveLength(1);
@@ -188,29 +191,30 @@ describe("get_server_info and the guard cannot reach different answers", () => {
 });
 
 describe("get_server_info's summary line", () => {
-  const summary = (over: Record<string, unknown>) =>
+  const summary = (over: Record<string, unknown>, facts?: Map<symbol, unknown>) =>
     getServerInfoOp.project?.(
       {
         url: "u",
         version: { version_major: "26.0" },
         config: {},
         version_known: true,
-        version_source: "server",
-        unsupported_ops: [],
+        unsupported_tools: [],
         ...over,
       } as never,
       {} as never,
+      facts,
     )?.message;
 
-  it("counts the unsupported ops", () => {
+  it("counts the unsupported tools", () => {
     expect(summary({})).not.toContain("unsupported");
-    expect(summary({ unsupported_ops: [{ name: "get_page", requires: ">=26.1" }] })).toContain(
-      "1 op(s) unsupported",
-    );
+    expect(
+      summary({ unsupported_tools: [{ name: "get_page_revision", requires: ">=26.1" }] }),
+    ).toContain("1 tool(s) unsupported");
   });
 
-  it("prints a supplied version, and says it was supplied", async () => {
-    expect(summary({ version_source: "supplied" })).toContain("version 26.0, supplied");
+  it("prints a version nobody supplied without saying it was supplied", async () => {
+    // A projection called by hand carries no collector, which is the same as a version
+    // that was fetched: nothing recorded the fact, so nothing claims it.
     expect(summary({})).toContain("version 26.0)");
   });
 
@@ -225,10 +229,9 @@ describe("get_server_info's summary line", () => {
           headers: { "content-type": "application/json" },
         })) as unknown as typeof fetch,
     });
-    const out = await getServerInfo({}, ctx);
-    const message = getServerInfoOp.project?.(out as never, {} as never)?.message ?? "";
-    expect(message).toContain("version 26.0");
-    expect(message).not.toContain("version ?");
+    const out = await runWithEnvelope(getServerInfoOp as never, {}, ctx);
+    expect(out.message).toContain("version 26.0");
+    expect(out.message).not.toContain("version ?");
   });
 });
 
@@ -245,6 +248,6 @@ describe("a context with no version lookup at all", () => {
     };
     const out = await getServerInfo({}, ctx);
     expect(out.version_known).toBe(false);
-    expect(out.unsupported_ops).toEqual([]);
+    expect(out.unsupported_tools).toEqual([]);
   });
 });

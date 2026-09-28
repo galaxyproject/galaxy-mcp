@@ -1,0 +1,54 @@
+{
+  "data": [
+    {
+      "id": "inv00002",
+      "state": "new",
+      "model_class": "WorkflowInvocation",
+      "workflow_id": "wf000001",
+      "history_id": "h0000",
+      "uuid": "33333333-3333-3333-3333-333333333333",
+      "create_time": "2026-01-02T03:04:05.000000",
+      "update_time": "2026-01-02T03:04:05.000000",
+      "inputs": {},
+      "steps": [
+        {
+          "id": "st000001",
+          "order_index": 0,
+          "state": "new",
+          "job_id": null,
+          "workflow_step_label": "Input FASTQ",
+          "model_class": "WorkflowInvocationStep"
+        }
+      ],
+      "outputs": {},
+      "output_collections": {}
+    },
+    {
+      "id": "inv00003",
+      "state": "new",
+      "model_class": "WorkflowInvocation",
+      "workflow_id": "wf000001",
+      "history_id": "h0000",
+      "uuid": "33333333-3333-3333-3333-333333333333",
+      "create_time": "2026-01-02T03:04:05.000000",
+      "update_time": "2026-01-02T03:04:05.000000",
+      "inputs": {},
+      "steps": [
+        {
+          "id": "st000001",
+          "order_index": 0,
+          "state": "new",
+          "job_id": null,
+          "workflow_step_label": "Input FASTQ",
+          "model_class": "WorkflowInvocationStep"
+        }
+      ],
+      "outputs": {},
+      "output_collections": {}
+    }
+  ],
+  "success": true,
+  "message": "Invoked workflow 'wf000001'",
+  "count": null,
+  "pagination": null
+}

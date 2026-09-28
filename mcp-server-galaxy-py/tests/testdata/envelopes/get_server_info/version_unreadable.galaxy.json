@@ -1,0 +1,42 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example/",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/version",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/configuration",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "brand": "Example Galaxy",
+        "logo_url": "/static/images/galaxyIcon_noText.png",
+        "welcome_url": "/static/welcome.html",
+        "support_url": "https://galaxy.example/support",
+        "citation_url": "https://galaxy.example/citing",
+        "terms_url": null,
+        "allow_user_creation": true,
+        "allow_user_deletion": false,
+        "enable_quotas": true,
+        "ftp_upload_site": null,
+        "wiki_url": "https://galaxy.example/wiki",
+        "screencasts_url": "https://galaxy.example/screencasts",
+        "library_import_dir": null,
+        "user_library_import_dir": null,
+        "allow_library_path_paste": false,
+        "enable_unique_workflow_defaults": false,
+        "version_major": "26.1",
+        "email_from": "noreply@galaxy.example",
+        "server_startttime": 1767225845
+      }
+    }
+  ]
+}

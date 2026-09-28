@@ -4,30 +4,101 @@ import { mockClient } from "../util/mock-client";
 import { DEFAULT_POLL } from "../../src/context";
 import type { GalaxyContext } from "../../src/context";
 
-const fastPoll = { ...DEFAULT_POLL, intervalMs: 0, maxIntervalMs: 0, jitter: 0 };
+const ctxWith = (client: any): GalaxyContext => ({ client, poll: DEFAULT_POLL });
+
+/** What POST /api/tools answers a submission with: queued jobs, in their starting state. */
+const SUBMISSION = {
+  outputs: [{ id: "d20", hid: 5, state: "new", output_name: "html_file" }],
+  output_collections: [],
+  jobs: [{ model_class: "Job", id: "j20", state: "new", tool_id: "fastqc", tool_version: "0.74" }],
+  implicit_collections: [],
+};
 
 describe("run_tool", () => {
-  it("has parity name run_tool and a nested-input schema", () => {
+  it("has parity name run_tool and the other server's four parameters", () => {
     expect(runToolOp.name).toBe("run_tool");
     expect(Object.keys(runToolOp.input).sort()).toEqual(["historyId", "inputs", "toolId", "toolVersion"]);
   });
 
-  it("drives a tool to ok via the typed path", async () => {
-    let si = 0;
+  it("submits to the classic tools endpoint and hands back what Galaxy said", async () => {
+    // Queue-and-return, not queue-and-wait: the jobs come back "new" and nothing here
+    // polls them. The other server's run_tool is this same POST and this same record.
+    let seen: { path?: string; body?: Record<string, unknown> } = {};
     const client = mockClient({
-      POST: () => ({ data: { tool_request_id: "tr1", task_result: {} }, response: { status: 200 } }),
-      GET: (path) => {
-        if (path.endsWith("/state")) return { data: ["new", "submitted"][Math.min(si++, 1)], response: { status: 200 } };
-        if (path === "/api/tool_requests/{id}")
-          return { data: { id: "tr1", state: "submitted", jobs: [{ src: "job", id: "j1" }], implicit_collections: [] }, response: { status: 200 } };
-        return { data: { id: "j1", state: "ok" }, response: { status: 200 } };
+      POST: (path, init) => {
+        seen = { path, body: init.body };
+        return { data: SUBMISSION, response: { status: 200 } };
       },
     });
-    const ctx: GalaxyContext = { client, poll: fastPoll };
-    const run = await runTool(
-      { toolId: "fastqc/0.74", historyId: "h1", inputs: { input_file: { src: "hda", id: "d1" } } },
-      ctx,
+    const out = await runTool(
+      { toolId: "fastqc", historyId: "h1", inputs: { input_file: { src: "hda", id: "d1" } } },
+      ctxWith(client),
     );
-    expect(run.state).toBe("ok");
+    expect(out).toEqual(SUBMISSION);
+    expect(seen.path).toBe("/api/tools");
+    expect(seen.body).toEqual({
+      history_id: "h1",
+      tool_id: "fastqc",
+      input_format: "legacy",
+      inputs: { input_file: { src: "hda", id: "d1" } },
+    });
+  });
+
+  it("hands legacy pipe-keyed inputs to Galaxy untouched, in legacy format", async () => {
+    // The other server sends bioblend's default input_format ("legacy"), whose parser
+    // reads a section parameter only as "section|param"; a nested object would be
+    // silently the default. So the keys go through exactly as written.
+    let body: Record<string, unknown> | undefined;
+    const client = mockClient({
+      POST: (_path, init) => {
+        body = init.body as Record<string, unknown>;
+        return { data: SUBMISSION, response: { status: 200 } };
+      },
+    });
+    const inputs = {
+      "advanced|threshold": 9,
+      "reference_source|ref_file": { src: "hda", id: "genome" },
+      contaminants: "",
+    };
+    await runTool({ toolId: "bwa_mem", historyId: "h1", inputs }, ctxWith(client));
+    expect(body?.input_format).toBe("legacy");
+    expect(body?.inputs).toEqual(inputs);
+    expect(runToolOp.input.inputs.description).toMatch(/'\|'/);
+    expect(runToolOp.summary).not.toMatch(/nested \(no flat/);
+  });
+
+  it("sends a pinned version in the payload, where Galaxy reads it", async () => {
+    // Not the query string: services/tools.py `_create` takes tool_version out of the body,
+    // which is the route the other server uses for the same case.
+    let body: Record<string, unknown> | undefined;
+    const client = mockClient({
+      POST: (_path, init) => {
+        body = init.body as Record<string, unknown>;
+        return { data: SUBMISSION, response: { status: 200 } };
+      },
+    });
+    await runTool(
+      { toolId: "fastqc", historyId: "h1", inputs: {}, toolVersion: "0.74+galaxy1" },
+      ctxWith(client),
+    );
+    expect(body?.tool_version).toBe("0.74+galaxy1");
+  });
+
+  it("leaves tool_version out entirely when none was asked for", async () => {
+    let body: Record<string, unknown> | undefined;
+    const client = mockClient({
+      POST: (_path, init) => {
+        body = init.body as Record<string, unknown>;
+        return { data: SUBMISSION, response: { status: 200 } };
+      },
+    });
+    await runTool({ toolId: "fastqc", historyId: "h1", inputs: {} }, ctxWith(client));
+    expect("tool_version" in (body ?? {})).toBe(false);
+  });
+
+  it("counts the queued jobs in its summary line", () => {
+    const message = runToolOp.project?.(SUBMISSION, { toolId: "fastqc", historyId: "h1", inputs: {} })
+      ?.message;
+    expect(message).toBe("Submitted fastqc to history h1 (1 job(s))");
   });
 });

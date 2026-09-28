@@ -1,0 +1,18 @@
+{
+  "data": {
+    "cancelled": true,
+    "invocation": {
+      "id": "inv00001",
+      "state": "cancelling",
+      "workflow_id": "wf000001",
+      "history_id": "h0000",
+      "create_time": "2026-01-02T03:04:05.000000",
+      "update_time": "2026-01-02T03:05:05.000000",
+      "model_class": "WorkflowInvocation"
+    }
+  },
+  "success": true,
+  "message": "Cancelled workflow invocation 'inv00001'",
+  "count": null,
+  "pagination": null
+}

@@ -1,0 +1,88 @@
+{
+  "data": {
+    "tool_id": "build_list",
+    "inputs_template": {
+      "input_file": {
+        "src": "hda",
+        "id": "<dataset_id>"
+      },
+      "datasets_0|input": {
+        "src": "hda",
+        "id": "<dataset_id>"
+      },
+      "datasets_0|id_cond|id_select": "idx",
+      "advanced|sort_by": "name",
+      "advanced|threshold": 0
+    },
+    "parameters": [
+      {
+        "name": "input_file",
+        "type": "data",
+        "optional": false
+      },
+      {
+        "name": "datasets",
+        "type": "repeat",
+        "repeat_key_hint": "datasets_0|<param>",
+        "children": [
+          {
+            "name": "input",
+            "type": "data",
+            "optional": false
+          },
+          {
+            "name": "id_cond",
+            "type": "conditional",
+            "selector": {
+              "name": "id_select",
+              "type": "select",
+              "choices": [
+                "idx",
+                "manual"
+              ],
+              "key_hint": "id_cond|id_select"
+            },
+            "cases": [
+              {
+                "when": "idx",
+                "params": []
+              },
+              {
+                "when": "manual",
+                "params": [
+                  {
+                    "name": "identifier",
+                    "type": "text"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "advanced",
+        "type": "section",
+        "section_key_hint": "advanced|<param>",
+        "children": [
+          {
+            "name": "sort_by",
+            "type": "select",
+            "choices": [
+              "name",
+              "identifier"
+            ]
+          },
+          {
+            "name": "threshold",
+            "type": "integer"
+          }
+        ]
+      }
+    ]
+  },
+  "success": true,
+  "message": "Built an input template for tool 'build_list'. Replace placeholders (e.g. <dataset_id>) and pass the result as `inputs` to run_tool.",
+  "count": null,
+  "pagination": null
+}

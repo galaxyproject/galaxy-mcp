@@ -239,7 +239,7 @@ describe("the parameter names this surface advertises", () => {
     expect(description("get_histories")).toContain("(id, name, counts)");
     expect(description("get_workflow_details")).toContain("(name, steps, inputs)");
     expect(description("update_history")).toContain("(name, annotation, tags, deleted, published)");
-    expect(description("run_tool")).toContain("the typed tool-request path");
+    expect(description("run_tool")).toContain("poll the jobs with get_job_details");
   });
 
   /**

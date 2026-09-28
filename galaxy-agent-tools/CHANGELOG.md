@@ -276,6 +276,77 @@ a call the Python server cannot answer at all, because its message echoes the
 query and `pydantic_core` refuses to serialise a lone surrogate, where these
 surfaces answer with an empty page.
 
+### A golden case for every open tool (#143)
+
+The envelope and payload rounds compared twenty tools in full and left twenty-two
+with no fixture at all, which is where a difference hides. Every open tool now has
+golden cases generated from the Python server and replayed on both surfaces, and
+the differences they turned up are below.
+
+- **Breaking:** `run_tool` submits and returns, and answers with Galaxy's own
+  submission record. It used to POST `/api/jobs`, poll `/api/tool_requests/{id}`
+  and then wait for every job it spawned, answering with
+  `{ toolRequestId, jobs, implicitCollections, state: "ok" }` once they were all
+  terminal. The Python tool POSTs `/api/tools` and hands back what Galaxy said --
+  `{ outputs, output_collections, jobs, implicit_collections, ... }` with the jobs
+  in their starting state -- and a call that blocks for the length of a
+  bioinformatics job is a different tool from one that queues it. Poll the jobs
+  with `get_job_details`. The queue-and-wait path is still here and is now
+  exported as `executeToolRequest`, with its `ToolRun` result, for a caller who
+  wants it. The inputs go with it: `/api/tools` takes Galaxy's legacy format, as
+  the Python tool sends it, so a parameter inside a section, conditional or
+  repeat is one flat key joined with `|` (`advanced|threshold`), and the nested
+  `{ advanced: { threshold } }` this op used to describe is read by the legacy
+  parser as nothing at all -- the default applies. A `{ __class__: "Batch" }`
+  wrapper is likewise the other path's spelling. The schema text and summary now
+  say so.
+- **Breaking:** `invoke_workflow` hands back every invocation a batch run made.
+  Galaxy answers a batch with a list, and this took the first element of it and
+  dropped the rest; the Python tool passes the list through, so now this does too.
+  A single invocation is unchanged. `InvokeWorkflowResult` (the op's output type)
+  is `InvocationResult | InvocationResult[]`, and the summary line names every id.
+- **Breaking:** `get_server_info` answers the way the Python tool does, in three
+  ways. The list of things this server is too old to run is `unsupported_tools`
+  rather than `unsupported_ops`, and it is sorted by name. `config` is the sixteen
+  fields that tool lifts out of `/api/configuration` by name -- `brand`,
+  `logo_url`, `welcome_url`, `support_url`, `citation_url`, `terms_url`,
+  `allow_user_creation`, `allow_user_deletion`, `enable_quotas`,
+  `ftp_upload_site`, `wiki_url`, `screencasts_url`, `library_import_dir`,
+  `user_library_import_dir`, `allow_library_path_paste` and
+  `enable_unique_workflow_defaults` -- rather than Galaxy's whole configuration; a
+  field Galaxy did not mention reads `null`, and an unmentioned `brand` reads
+  `"Galaxy"`. And `version_source` is gone: the other server sends no such key, so
+  a caller could not rely on it. Whether the version was supplied rather than
+  fetched is still said, in the summary line. `UnsupportedOp` is now
+  `UnsupportedTool` and `ServerConfigSummary` is exported beside it.
+- **Breaking:** `get_page`, `create_page` and `update_page` drop the expanded
+  `content` on an HTML page too. They dropped it only for a page that had a
+  `content_editor` to keep instead, which left an HTML page -- where Galaxy fills
+  content_editor on the markdown path only -- answering with its rendered body
+  where the Python tool answers without it. `content` is the expanded form either
+  way, so a caller editing it and sending it back bakes the expansion into the
+  page; `get_page`'s `includeRendered` is how to ask for it on purpose.
+- **Breaking:** `get_dataset_details` answers with `{ dataset, dataset_id }` and
+  puts `preview` beside them, rather than spreading Galaxy's record at the top
+  level with the preview mixed in. `data.dataset` is what Galaxy sent and
+  `data.dataset_id` is the id that was asked for, so it is there even for a record
+  that carries no id -- and a Galaxy that grew a `preview` field of its own could
+  no longer collide with ours. The preview itself has not moved.
+- **Breaking:** `get_user` answers with Galaxy's whole user record rather than
+  `{ id, email, username }`. A DetailedUserModel carries the disk usage, the
+  quota, the tags in use and the stored preferences, and the Python tool passes
+  all of it through. The three named fields are still there and are still what
+  the anonymous-response guard insists on, so a caller reading only those is
+  unaffected; `CurrentUser` has gained an index signature for the rest.
+
+Fifty-three more golden cases, 143 in all across all forty-two open tools, so
+every tool either surface serves is now replayed on both and compared key for key:
+the key set, `data`, `success`, `count` and `pagination`, and `message` for the
+nine budgeted listings. `PARITY.md` gains a `Cases` column saying how many each
+tool has, and the parity check fails on an open tool that has none. Still not
+aligned: the `message` text of every tool but those nine, and the failure
+envelope.
+
 ## 0.2.0 (unreleased)
 
 Breaking, and the first release since the packages went up on npm. Everything in

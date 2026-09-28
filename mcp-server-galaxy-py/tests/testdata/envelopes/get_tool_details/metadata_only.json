@@ -1,0 +1,15 @@
+{
+  "data": {
+    "id": "cat1",
+    "name": "Concatenate datasets",
+    "version": "1.0.0",
+    "description": "tail-to-head",
+    "model_class": "Tool",
+    "panel_section_id": "text_manipulation",
+    "panel_section_name": "Text Manipulation"
+  },
+  "success": true,
+  "message": "Retrieved details for tool 'cat1'",
+  "count": null,
+  "pagination": null
+}

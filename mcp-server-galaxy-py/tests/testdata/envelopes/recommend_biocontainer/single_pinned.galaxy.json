@@ -1,0 +1,29 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example/",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "https://quay.io/api/v1/repository/biocontainers/samtools",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "tags": {
+          "1.17--hd87286a_2": {
+            "name": "1.17--hd87286a_2"
+          },
+          "1.17--h00b6d6a_0": {
+            "name": "1.17--h00b6d6a_0"
+          },
+          "1.16.1--h6899075_1": {
+            "name": "1.16.1--h6899075_1"
+          },
+          "latest": {
+            "name": "latest"
+          }
+        }
+      }
+    }
+  ]
+}

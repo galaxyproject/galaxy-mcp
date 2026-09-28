@@ -47,26 +47,48 @@ from galaxy_mcp.server import GalaxyResult, galaxy_state
 from galaxy_mcp.version import clear_version_cache
 
 from .test_helpers import (
+    cancel_workflow_invocation_fn,
+    create_history_fn,
+    create_page_fn,
+    create_user_tool_fn,
+    delete_user_tool_fn,
     get_collection_details_fn,
+    get_dataset_details_fn,
     get_histories_fn,
     get_history_contents_fn,
     get_history_details_fn,
     get_invocations_fn,
     get_iwc_workflow_details_fn,
     get_iwc_workflows_fn,
+    get_job_details_fn,
+    get_page_fn,
+    get_page_revision_fn,
+    get_server_info_fn,
     get_tool_citations_fn,
+    get_tool_details_fn,
+    get_tool_input_template_fn,
     get_tool_panel_fn,
     get_tool_run_examples_fn,
+    get_user_fn,
+    get_workflow_details_fn,
     get_workflow_input_template_fn,
+    import_workflow_from_iwc_fn,
+    invoke_workflow_fn,
     list_history_ids_fn,
     list_page_revisions_fn,
     list_pages_fn,
     list_user_tools_fn,
     list_workflows_fn,
+    recommend_biocontainer_fn,
     recommend_iwc_workflows_fn,
+    revert_page_revision_fn,
+    run_tool_fn,
+    run_user_tool_fn,
     search_iwc_workflows_fn,
     search_tools_by_keywords_fn,
     search_tools_fn,
+    update_history_fn,
+    update_page_fn,
 )
 
 FIXTURE_ROOT = Path(__file__).parent / "testdata" / "envelopes"
@@ -75,6 +97,14 @@ REGENERATE_COMMAND = "uv run python -m tests.envelope_fixtures"
 # Where the fake Galaxy lives. The TypeScript replay uses the same base, so a route's
 # path reads the same on both sides.
 GALAXY_URL = "https://galaxy.example"
+# The same address as a connected session holds it. ``connect`` stores whatever it was
+# given with a trailing slash added, and two tools read that string rather than a
+# client's normalised copy of it: get_server_info answers with it, and get_job_details
+# joins "api/jobs/{id}" straight onto it. So a session on this Galaxy is set up here the
+# way connect would leave it, and the reply table hands the same spelling to the other
+# side -- pointing the two surfaces at one address written two ways would be a
+# difference in the fixture rather than in either server.
+GALAXY_BASE_URL = f"{GALAXY_URL}/"
 # Not a credential: every request in this module is answered by `responses`, and the
 # string exists only because bioblend wants one.
 PLACEHOLDER_KEY = "fixture-not-a-key"
@@ -123,6 +153,13 @@ class Case:
     input: dict[str, Any]
     call: Callable[[], GalaxyResult]
     routes: list[dict[str, Any]] = field(default_factory=list)
+
+
+# How a section below adds one case: the same six arguments ``cases()`` takes, so a
+# group can live in a function of its own without changing what a case looks like.
+AddCase = Callable[
+    [str, str, str, dict[str, Any], Callable[[], GalaxyResult], list[dict[str, Any]]], None
+]
 
 
 # ---------------------------------------------------------------------------
@@ -1688,7 +1725,1420 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         ],
     )
 
+    single_record_cases(add)
+    mutation_cases(add)
+    biocontainer_cases(add)
+
     return out
+
+
+# ---------------------------------------------------------------------------
+# One record in, one record out
+#
+# Sections of their own rather than more of the table above: these tools answer with
+# a record or a small wrapper around one, so what a case pins is which fields a reply
+# may leave out rather than where a page was cut.
+# ---------------------------------------------------------------------------
+
+
+def single_record_cases(add: AddCase) -> None:
+    server_info_cases(add)
+    user_cases(add)
+    dataset_details_cases(add)
+    tool_details_cases(add)
+    tool_input_template_cases(add)
+    workflow_details_cases(add)
+    job_details_cases(add)
+
+
+def server_info_cases(add: AddCase) -> None:
+    """What the connected Galaxy is, and what it is too old to run.
+
+    Three things this tool answers with are its own rather than Galaxy's: the address
+    is the one the session stored, ``config`` is sixteen named fields lifted out of
+    Galaxy's configuration with their own defaults (a brand that is missing reads
+    "Galaxy", everything else missing reads null), and ``unsupported_tools`` is the
+    declared tools this version cannot run, by name. So the cases are a current server,
+    one a version too old for the page tools, one that will not say what it is, and a
+    configuration bare enough that every default shows.
+    """
+    config = {
+        "brand": "Example Galaxy",
+        "logo_url": "/static/images/galaxyIcon_noText.png",
+        "welcome_url": "/static/welcome.html",
+        "support_url": "https://galaxy.example/support",
+        "citation_url": "https://galaxy.example/citing",
+        "terms_url": None,
+        "allow_user_creation": True,
+        "allow_user_deletion": False,
+        "enable_quotas": True,
+        "ftp_upload_site": None,
+        "wiki_url": "https://galaxy.example/wiki",
+        "screencasts_url": "https://galaxy.example/screencasts",
+        "library_import_dir": None,
+        "user_library_import_dir": None,
+        "allow_library_path_paste": False,
+        "enable_unique_workflow_defaults": False,
+        # Fields this tool does not lift out, so a case proves they do not travel.
+        "version_major": "26.1",
+        "email_from": "noreply@galaxy.example",
+        "server_startttime": 1767225845,
+    }
+    config_route = route("/api/configuration", config)
+    add(
+        "get_server_info",
+        "current_galaxy",
+        "a server new enough for everything, so nothing is ruled out",
+        {},
+        get_server_info_fn,
+        [VERSION_ROUTE, config_route],
+    )
+    add(
+        "get_server_info",
+        "too_old_for_the_page_tools",
+        "one minor version short, so the six declared tools are named",
+        {},
+        get_server_info_fn,
+        [
+            route("/api/version", {"version_major": "26.0", "version_minor": "0"}),
+            config_route,
+        ],
+    )
+    add(
+        "get_server_info",
+        "version_unreadable",
+        "a version route that says nothing, where nothing is known and nothing is refused",
+        {},
+        get_server_info_fn,
+        [route("/api/version", {}), config_route],
+    )
+    add(
+        "get_server_info",
+        "bare_configuration",
+        "a configuration carrying almost nothing, so every default shows",
+        {},
+        get_server_info_fn,
+        [VERSION_ROUTE, route("/api/configuration", {"logo_url": None})],
+    )
+
+
+def user_cases(add: AddCase) -> None:
+    """The current user, as Galaxy describes them.
+
+    Whatever the record carries is what the tool answers with -- there is no field
+    list here -- so the cases are a full DetailedUserModel and one stripped to the
+    three fields anything reading it needs.
+    """
+    add(
+        "get_user",
+        "detailed",
+        "the whole user record, every field Galaxy sent",
+        {},
+        get_user_fn,
+        [
+            route(
+                "/api/users/current",
+                {
+                    "id": "u0000001",
+                    "username": "curator",
+                    "email": "curator@galaxy.example",
+                    "model_class": "User",
+                    "deleted": False,
+                    "purged": False,
+                    "is_admin": False,
+                    "total_disk_usage": 1048576,
+                    "nice_total_disk_usage": "1.0 MB",
+                    "quota_percent": 12.5,
+                    "quota": "10.0 GB",
+                    "quota_bytes": 10737418240,
+                    "tags_used": ["rnaseq"],
+                    "preferences": {"extra_user_preferences": "{}"},
+                },
+            )
+        ],
+    )
+    add(
+        "get_user",
+        "bare",
+        "a record carrying only the three fields anything reading it needs",
+        {},
+        get_user_fn,
+        [
+            route(
+                "/api/users/current",
+                {"id": "u0000001", "username": "curator", "email": "curator@galaxy.example"},
+            )
+        ],
+    )
+
+
+def dataset_details_cases(add: AddCase) -> None:
+    """A dataset's metadata, wrapped, with Galaxy's text peek sliced beside it.
+
+    The record does not come back on its own: it arrives under ``dataset`` next to the
+    id that was asked for, so a caller reading ``data.state`` is reading the wrapper
+    and not the dataset. The peek is only taken for a dataset in the ok state and only
+    when it was asked for, and it has three shapes -- sliced text, a datatype Galaxy
+    has no text for, and a peek that could not be taken -- so the cases are the
+    branches rather than one happy path.
+    """
+    record = {
+        "id": "d0000001",
+        "name": "reads.txt",
+        "state": "ok",
+        "extension": "txt",
+        "file_size": 1024,
+        "history_id": "h0000",
+        "deleted": False,
+        "visible": True,
+        "hid": 1,
+        "misc_info": None,
+        "model_class": "HistoryDatasetAssociation",
+    }
+    twelve = "\n".join(f"line{n}" for n in range(1, 13))
+    text_route = route(
+        "/api/datasets/d0000001/get_content_as_text",
+        {"item_data": twelve, "truncated": False, "item_url": "/datasets/d0000001/display"},
+    )
+    add(
+        "get_dataset_details",
+        "peek_sliced",
+        "twelve lines of peek cut to the ten asked for by default",
+        {"dataset_id": "d0000001"},
+        lambda: get_dataset_details_fn("d0000001"),
+        [route("/api/datasets/d0000001", record), text_route],
+    )
+    add(
+        "get_dataset_details",
+        "peek_shorter_than_asked_for",
+        "fewer lines than the slice, so nothing is cut and the count is what arrived",
+        {"dataset_id": "d0000001", "preview_lines": 20},
+        lambda: get_dataset_details_fn("d0000001", preview_lines=20),
+        [route("/api/datasets/d0000001", record), text_route],
+    )
+    add(
+        "get_dataset_details",
+        "galaxy_cut_the_peek_itself",
+        "Galaxy's own truncated flag, which is not the same fact as our line slice",
+        {"dataset_id": "d0000001", "preview_lines": 20},
+        lambda: get_dataset_details_fn("d0000001", preview_lines=20),
+        [
+            route("/api/datasets/d0000001", record),
+            route(
+                "/api/datasets/d0000001/get_content_as_text",
+                {"item_data": "line1\nline2\n", "truncated": True},
+            ),
+        ],
+    )
+    add(
+        "get_dataset_details",
+        "no_text_preview",
+        "a datatype Galaxy previews nothing for, so item_data is null",
+        {"dataset_id": "d0000002"},
+        lambda: get_dataset_details_fn("d0000002"),
+        [
+            route(
+                "/api/datasets/d0000002",
+                {**record, "id": "d0000002", "name": "alignment.bam", "extension": "bam"},
+            ),
+            route(
+                "/api/datasets/d0000002/get_content_as_text",
+                {"item_data": None, "truncated": False},
+            ),
+        ],
+    )
+    add(
+        "get_dataset_details",
+        "preview_not_asked_for",
+        "include_preview false, so the text route is never asked and there is no preview key",
+        {"dataset_id": "d0000001", "include_preview": False},
+        lambda: get_dataset_details_fn("d0000001", include_preview=False),
+        [route("/api/datasets/d0000001", record)],
+    )
+    add(
+        "get_dataset_details",
+        "state_not_ok",
+        "a dataset still running, where no peek is taken whatever was asked for",
+        {"dataset_id": "d0000003"},
+        lambda: get_dataset_details_fn("d0000003"),
+        [
+            route(
+                "/api/datasets/d0000003",
+                {**record, "id": "d0000003", "name": "half.txt", "state": "running"},
+            )
+        ],
+    )
+
+
+def tool_details_cases(add: AddCase) -> None:
+    """Galaxy's tool record, passed through as it arrived.
+
+    ``io_details`` changes the request and not the answer, and the two clients spell a
+    boolean query parameter differently -- ``io_details=True`` from requests,
+    ``io_details=true`` from this side -- so a route narrowed on it would answer one
+    surface and 404 the other. The two cases therefore ask about two tools, each with
+    its own reply, which is what the flag is for anyway.
+    """
+    add(
+        "get_tool_details",
+        "metadata_only",
+        "the default: the tool record without its parameter list",
+        {"tool_id": "cat1"},
+        lambda: get_tool_details_fn("cat1"),
+        [
+            route(
+                "/api/tools/cat1",
+                {
+                    "id": "cat1",
+                    "name": "Concatenate datasets",
+                    "version": "1.0.0",
+                    "description": "tail-to-head",
+                    "model_class": "Tool",
+                    "panel_section_id": "text_manipulation",
+                    "panel_section_name": "Text Manipulation",
+                },
+            )
+        ],
+    )
+    add(
+        "get_tool_details",
+        "with_io_details",
+        "io_details=True, so the parameter and output lists come too",
+        {"tool_id": "fastqc", "io_details": True},
+        lambda: get_tool_details_fn("fastqc", io_details=True),
+        [
+            route(
+                "/api/tools/fastqc",
+                {
+                    "id": "fastqc",
+                    "name": "FastQC",
+                    "version": "0.74+galaxy1",
+                    "description": "Read Quality reports",
+                    "model_class": "Tool",
+                    "inputs": [
+                        {
+                            "name": "input_file",
+                            "label": "Short read data from your current history",
+                            "type": "data",
+                            "optional": False,
+                            "multiple": False,
+                            "extensions": ["fastqsanger", "bam"],
+                            "value": None,
+                        },
+                        {
+                            "name": "contaminants",
+                            "label": "Contaminant list",
+                            "type": "data",
+                            "optional": True,
+                            "multiple": False,
+                            "extensions": ["tabular"],
+                            "value": None,
+                        },
+                    ],
+                    "outputs": [
+                        {
+                            "name": "html_file",
+                            "format": "html",
+                            "label": "${tool.name} on ${on_string}: Webpage",
+                        },
+                        {
+                            "name": "text_file",
+                            "format": "txt",
+                            "label": "${tool.name} on ${on_string}: RawData",
+                        },
+                    ],
+                },
+            )
+        ],
+    )
+
+
+def tool_input_template_cases(add: AddCase) -> None:
+    """The skeleton and the compact parameter list, built from one io_details schema.
+
+    Every nesting the builder walks is in the first case -- a data param, a repeat, a
+    conditional inside it, a section, and a select whose options are capped inline --
+    because each of them decides a different flattened key.
+    """
+    add(
+        "get_tool_input_template",
+        "every_nesting",
+        "a data param, a repeat, a conditional, a section and a select in one schema",
+        {"tool_id": "build_list"},
+        lambda: get_tool_input_template_fn("build_list"),
+        [
+            route(
+                "/api/tools/build_list",
+                {
+                    "id": "build_list",
+                    "name": "Build list",
+                    "version": "1.2.0",
+                    "inputs": [
+                        {
+                            "name": "input_file",
+                            "type": "data",
+                            "optional": False,
+                            "multiple": False,
+                            "extensions": ["tabular"],
+                        },
+                        {
+                            "name": "datasets",
+                            "type": "repeat",
+                            "title": "Dataset",
+                            "inputs": [
+                                {"name": "input", "type": "data", "optional": False},
+                                {
+                                    "name": "id_cond",
+                                    "type": "conditional",
+                                    "test_param": {
+                                        "name": "id_select",
+                                        "type": "select",
+                                        "value": "idx",
+                                        "options": [
+                                            ["use index", "idx", True],
+                                            ["manual", "manual", False],
+                                        ],
+                                    },
+                                    "cases": [
+                                        {"value": "idx", "inputs": []},
+                                        {
+                                            "value": "manual",
+                                            "inputs": [
+                                                {"name": "identifier", "type": "text", "value": ""}
+                                            ],
+                                        },
+                                    ],
+                                },
+                            ],
+                        },
+                        {
+                            "name": "advanced",
+                            "type": "section",
+                            "title": "Advanced",
+                            "inputs": [
+                                {
+                                    "name": "sort_by",
+                                    "type": "select",
+                                    "value": "name",
+                                    "options": [
+                                        ["Name", "name", True],
+                                        ["Identifier", "identifier", False],
+                                    ],
+                                },
+                                {"name": "threshold", "type": "integer", "value": 5},
+                            ],
+                        },
+                    ],
+                },
+            )
+        ],
+    )
+    add(
+        "get_tool_input_template",
+        "no_inputs",
+        "a tool whose definition arrived without a parameter list at all",
+        {"tool_id": "upload1"},
+        lambda: get_tool_input_template_fn("upload1"),
+        [route("/api/tools/upload1", {"id": "upload1", "name": "Upload File", "version": "1.1.7"})],
+    )
+
+
+def workflow_details_cases(add: AddCase) -> None:
+    """A stored workflow, passed through.
+
+    ``version`` changes the request and not the answer, so -- as with io_details above
+    -- the two cases ask about two workflows rather than narrowing one path on a query
+    the two clients spell differently.
+    """
+    add(
+        "get_workflow_details",
+        "latest",
+        "no version asked for, so Galaxy answers with the newest",
+        {"workflow_id": "wf000001"},
+        lambda: get_workflow_details_fn("wf000001"),
+        [
+            route(
+                "/api/workflows/wf000001",
+                {
+                    "id": "wf000001",
+                    "name": "Reads QC",
+                    "version": 3,
+                    "owner": "curator",
+                    "annotation": "quality control over sequencing reads",
+                    "published": False,
+                    "deleted": False,
+                    "inputs": {"0": {"label": "Input FASTQ", "value": "", "uuid": None}},
+                    "steps": {
+                        "0": {
+                            "id": 0,
+                            "type": "data_input",
+                            "annotation": None,
+                            "input_steps": {},
+                        },
+                        "1": {
+                            "id": 1,
+                            "type": "tool",
+                            "tool_id": "fastqc",
+                            "annotation": None,
+                            "input_steps": {
+                                "input_file": {"source_step": 0, "step_output": "output"}
+                            },
+                        },
+                    },
+                },
+            )
+        ],
+    )
+    add(
+        "get_workflow_details",
+        "pinned_version",
+        "an older version asked for by number",
+        {"workflow_id": "wf000002", "version": 1},
+        lambda: get_workflow_details_fn("wf000002", version=1),
+        [
+            route(
+                "/api/workflows/wf000002",
+                {
+                    "id": "wf000002",
+                    "name": "Reads QC",
+                    "version": 1,
+                    "owner": "curator",
+                    "annotation": None,
+                    "published": False,
+                    "deleted": False,
+                    "inputs": {},
+                    "steps": {"0": {"id": 0, "type": "data_input", "input_steps": {}}},
+                },
+            )
+        ],
+    )
+
+
+def job_details_cases(add: AddCase) -> None:
+    """The job behind a dataset, found two ways.
+
+    With a history the provenance record is asked first and its ``job_id`` is used;
+    without one, or when provenance answers without a job id, the dataset's own
+    ``creating_job`` is read instead. Both paths end at the same GET /api/jobs/{id},
+    which this server reaches with requests rather than through bioblend -- joined onto
+    the session's stored address, which is why that address has to be the one connect
+    would have stored.
+    """
+    job = {
+        "id": "j0000001",
+        "state": "ok",
+        "tool_id": "fastqc",
+        "exit_code": 0,
+        "create_time": "2026-01-02T03:04:05.000000",
+        "update_time": "2026-01-02T03:14:05.000000",
+        "params": {"input_file": '{"values": [{"id": 12, "src": "hda"}]}'},
+        "inputs": {"input_file": {"id": "d0000001", "src": "hda", "uuid": None}},
+        "outputs": {"html_file": {"id": "d0000002", "src": "hda", "uuid": None}},
+    }
+    job_route = route("/api/jobs/j0000001", job)
+    dataset_route = route(
+        "/api/datasets/d0000002",
+        {
+            "id": "d0000002",
+            "name": "FastQC on data 1: Webpage",
+            "state": "ok",
+            "extension": "html",
+            "creating_job": "j0000001",
+            "history_id": "h0000",
+        },
+    )
+    add(
+        "get_job_details",
+        "from_provenance",
+        "a history was named, so the provenance record answers with the job id",
+        {"dataset_id": "d0000002", "history_id": "h0000"},
+        lambda: get_job_details_fn("d0000002", history_id="h0000"),
+        [
+            route(
+                "/api/histories/h0000/contents/d0000002/provenance",
+                {
+                    "id": "d0000002",
+                    "job_id": "j0000001",
+                    "tool_id": "fastqc",
+                    "uuid": "22222222-2222-2222-2222-222222222222",
+                    "parameters": {},
+                },
+            ),
+            job_route,
+        ],
+    )
+    add(
+        "get_job_details",
+        "from_creating_job",
+        "no history named, so the dataset's own creating_job is read",
+        {"dataset_id": "d0000002"},
+        lambda: get_job_details_fn("d0000002"),
+        [dataset_route, job_route],
+    )
+    add(
+        "get_job_details",
+        "provenance_without_a_job_id",
+        "provenance answered, but named no job, so the dataset is read anyway",
+        {"dataset_id": "d0000002", "history_id": "h0000"},
+        lambda: get_job_details_fn("d0000002", history_id="h0000"),
+        [
+            route(
+                "/api/histories/h0000/contents/d0000002/provenance",
+                {"id": "d0000002", "tool_id": "fastqc", "parameters": {}},
+            ),
+            dataset_route,
+            job_route,
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Mutations
+#
+# Ordinary cases: the POST, PUT or DELETE reply is canned like any other, and what
+# a case pins is the record the tool hands back afterwards. Success paths only --
+# the failure envelope is its own piece of work -- and nothing here reaches a
+# Galaxy, so "creating" a history costs one canned reply.
+# ---------------------------------------------------------------------------
+
+
+def mutation_cases(add: AddCase) -> None:
+    history_mutation_cases(add)
+    run_tool_cases(add)
+    invoke_workflow_cases(add)
+    page_cases(add)
+    user_tool_mutation_cases(add)
+    invocation_mutation_cases(add)
+    revision_cases(add)
+
+
+def history_mutation_cases(add: AddCase) -> None:
+    created = {
+        "id": "h0000new",
+        "name": "RNA-seq Sample A",
+        "state": "new",
+        "deleted": False,
+        "published": False,
+        "annotation": None,
+        "tags": [],
+        "create_time": "2026-01-02T03:04:05.000000",
+        "update_time": "2026-01-02T03:04:05.000000",
+        "model_class": "History",
+    }
+    add(
+        "create_history",
+        "named",
+        "a new history, which is one POST and the record Galaxy answers with",
+        {"history_name": "RNA-seq Sample A"},
+        lambda: create_history_fn("RNA-seq Sample A"),
+        [route("/api/histories", created, method="POST")],
+    )
+    add(
+        "update_history",
+        "name_only",
+        "one field changed, which the message has to name and the record has to show",
+        {"history_id": "h0000new", "name": "RNA-seq Sample A (final)"},
+        lambda: update_history_fn("h0000new", name="RNA-seq Sample A (final)"),
+        [
+            route(
+                "/api/histories/h0000new",
+                {
+                    **created,
+                    "name": "RNA-seq Sample A (final)",
+                    "update_time": "2026-01-03T00:00:00",
+                },
+                method="PUT",
+            )
+        ],
+    )
+    add(
+        "update_history",
+        "several_fields",
+        "an annotation, tags and published at once",
+        {
+            "history_id": "h0000new",
+            "annotation": "QC'd and ready",
+            "tags": ["rnaseq", "final"],
+            "published": True,
+        },
+        lambda: update_history_fn(
+            "h0000new", annotation="QC'd and ready", tags=["rnaseq", "final"], published=True
+        ),
+        [
+            route(
+                "/api/histories/h0000new",
+                {
+                    **created,
+                    "annotation": "QC'd and ready",
+                    "tags": ["rnaseq", "final"],
+                    "published": True,
+                    "update_time": "2026-01-03T00:00:00",
+                },
+                method="PUT",
+            )
+        ],
+    )
+
+
+# A page, as Galaxy answers with one. `content` is the same document with its embeds
+# expanded for export and is the large half of the reply; `content_editor` is the
+# editable markdown a caller edits and sends back.
+PAGE_MARKDOWN = (
+    "# Reads QC\n\n```galaxy\nhistory_dataset_display(history_dataset_id=d0000002)\n```\n"
+)
+PAGE_RENDERED = "# Reads QC\n\n<div class='embedded'>expanded</div>\n"
+
+
+def page_record(**over: Any) -> dict[str, Any]:
+    record: dict[str, Any] = {
+        "id": "pg000001",
+        "title": "Reads QC report",
+        "slug": "reads-qc-report",
+        "history_id": "h0000",
+        "latest_revision_id": "rev00002",
+        "revision_ids": ["rev00001", "rev00002"],
+        "source_invocation_id": None,
+        "model_class": "Page",
+        "username": "curator",
+        "email_hash": "d41d8cd98f00b204e9800998ecf8427e",
+        "author_deleted": False,
+        "deleted": False,
+        "importable": False,
+        "published": False,
+        "tags": [],
+        "create_time": "2026-01-02T03:04:05.000000",
+        "update_time": "2026-01-02T03:14:05.000000",
+        "content_editor": PAGE_MARKDOWN,
+        "content": PAGE_RENDERED,
+        "content_format": "markdown",
+        "annotation": None,
+        "edit_source": "agent",
+        "generate_time": None,
+        "generate_version": None,
+    }
+    record.update(over)
+    return record
+
+
+def page_cases(add: AddCase) -> None:
+    """A page read, created and updated, and what happens to the expanded render.
+
+    The rendered ``content`` is dropped unless it was asked for, and asking is only
+    possible on the read -- create and update never return it. What the cases pin is
+    that the drop is unconditional: an HTML page arrives with an empty
+    ``content_editor``, because Galaxy fills that field on the markdown path only, and
+    its body is in ``content`` -- and ``content`` goes anyway. get_page is not refused
+    against an older Galaxy, so its cases are answered no version; create_page and
+    update_page are, so theirs are.
+    """
+    add(
+        "get_page",
+        "markdown",
+        "the default read: the editable markdown stays, the expanded render goes",
+        {"page_id": "pg000001"},
+        lambda: get_page_fn("pg000001"),
+        [route("/api/pages/pg000001", page_record())],
+    )
+    add(
+        "get_page",
+        "with_rendered",
+        "include_rendered, so the expanded render comes too",
+        {"page_id": "pg000001", "include_rendered": True},
+        lambda: get_page_fn("pg000001", include_rendered=True),
+        [route("/api/pages/pg000001", page_record())],
+    )
+    add(
+        "get_page",
+        "html_page_without_content_editor",
+        "an HTML page, whose only body is the expanded render -- which still goes",
+        {"page_id": "pg000002"},
+        lambda: get_page_fn("pg000002"),
+        [
+            route(
+                "/api/pages/pg000002",
+                page_record(
+                    id="pg000002",
+                    title="Legacy report",
+                    slug="legacy-report",
+                    history_id=None,
+                    content_format="html",
+                    content_editor="",
+                    content="<h1>Legacy report</h1>",
+                    edit_source="user",
+                ),
+            )
+        ],
+    )
+    add(
+        "get_page",
+        "no_rendered_content_at_all",
+        "a reply carrying no content key, where there is nothing to drop",
+        {"page_id": "pg000003"},
+        lambda: get_page_fn("pg000003"),
+        [
+            route(
+                "/api/pages/pg000003",
+                {k: v for k, v in page_record(id="pg000003").items() if k != "content"},
+            )
+        ],
+    )
+    add(
+        "create_page",
+        "notebook",
+        "a page attached to a history, which is the notebook shape",
+        {"history_id": "h0000", "title": "Reads QC report", "content": "# Reads QC\n"},
+        lambda: create_page_fn(history_id="h0000", title="Reads QC report", content="# Reads QC\n"),
+        [
+            VERSION_ROUTE,
+            route(
+                "/api/pages",
+                page_record(
+                    content_editor="# Reads QC\n",
+                    content="# Reads QC\n",
+                    latest_revision_id="rev00001",
+                    revision_ids=["rev00001"],
+                    edit_source="user",
+                ),
+                method="POST",
+            ),
+        ],
+    )
+    add(
+        "create_page",
+        "standalone_report",
+        "no history, so a report -- which needs both a title and a slug",
+        {"title": "Cohort summary", "slug": "cohort-summary", "annotation": "for the paper"},
+        lambda: create_page_fn(
+            title="Cohort summary", slug="cohort-summary", annotation="for the paper"
+        ),
+        [
+            VERSION_ROUTE,
+            route(
+                "/api/pages",
+                page_record(
+                    id="pg000004",
+                    title="Cohort summary",
+                    slug="cohort-summary",
+                    history_id=None,
+                    annotation="for the paper",
+                    content_editor="",
+                    content="",
+                    latest_revision_id="rev00010",
+                    revision_ids=["rev00010"],
+                    edit_source="user",
+                ),
+                method="POST",
+            ),
+        ],
+    )
+    add(
+        "update_page",
+        "content_changed",
+        "new markdown, which writes a revision the agent is recorded against",
+        {"page_id": "pg000001", "content": "# Reads QC\n\nrewritten\n"},
+        lambda: update_page_fn("pg000001", content="# Reads QC\n\nrewritten\n"),
+        [
+            VERSION_ROUTE,
+            route(
+                "/api/pages/pg000001",
+                page_record(
+                    content_editor="# Reads QC\n\nrewritten\n",
+                    latest_revision_id="rev00003",
+                    revision_ids=["rev00001", "rev00002", "rev00003"],
+                ),
+                method="PUT",
+            ),
+        ],
+    )
+    add(
+        "update_page",
+        "title_only_on_an_html_page",
+        "a title change on a page whose body is the expanded render, which still goes",
+        {"page_id": "pg000002", "title": "Legacy report (renamed)"},
+        lambda: update_page_fn("pg000002", title="Legacy report (renamed)"),
+        [
+            VERSION_ROUTE,
+            route(
+                "/api/pages/pg000002",
+                page_record(
+                    id="pg000002",
+                    title="Legacy report (renamed)",
+                    slug="legacy-report",
+                    history_id=None,
+                    content_format="html",
+                    content_editor="",
+                    content="<h1>Legacy report</h1>",
+                ),
+                method="PUT",
+            ),
+        ],
+    )
+
+
+def user_tool_mutation_cases(add: AddCase) -> None:
+    """A user-defined tool created, run and deactivated.
+
+    The representation is the tool's own definition, and run_user_tool is two
+    requests: the uuid is read for the tool id and version, then the run is POSTed to
+    /api/tools like any other. The definition it reads back is also the schema this
+    server checks the supplied inputs against, so a dataset handed to a data parameter
+    is checked here without a second lookup.
+    """
+    representation = {
+        "class": "GalaxyUserTool",
+        "id": "row_filter",
+        "version": "0.1.0",
+        "name": "Row filter",
+        "description": "Keep rows above a threshold",
+        "container": "quay.io/biocontainers/python:3.12",
+        "shell_command": "python3 -c 'pass'",
+        "inputs": [
+            {"name": "table", "type": "data", "format": "tabular"},
+            {"name": "threshold", "type": "integer"},
+        ],
+        "outputs": [
+            {"name": "kept", "type": "data", "format": "tabular", "from_work_dir": "out.tsv"}
+        ],
+    }
+    created_tool = {
+        "id": "ut000001",
+        "uuid": "61d15277-a911-45ef-aa66-5385146578cc",
+        "tool_id": "row_filter",
+        "active": True,
+        "create_time": "2026-01-02T03:04:05.000000",
+        "representation": representation,
+    }
+    add(
+        "create_user_tool",
+        "created",
+        "a representation POSTed, and the record Galaxy answers with",
+        {"representation": representation},
+        lambda: create_user_tool_fn(representation),
+        [route("/api/unprivileged_tools", created_tool, method="POST")],
+    )
+    add(
+        "delete_user_tool",
+        "deactivated",
+        "a soft delete, where the answer is built here rather than read from Galaxy",
+        {"uuid": "61d15277-a911-45ef-aa66-5385146578cc"},
+        lambda: delete_user_tool_fn("61d15277-a911-45ef-aa66-5385146578cc"),
+        [
+            route(
+                "/api/unprivileged_tools/61d15277-a911-45ef-aa66-5385146578cc",
+                {"id": "ut000001", "active": False},
+                method="DELETE",
+            )
+        ],
+    )
+    submission = {
+        "outputs": [
+            {
+                "id": "d0000010",
+                "hid": 4,
+                "name": "Row filter on data 1",
+                "state": "new",
+                "history_id": "h0000",
+                "extension": "tabular",
+            }
+        ],
+        "output_collections": [],
+        "jobs": [
+            {
+                "model_class": "Job",
+                "id": "j0000010",
+                "state": "new",
+                "tool_id": "row_filter",
+                "tool_version": "0.1.0",
+                "create_time": "2026-01-02T03:04:05.000000",
+            }
+        ],
+        "implicit_collections": [],
+        "produces_entry_points": False,
+    }
+    lookup = route("/api/unprivileged_tools/61d15277-a911-45ef-aa66-5385146578cc", created_tool)
+    add(
+        "run_user_tool",
+        "scalar_input",
+        "a run whose inputs are all scalars, so the checker has nothing to resolve",
+        {
+            "history_id": "h0000",
+            "tool_uuid": "61d15277-a911-45ef-aa66-5385146578cc",
+            "inputs": {"threshold": 5},
+        },
+        lambda: run_user_tool_fn("h0000", "61d15277-a911-45ef-aa66-5385146578cc", {"threshold": 5}),
+        [lookup, route("/api/tools", submission, method="POST")],
+    )
+    add(
+        "run_user_tool",
+        "dataset_input",
+        "a dataset handed to a data parameter, checked against the tool's own definition",
+        {
+            "history_id": "h0000",
+            "tool_uuid": "61d15277-a911-45ef-aa66-5385146578cc",
+            "inputs": {"table": {"src": "hda", "id": "d0000001"}, "threshold": 5},
+        },
+        lambda: run_user_tool_fn(
+            "h0000",
+            "61d15277-a911-45ef-aa66-5385146578cc",
+            {"table": {"src": "hda", "id": "d0000001"}, "threshold": 5},
+        ),
+        [lookup, route("/api/tools", submission, method="POST")],
+    )
+
+
+def run_tool_cases(add: AddCase) -> None:
+    """A tool submitted, and the submission record Galaxy answers with.
+
+    This tool queues and returns: the jobs come back in the "new" state and nothing
+    here waits for them. Two things happen before the POST and neither shows in the
+    answer. Supplied inputs are checked against the tool's schema, but only when one
+    of them looks like a dataset reference -- a run made entirely of scalars skips the
+    lookup -- so the second case registers the schema and the first does not need it.
+    And stored credentials for the tool are looked up best-effort; this table answers
+    that lookup with nothing, so the run goes out without a credentials context, which
+    is what an ordinary tool run does.
+    """
+    submission = {
+        "outputs": [
+            {
+                "id": "d0000020",
+                "hid": 5,
+                "name": "FastQC on data 1: Webpage",
+                "state": "new",
+                "history_id": "h0000",
+                "output_name": "html_file",
+                "file_ext": "html",
+                "model_class": "HistoryDatasetAssociation",
+            }
+        ],
+        "output_collections": [],
+        "jobs": [
+            {
+                "model_class": "Job",
+                "id": "j0000020",
+                "state": "new",
+                "tool_id": "fastqc",
+                "tool_version": "0.74+galaxy1",
+                "create_time": "2026-01-02T03:04:05.000000",
+                "update_time": "2026-01-02T03:04:05.000000",
+                "exit_code": None,
+            }
+        ],
+        "implicit_collections": [],
+        "produces_entry_points": False,
+    }
+    tools_post = route("/api/tools", submission, method="POST")
+    add(
+        "run_tool",
+        "scalar_inputs",
+        "nothing that looks like a dataset, so the schema is never fetched",
+        {
+            "history_id": "h0000",
+            "tool_id": "fastqc",
+            "inputs": {"contaminants": "", "limits": ""},
+        },
+        lambda: run_tool_fn("h0000", "fastqc", {"contaminants": "", "limits": ""}),
+        [tools_post],
+    )
+    fastqc_schema = {
+        "id": "fastqc",
+        "name": "FastQC",
+        "version": "0.74+galaxy1",
+        "inputs": [
+            {
+                "name": "input_file",
+                "type": "data",
+                "optional": False,
+                "multiple": False,
+                "extensions": ["fastqsanger"],
+            }
+        ],
+    }
+    add(
+        "run_tool",
+        "dataset_input_checked_first",
+        "a dataset reference, so the tool's schema is read and the inputs are checked",
+        {
+            "history_id": "h0000",
+            "tool_id": "fastqc",
+            "inputs": {"input_file": {"src": "hda", "id": "d0000001"}},
+        },
+        lambda: run_tool_fn("h0000", "fastqc", {"input_file": {"src": "hda", "id": "d0000001"}}),
+        [route("/api/tools/fastqc", fastqc_schema), tools_post],
+    )
+    add(
+        "run_tool",
+        "section_inputs_legacy_keys",
+        "a parameter inside a section, spelled the flat legacy way the tool sends it",
+        {
+            "history_id": "h0000",
+            "tool_id": "fastqc",
+            "inputs": {"advanced|threshold": 9, "contaminants": ""},
+        },
+        lambda: run_tool_fn("h0000", "fastqc", {"advanced|threshold": 9, "contaminants": ""}),
+        [tools_post],
+    )
+    add(
+        "run_tool",
+        "pinned_version",
+        "a version asked for by name, which this server posts itself rather than bioblend",
+        {
+            "history_id": "h0000",
+            "tool_id": "fastqc",
+            "inputs": {"contaminants": ""},
+            "tool_version": "0.74+galaxy1",
+        },
+        lambda: run_tool_fn("h0000", "fastqc", {"contaminants": ""}, tool_version="0.74+galaxy1"),
+        [tools_post],
+    )
+
+
+def invoke_workflow_cases(add: AddCase) -> None:
+    """A workflow submitted, and what comes back.
+
+    The answer is the invocation record Galaxy sent and nothing else: this is a
+    submission, not a wait, and the invocation is "new" when it arrives. Supplying
+    inputs turns on a preflight, which reads the run model, the datatype hierarchy and
+    each supplied dataset before anything is posted -- all mocked here, so the check
+    really runs and really passes rather than being skipped by a failed lookup. A
+    batch invocation is the third case: Galaxy answers with a list of invocations and
+    that list is the answer.
+    """
+    invocation = {
+        "id": "inv00002",
+        "state": "new",
+        "model_class": "WorkflowInvocation",
+        "workflow_id": "wf000001",
+        "history_id": "h0000",
+        "uuid": "33333333-3333-3333-3333-333333333333",
+        "create_time": "2026-01-02T03:04:05.000000",
+        "update_time": "2026-01-02T03:04:05.000000",
+        "inputs": {},
+        "steps": [
+            {
+                "id": "st000001",
+                "order_index": 0,
+                "state": "new",
+                "job_id": None,
+                "workflow_step_label": "Input FASTQ",
+                "model_class": "WorkflowInvocationStep",
+            }
+        ],
+        "outputs": {},
+        "output_collections": {},
+    }
+    invocations_route = route("/api/workflows/wf000001/invocations", invocation, method="POST")
+    add(
+        "invoke_workflow",
+        "no_inputs",
+        "nothing supplied, so nothing to check -- one POST and the record back",
+        {"workflow_id": "wf000001", "history_id": "h0000"},
+        lambda: invoke_workflow_fn("wf000001", history_id="h0000"),
+        [invocations_route],
+    )
+    run_model_for_invoke = {
+        "id": "wf000001",
+        "name": "Reads QC",
+        "has_upgrade_messages": False,
+        "step_version_changes": [],
+        "steps": {
+            "0": {
+                "step_type": "data_input",
+                "step_index": 0,
+                "step_label": "Input FASTQ",
+                "uuid": "11111111-1111-1111-1111-111111111111",
+                "inputs": [
+                    {
+                        "extensions": ["fastqsanger"],
+                        "acceptable_extensions": ["fastqsanger", "fastqsanger.gz"],
+                        "optional": False,
+                    }
+                ],
+            }
+        },
+    }
+    add(
+        "invoke_workflow",
+        "inputs_checked_before_submitting",
+        "a dataset supplied for the one slot, checked against the run model first",
+        {
+            "workflow_id": "wf000001",
+            "history_id": "h0000",
+            "inputs": {"0": {"id": "d0000001", "src": "hda"}},
+        },
+        lambda: invoke_workflow_fn(
+            "wf000001", inputs={"0": {"id": "d0000001", "src": "hda"}}, history_id="h0000"
+        ),
+        [
+            route(
+                "/api/workflows/wf000001/download",
+                run_model_for_invoke,
+                query={"style": "run"},
+            ),
+            route(
+                "/api/datatypes/types_and_mapping",
+                {
+                    "datatypes_mapping": {
+                        "ext_to_class_name": {
+                            "fastqsanger": "galaxy.datatypes.sequence.FastqSanger"
+                        },
+                        "class_to_classes": {
+                            "galaxy.datatypes.sequence.FastqSanger": {
+                                "galaxy.datatypes.sequence.FastqSanger": True
+                            }
+                        },
+                    }
+                },
+            ),
+            route(
+                "/api/datasets/d0000001",
+                {"id": "d0000001", "name": "reads.fastqsanger", "extension": "fastqsanger"},
+            ),
+            invocations_route,
+        ],
+    )
+    add(
+        "invoke_workflow",
+        "batch_answers_with_a_list",
+        "Galaxy expanded the run, so the answer is every invocation it made",
+        {"workflow_id": "wf000001", "history_id": "h0000"},
+        lambda: invoke_workflow_fn("wf000001", history_id="h0000"),
+        [
+            route(
+                "/api/workflows/wf000001/invocations",
+                [invocation, {**invocation, "id": "inv00003"}],
+                method="POST",
+            )
+        ],
+    )
+
+
+def invocation_mutation_cases(add: AddCase) -> None:
+    add(
+        "cancel_workflow_invocation",
+        "cancelled",
+        "a DELETE, and the invocation Galaxy answers with wrapped beside a flag",
+        {"invocation_id": "inv00001"},
+        lambda: cancel_workflow_invocation_fn("inv00001"),
+        [
+            route(
+                "/api/invocations/inv00001",
+                {
+                    "id": "inv00001",
+                    "state": "cancelling",
+                    "workflow_id": "wf000001",
+                    "history_id": "h0000",
+                    "create_time": "2026-01-02T03:04:05.000000",
+                    "update_time": "2026-01-02T03:05:05.000000",
+                    "model_class": "WorkflowInvocation",
+                },
+                method="DELETE",
+            )
+        ],
+    )
+    # bioblend posts an imported definition to /api/workflows/upload where the other
+    # side posts it to /api/workflows. Both are the same create to Galaxy, and this
+    # table answers questions rather than replaying a log, so the record is registered
+    # under both spellings.
+    imported = {
+        "id": "wf000009",
+        "name": "Workflow 0",
+        "owner": "curator",
+        "number_of_steps": 2,
+        "published": False,
+        "deleted": False,
+        "model_class": "StoredWorkflow",
+    }
+    add(
+        "import_workflow_from_iwc",
+        "imported",
+        "a definition found in the IWC manifest and POSTed to Galaxy",
+        {"trs_id": "#workflow/github.com/iwc-workflows/wf0/main"},
+        lambda: import_workflow_from_iwc_fn("#workflow/github.com/iwc-workflows/wf0/main"),
+        [
+            route(IWC_MANIFEST_URL, iwc_manifest(2)),
+            route("/api/workflows/upload", imported, method="POST"),
+            route("/api/workflows", imported, method="POST"),
+        ],
+    )
+
+
+def revision_cases(add: AddCase) -> None:
+    """A page revision read and restored.
+
+    Both tools give a revision one field to edit whatever the server sent and say which
+    field that was, so the three cases are the three answers: the revision's own
+    content_editor, the expanded content standing in for it, and a revision carrying
+    neither. Both are refused against a Galaxy older than 26.1, so every case here is
+    answered a version first.
+    """
+    revision = {
+        "id": "rev00002",
+        "page_id": "pg000001",
+        "edit_source": "agent",
+        "title": "Reads QC report",
+        "content_format": "markdown",
+        "create_time": "2026-01-02T03:04:05.000000",
+        "update_time": "2026-01-02T03:04:05.000000",
+    }
+    add(
+        "get_page_revision",
+        "content_editor_from_the_server",
+        "the revision carries its own editable markdown",
+        {"page_id": "pg000001", "revision_id": "rev00002"},
+        lambda: get_page_revision_fn("pg000001", "rev00002"),
+        [
+            VERSION_ROUTE,
+            route(
+                "/api/pages/pg000001/revisions/rev00002",
+                {
+                    **revision,
+                    "content_editor": (
+                        "# Reads QC\n\n```galaxy\n"
+                        "history_dataset_display(history_dataset_id=d0000002)\n```\n"
+                    ),
+                    "content": "# Reads QC\n\n<div class='embedded'>expanded</div>\n",
+                },
+            ),
+        ],
+    )
+    add(
+        "get_page_revision",
+        "content_editor_from_content",
+        "an older server sent no content_editor, so the expanded content stands in",
+        {"page_id": "pg000001", "revision_id": "rev00001"},
+        lambda: get_page_revision_fn("pg000001", "rev00001"),
+        [
+            VERSION_ROUTE,
+            route(
+                "/api/pages/pg000001/revisions/rev00001",
+                {
+                    **revision,
+                    "id": "rev00001",
+                    "edit_source": "user",
+                    "content": "# Reads QC\n\n<div class='embedded'>expanded</div>\n",
+                },
+            ),
+        ],
+    )
+    add(
+        "get_page_revision",
+        "no_content_at_all",
+        "a revision carrying neither field, where content_editor is null",
+        {"page_id": "pg000001", "revision_id": "rev00000"},
+        lambda: get_page_revision_fn("pg000001", "rev00000"),
+        [
+            VERSION_ROUTE,
+            route(
+                "/api/pages/pg000001/revisions/rev00000",
+                {**revision, "id": "rev00000", "edit_source": "user", "content_editor": ""},
+            ),
+        ],
+    )
+    add(
+        "revert_page_revision",
+        "restored",
+        "the new revision a restore writes, read back the same way",
+        {"page_id": "pg000001", "revision_id": "rev00001"},
+        lambda: revert_page_revision_fn("pg000001", "rev00001"),
+        [
+            VERSION_ROUTE,
+            route(
+                "/api/pages/pg000001/revisions/rev00001/revert",
+                {
+                    **revision,
+                    "id": "rev00003",
+                    "edit_source": "restore",
+                    "content_editor": "# Reads QC\n\nthe old body\n",
+                    "content": "# Reads QC\n\nthe old body\n",
+                },
+                method="POST",
+            ),
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# The one tool that does not talk to a Galaxy
+# ---------------------------------------------------------------------------
+
+
+def quay_repository(name: str) -> str:
+    """Where a biocontainer's tag list lives, on both sides."""
+    return f"https://quay.io/api/v1/repository/biocontainers/{name}"
+
+
+def biocontainer_cases(add: AddCase) -> None:
+    """A conda package list resolved to a built quay.io image.
+
+    The only tool here that reaches a host other than the Galaxy: quay.io answers with a
+    repository's tag list, and the recommender picks a tag from it and then asks again to
+    verify the one it picked -- two requests to one route, which one canned reply answers
+    on both sides. A single package is looked up under its own name; several are a
+    mulled-v2 repository whose name hashes the sorted package names and whose tag hashes
+    their versions. The inputs are plain ASCII with an ordinary JSON reply on purpose: the
+    accepted divergences of the port are all about codecs, charsets and timing, and these
+    cases are about the algorithm.
+    """
+    samtools_tags = {
+        "tags": {
+            "1.17--hd87286a_2": {"name": "1.17--hd87286a_2"},
+            "1.17--h00b6d6a_0": {"name": "1.17--h00b6d6a_0"},
+            "1.16.1--h6899075_1": {"name": "1.16.1--h6899075_1"},
+            "latest": {"name": "latest"},
+        }
+    }
+    samtools = route(quay_repository("samtools"), samtools_tags)
+    add(
+        "recommend_biocontainer",
+        "single_pinned",
+        "one package at a version that is built, which is an exact match",
+        {"packages": ["samtools=1.17"]},
+        lambda: recommend_biocontainer_fn(["samtools=1.17"]),
+        [samtools],
+    )
+    add(
+        "recommend_biocontainer",
+        "single_unpinned",
+        "one package with no version, so the newest built tag and a name-only match",
+        {"packages": ["samtools"]},
+        lambda: recommend_biocontainer_fn(["samtools"]),
+        [samtools],
+    )
+    add(
+        "recommend_biocontainer",
+        "version_never_built",
+        "a version nobody built, which falls back to the newest and says so in a note",
+        {"packages": ["samtools=9.9"]},
+        lambda: recommend_biocontainer_fn(["samtools=9.9"]),
+        [samtools],
+    )
+    add(
+        "recommend_biocontainer",
+        "no_such_repository",
+        "a package with no biocontainer at all: no image, and nothing to verify",
+        {"packages": ["nosuchpackage"]},
+        lambda: recommend_biocontainer_fn(["nosuchpackage"]),
+        [route(quay_repository("nosuchpackage"), {"detail": "Not Found"}, status=404)],
+    )
+    # Two packages are a mulled-v2 image: the repository name is a hash of the sorted
+    # package names and the tag is a hash of their versions, both written out here so a
+    # reader can see that the two sides hash the same thing.
+    mulled_v2 = "mulled-v2-fe8faa35dbf6dc65a0f7f5d4ea12e31a79f73e40"
+    mulled_tag = "49f21fe4737f78633ac5b610f847c089b6251c74-0"
+    add(
+        "recommend_biocontainer",
+        "two_packages",
+        "a pinned pair, which is a mulled-v2 repository and a hashed tag",
+        {"packages": ["bwa=0.7.17", "samtools=1.17"]},
+        lambda: recommend_biocontainer_fn(["bwa=0.7.17", "samtools=1.17"]),
+        [
+            route(
+                quay_repository(mulled_v2),
+                {"tags": {mulled_tag: {"name": mulled_tag}, "latest": {"name": "latest"}}},
+            )
+        ],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1705,15 +3155,34 @@ def _reset_caches() -> None:
     server._TOOL_SCHEMA_CACHE.clear()
     server._DATATYPES_MAPPING_CACHE.clear()
     clear_version_cache()
+    _clear_recommendation_cache()
+
+
+def _clear_recommendation_cache() -> None:
+    """Forget what quay.io said, which is remembered module-wide for five minutes.
+
+    Three cases ask about the same package and expect three lookups; without this the
+    second and third would be answered from the first. Imported inside the function
+    because the recommender only exists with the container-recommend extra -- which is
+    also what registers the tool -- and an install without it has no memo to clear. The
+    cases that need the extra then fail with the tool's own sentence about installing it,
+    which says more than an ImportError from here would.
+    """
+    try:
+        from galaxy.tool_util.deps.mulled import recommend as mulled_recommend
+    except ImportError:
+        return
+    with mulled_recommend._cache_lock:
+        mulled_recommend._cache.clear()
 
 
 def run_case(case: Case) -> GalaxyResult:
     """Answer this case's requests from its table and return what the tool built."""
     _reset_caches()
-    gi = GalaxyInstance(url=GALAXY_URL, key=PLACEHOLDER_KEY)
+    gi = GalaxyInstance(url=GALAXY_BASE_URL, key=PLACEHOLDER_KEY)
     previous = galaxy_state.copy()
     galaxy_state.update(
-        {"url": GALAXY_URL, "api_key": PLACEHOLDER_KEY, "gi": gi, "connected": True}
+        {"url": GALAXY_BASE_URL, "api_key": PLACEHOLDER_KEY, "gi": gi, "connected": True}
     )
     try:
         with responses.RequestsMock(assert_all_requests_are_fired=False) as mock:
@@ -1760,7 +3229,7 @@ def replies_json_for(case: Case) -> str:
                     "declares a query, every declared parameter must match, and the most "
                     "specific matching route wins."
                 ),
-                "baseUrl": GALAXY_URL,
+                "baseUrl": GALAXY_BASE_URL,
                 "routes": case.routes,
             },
             indent=2,

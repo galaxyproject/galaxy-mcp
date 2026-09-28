@@ -1,0 +1,14 @@
+{
+  "data": {
+    "image": "quay.io/biocontainers/mulled-v2-fe8faa35dbf6dc65a0f7f5d4ea12e31a79f73e40:49f21fe4737f78633ac5b610f847c089b6251c74-0",
+    "found": true,
+    "match_quality": "exact_version",
+    "source": "quay_mulled_v2",
+    "notes": [],
+    "verified": true
+  },
+  "success": true,
+  "message": "Resolved quay.io/biocontainers/mulled-v2-fe8faa35dbf6dc65a0f7f5d4ea12e31a79f73e40:49f21fe4737f78633ac5b610f847c089b6251c74-0 (exact_version)",
+  "count": null,
+  "pagination": null
+}

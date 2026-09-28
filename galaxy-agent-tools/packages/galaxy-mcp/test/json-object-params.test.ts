@@ -126,17 +126,11 @@ const CASES: Case[] = [
     tool: "run_tool",
     param: "inputs",
     args: `{"tool_id":"fastqc/0.74","history_id":"h1","inputs":{${PROTO},"input_file":{"src":"hda","id":"d1"}}}`,
-    answers: [
-      VERSION,
-      // Checked before the bare request id, which it contains.
-      ["/api/tool_requests/tr1/state", "submitted"],
-      ["/api/tool_requests/tr1", { id: "tr1", state: "submitted", jobs: [], implicit_collections: [] }],
-      ["/api/jobs", { tool_request_id: "tr1" }],
-    ],
-    route: "/api/jobs",
+    answers: [VERSION, ["/api/tools", { outputs: [], jobs: [] }]],
+    route: "/api/tools",
     body:
-      `{"tool_id":"fastqc/0.74","history_id":"h1","inputs":{${PROTO},"input_file":{"src":"hda","id":"d1"}},` +
-      '"strict":true,"send_email_notification":false}',
+      '{"history_id":"h1","tool_id":"fastqc/0.74","input_format":"legacy",' +
+      `"inputs":{${PROTO},"input_file":{"src":"hda","id":"d1"}}}`,
   },
   {
     tool: "run_user_tool",
@@ -367,8 +361,10 @@ describe("a key at the top level of an object-valued parameter", () => {
         `version, name, shell_command, container:'<image>'}"}`,
     );
     expect(schemaOf("run_tool", "inputs")).toBe(
-      `{${open},"description":"Nested tool inputs: data refs as {src:'hda',id}, batches as ` +
-        `{__class__:'Batch',values:[...]}"}`,
+      `{${open},"description":"Tool input parameters in Galaxy's legacy format: dataset inputs as ` +
+        `{\\"input_name\\": {\\"src\\": \\"hda\\", \\"id\\": \\"dataset_id\\"}}; a parameter inside a ` +
+        `section, conditional or repeat as one flat key joined with '|', e.g. ` +
+        `\\"reference_source|ref_file\\" -- not nested objects."}`,
     );
     expect(schemaOf("run_user_tool", "inputs")).toBe(
       `{${open},"description":"tool inputs; dataset refs as {src:'hda',id}"}`,

@@ -25,8 +25,17 @@ export { laxenLikePydantic, isPlainObject, materializeOnce } from "./laxen";
 export { jsonObject, isJsonObjectSchema } from "./json-object";
 export type { PaginationInfo, Paged } from "./operations/pagination";
 export { getUserOp, getUser, type CurrentUser } from "./operations/get-user";
-export { runToolOp, runTool } from "./operations/run-tool";
-export type { ToolRun, ToolInputs, ImplicitCollectionRef } from "./execute-tool-request";
+export { runToolOp, runTool, type ToolSubmission } from "./operations/run-tool";
+// The queue-and-wait path over /api/jobs and /api/tool_requests. `run_tool` submits and
+// returns, because that is what the other server does; a caller who wants to wait for the
+// jobs it queued calls this directly.
+export {
+  executeToolRequest,
+  type ExecuteToolRequestArgs,
+  type ToolRun,
+  type ToolInputs,
+  type ImplicitCollectionRef,
+} from "./execute-tool-request";
 export {
   getInvocationsOp,
   getInvocations,
@@ -38,7 +47,8 @@ export {
   getServerInfoOp,
   getServerInfo,
   type ServerInfo,
-  type UnsupportedOp,
+  type ServerConfigSummary,
+  type UnsupportedTool,
 } from "./operations/get-server-info";
 export { getHistoriesOp, getHistories, type Histories } from "./operations/get-histories";
 export { listHistoryIdsOp, listHistoryIds, type HistoryRef } from "./operations/list-history-ids";
@@ -83,7 +93,13 @@ export { deleteUserToolOp, deleteUserTool, type DeletedUserTool } from "./operat
 export { runUserToolOp, runUserTool, type UserToolRun } from "./operations/run-user-tool";
 export { getToolInputTemplateOp, getToolInputTemplate, type ToolInputTemplateResult } from "./operations/get-tool-input-template";
 export { getWorkflowInputTemplateOp, getWorkflowInputTemplate, resolveWorkflowSlots, type ResolvedSlots } from "./operations/get-workflow-input-template";
-export { invokeWorkflowOp, invokeWorkflow, getDatatypesMapping, type InvocationResult } from "./operations/invoke-workflow";
+export {
+  invokeWorkflowOp,
+  invokeWorkflow,
+  getDatatypesMapping,
+  type InvocationResult,
+  type InvokeWorkflowResult,
+} from "./operations/invoke-workflow";
 export { uploadFileFromUrlOp, uploadFileFromUrl, type UploadFileFromUrlResult } from "./operations/upload-file-from-url";
 export { listPagesOp, listPages } from "./operations/list-pages";
 export { getPageOp, getPage } from "./operations/get-page";

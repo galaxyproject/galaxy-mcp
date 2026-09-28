@@ -1,0 +1,15 @@
+{
+  "data": {
+    "id": "wf000009",
+    "name": "Workflow 0",
+    "owner": "curator",
+    "number_of_steps": 2,
+    "published": false,
+    "deleted": false,
+    "model_class": "StoredWorkflow"
+  },
+  "success": true,
+  "message": "Successfully imported workflow '#workflow/github.com/iwc-workflows/wf0/main'",
+  "count": null,
+  "pagination": null
+}

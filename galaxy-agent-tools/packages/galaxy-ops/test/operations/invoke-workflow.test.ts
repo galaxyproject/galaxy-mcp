@@ -339,6 +339,25 @@ describe("invoke_workflow op", () => {
 // validateInputs unit tests (golden: valid -> no rejects; type mismatch -> reject)
 // ---------------------------------------------------------------------------
 
+describe("a batch invocation, which Galaxy answers with a list", () => {
+  it("hands back every invocation rather than the first of them", async () => {
+    // Galaxy expands a batch run into one invocation per element. Answering with
+    // data[0] loses the rest of them, and the other server passes the list through.
+    const made = [
+      { id: "inv42", state: "new", model_class: "WorkflowInvocation" },
+      { id: "inv43", state: "new", model_class: "WorkflowInvocation" },
+    ];
+    const client = mockClient({
+      POST: () => ({ data: made, response: { status: 200 } }),
+    });
+    const out = await invokeWorkflow({ workflowId: "wf1" }, ctxWith(client));
+    expect(out).toEqual(made);
+    expect(invokeWorkflowOp.project?.(out, { workflowId: "wf1" } as never)?.message).toContain(
+      "2 invocations: inv42, inv43",
+    );
+  });
+});
+
 describe("validateInputs", () => {
   const DATA_SLOT = {
     step_index: 0,
