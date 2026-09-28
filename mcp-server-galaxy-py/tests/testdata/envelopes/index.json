@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 87,
+  "caseCount": 89,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -779,6 +779,28 @@
       },
       "envelope": "list_pages/empty.json",
       "replies": "list_pages/empty.galaxy.json"
+    },
+    {
+      "tool": "list_pages",
+      "case": "past_the_end",
+      "note": "an offset past the last page, which the shared helper has a sentence for",
+      "input": {
+        "limit": 5,
+        "offset": 40
+      },
+      "envelope": "list_pages/past_the_end.json",
+      "replies": "list_pages/past_the_end.galaxy.json"
+    },
+    {
+      "tool": "list_pages",
+      "case": "header_below_the_rows_in_hand",
+      "note": "a total_matches smaller than the page it came with",
+      "input": {
+        "limit": 5,
+        "offset": 0
+      },
+      "envelope": "list_pages/header_below_the_rows_in_hand.json",
+      "replies": "list_pages/header_below_the_rows_in_hand.galaxy.json"
     },
     {
       "tool": "list_page_revisions",

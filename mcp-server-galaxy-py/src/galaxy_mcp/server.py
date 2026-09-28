@@ -4800,17 +4800,18 @@ def list_pages(
         # total_matches is a response header, not part of the JSON body.
         total_matches = int(response.headers.get("total_matches", len(pages)))
 
-        has_next = (offset + len(pages)) < total_matches
-        has_previous = offset > 0
-        pagination = PaginationInfo(
+        # The same helper every other listing uses. This one windows server-side and
+        # reads its total from a header, which the helper already has a line for: a
+        # total it was handed cannot be smaller than the rows in hand, and an empty
+        # page past the end must not inflate it. What the hand-built block it replaces
+        # did differently was advance by the limit asked for rather than by what came
+        # back, and send no helper text at all.
+        pagination = _pagination_info(
             total_items=total_matches,
             returned_items=len(pages),
             limit=limit,
             offset=offset,
-            has_next=has_next,
-            has_previous=has_previous,
-            next_offset=offset + limit if has_next else None,
-            previous_offset=max(0, offset - limit) if has_previous else None,
+            noun="pages",
         )
 
         return GalaxyResult(

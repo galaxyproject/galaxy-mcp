@@ -1162,6 +1162,25 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         lambda: list_pages_fn(limit=5, offset=0),
         [VERSION_ROUTE, route("/api/pages", [], headers={"total_matches": "0"})],
     )
+    add(
+        "list_pages",
+        "past_the_end",
+        "an offset past the last page, which the shared helper has a sentence for",
+        {"limit": 5, "offset": 40},
+        lambda: list_pages_fn(limit=5, offset=40),
+        [VERSION_ROUTE, route("/api/pages", [], headers={"total_matches": "12"})],
+    )
+    # The header is the total, except that rows in hand prove a floor: a server that
+    # under-reports cannot make a page it just sent disappear. That is the one line in
+    # the shared helper that makes a total-from-a-header expressible through it.
+    add(
+        "list_pages",
+        "header_below_the_rows_in_hand",
+        "a total_matches smaller than the page it came with",
+        {"limit": 5, "offset": 0},
+        lambda: list_pages_fn(limit=5, offset=0),
+        [VERSION_ROUTE, route("/api/pages", page_rows(3), headers={"total_matches": "1"})],
+    )
 
     # -- list_page_revisions -------------------------------------------------
     add(

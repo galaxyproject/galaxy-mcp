@@ -4,14 +4,14 @@
   "message": "Retrieved 0 pages",
   "count": 0,
   "pagination": {
-    "total_items": 0,
+    "total_items": 12,
     "returned_items": 0,
     "limit": 5,
-    "offset": 0,
+    "offset": 40,
     "has_next": false,
-    "has_previous": false,
+    "has_previous": true,
     "next_offset": null,
-    "previous_offset": null,
-    "helper_text": "Showing 0 of 0 pages (offset 0). This is the last page."
+    "previous_offset": 35,
+    "helper_text": "offset 40 is past the end of 12 pages; use a smaller offset"
   }
 }

@@ -52,9 +52,7 @@ key for key, on the MCP text block and on `galaxy-cli --format json` alike.
   to get it.
 - `list_pages` reports a real `total_items`, taken from the `total_matches`
   response header, where before it returned only the window it had asked for.
-  Its block is hand-built to match the Python tool exactly, which means it
-  advances by the `limit` asked for rather than by what came back, and carries no
-  helper text.
+  Its block comes from the shared describer, like every other listing's.
 - `get_invocations` no longer sends a pagination block carrying just the `limit`.
   Galaxy windows that index itself and reports no total, so there was never a
   window to describe; the Python tool sends none either.

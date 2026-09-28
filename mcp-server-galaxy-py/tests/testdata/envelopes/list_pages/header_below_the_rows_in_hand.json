@@ -39,20 +39,40 @@
       "tags": [],
       "create_time": "2026-01-01T00:00:00",
       "update_time": "2026-01-02T00:00:00"
+    },
+    {
+      "id": "p0002",
+      "title": "Page 2",
+      "slug": "page-2",
+      "history_id": "h0000",
+      "latest_revision_id": "r0002",
+      "revision_ids": [
+        "r0002"
+      ],
+      "model_class": "Page",
+      "username": "tester",
+      "email_hash": "00000000000000000000000000000000",
+      "author_deleted": false,
+      "deleted": false,
+      "importable": false,
+      "published": false,
+      "tags": [],
+      "create_time": "2026-01-01T00:00:00",
+      "update_time": "2026-01-02T00:00:00"
     }
   ],
   "success": true,
-  "message": "Retrieved 2 pages",
-  "count": 2,
+  "message": "Retrieved 3 pages",
+  "count": 3,
   "pagination": {
-    "total_items": 12,
-    "returned_items": 2,
+    "total_items": 3,
+    "returned_items": 3,
     "limit": 5,
-    "offset": 10,
+    "offset": 0,
     "has_next": false,
-    "has_previous": true,
+    "has_previous": false,
     "next_offset": null,
-    "previous_offset": 5,
-    "helper_text": "Showing 2 of 12 pages (offset 10). This is the last page."
+    "previous_offset": null,
+    "helper_text": "Showing 3 of 3 pages (offset 0). This is the last page."
   }
 }

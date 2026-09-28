@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { classifyHttp } from "../errors";
 import { envelopeFact, readFact, recordFact } from "./envelope-facts";
+import { paginationInfo, wirePagination } from "./pagination";
 import type { PageSummary } from "./pages-common";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
@@ -76,33 +77,25 @@ export const listPagesOp: Operation<typeof input, PageSummary[]> = {
   input,
   requires: { galaxy: ">=26.1" },
   run,
-  project: (pages, i, facts) => {
-    const offset = i.offset ?? 0;
-    const limit = i.limit ?? DEFAULT_LIMIT;
-    const total = readFact(facts, totalMatches) ?? pages.length;
-    const hasNext = offset + pages.length < total;
-    const hasPrevious = offset > 0;
-    return {
-      message: `${pages.length} page(s)`,
-      count: pages.length,
-      // Built by hand rather than through paginationInfo, because the Python tool
-      // builds it by hand too: it advances by the limit asked for rather than by
-      // what came back, and it sends no helper text at all. Matching the envelope
-      // means matching that, oddities included -- see the report for the two the
-      // other server should probably lose.
-      pagination: {
-        total_items: total,
-        returned_items: pages.length,
-        limit,
-        offset,
-        has_next: hasNext,
-        has_previous: hasPrevious,
-        next_offset: hasNext ? offset + limit : null,
-        previous_offset: hasPrevious ? Math.max(0, offset - limit) : null,
-        helper_text: null,
-      },
-    };
-  },
+  project: (pages, i, facts) => ({
+    message: `${pages.length} page(s)`,
+    count: pages.length,
+    // The shared describer, like every other listing. This one windows server-side
+    // and reads its total from a header, which the describer already has a line for:
+    // rows in hand prove a floor, so a server that under-reports cannot make the page
+    // it just sent disappear. It used to be built by hand here to match a hand-built
+    // block on the other server -- no helper text at all, and an advance by the limit
+    // asked for rather than by what came back. That block is gone now.
+    pagination: wirePagination(
+      paginationInfo({
+        total: readFact(facts, totalMatches) ?? pages.length,
+        returned: pages.length,
+        limit: i.limit ?? DEFAULT_LIMIT,
+        offset: i.offset ?? 0,
+        noun: "pages",
+      }),
+    ),
+  }),
 };
 
 register(listPagesOp as AnyOperation);
