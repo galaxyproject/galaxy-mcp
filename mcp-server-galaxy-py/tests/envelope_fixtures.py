@@ -2922,6 +2922,65 @@ def run_tool_cases(add: AddCase) -> None:
     )
     add(
         "run_tool",
+        "schema_unreadable",
+        "the schema read refused, so the run says the inputs went unchecked",
+        {
+            "history_id": "h0000",
+            "tool_id": "fastqc",
+            "inputs": {"input_file": {"src": "hda", "id": "d0000001"}},
+        },
+        lambda: run_tool_fn("h0000", "fastqc", {"input_file": {"src": "hda", "id": "d0000001"}}),
+        [fail("/api/tools/fastqc", 404, MISSING), tools_post],
+    )
+    add(
+        "run_tool",
+        "schema_without_a_parameter_list",
+        "a schema with no inputs key is not checkable, which the run says rather than implies",
+        {
+            "history_id": "h0000",
+            "tool_id": "fastqc",
+            "inputs": {"input_file": {"src": "hda", "id": "d0000001"}},
+        },
+        lambda: run_tool_fn("h0000", "fastqc", {"input_file": {"src": "hda", "id": "d0000001"}}),
+        [
+            route(
+                "/api/tools/fastqc", {"id": "fastqc", "name": "FastQC", "version": "0.74+galaxy1"}
+            ),
+            tools_post,
+        ],
+    )
+    add(
+        "run_tool",
+        "with_stored_credentials",
+        "credentials configured for this tool, which the run carries and says it carried",
+        {
+            "history_id": "h0000",
+            "tool_id": "fastqc",
+            "inputs": {"contaminants": ""},
+        },
+        lambda: run_tool_fn("h0000", "fastqc", {"contaminants": ""}),
+        [
+            route("/api/users/current", {"id": "u0000001", "username": "curator"}),
+            route(
+                "/api/users/u0000001/credentials",
+                [
+                    {
+                        "id": "cred0001",
+                        "name": "api_token",
+                        "version": "1",
+                        "current_group_id": "g0000001",
+                        "groups": [
+                            {"id": "g0000001", "name": "default"},
+                            {"id": "g0000002", "name": "staging"},
+                        ],
+                    }
+                ],
+            ),
+            tools_post,
+        ],
+    )
+    add(
+        "run_tool",
         "section_inputs_legacy_keys",
         "a parameter inside a section, spelled the flat legacy way the tool sends it",
         {

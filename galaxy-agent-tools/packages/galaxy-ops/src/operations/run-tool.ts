@@ -2,6 +2,8 @@ import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { jsonObject } from "../json-object";
 import { legacyPost } from "../legacy";
+import { preflightToolInputs, toolCredentialsContext } from "../tool-preflight";
+import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
@@ -59,7 +61,23 @@ type RunToolInput = {
  * payload rather than the query string -- Galaxy reads it out of the body in
  * services/tools.py `_create`.
  */
+/** Why the inputs were not checked against the tool's schema, when they were not. */
+const uncheckedInputs = envelopeFact<string>("run_tool.unchecked_inputs");
+/** Whether stored credentials were found and sent with the run. */
+const withCredentials = envelopeFact<boolean>("run_tool.with_credentials");
+
 async function run(i: RunToolInput, ctx: GalaxyContext): Promise<ToolSubmission> {
+  // Before anything is sent, and in this order, because that is the order over there: the
+  // schema read only when an input looks like a dataset, then the credentials lookup, then
+  // the run. The first two both decide a clause of the sentence the run answers with.
+  const unchecked = await preflightToolInputs(ctx, i.toolId, i.inputs, {
+    toolVersion: i.toolVersion,
+  });
+  if (unchecked !== null) recordFact(ctx, uncheckedInputs, unchecked);
+
+  const credentials = await toolCredentialsContext(ctx, i.toolId);
+  if (credentials !== null) recordFact(ctx, withCredentials, true);
+
   const body: Record<string, unknown> = {
     history_id: i.historyId,
     tool_id: i.toolId,
@@ -67,6 +85,7 @@ async function run(i: RunToolInput, ctx: GalaxyContext): Promise<ToolSubmission>
     inputs: i.inputs,
   };
   if (i.toolVersion != null) body["tool_version"] = i.toolVersion;
+  if (credentials !== null) body["credentials_context"] = credentials;
   return legacyPost<ToolSubmission>(ctx, "/api/tools", { body });
 }
 
@@ -107,12 +126,12 @@ export const runToolOp: Operation<typeof input, ToolSubmission> = {
   input,
   readOnly: false, // executes a tool -- not a read
   run,
-  project: (o, i) => {
+  project: (o, i, facts) => {
     // server.py, run_tool: the tool and the history, with a clause about the version
     // only when one was asked for -- and that clause reports what the jobs say ran,
-    // never the request repeated back as if it were the answer. The two clauses the
-    // other server can add after this one (stored credentials, and inputs that went
-    // unchecked) belong to work this surface does not do; see the release notes.
+    // never the request repeated back as if it were the answer. Then the credentials
+    // clause and the unchecked-inputs clause, in that order, each from a fact the run
+    // left behind.
     let version = "";
     if (i.toolVersion != null) {
       const ran = reportedToolVersion(o);
@@ -120,7 +139,14 @@ export const runToolOp: Operation<typeof input, ToolSubmission> = {
       else if (ran === i.toolVersion) version = ` at version ${ran}`;
       else version = ` at version ${ran} (not the ${i.toolVersion} requested)`;
     }
-    return { message: `Started tool '${i.toolId}'${version} in history '${i.historyId}'` };
+    const credentials = readFact(facts, withCredentials) ? " (with credentials)" : "";
+    const unchecked = readFact(facts, uncheckedInputs);
+    const notChecked = unchecked ? ` (inputs not pre-checked: ${unchecked})` : "";
+    return {
+      message:
+        `Started tool '${i.toolId}'${version} in history ` +
+        `'${i.historyId}'${credentials}${notChecked}`,
+    };
   },
   // server.py, run_tool: the run is a bioblend write. A 400 is the status Galaxy rejects a
   // tool form with, and that failure gets the input-shape explanation rather than the bare
