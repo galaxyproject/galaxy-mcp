@@ -76,8 +76,52 @@ describe("get_iwc_workflow_details", () => {
     const outputNames = out.outputs.map((o) => o.name);
     expect(outputNames).toContain("QC report");
     expect(outputNames).toContain("splice sites");
-    // falls back to output_name when label is empty
-    expect(outputNames).toContain("alignments");
+    // an empty label is the value, as it is on the other server; only an absent
+    // one falls back to output_name
+    expect(outputNames).toContain("");
+    expect(outputNames).not.toContain("alignments");
+  });
+
+  it("passes a null or empty label through and defaults only an absent one", async () => {
+    __setIwcCacheForTest([
+      {
+        ...FULL_WF,
+        trsID: "#workflow/github.com/iwc-workflows/nulls/main",
+        definition: {
+          ...FULL_WF.definition,
+          steps: {
+            "1": {
+              type: "data_input",
+              label: null,
+              annotation: null,
+              workflow_outputs: [
+                { label: null, output_name: "output" },
+                { label: "", output_name: "out2" },
+                { output_name: "out3" },
+                {},
+              ],
+            },
+            "2": { type: "tool", tool_id: "t", workflow_outputs: [{ label: "named" }] },
+            "3": { type: "parameter_input" },
+          },
+        },
+      },
+    ]);
+    const out = await getIwcWorkflowDetails(
+      { trsId: "#workflow/github.com/iwc-workflows/nulls/main" },
+      ctxWith(mockClient({})),
+    );
+    expect(out.inputs).toEqual([
+      { name: null, type: "data_input", annotation: null },
+      { name: "Input 3", type: "parameter_input", annotation: "" },
+    ]);
+    expect(out.outputs).toEqual([
+      { name: null, step: null },
+      { name: "", step: null },
+      { name: "out3", step: null },
+      { name: "", step: null },
+      { name: "named", step: "Step 2" },
+    ]);
   });
 
   it("throws GalaxyNotFoundError when trsId is not in manifest", async () => {

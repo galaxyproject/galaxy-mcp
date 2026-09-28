@@ -1,0 +1,65 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "https://iwc.galaxyproject.org/workflow_manifest.json",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": [
+        {
+          "repo": "repo0",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf1/main",
+              "definition": {
+                "name": "Workflow 1",
+                "annotation": "labels stated as null",
+                "tags": [],
+                "license": "MIT",
+                "creator": [],
+                "steps": {
+                  "1": {
+                    "type": "data_input",
+                    "label": null,
+                    "annotation": null,
+                    "workflow_outputs": [
+                      {
+                        "label": null,
+                        "output_name": "output"
+                      },
+                      {
+                        "label": "",
+                        "output_name": "out2"
+                      },
+                      {
+                        "output_name": "out3"
+                      },
+                      {}
+                    ]
+                  },
+                  "2": {
+                    "type": "tool",
+                    "tool_id": "t",
+                    "workflow_outputs": [
+                      {
+                        "label": "named"
+                      }
+                    ]
+                  },
+                  "3": {
+                    "type": "parameter_input"
+                  }
+                }
+              },
+              "readme": "Workflow 1.",
+              "categories": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

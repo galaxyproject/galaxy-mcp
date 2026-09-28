@@ -39,16 +39,36 @@ async function run(i: In, ctx: GalaxyContext): Promise<HistoryDetail> {
   return history;
 }
 
+/**
+ * The sentence the other server puts beside the number, word for word.
+ *
+ * It is there because a count reads like a listing to an agent that asked for a
+ * history's details and got one number back, so the payload says which tool
+ * returns the datasets themselves.
+ */
+const CONTENTS_NOTE =
+  "This is just a count. To get actual datasets, use " +
+  "get_history_contents(history_id, limit=25, order='create_time-dsc') " +
+  "for newest datasets first.";
+
 export const getHistoryDetailsOp: Operation<typeof input, HistoryDetail> = {
   name: "get_history_details",
   domain: "histories",
   summary: "Show a single history's details by id (name, state, counts).",
   input,
   run,
-  project: (h, _i, facts) => ({
-    message: `History ${(h as { id?: string }).id} state=${(h as { state?: string }).state}`,
-    count: readFact(facts, contentsCount) ?? null,
-  }),
+  // The other server wraps the record: this tool answers with the history under its
+  // own key and the count it already paid a request for under another, so a caller
+  // reading `data` cannot mistake one number for the history's own metadata. run()
+  // goes on returning the bare record, which is what a library caller destructures.
+  project: (h, _i, facts) => {
+    const total = readFact(facts, contentsCount) ?? 0;
+    return {
+      data: { history: h, contents_summary: { total_items: total, note: CONTENTS_NOTE } },
+      message: `History ${(h as { id?: string }).id} state=${(h as { state?: string }).state}`,
+      count: total,
+    };
+  },
 };
 
 register(getHistoryDetailsOp as AnyOperation);

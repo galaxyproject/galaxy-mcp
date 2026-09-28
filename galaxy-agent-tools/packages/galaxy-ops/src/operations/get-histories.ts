@@ -21,7 +21,13 @@ const input = {
     .int()
     .default(0)
     .describe("Skip the first N histories. Pass pagination.nextOffset to walk to the following page."),
-  name: z.string().nullish().describe("Return only histories with exactly this name"),
+  name: z
+    .string()
+    .nullish()
+    .describe(
+      'Return only histories with exactly this name. The match is exact and case-sensitive, ' +
+        'not a substring: name="RNA" does not match "RNA-seq analysis".',
+    ),
 };
 type In = { limit?: number | null; offset?: number; name?: string | null };
 

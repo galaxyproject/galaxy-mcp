@@ -31,7 +31,13 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<HistoryRef>> {
   // everything in one, which is what this listing needs to count and slice.
   const { items } = await getHistories({}, ctx);
   const histories = items as Array<{ id?: string; name?: string }>;
-  const rows = histories.map((h) => ({ id: h.id ?? "", name: h.name ?? "" }));
+  // A history with no name is "Unnamed", not "": that is the word the other server
+  // puts there, and `h.get("name", "Unnamed")` substitutes it for an ABSENT key
+  // only -- a name Galaxy sent as null stays null, and an empty one stays empty.
+  const rows = histories.map((h) => ({
+    id: h.id ?? "",
+    name: ("name" in h ? h.name : "Unnamed") as string,
+  }));
   return paginate(rows, { limit, offset, noun: "histories" });
 }
 

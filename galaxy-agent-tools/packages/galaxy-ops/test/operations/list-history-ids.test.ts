@@ -39,6 +39,26 @@ describe("list_history_ids", () => {
     await expect(listHistoryIds({ limit: 501 }, ctxWith(serving(10)))).rejects.toThrow(/at most 500/);
   });
 
+  /**
+   * Three ways for a history to have no name, and three different answers. The word
+   * stands in for a key that is not there; a null and an empty string are values the
+   * user's Galaxy sent and are passed along.
+   */
+  it("calls a history with no name Unnamed, and leaves a null or empty one alone", async () => {
+    const client = mockClient({
+      GET: () => ({
+        data: [{ id: "a" }, { id: "b", name: null }, { id: "c", name: "" }],
+        response: { status: 200 },
+      }),
+    });
+    const out = await listHistoryIds({}, ctxWith(client));
+    expect(out.items).toEqual([
+      { id: "a", name: "Unnamed" },
+      { id: "b", name: null },
+      { id: "c", name: "" },
+    ]);
+  });
+
   it("handles a user with no histories", async () => {
     const out = await listHistoryIds({}, ctxWith(serving(0)));
     expect(out.items).toEqual([]);

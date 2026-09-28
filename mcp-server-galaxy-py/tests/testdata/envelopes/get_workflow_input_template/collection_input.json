@@ -1,0 +1,49 @@
+{
+  "data": {
+    "inputs_template": {
+      "0": {
+        "src": "hdca",
+        "id": "<collection_id>"
+      }
+    },
+    "slots": [
+      {
+        "step_index": 0,
+        "step_uuid": "22222222-2222-2222-2222-222222222222",
+        "label": "Paired reads",
+        "input_type": "data_collection",
+        "src": "hdca",
+        "accepted_formats": [],
+        "collection_type": "list:paired",
+        "parameter_type": null,
+        "optional": true
+      }
+    ],
+    "inputs_by": "step_index|step_uuid",
+    "warnings": [
+      {
+        "kind": "legacy_runtime_value",
+        "message": "Tool step 'fastqc' has a RuntimeValue parameter set at runtime (legacy run-form pattern); the workflow may not run cleanly via the API."
+      }
+    ],
+    "guide": {
+      "summary": "Runs quality control over reads and reports on them.",
+      "annotation": "quality control over sequencing reads",
+      "provenance": {
+        "version": 3,
+        "source": {
+          "trs_id": "#workflow/github.com/iwc-workflows/reads-qc/main",
+          "trs_url": "https://dockstore.org/api/ga4gh/trs/v2/tools/reads-qc"
+        },
+        "freshness": {
+          "has_upgrade_messages": false,
+          "step_version_changes": []
+        }
+      }
+    }
+  },
+  "success": true,
+  "message": "Built an input template for workflow 'wf000001' (1 slot(s), source: style=run). Fill inputs_template and invoke with inputs_by='step_index|step_uuid'.",
+  "count": 1,
+  "pagination": null
+}

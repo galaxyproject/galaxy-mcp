@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 68,
+  "caseCount": 90,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -175,6 +175,29 @@
       "replies": "get_tool_panel/section_cut_by_the_budget.galaxy.json"
     },
     {
+      "tool": "get_tool_panel",
+      "case": "nested_overview",
+      "note": "a nested panel, where a section entry counts only the tools directly in it",
+      "input": {
+        "limit": 5,
+        "offset": 0
+      },
+      "envelope": "get_tool_panel/nested_overview.json",
+      "replies": "get_tool_panel/nested_overview.galaxy.json"
+    },
+    {
+      "tool": "get_tool_panel",
+      "case": "nested_section",
+      "note": "opening a section that holds a sub-section and a label as well as a tool",
+      "input": {
+        "section_id": "outer",
+        "limit": 5,
+        "offset": 0
+      },
+      "envelope": "get_tool_panel/nested_section.json",
+      "replies": "get_tool_panel/nested_overview.galaxy.json"
+    },
+    {
       "tool": "list_history_ids",
       "case": "full_page",
       "note": "a full page of history ids",
@@ -217,6 +240,17 @@
       },
       "envelope": "list_history_ids/past_the_end.json",
       "replies": "list_history_ids/full_page.galaxy.json"
+    },
+    {
+      "tool": "list_history_ids",
+      "case": "nameless",
+      "note": "histories with no name, a null name and an empty name, which are three answers",
+      "input": {
+        "limit": 10,
+        "offset": 0
+      },
+      "envelope": "list_history_ids/nameless.json",
+      "replies": "list_history_ids/nameless.galaxy.json"
     },
     {
       "tool": "list_history_ids",
@@ -375,6 +409,26 @@
       "replies": "get_history_contents/full_page.galaxy.json"
     },
     {
+      "tool": "get_history_details",
+      "case": "with_contents",
+      "note": "a history and the number of items in it, wrapped in this tool's own data shape",
+      "input": {
+        "history_id": "h0000"
+      },
+      "envelope": "get_history_details/with_contents.json",
+      "replies": "get_history_details/with_contents.galaxy.json"
+    },
+    {
+      "tool": "get_history_details",
+      "case": "empty",
+      "note": "a history with nothing in it, which still carries the same note",
+      "input": {
+        "history_id": "h0000"
+      },
+      "envelope": "get_history_details/empty.json",
+      "replies": "get_history_details/empty.galaxy.json"
+    },
+    {
       "tool": "list_workflows",
       "case": "full_page",
       "note": "a full page of workflows",
@@ -505,6 +559,37 @@
       },
       "envelope": "get_iwc_workflows/past_the_end.json",
       "replies": "get_iwc_workflows/full_page.galaxy.json"
+    },
+    {
+      "tool": "get_iwc_workflows",
+      "case": "steps_out_of_order",
+      "note": "a workflow whose step keys arrive out of order, which decides tools_used",
+      "input": {
+        "limit": 10,
+        "offset": 0
+      },
+      "envelope": "get_iwc_workflows/steps_out_of_order.json",
+      "replies": "get_iwc_workflows/steps_out_of_order.galaxy.json"
+    },
+    {
+      "tool": "get_iwc_workflow_details",
+      "case": "steps_out_of_order",
+      "note": "one workflow's inputs and outputs, which are the step order read twice",
+      "input": {
+        "trs_id": "#workflow/github.com/iwc-workflows/wf0/main"
+      },
+      "envelope": "get_iwc_workflow_details/steps_out_of_order.json",
+      "replies": "get_iwc_workflow_details/steps_out_of_order.galaxy.json"
+    },
+    {
+      "tool": "get_iwc_workflow_details",
+      "case": "labels_null_empty_and_absent",
+      "note": "inputs and outputs whose labels are null, empty, or missing",
+      "input": {
+        "trs_id": "#workflow/github.com/iwc-workflows/wf1/main"
+      },
+      "envelope": "get_iwc_workflow_details/labels_null_empty_and_absent.json",
+      "replies": "get_iwc_workflow_details/labels_null_empty_and_absent.galaxy.json"
     },
     {
       "tool": "search_iwc_workflows",
@@ -706,6 +791,28 @@
       "replies": "list_pages/empty.galaxy.json"
     },
     {
+      "tool": "list_pages",
+      "case": "past_the_end",
+      "note": "an offset past the last page, which the shared helper has a sentence for",
+      "input": {
+        "limit": 5,
+        "offset": 40
+      },
+      "envelope": "list_pages/past_the_end.json",
+      "replies": "list_pages/past_the_end.galaxy.json"
+    },
+    {
+      "tool": "list_pages",
+      "case": "header_below_the_rows_in_hand",
+      "note": "a total_matches smaller than the page it came with",
+      "input": {
+        "limit": 5,
+        "offset": 0
+      },
+      "envelope": "list_pages/header_below_the_rows_in_hand.json",
+      "replies": "list_pages/header_below_the_rows_in_hand.galaxy.json"
+    },
+    {
       "tool": "list_page_revisions",
       "case": "some",
       "note": "a page's revisions: a count, and no pagination block",
@@ -746,6 +853,127 @@
       },
       "envelope": "get_tool_run_examples/none.json",
       "replies": "get_tool_run_examples/none.galaxy.json"
+    },
+    {
+      "tool": "get_tool_run_examples",
+      "case": "no_version_asked_for",
+      "note": "no version named, which the answer states as null rather than leaving out",
+      "input": {
+        "tool_id": "cat1"
+      },
+      "envelope": "get_tool_run_examples/no_version_asked_for.json",
+      "replies": "get_tool_run_examples/with_version.galaxy.json"
+    },
+    {
+      "tool": "get_collection_details",
+      "case": "some_elements",
+      "note": "a collection whose elements all fit under the cap",
+      "input": {
+        "collection_id": "dc000001"
+      },
+      "envelope": "get_collection_details/some_elements.json",
+      "replies": "get_collection_details/some_elements.galaxy.json"
+    },
+    {
+      "tool": "get_collection_details",
+      "case": "truncated",
+      "note": "more elements than max_elements, which the note and the flag both have to say",
+      "input": {
+        "collection_id": "dc000001",
+        "max_elements": 2
+      },
+      "envelope": "get_collection_details/truncated.json",
+      "replies": "get_collection_details/truncated.galaxy.json"
+    },
+    {
+      "tool": "get_collection_details",
+      "case": "nested_collection",
+      "note": "a list of pairs, where an element's object is another collection and is not walked",
+      "input": {
+        "collection_id": "dc000002"
+      },
+      "envelope": "get_collection_details/nested_collection.json",
+      "replies": "get_collection_details/nested_collection.galaxy.json"
+    },
+    {
+      "tool": "get_collection_details",
+      "case": "sparse_record",
+      "note": "a collection Galaxy answered with almost nothing, so every default shows",
+      "input": {
+        "collection_id": "dc000004"
+      },
+      "envelope": "get_collection_details/sparse_record.json",
+      "replies": "get_collection_details/sparse_record.galaxy.json"
+    },
+    {
+      "tool": "get_workflow_input_template",
+      "case": "simple",
+      "note": "one data input off the run model, with a guide and a legacy warning",
+      "input": {
+        "workflow_id": "wf000001"
+      },
+      "envelope": "get_workflow_input_template/simple.json",
+      "replies": "get_workflow_input_template/simple.galaxy.json"
+    },
+    {
+      "tool": "get_workflow_input_template",
+      "case": "collection_input",
+      "note": "a collection slot whose type comes from collection_types rather than collection_type",
+      "input": {
+        "workflow_id": "wf000001"
+      },
+      "envelope": "get_workflow_input_template/collection_input.json",
+      "replies": "get_workflow_input_template/collection_input.galaxy.json"
+    },
+    {
+      "tool": "get_workflow_input_template",
+      "case": "parameter_selector",
+      "note": "a parameter slot whose options are a selector's choices",
+      "input": {
+        "workflow_id": "wf000001"
+      },
+      "envelope": "get_workflow_input_template/parameter_selector.json",
+      "replies": "get_workflow_input_template/parameter_selector.galaxy.json"
+    },
+    {
+      "tool": "get_workflow_input_template",
+      "case": "capped_options",
+      "note": "a selector with more choices than the template inlines, on a step with no uuid",
+      "input": {
+        "workflow_id": "wf000001"
+      },
+      "envelope": "get_workflow_input_template/capped_options.json",
+      "replies": "get_workflow_input_template/capped_options.galaxy.json"
+    },
+    {
+      "tool": "get_workflow_input_template",
+      "case": "sparse_run_step",
+      "note": "a run-model step that names almost nothing, so every fallback is exercised",
+      "input": {
+        "workflow_id": "wf000001"
+      },
+      "envelope": "get_workflow_input_template/sparse_run_step.json",
+      "replies": "get_workflow_input_template/sparse_run_step.galaxy.json"
+    },
+    {
+      "tool": "get_workflow_input_template",
+      "case": "ga_fallback",
+      "note": "the .ga path, which resolves no options and says so in the guide's notes",
+      "input": {
+        "workflow_id": "wf000002"
+      },
+      "envelope": "get_workflow_input_template/ga_fallback.json",
+      "replies": "get_workflow_input_template/ga_fallback.galaxy.json"
+    },
+    {
+      "tool": "get_workflow_input_template",
+      "case": "steps_out_of_order",
+      "note": "step keys out of order, plus two keys that are not step indexes",
+      "input": {
+        "workflow_id": "wf000003"
+      },
+      "envelope": "get_workflow_input_template/steps_out_of_order.json",
+      "replies": "get_workflow_input_template/steps_out_of_order.galaxy.json"
     },
     {
       "tool": "get_tool_citations",

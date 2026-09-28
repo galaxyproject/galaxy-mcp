@@ -76,6 +76,28 @@ describe("get_history_details", () => {
     expect([first.count, second.count]).toEqual([3, 9]);
   });
 
+  /**
+   * The envelope wraps the record and states the count beside it, which is the
+   * other server's data shape -- `{history, contents_summary}`, note included.
+   * run() still hands a library caller the bare record.
+   */
+  it("answers with the history under its own key and the count beside it", async () => {
+    const items = Array.from({ length: 4 }, (_, k) => ({ id: `d${k}` }));
+    const r = await runWithEnvelope(getHistoryDetailsOp as never, { historyId: "h1" } as never, ctxWith(serving(items)));
+    expect(r.data).toEqual({
+      history: { id: "h1", name: "alpha", state: "ok" },
+      contents_summary: {
+        total_items: 4,
+        note:
+          "This is just a count. To get actual datasets, use " +
+          "get_history_contents(history_id, limit=25, order='create_time-dsc') " +
+          "for newest datasets first.",
+      },
+    });
+    const bare = await getHistoryDetails({ historyId: "h1" }, ctxWith(serving(items)));
+    expect(bare).toEqual({ id: "h1", name: "alpha", state: "ok" });
+  });
+
   it("throws NotFound on 404", async () => {
     const client = mockClient({ GET: () => ({ error: { err_msg: "no" }, response: { status: 404 } }) });
     await expect(getHistoryDetails({ historyId: "x" }, ctxWith(client))).rejects.toBeInstanceOf(GalaxyNotFoundError);

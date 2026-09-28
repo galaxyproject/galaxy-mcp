@@ -1,0 +1,30 @@
+{
+  "data": {
+    "history": {
+      "id": "h0000",
+      "name": "History 0",
+      "state": "ok",
+      "deleted": false,
+      "purged": false,
+      "published": false,
+      "annotation": null,
+      "tags": [],
+      "size": 2048,
+      "create_time": "2026-01-01T00:00:00",
+      "update_time": "2026-01-02T00:00:00",
+      "contents_active": {
+        "active": 3,
+        "deleted": 1,
+        "hidden": 0
+      }
+    },
+    "contents_summary": {
+      "total_items": 0,
+      "note": "This is just a count. To get actual datasets, use get_history_contents(history_id, limit=25, order='create_time-dsc') for newest datasets first."
+    }
+  },
+  "success": true,
+  "message": "Retrieved details for history 'History 0'",
+  "count": 0,
+  "pagination": null
+}

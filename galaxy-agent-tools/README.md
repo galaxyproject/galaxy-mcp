@@ -267,9 +267,8 @@ than paged through. The two history listings count their own items and filter,
 sort and slice them here rather than asking Galaxy to, which is what the Python
 tools do and is why they can report a real total. The Pages operations sit half
 in: `list_pages` takes `limit` and `offset` and reports the total the server
-counted, on a `total_matches` header, but no helper sentence -- the Python tool
-sends none there either -- and `list_page_revisions` returns every revision at
-once.
+counted, on a `total_matches` header, with the same helper sentence the other
+listings carry; `list_page_revisions` returns every revision at once.
 
 ### The result envelope
 

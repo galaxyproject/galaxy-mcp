@@ -1,0 +1,75 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "https://iwc.galaxyproject.org/workflow_manifest.json",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": [
+        {
+          "repo": "repo0",
+          "workflows": [
+            {
+              "trsID": "#workflow/github.com/iwc-workflows/wf0/main",
+              "definition": {
+                "name": "Workflow 0",
+                "annotation": "rnaseq analysis number 0",
+                "tags": [
+                  "transcriptomics"
+                ],
+                "license": "MIT",
+                "creator": [
+                  {
+                    "class": "Person",
+                    "name": "IWC",
+                    "identifier": ""
+                  }
+                ],
+                "steps": {
+                  "2": {
+                    "type": "data_input",
+                    "label": "Reads",
+                    "annotation": "the fastq",
+                    "workflow_outputs": [
+                      {
+                        "label": "copy",
+                        "output_name": "output"
+                      }
+                    ]
+                  },
+                  "10": {
+                    "type": "parameter_input",
+                    "label": "Threads",
+                    "annotation": ""
+                  },
+                  "1": {
+                    "type": "tool",
+                    "tool_id": "fastqc",
+                    "label": "QC",
+                    "workflow_outputs": [
+                      {
+                        "output_name": "html_file"
+                      }
+                    ]
+                  },
+                  "x": {
+                    "type": "data_collection_input",
+                    "label": "Extra",
+                    "annotation": ""
+                  }
+                }
+              },
+              "readme": "Workflow 0 runs rnaseq quality control.",
+              "categories": [
+                "Transcriptomics"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

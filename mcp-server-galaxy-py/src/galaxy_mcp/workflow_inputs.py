@@ -63,7 +63,44 @@ def _options_from_restrictions(raw: Any) -> list[dict]:
     return [{"label": str(v), "value": str(v)} for v in raw] if isinstance(raw, list) else []
 
 
-_SORT_SENTINEL = 10**9  # sorts non-numeric step keys to the end without crashing
+# A workflow's ``steps`` is a JSON object, and the two languages disagree about what
+# an object's order is: Python keeps the order the keys arrived in, JavaScript visits
+# integer-like keys in ascending numeric order first and the rest in arrival order.
+# Neither can cheaply pretend to be the other, so both now sort explicitly, by this
+# rule: steps are visited by numeric key ascending for keys that are non-negative
+# integers written canonically -- no leading zeros, no sign -- and then the remaining
+# keys in the order they arrived. The same rule says which key is a step index.
+_CANONICAL_STEP_KEY = re.compile(r"0|[1-9][0-9]*")
+
+
+def canonical_step_index(key: Any) -> int | None:
+    """The step index a key names, or None when the key is not one.
+
+    A canonical non-negative integer and nothing else: not ``007``, not ``+1``, not
+    ``1e2``, not a hash. Those are keys a workflow should not have, and the two
+    languages read them differently enough that guessing costs more than skipping.
+    """
+    return int(key) if isinstance(key, str) and _CANONICAL_STEP_KEY.fullmatch(key) else None
+
+
+def steps_in_order(steps: dict[Any, Any]) -> list[tuple[Any, Any]]:
+    """A workflow's steps in the one order both servers agree on.
+
+    Numeric keys ascending for keys that are non-negative integers written
+    canonically (no leading zeros, no sign), then the remaining keys in the order
+    they arrived.
+    """
+    numbered: list[tuple[int, int, Any, Any]] = []
+    rest: list[tuple[Any, Any]] = []
+    for arrived, (key, value) in enumerate(steps.items()):
+        index = canonical_step_index(key)
+        if index is None:
+            rest.append((key, value))
+        else:
+            numbered.append((index, arrived, key, value))
+    numbered.sort()
+    return [(key, value) for _, _, key, value in numbered] + rest
+
 
 _INPUT_TYPE_MAP = {
     "data_input": "data",
@@ -232,14 +269,10 @@ def normalize_ga_steps(definition: dict[str, Any]) -> list[dict[str, Any]]:
     """
     steps = definition.get("steps", {})
     slots: list[dict[str, Any]] = []
-    # Sort numeric keys first (ascending), then non-numeric keys at the end.
-    # Non-numeric keys are skipped below; the sentinel just keeps sort() from crashing.
-    for key, step in sorted(
-        steps.items(), key=lambda kv: (_safe_int(kv[0], _SORT_SENTINEL), kv[0])
-    ):
-        index = _safe_int(key)
+    for key, step in steps_in_order(steps):
+        index = canonical_step_index(key)
         if index is None:
-            continue  # non-numeric key -- skip; .ga files should never have these
+            continue  # not a step index -- skip; .ga files should never have these
         input_type = _INPUT_TYPE_MAP.get(step.get("type", ""))
         if input_type is None:
             continue
@@ -306,10 +339,7 @@ def normalize_run_model(run_dict: dict[str, Any]) -> list[dict[str, Any]]:
     """
     raw_steps = run_dict.get("steps")
     if isinstance(raw_steps, dict):
-        # non-numeric keys get sorted to the end and skipped below
-        step_iter = [
-            raw_steps[k] for k in sorted(raw_steps, key=lambda k: (_safe_int(k, _SORT_SENTINEL), k))
-        ]
+        step_iter = [step for _, step in steps_in_order(raw_steps)]
     else:
         step_iter = list(raw_steps or [])
     slots: list[dict[str, Any]] = []
@@ -373,10 +403,7 @@ def find_legacy_warnings(definition: dict[str, Any]) -> list[dict[str, str]]:
     and are NOT flagged.
     """
     warnings: list[dict[str, str]] = []
-    for key, step in sorted(
-        definition.get("steps", {}).items(),
-        key=lambda kv: (_safe_int(kv[0], _SORT_SENTINEL), kv[0]),
-    ):
+    for key, step in steps_in_order(definition.get("steps", {})):
         if step.get("type") != "tool":
             continue
         if _has_runtime_value(_coerce_state(step.get("tool_state"))):

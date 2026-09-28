@@ -74,8 +74,9 @@ describe("list_pages", () => {
     const r = await runWithEnvelope(listPagesOp as any, { limit: 1, offset: 2 }, ctxWith(client));
     expect(r.success).toBe(true);
     expect(r.count).toBe(1);
-    // The Python tool builds this block by hand: it advances by the limit rather
-    // than by what came back, and sends no helper text at all.
+    // The shared describer, like every other listing: it advances by what came back
+    // and says in a sentence where the window sits. This tool used to build the block
+    // by hand, to match a hand-built one on the other server; both are gone.
     expect(r.pagination).toEqual({
       total_items: 12,
       returned_items: 1,
@@ -85,9 +86,33 @@ describe("list_pages", () => {
       has_previous: true,
       next_offset: 3,
       previous_offset: 1,
-      helper_text: null,
+      helper_text: "Showing 1 of 12 pages (offset 2). Use offset=3 for the next page.",
     });
     expect(r.message).toBe("1 page(s)");
+  });
+
+  /** An offset past the last page gets the sentence that says so, not a blank one. */
+  it("says an offset is past the end, as the other listings do", async () => {
+    const client = mockClient({ GET: () => ok([], 12) });
+    const r = await runWithEnvelope(listPagesOp as any, { limit: 5, offset: 40 }, ctxWith(client));
+    expect(r.pagination).toMatchObject({
+      total_items: 12,
+      returned_items: 0,
+      has_next: false,
+      next_offset: null,
+      helper_text: "offset 40 is past the end of 12 pages; use a smaller offset",
+    });
+  });
+
+  /**
+   * The line that makes a total-from-a-header expressible through the shared
+   * describer: rows in hand prove a floor, so a header that under-reports cannot
+   * make the page it arrived with disappear.
+   */
+  it("does not let a header smaller than the page shrink the total", async () => {
+    const client = mockClient({ GET: () => ok([{ id: "a" }, { id: "b" }, { id: "c" }], 1) });
+    const r = await runWithEnvelope(listPagesOp as any, { limit: 5, offset: 0 }, ctxWith(client));
+    expect(r.pagination).toMatchObject({ total_items: 3, returned_items: 3, has_next: false });
   });
 
   it("falls back to the page it was handed when no total came back", async () => {

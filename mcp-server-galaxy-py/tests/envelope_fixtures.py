@@ -47,13 +47,17 @@ from galaxy_mcp.server import GalaxyResult, galaxy_state
 from galaxy_mcp.version import clear_version_cache
 
 from .test_helpers import (
+    get_collection_details_fn,
     get_histories_fn,
     get_history_contents_fn,
+    get_history_details_fn,
     get_invocations_fn,
+    get_iwc_workflow_details_fn,
     get_iwc_workflows_fn,
     get_tool_citations_fn,
     get_tool_panel_fn,
     get_tool_run_examples_fn,
+    get_workflow_input_template_fn,
     list_history_ids_fn,
     list_page_revisions_fn,
     list_pages_fn,
@@ -477,6 +481,69 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         ],
     )
 
+    # A panel that is not flat: a section holding a tool, a sub-section and a
+    # divider label, and a tool sitting outside any section. A section entry's
+    # tool_count counts the tools directly in it -- a sub-section is neither a tool
+    # nor counted through, and a label is not a tool -- so a recursive count would
+    # read 2 here and a flat one over every node would read 3. Neither number is
+    # what either server reports, and the drill-in lists the one tool for the same
+    # reason. There is no panel-wide total on this tool at all, on either side.
+    nested_panel = [
+        {
+            "id": "outer",
+            "name": "Outer",
+            "model_class": "ToolSection",
+            "elems": [
+                {
+                    "id": "outer_tool",
+                    "name": "Outer Tool",
+                    "description": "directly in the section",
+                    "versions": ["1.0.0"],
+                    "model_class": "Tool",
+                },
+                {
+                    "id": "inner",
+                    "name": "Inner",
+                    "model_class": "ToolSection",
+                    "elems": [
+                        {
+                            "id": "inner_tool",
+                            "name": "Inner Tool",
+                            "description": "one level down",
+                            "versions": ["1.0.0"],
+                            "model_class": "Tool",
+                        }
+                    ],
+                },
+                {"id": "divider", "name": "Divider", "model_class": "ToolSectionLabel"},
+            ],
+        },
+        {
+            "id": "loose_tool",
+            "name": "Loose Tool",
+            "description": "outside any section",
+            "versions": ["1.0.0"],
+            "model_class": "Tool",
+        },
+    ]
+    nested_panel_routes = [route("/api/tools", nested_panel)]
+    add(
+        "get_tool_panel",
+        "nested_overview",
+        "a nested panel, where a section entry counts only the tools directly in it",
+        {"limit": 5, "offset": 0},
+        lambda: get_tool_panel_fn(limit=5, offset=0),
+        nested_panel_routes,
+    )
+    add(
+        "get_tool_panel",
+        "nested_section",
+        "opening a section that holds a sub-section and a label as well as a tool",
+        {"section_id": "outer", "limit": 5, "offset": 0},
+        lambda: get_tool_panel_fn(section_id="outer", limit=5, offset=0),
+        nested_panel_routes,
+    )
+
     # -- list_history_ids ----------------------------------------------------
     histories_40 = history_rows(40)
     histories_index = [route("/api/histories", histories_40)]
@@ -518,6 +585,26 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
     # on one surface keeps a row the other cuts. That is not a hypothetical: it is
     # what the two surfaces did here while their messages were still their own.
     boundary_histories = [{"id": f"h{i}", "name": "n" * 24_835} for i in range(2)]
+    # A history with no name at all, one whose name Galaxy sent as null, and one
+    # named the empty string. The word "Unnamed" stands in for the missing key and
+    # for nothing else, so all three have to be here to say which is which.
+    add(
+        "list_history_ids",
+        "nameless",
+        "histories with no name, a null name and an empty name, which are three answers",
+        {"limit": 10, "offset": 0},
+        lambda: list_history_ids_fn(limit=10, offset=0),
+        [
+            route(
+                "/api/histories",
+                [
+                    {"id": "hmissing", "state": "ok"},
+                    {"id": "hnull", "name": None, "state": "ok"},
+                    {"id": "hempty", "name": "", "state": "ok"},
+                ],
+            )
+        ],
+    )
     add(
         "list_history_ids",
         "budget_boundary",
@@ -648,6 +735,47 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         contents_route,
     )
 
+    # -- get_history_details -------------------------------------------------
+    # Two requests, in this order: the history itself, then its contents, which are
+    # fetched only to be counted. The count is every item the history holds, deleted
+    # and hidden included, which is why the metadata's own numbers will not do.
+    history_record = {
+        "id": "h0000",
+        "name": "History 0",
+        "state": "ok",
+        "deleted": False,
+        "purged": False,
+        "published": False,
+        "annotation": None,
+        "tags": [],
+        "size": 2048,
+        "create_time": "2026-01-01T00:00:00",
+        "update_time": "2026-01-02T00:00:00",
+        "contents_active": {"active": 3, "deleted": 1, "hidden": 0},
+    }
+    add(
+        "get_history_details",
+        "with_contents",
+        "a history and the number of items in it, wrapped in this tool's own data shape",
+        {"history_id": "h0000"},
+        lambda: get_history_details_fn("h0000"),
+        [
+            route("/api/histories/h0000", history_record),
+            route("/api/histories/h0000/contents", content_rows(4)),
+        ],
+    )
+    add(
+        "get_history_details",
+        "empty",
+        "a history with nothing in it, which still carries the same note",
+        {"history_id": "h0000"},
+        lambda: get_history_details_fn("h0000"),
+        [
+            route("/api/histories/h0000", history_record),
+            route("/api/histories/h0000/contents", []),
+        ],
+    )
+
     # -- list_workflows ------------------------------------------------------
     workflows_30 = workflow_rows(30)
     workflows_route = [route("/api/workflows", workflows_30)]
@@ -755,6 +883,142 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         lambda: get_iwc_workflows_fn(limit=10, offset=400),
         manifest_route,
     )
+    # Steps whose keys arrive out of order, with a key that is not an index at all.
+    # A JSON object has no order the two servers agree on, so the order tools_used
+    # comes out in is the stated one: canonical non-negative integers ascending,
+    # then the rest as they arrived. Insertion order alone would answer
+    # hisat2, multiqc, fastqc, cutadapt; ascending-everything would put cutadapt
+    # somewhere it does not belong.
+    out_of_order_steps = {
+        "2": {"type": "tool", "tool_id": "toolshed.g2.bx.psu.edu/repos/iuc/hisat2/hisat2/2.2.1"},
+        "10": {"type": "tool", "tool_id": "multiqc"},
+        "1": {"type": "tool", "tool_id": "fastqc"},
+        "x": {"type": "tool", "tool_id": "cutadapt"},
+    }
+    out_of_order_manifest = [
+        {
+            "repo": "repo0",
+            "workflows": [
+                {
+                    "trsID": "#workflow/github.com/iwc-workflows/wf0/main",
+                    "definition": {
+                        "name": "Workflow 0",
+                        "annotation": "rnaseq analysis number 0",
+                        "tags": ["transcriptomics", "rnaseq"],
+                        "license": "MIT",
+                        "creator": [{"class": "Person", "name": "IWC", "identifier": ""}],
+                        "steps": out_of_order_steps,
+                    },
+                    "readme": "Workflow 0 runs rnaseq quality control.",
+                    "categories": ["Transcriptomics"],
+                }
+            ],
+        }
+    ]
+    add(
+        "get_iwc_workflows",
+        "steps_out_of_order",
+        "a workflow whose step keys arrive out of order, which decides tools_used",
+        {"limit": 10, "offset": 0},
+        lambda: get_iwc_workflows_fn(limit=10, offset=0),
+        [route(IWC_MANIFEST_URL, out_of_order_manifest)],
+    )
+
+    # -- get_iwc_workflow_details -------------------------------------------
+    # The same steps read a second way: this tool walks them for inputs and
+    # outputs, so its two lists are the same order question again.
+    details_steps = {
+        "2": {
+            "type": "data_input",
+            "label": "Reads",
+            "annotation": "the fastq",
+            "workflow_outputs": [{"label": "copy", "output_name": "output"}],
+        },
+        "10": {"type": "parameter_input", "label": "Threads", "annotation": ""},
+        "1": {
+            "type": "tool",
+            "tool_id": "fastqc",
+            "label": "QC",
+            "workflow_outputs": [{"output_name": "html_file"}],
+        },
+        "x": {"type": "data_collection_input", "label": "Extra", "annotation": ""},
+    }
+    details_manifest = [
+        {
+            "repo": "repo0",
+            "workflows": [
+                {
+                    "trsID": "#workflow/github.com/iwc-workflows/wf0/main",
+                    "definition": {
+                        "name": "Workflow 0",
+                        "annotation": "rnaseq analysis number 0",
+                        "tags": ["transcriptomics"],
+                        "license": "MIT",
+                        "creator": [{"class": "Person", "name": "IWC", "identifier": ""}],
+                        "steps": details_steps,
+                    },
+                    "readme": "Workflow 0 runs rnaseq quality control.",
+                    "categories": ["Transcriptomics"],
+                }
+            ],
+        }
+    ]
+    add(
+        "get_iwc_workflow_details",
+        "steps_out_of_order",
+        "one workflow's inputs and outputs, which are the step order read twice",
+        {"trs_id": "#workflow/github.com/iwc-workflows/wf0/main"},
+        lambda: get_iwc_workflow_details_fn("#workflow/github.com/iwc-workflows/wf0/main"),
+        [route(IWC_MANIFEST_URL, details_manifest)],
+    )
+
+    # A .ga export states a label it does not have as null, and the other server
+    # passes a present null (or an empty string) through: only an absent key gets
+    # the "Input N" / "Step N" / output_name fallback.
+    null_label_steps = {
+        "1": {
+            "type": "data_input",
+            "label": None,
+            "annotation": None,
+            "workflow_outputs": [
+                {"label": None, "output_name": "output"},
+                {"label": "", "output_name": "out2"},
+                {"output_name": "out3"},
+                {},
+            ],
+        },
+        "2": {"type": "tool", "tool_id": "t", "workflow_outputs": [{"label": "named"}]},
+        "3": {"type": "parameter_input"},
+    }
+    null_label_manifest = [
+        {
+            "repo": "repo0",
+            "workflows": [
+                {
+                    "trsID": "#workflow/github.com/iwc-workflows/wf1/main",
+                    "definition": {
+                        "name": "Workflow 1",
+                        "annotation": "labels stated as null",
+                        "tags": [],
+                        "license": "MIT",
+                        "creator": [],
+                        "steps": null_label_steps,
+                    },
+                    "readme": "Workflow 1.",
+                    "categories": [],
+                }
+            ],
+        }
+    ]
+    add(
+        "get_iwc_workflow_details",
+        "labels_null_empty_and_absent",
+        "inputs and outputs whose labels are null, empty, or missing",
+        {"trs_id": "#workflow/github.com/iwc-workflows/wf1/main"},
+        lambda: get_iwc_workflow_details_fn("#workflow/github.com/iwc-workflows/wf1/main"),
+        [route(IWC_MANIFEST_URL, null_label_manifest)],
+    )
+
     add(
         "search_iwc_workflows",
         "full_page",
@@ -945,6 +1209,25 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         lambda: list_pages_fn(limit=5, offset=0),
         [VERSION_ROUTE, route("/api/pages", [], headers={"total_matches": "0"})],
     )
+    add(
+        "list_pages",
+        "past_the_end",
+        "an offset past the last page, which the shared helper has a sentence for",
+        {"limit": 5, "offset": 40},
+        lambda: list_pages_fn(limit=5, offset=40),
+        [VERSION_ROUTE, route("/api/pages", [], headers={"total_matches": "12"})],
+    )
+    # The header is the total, except that rows in hand prove a floor: a server that
+    # under-reports cannot make a page it just sent disappear. That is the one line in
+    # the shared helper that makes a total-from-a-header expressible through it.
+    add(
+        "list_pages",
+        "header_below_the_rows_in_hand",
+        "a total_matches smaller than the page it came with",
+        {"limit": 5, "offset": 0},
+        lambda: list_pages_fn(limit=5, offset=0),
+        [VERSION_ROUTE, route("/api/pages", page_rows(3), headers={"total_matches": "1"})],
+    )
 
     # -- list_page_revisions -------------------------------------------------
     add(
@@ -984,6 +1267,393 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         {"tool_id": "cat1", "tool_version": "1.0.0"},
         lambda: get_tool_run_examples_fn("cat1", tool_version="1.0.0"),
         [route("/api/tools/cat1/test_data", [])],
+    )
+    # No version asked for, which is still a stated one: requested_version comes back
+    # null rather than missing, because an absent key reads as "no such field".
+    add(
+        "get_tool_run_examples",
+        "no_version_asked_for",
+        "no version named, which the answer states as null rather than leaving out",
+        {"tool_id": "cat1"},
+        lambda: get_tool_run_examples_fn("cat1"),
+        [route("/api/tools/cat1/test_data", test_cases)],
+    )
+
+    # -- get_collection_details ----------------------------------------------
+    # The elements come back normalised rather than as Galaxy sent them: one flat
+    # record per element, its index counted from the head of the returned list, and
+    # the dataset behind it read one level deep and no further. A nested collection
+    # is an element whose object is another collection, and it stays that way -- the
+    # fields a dataset would fill are simply empty.
+    def collection_element(index: int, *, size: int | None = 1024) -> dict[str, Any]:
+        return {
+            "id": f"dce{index}",
+            "element_index": index,
+            "element_identifier": f"sample{index}",
+            "element_type": "hda",
+            "model_class": "DatasetCollectionElement",
+            "object": {
+                "id": f"d{index:04d}",
+                "name": f"sample{index}.txt",
+                "state": "ok",
+                "extension": "txt",
+                "file_size": size,
+                "history_id": "h0000",
+            },
+        }
+
+    def collection_record(elements: list[dict[str, Any]], **over: Any) -> dict[str, Any]:
+        record = {
+            "id": "dc000001",
+            "name": "Sample list",
+            "collection_type": "list",
+            "element_count": len(elements),
+            "populated": True,
+            "state": "ok",
+            "history_content_type": "dataset_collection",
+            "elements": elements,
+        }
+        record.update(over)
+        return record
+
+    add(
+        "get_collection_details",
+        "some_elements",
+        "a collection whose elements all fit under the cap",
+        {"collection_id": "dc000001"},
+        lambda: get_collection_details_fn("dc000001"),
+        [
+            route(
+                "/api/dataset_collections/dc000001",
+                collection_record([collection_element(i) for i in range(3)]),
+            )
+        ],
+    )
+    add(
+        "get_collection_details",
+        "truncated",
+        "more elements than max_elements, which the note and the flag both have to say",
+        {"collection_id": "dc000001", "max_elements": 2},
+        lambda: get_collection_details_fn("dc000001", max_elements=2),
+        [
+            route(
+                "/api/dataset_collections/dc000001",
+                collection_record([collection_element(i) for i in range(5)]),
+            )
+        ],
+    )
+    add(
+        "get_collection_details",
+        "nested_collection",
+        "a list of pairs, where an element's object is another collection and is not walked",
+        {"collection_id": "dc000002"},
+        lambda: get_collection_details_fn("dc000002"),
+        [
+            route(
+                "/api/dataset_collections/dc000002",
+                collection_record(
+                    [
+                        {
+                            "id": "dce0",
+                            "element_index": 0,
+                            "element_identifier": "pair0",
+                            "element_type": "dataset_collection",
+                            "model_class": "DatasetCollectionElement",
+                            "object": {
+                                "id": "dc000003",
+                                "collection_type": "paired",
+                                "element_count": 2,
+                                "populated": True,
+                                "elements": [collection_element(0), collection_element(1)],
+                            },
+                        }
+                    ],
+                    id="dc000002",
+                    name="Paired samples",
+                    collection_type="list:paired",
+                ),
+            )
+        ],
+    )
+    # Every field of the normalised collection missing at once: the defaults are not
+    # all the same, and only a reply that leaves them out says which is which.
+    add(
+        "get_collection_details",
+        "sparse_record",
+        "a collection Galaxy answered with almost nothing, so every default shows",
+        {"collection_id": "dc000004"},
+        lambda: get_collection_details_fn("dc000004"),
+        [
+            route(
+                "/api/dataset_collections/dc000004",
+                {"elements": [{"element_identifier": "lonely", "object": {}}]},
+            )
+        ],
+    )
+
+    # -- get_workflow_input_template -----------------------------------------
+    # Three independent reads of one workflow, and the two servers do not spell all
+    # three the same: the run model is `/api/workflows/{id}/download?style=run` on
+    # both, but bioblend's .ga export asks `/api/workflows/download/{id}` while the
+    # other side asks the first path with no style. Both spellings are the same
+    # endpoint to Galaxy, and this table answers questions rather than replaying a
+    # log, so the .ga body is registered under both.
+    def wf_routes(
+        workflow_id: str,
+        run_model: dict[str, Any],
+        definition: dict[str, Any],
+        show: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        return [
+            route(f"/api/workflows/{workflow_id}/download", run_model, query={"style": "run"}),
+            route(f"/api/workflows/{workflow_id}/download", definition),
+            route(f"/api/workflows/download/{workflow_id}", definition),
+            route(f"/api/workflows/{workflow_id}", show),
+        ]
+
+    # One tool step carrying an unconnected RuntimeValue, which is the legacy pattern
+    # the template warns about; the input steps around it are the slots.
+    def ga_definition(input_steps: dict[str, Any]) -> dict[str, Any]:
+        steps = dict(input_steps)
+        steps["9"] = {
+            "type": "tool",
+            "tool_id": "fastqc",
+            "label": None,
+            "tool_state": json.dumps({"adapters": {"__class__": "RuntimeValue"}}),
+        }
+        return {"a_galaxy_workflow": "true", "name": "Reads QC", "steps": steps}
+
+    wf_show = {
+        "id": "wf000001",
+        "name": "Reads QC",
+        "version": 3,
+        "annotation": "quality control over sequencing reads",
+        "readme": "# Reads QC\n\nRuns quality control over reads and reports on them.\n",
+        "help": "",
+        "source_metadata": {
+            "trs_tool_id": "#workflow/github.com/iwc-workflows/reads-qc/main",
+            "trs_url": "https://dockstore.org/api/ga4gh/trs/v2/tools/reads-qc",
+        },
+    }
+
+    def run_model(steps: dict[str, Any], **over: Any) -> dict[str, Any]:
+        model = {
+            "id": "wf000001",
+            "name": "Reads QC",
+            "has_upgrade_messages": False,
+            "step_version_changes": [],
+            "steps": steps,
+        }
+        model.update(over)
+        return model
+
+    data_step = {
+        "step_type": "data_input",
+        "step_index": 0,
+        "step_label": "Input FASTQ",
+        "uuid": "11111111-1111-1111-1111-111111111111",
+        "inputs": [
+            {
+                "extensions": ["fastqsanger"],
+                "acceptable_extensions": ["fastqsanger", "fastqsanger.gz"],
+                "optional": False,
+            }
+        ],
+    }
+    add(
+        "get_workflow_input_template",
+        "simple",
+        "one data input off the run model, with a guide and a legacy warning",
+        {"workflow_id": "wf000001"},
+        lambda: get_workflow_input_template_fn("wf000001"),
+        wf_routes(
+            "wf000001",
+            run_model({"0": data_step, "1": {"step_type": "tool", "step_index": 1, "inputs": []}}),
+            ga_definition({"0": {"type": "data_input", "label": "Input FASTQ"}}),
+            wf_show,
+        ),
+    )
+    add(
+        "get_workflow_input_template",
+        "collection_input",
+        "a collection slot whose type comes from collection_types rather than collection_type",
+        {"workflow_id": "wf000001"},
+        lambda: get_workflow_input_template_fn("wf000001"),
+        wf_routes(
+            "wf000001",
+            run_model(
+                {
+                    "0": {
+                        "step_type": "data_collection_input",
+                        "step_index": 0,
+                        "step_label": "Paired reads",
+                        "uuid": "22222222-2222-2222-2222-222222222222",
+                        "inputs": [
+                            {
+                                "extensions": [],
+                                "collection_types": ["list:paired", "paired"],
+                                "optional": True,
+                            }
+                        ],
+                    }
+                }
+            ),
+            ga_definition({"0": {"type": "data_collection_input", "label": "Paired reads"}}),
+            wf_show,
+        ),
+    )
+    # A selector and its choices: the run model hands options over as
+    # [label, value, selected] triples, and the template keeps label and value.
+    add(
+        "get_workflow_input_template",
+        "parameter_selector",
+        "a parameter slot whose options are a selector's choices",
+        {"workflow_id": "wf000001"},
+        lambda: get_workflow_input_template_fn("wf000001"),
+        wf_routes(
+            "wf000001",
+            run_model(
+                {
+                    "0": {
+                        "step_type": "parameter_input",
+                        "step_index": 0,
+                        "uuid": "33333333-3333-3333-3333-333333333333",
+                        "inputs": [
+                            {
+                                "label": "Reference genome",
+                                "parameter_type": "text",
+                                "optional": False,
+                                "options": [
+                                    ["Human (hg38)", "hg38", True],
+                                    ["Mouse (mm10)", "mm10", False],
+                                ],
+                            }
+                        ],
+                    }
+                }
+            ),
+            ga_definition({"0": {"type": "parameter_input", "label": "Reference genome"}}),
+            wf_show,
+        ),
+    )
+    # More options than the inline cap, so the sample and its sentence show up. The
+    # step carries NO uuid key at all, which is the difference between a slot whose
+    # step_uuid is null and a slot that has no such field.
+    add(
+        "get_workflow_input_template",
+        "capped_options",
+        "a selector with more choices than the template inlines, on a step with no uuid",
+        {"workflow_id": "wf000001"},
+        lambda: get_workflow_input_template_fn("wf000001"),
+        wf_routes(
+            "wf000001",
+            run_model(
+                {
+                    "0": {
+                        "step_type": "parameter_input",
+                        "step_index": 0,
+                        "step_label": "Build",
+                        "inputs": [
+                            {
+                                "parameter_type": "text",
+                                "options": [[f"Build {i}", f"b{i}", i == 0] for i in range(30)],
+                            }
+                        ],
+                    }
+                }
+            ),
+            ga_definition({"0": {"type": "parameter_input", "label": "Build"}}),
+            wf_show,
+        ),
+    )
+    # Everything the run model is allowed to leave out: no step_index (the index comes
+    # from order_index), no uuid, no label anywhere (so the slot names itself), and
+    # parameter_type on the step rather than on the param.
+    add(
+        "get_workflow_input_template",
+        "sparse_run_step",
+        "a run-model step that names almost nothing, so every fallback is exercised",
+        {"workflow_id": "wf000001"},
+        lambda: get_workflow_input_template_fn("wf000001"),
+        wf_routes(
+            "wf000001",
+            run_model(
+                {
+                    "0": {
+                        "step_type": "parameter_input",
+                        "order_index": 4,
+                        "id": 7,
+                        "parameter_type": "integer",
+                        "inputs": [{}],
+                    }
+                }
+            ),
+            ga_definition({"0": {"type": "parameter_input"}}),
+            wf_show,
+        ),
+    )
+    # The run model answers with no input steps at all, so both servers fall back to
+    # the .ga export: options come from `restrictions`, nothing is server-resolved,
+    # and the guide says so in a note.
+    add(
+        "get_workflow_input_template",
+        "ga_fallback",
+        "the .ga path, which resolves no options and says so in the guide's notes",
+        {"workflow_id": "wf000002"},
+        lambda: get_workflow_input_template_fn("wf000002"),
+        wf_routes(
+            "wf000002",
+            run_model({"0": {"step_type": "tool", "step_index": 0, "inputs": []}}),
+            ga_definition(
+                {
+                    "0": {
+                        "type": "data_input",
+                        "label": "",
+                        "uuid": "44444444-4444-4444-4444-444444444444",
+                        "tool_state": json.dumps({"format": "tabular", "optional": False}),
+                    },
+                    "1": {
+                        "type": "parameter_input",
+                        "uuid": None,
+                        "tool_state": json.dumps(
+                            {
+                                "parameter_type": "text",
+                                "restrictions": ["alpha", "beta"],
+                                "optional": True,
+                            }
+                        ),
+                    },
+                }
+            ),
+            {**wf_show, "readme": "", "help": "", "annotation": "a bare annotation"},
+        ),
+    )
+    # The same order question on the .ga path: the slots come out in step order, and
+    # the key that is not an index is not a slot. Insertion order alone would put
+    # step 2 first; treating every integer-ish key as an index would make a slot of
+    # "007", which is a key a workflow should not have.
+    add(
+        "get_workflow_input_template",
+        "steps_out_of_order",
+        "step keys out of order, plus two keys that are not step indexes",
+        {"workflow_id": "wf000003"},
+        lambda: get_workflow_input_template_fn("wf000003"),
+        wf_routes(
+            "wf000003",
+            run_model({}),
+            {
+                "a_galaxy_workflow": "true",
+                "name": "Out of order",
+                "steps": {
+                    "2": {"type": "data_input", "label": "Second", "tool_state": "{}"},
+                    "10": {"type": "data_input", "label": "Tenth", "tool_state": "{}"},
+                    "1": {"type": "data_input", "label": "First", "tool_state": "{}"},
+                    "x": {"type": "data_input", "label": "Not a step", "tool_state": "{}"},
+                    "007": {"type": "data_input", "label": "Padded", "tool_state": "{}"},
+                },
+            },
+            {**wf_show, "readme": "", "help": "", "annotation": "out of order"},
+        ),
     )
 
     # -- get_tool_citations --------------------------------------------------

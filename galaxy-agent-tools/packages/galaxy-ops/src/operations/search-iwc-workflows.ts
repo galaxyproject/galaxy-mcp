@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { fetchIwcWorkflows, enrichWorkflowResult, type EnrichedIwcWorkflow } from "../iwc-manifest";
 import type { GalaxyContext } from "../context";
-import { pyLower } from "../python-str";
+import { pyContains, pyLower } from "../python-str";
 import { paginate, shrinkPaged, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
@@ -39,7 +39,14 @@ async function run(i: In, _ctx: GalaxyContext): Promise<Paged<EnrichedIwcWorkflo
       const annotation = pyLower(def.annotation ?? "");
       const tags = (def.tags ?? []).map((t) => pyLower(t));
       const readme = pyLower(wf.readme ?? "");
-      return name.includes(q) || annotation.includes(q) || tags.some((t) => t.includes(q)) || readme.includes(q);
+      // `pyContains`, not `includes`: `in` compares code points over there and this
+      // compares code units, which differ wherever a needle is half a surrogate pair.
+      return (
+        pyContains(name, q) ||
+        pyContains(annotation, q) ||
+        tags.some((t) => pyContains(t, q)) ||
+        pyContains(readme, q)
+      );
     })
     .map((wf) => enrichWorkflowResult(wf));
 

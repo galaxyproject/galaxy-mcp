@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { legacyGet } from "../legacy";
-import { pyLower } from "../python-str";
+import { pyContains, pyLower } from "../python-str";
 import { paginate, shrinkPaged, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
@@ -96,7 +96,9 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<ToolKeywordMatch>> 
   const matchesImmediately = (t: PanelNode) => {
     const name = pyLower(t.name ?? "");
     const desc = pyLower(t.description ?? "");
-    return needles.some((kw) => name.includes(kw) || desc.includes(kw));
+    // `pyContains`, not `includes`: `in` compares code points over there and this
+    // compares code units, which differ wherever a needle is half a surrogate pair.
+    return needles.some((kw) => pyContains(name, kw) || pyContains(desc, kw));
   };
 
   const immediateMatches: PanelNode[] = [];
@@ -127,10 +129,12 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<ToolKeywordMatch>> 
         const matched = inputs.some((inp) => {
           const ext = inp.extensions;
           if (Array.isArray(ext)) {
-            return ext.some((e) => typeof e === "string" && needles.some((kw) => pyLower(e).includes(kw)));
+            return ext.some(
+              (e) => typeof e === "string" && needles.some((kw) => pyContains(pyLower(e), kw)),
+            );
           }
           if (typeof ext === "string" && ext) {
-            return needles.some((kw) => pyLower(ext).includes(kw));
+            return needles.some((kw) => pyContains(pyLower(ext), kw));
           }
           return false;
         });

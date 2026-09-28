@@ -1,0 +1,56 @@
+{
+  "data": {
+    "trsID": "#workflow/github.com/iwc-workflows/wf1/main",
+    "name": "Workflow 1",
+    "description": "labels stated as null",
+    "tags": [],
+    "readme": "Workflow 1.",
+    "readme_summary": "Workflow 1.",
+    "step_count": 3,
+    "authors": [],
+    "categories": [],
+    "license": "MIT",
+    "tools_used": [
+      "t"
+    ],
+    "inputs": [
+      {
+        "name": null,
+        "type": "data_input",
+        "annotation": null
+      },
+      {
+        "name": "Input 3",
+        "type": "parameter_input",
+        "annotation": ""
+      }
+    ],
+    "outputs": [
+      {
+        "name": null,
+        "step": null
+      },
+      {
+        "name": "",
+        "step": null
+      },
+      {
+        "name": "out3",
+        "step": null
+      },
+      {
+        "name": "",
+        "step": null
+      },
+      {
+        "name": "named",
+        "step": "Step 2"
+      }
+    ],
+    "updated": ""
+  },
+  "success": true,
+  "message": "Retrieved details for workflow 'Workflow 1'",
+  "count": null,
+  "pagination": null
+}

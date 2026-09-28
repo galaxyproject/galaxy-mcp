@@ -1,0 +1,58 @@
+{
+  "data": {
+    "trsID": "#workflow/github.com/iwc-workflows/wf0/main",
+    "name": "Workflow 0",
+    "description": "rnaseq analysis number 0",
+    "tags": [
+      "transcriptomics"
+    ],
+    "readme": "Workflow 0 runs rnaseq quality control.",
+    "readme_summary": "Workflow 0 runs rnaseq quality control.",
+    "step_count": 4,
+    "authors": [
+      {
+        "name": "IWC",
+        "orcid": ""
+      }
+    ],
+    "categories": [
+      "Transcriptomics"
+    ],
+    "license": "MIT",
+    "tools_used": [
+      "fastqc"
+    ],
+    "inputs": [
+      {
+        "name": "Reads",
+        "type": "data_input",
+        "annotation": "the fastq"
+      },
+      {
+        "name": "Threads",
+        "type": "parameter_input",
+        "annotation": ""
+      },
+      {
+        "name": "Extra",
+        "type": "data_collection_input",
+        "annotation": ""
+      }
+    ],
+    "outputs": [
+      {
+        "name": "html_file",
+        "step": "QC"
+      },
+      {
+        "name": "copy",
+        "step": "Reads"
+      }
+    ],
+    "updated": ""
+  },
+  "success": true,
+  "message": "Retrieved details for workflow 'Workflow 0'",
+  "count": null,
+  "pagination": null
+}

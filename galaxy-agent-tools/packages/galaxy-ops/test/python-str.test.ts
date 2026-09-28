@@ -8,9 +8,12 @@
  */
 import { describe, it, expect } from "vitest";
 import { GalaxyValidationError } from "../src/errors";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
   comparePyStrings,
   isPySpace,
+  pyContains,
   pyIntFromDigits,
   pyLower,
   pyRepr,
@@ -338,5 +341,63 @@ describe("pyLower", () => {
     // folds the two together and would report a match the other server never makes.
     expect(pyLower("\u0264").includes(pyLower("\ua7cb"))).toBe(false);
     expect("\u0264".toLowerCase().includes("\ua7cb".toLowerCase())).toBe(true);
+  });
+});
+
+/**
+ * `needle in haystack`, which is a question about code points and not about the
+ * sixteen-bit pieces this runtime stores them in.
+ *
+ * The facts on the right came off the contract interpreter:
+ *
+ *   >>> "\ude00" in "\U0001F600"      -> False
+ *   >>> "\ud83d" in "\U0001F600"      -> False
+ *   >>> "\U0001F600" in "a\U0001F600b" -> True
+ */
+describe("pyContains", () => {
+  it("does not let half a surrogate pair match half an astral character", () => {
+    // The difference, in one line each. This runtime's own answer is the opposite.
+    expect(pyContains("\u{1F600}", "\udE00")).toBe(false);
+    expect("\u{1F600}".includes("\udE00")).toBe(true);
+    expect(pyContains("\u{1F600}", "\uD83D")).toBe(false);
+    expect("\u{1F600}".includes("\uD83D")).toBe(true);
+  });
+
+  it("finds a lone surrogate that really is there on its own", () => {
+    expect(pyContains("a\udE00b", "\udE00")).toBe(true);
+  });
+
+  it("finds a whole astral character, and the ordinary substrings around it", () => {
+    expect(pyContains("a\u{1F600}b", "\u{1F600}")).toBe(true);
+    expect(pyContains("a\u{1F600}b", "b")).toBe(true);
+    expect(pyContains("rna-seq data", "seq")).toBe(true);
+    expect(pyContains("rna-seq data", "rna-seq data")).toBe(true);
+    expect(pyContains("rna-seq", "quality")).toBe(false);
+  });
+
+  it("matches the empty needle and nothing longer than the haystack, as `in` does", () => {
+    expect(pyContains("", "")).toBe(true);
+    expect(pyContains("rna", "")).toBe(true);
+    expect(pyContains("rna", "rnaseq")).toBe(false);
+  });
+
+  /**
+   * The source check that goes with it: a code-point search that reaches for
+   * `includes` or `indexOf` anywhere inside is the code-unit view again, whatever
+   * the loop around it looks like.
+   */
+  it("gets there without asking this runtime for a code-unit search", () => {
+    const text = readFileSync(fileURLToPath(new URL("../src/python-str.ts", import.meta.url)), "utf8");
+    const body = (name: string): string => {
+      const at = text.indexOf(`function ${name}(`);
+      expect(at).toBeGreaterThan(-1);
+      return text.slice(at, text.indexOf("\n}\n", at));
+    };
+    for (const name of ["pyContains", "matchesAt"]) {
+      const source = body(name);
+      for (const forbidden of ["includes", "indexOf", "lastIndexOf", ".search(", "normalize("]) {
+        expect([name, source.includes(forbidden)]).toEqual([name, false]);
+      }
+    }
   });
 });

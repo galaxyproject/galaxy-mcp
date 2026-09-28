@@ -3,14 +3,17 @@ from pathlib import Path
 
 import pytest
 
+from galaxy_mcp.server import _extract_tool_names_from_steps
 from galaxy_mcp.workflow_inputs import (
     _clean_readme_summary,
     _collection_type_compatible,
     build_guide,
     build_workflow_input_template,
+    canonical_step_index,
     find_legacy_warnings,
     normalize_ga_steps,
     normalize_run_model,
+    steps_in_order,
     subtype_satisfies,
     validate_inputs,
 )
@@ -1168,3 +1171,69 @@ def test_a_non_string_ext_does_not_crash_the_validator(ext):
 
     assert res["rejects"] == []
     assert any("Could not determine datatype" in w["message"] for w in res["warnings"])
+
+
+# ---------------------------------------------------------------------------
+# The stated order for a workflow's steps
+# ---------------------------------------------------------------------------
+
+
+def _keys(steps):
+    return [key for key, _ in steps_in_order(steps)]
+
+
+def test_steps_in_order_numbers_first_then_arrival_order():
+    """Canonical numeric keys ascending, then the rest as they arrived."""
+    assert _keys({"2": 0, "10": 0, "1": 0, "x": 0}) == ["1", "2", "10", "x"]
+
+
+def test_steps_in_order_does_not_sort_the_non_index_keys():
+    assert _keys({"zeta": 0, "1": 0, "alpha": 0, "0": 0}) == ["0", "1", "zeta", "alpha"]
+
+
+def test_steps_in_order_compares_numeric_keys_by_value():
+    assert _keys({"9": 0, "100": 0, "20": 0}) == ["9", "20", "100"]
+
+
+def test_steps_in_order_sorts_keys_past_the_other_runtime_array_index_range():
+    """The case that proves the order is stated on both sides rather than inherited.
+
+    A key past 2**32 is an ordinary string key to a JavaScript object, which hands
+    those back in arrival order; this rule sorts them.
+    """
+    assert _keys({"9999999999": 0, "4294967296": 0, "5": 0}) == [
+        "5",
+        "4294967296",
+        "9999999999",
+    ]
+
+
+def test_canonical_step_index_takes_a_canonical_non_negative_integer_only():
+    assert canonical_step_index("0") == 0
+    assert canonical_step_index("42") == 42
+    for key in ("007", "+1", "-1", "1e2", "0x10", "1.0", " 1 ", "", "abc123", 7):
+        assert canonical_step_index(key) is None, key
+
+
+def test_ga_steps_follow_the_stated_order_and_skip_a_key_that_is_not_an_index():
+    definition = {
+        "steps": {
+            "2": {"type": "data_input", "label": "Second"},
+            "10": {"type": "data_input", "label": "Tenth"},
+            "1": {"type": "data_input", "label": "First"},
+            "x": {"type": "data_input", "label": "Not a step"},
+            "007": {"type": "data_input", "label": "Padded"},
+        }
+    }
+    slots = normalize_ga_steps(definition)
+    assert [s["label"] for s in slots] == ["First", "Second", "Tenth"]
+
+
+def test_tool_names_come_out_in_the_stated_step_order():
+    steps = {
+        "2": {"type": "tool", "tool_id": "hisat2"},
+        "10": {"type": "tool", "tool_id": "multiqc"},
+        "1": {"type": "tool", "tool_id": "fastqc"},
+        "x": {"type": "tool", "tool_id": "cutadapt"},
+    }
+    assert _extract_tool_names_from_steps(steps) == ["fastqc", "hisat2", "multiqc", "cutadapt"]

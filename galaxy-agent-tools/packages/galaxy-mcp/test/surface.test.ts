@@ -7,6 +7,20 @@ import { allOperations, requirementSentence } from "@galaxyproject/galaxy-ops";
 import { buildServer, toolNames, toolAnnotations, annotationsFor, toolResult } from "../src/server";
 import { inWireNames } from "../src/wire-names";
 
+/** Every description string in a served tool, at whatever depth a schema nests one. */
+function descriptionsIn(node: unknown): string[] {
+  if (Array.isArray(node)) return node.flatMap(descriptionsIn);
+  if (node === null || typeof node !== "object") return [];
+  return Object.entries(node).flatMap(([key, value]) =>
+    key === "description" && typeof value === "string" ? [value] : descriptionsIn(value),
+  );
+}
+
+/** What a Galaxy id looks like when it is spelled out rather than named. */
+const exampleIdsIn = (text: string): string[] => text.match(/\b[0-9a-f]{16}\b/g) ?? [];
+
+const sortedUnique = (values: string[]): string[] => [...new Set(values)].sort();
+
 describe("MCP surface is a mechanical projection", () => {
   it("registers one tool per registered op", () => {
     const names = toolNames();
@@ -57,6 +71,31 @@ describe("MCP surface is a mechanical projection", () => {
       expect(byName.get("list_page_revisions")).toContain("Requires Galaxy 26.1 or newer.");
       // get_page works on 26.0, so it must not pick the sentence up.
       expect(byName.get("get_page")).not.toContain("Requires Galaxy");
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  /**
+   * An id an agent can copy reads as a real one. A 16-hex example from a description was
+   * copied verbatim into three live analyses as the input dataset, in histories that did
+   * not contain it, so descriptions name the shape and use a placeholder for the value.
+   *
+   * Read off the surface this server actually serves rather than off the sources, at
+   * whatever depth a schema nests a description: what an agent is handed is the text in
+   * tools/list, and prose about the code is not part of it. The same check guards the
+   * other server's manifest (tests/test_mcp_surface_snapshot.py).
+   */
+  it("ships no example id an agent could copy, anywhere in tools/list", async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = buildServer({ baseUrl: "https://g.example", apiKey: "K" });
+    const client = new Client({ name: "surface-check", version: "0" });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const { tools } = await client.listTools();
+      expect(tools.length).toBeGreaterThan(0);
+      expect(sortedUnique(descriptionsIn(tools).flatMap(exampleIdsIn))).toEqual([]);
     } finally {
       await client.close();
       await server.close();

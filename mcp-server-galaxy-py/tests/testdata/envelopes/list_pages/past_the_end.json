@@ -1,0 +1,17 @@
+{
+  "data": [],
+  "success": true,
+  "message": "Retrieved 0 pages",
+  "count": 0,
+  "pagination": {
+    "total_items": 12,
+    "returned_items": 0,
+    "limit": 5,
+    "offset": 40,
+    "has_next": false,
+    "has_previous": true,
+    "next_offset": null,
+    "previous_offset": 35,
+    "helper_text": "offset 40 is past the end of 12 pages; use a smaller offset"
+  }
+}

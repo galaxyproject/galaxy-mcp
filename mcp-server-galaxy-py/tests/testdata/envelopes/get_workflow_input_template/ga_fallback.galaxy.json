@@ -1,0 +1,107 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/workflows/wf000002/download",
+      "query": {
+        "style": "run"
+      },
+      "status": 200,
+      "headers": {},
+      "body": {
+        "id": "wf000001",
+        "name": "Reads QC",
+        "has_upgrade_messages": false,
+        "step_version_changes": [],
+        "steps": {
+          "0": {
+            "step_type": "tool",
+            "step_index": 0,
+            "inputs": []
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/workflows/wf000002/download",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "a_galaxy_workflow": "true",
+        "name": "Reads QC",
+        "steps": {
+          "0": {
+            "type": "data_input",
+            "label": "",
+            "uuid": "44444444-4444-4444-4444-444444444444",
+            "tool_state": "{\"format\": \"tabular\", \"optional\": false}"
+          },
+          "1": {
+            "type": "parameter_input",
+            "uuid": null,
+            "tool_state": "{\"parameter_type\": \"text\", \"restrictions\": [\"alpha\", \"beta\"], \"optional\": true}"
+          },
+          "9": {
+            "type": "tool",
+            "tool_id": "fastqc",
+            "label": null,
+            "tool_state": "{\"adapters\": {\"__class__\": \"RuntimeValue\"}}"
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/workflows/download/wf000002",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "a_galaxy_workflow": "true",
+        "name": "Reads QC",
+        "steps": {
+          "0": {
+            "type": "data_input",
+            "label": "",
+            "uuid": "44444444-4444-4444-4444-444444444444",
+            "tool_state": "{\"format\": \"tabular\", \"optional\": false}"
+          },
+          "1": {
+            "type": "parameter_input",
+            "uuid": null,
+            "tool_state": "{\"parameter_type\": \"text\", \"restrictions\": [\"alpha\", \"beta\"], \"optional\": true}"
+          },
+          "9": {
+            "type": "tool",
+            "tool_id": "fastqc",
+            "label": null,
+            "tool_state": "{\"adapters\": {\"__class__\": \"RuntimeValue\"}}"
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/workflows/wf000002",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "id": "wf000001",
+        "name": "Reads QC",
+        "version": 3,
+        "annotation": "a bare annotation",
+        "readme": "",
+        "help": "",
+        "source_metadata": {
+          "trs_tool_id": "#workflow/github.com/iwc-workflows/reads-qc/main",
+          "trs_url": "https://dockstore.org/api/ga4gh/trs/v2/tools/reads-qc"
+        }
+      }
+    }
+  ]
+}

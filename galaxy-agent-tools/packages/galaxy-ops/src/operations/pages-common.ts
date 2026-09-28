@@ -2,7 +2,7 @@
 //
 // A Galaxy "Page" is a markdown document. Attached to a history it is a Notebook;
 // standalone it is a Report. Content is Galaxy-flavored markdown whose directives
-// carry ENCODED ids (e.g. history_dataset_display(history_dataset_id=f2db41e1fa331b3e)),
+// carry ENCODED ids (e.g. history_dataset_display(history_dataset_id=<encoded-dataset-id>)),
 // so there is no encode/decode step: content_editor is read, edited and posted back as-is.
 //
 // Most of these ops declare Galaxy 26.1, each for its own reason -- get_page does not, because
