@@ -3453,6 +3453,28 @@ def http_failure_cases(add: AddFailure) -> None:
         {"page_id": "p0000404"},
         [fail("/api/pages/p0000404", 404, MISSING)],
     )
+    # -- a raw request whose status the tool checks itself ------------------
+    add(
+        "list_user_tools",
+        "server_error",
+        "the index refused, which reads as requests' text because the tool checks the status",
+        {},
+        [fail("/api/unprivileged_tools", 500, BROKEN, query={"active": "true"})],
+    )
+    add(
+        "delete_user_tool",
+        "not_found",
+        "a DELETE that failed, which is a failure and not a deactivation",
+        {"uuid": "u0000404"},
+        [fail("/api/unprivileged_tools/u0000404", 404, MISSING, method="DELETE")],
+    )
+    add(
+        "run_user_tool",
+        "lookup_refused",
+        "the uuid lookup refused, before anything is submitted",
+        {"history_id": "h0001", "tool_uuid": "u0000403", "inputs": {}},
+        [fail("/api/unprivileged_tools/u0000403", 403, DENIED)],
+    )
     # -- an error body under a 200 -----------------------------------------
     add(
         "get_invocations",

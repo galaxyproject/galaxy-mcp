@@ -380,7 +380,10 @@ class TestToolOperations:
         resolve = type(
             "R",
             (),
-            {"json": lambda self: {"tool_id": "utool", "representation": representation}},
+            {
+                "json": lambda self: {"tool_id": "utool", "representation": representation},
+                "raise_for_status": lambda self: None,
+            },
         )()
         mock_galaxy_instance.make_get_request.return_value = resolve
         # the job POST fails with a 400
@@ -404,7 +407,10 @@ class TestToolOperations:
         resolve = type(
             "R",
             (),
-            {"json": lambda self: {"tool_id": "utool", "representation": {"version": "0.1.0"}}},
+            {
+                "json": lambda self: {"tool_id": "utool", "representation": {"version": "0.1.0"}},
+                "raise_for_status": lambda self: None,
+            },
         )()
         mock_galaxy_instance.make_get_request.return_value = resolve
         mock_galaxy_instance.make_post_request.side_effect = bioblend.ConnectionError(
@@ -431,7 +437,10 @@ class TestToolOperations:
         resolve = type(
             "R",
             (),
-            {"json": lambda self: {"tool_id": "utool", "representation": representation}},
+            {
+                "json": lambda self: {"tool_id": "utool", "representation": representation},
+                "raise_for_status": lambda self: None,
+            },
         )()
         mock_galaxy_instance.make_get_request.return_value = resolve
         mock_galaxy_instance.make_post_request.side_effect = bioblend.ConnectionError(

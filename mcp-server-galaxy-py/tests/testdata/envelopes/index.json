@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 170,
-  "failureCaseCount": 18,
+  "caseCount": 173,
+  "failureCaseCount": 21,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -2012,6 +2012,39 @@
       },
       "envelope": "get_page/not_found.json",
       "replies": "get_page/not_found.galaxy.json"
+    },
+    {
+      "tool": "list_user_tools",
+      "case": "server_error",
+      "note": "the index refused, which reads as requests' text because the tool checks the status",
+      "outcome": "failure",
+      "input": {},
+      "envelope": "list_user_tools/server_error.json",
+      "replies": "list_user_tools/server_error.galaxy.json"
+    },
+    {
+      "tool": "delete_user_tool",
+      "case": "not_found",
+      "note": "a DELETE that failed, which is a failure and not a deactivation",
+      "outcome": "failure",
+      "input": {
+        "uuid": "u0000404"
+      },
+      "envelope": "delete_user_tool/not_found.json",
+      "replies": "delete_user_tool/not_found.galaxy.json"
+    },
+    {
+      "tool": "run_user_tool",
+      "case": "lookup_refused",
+      "note": "the uuid lookup refused, before anything is submitted",
+      "outcome": "failure",
+      "input": {
+        "history_id": "h0001",
+        "tool_uuid": "u0000403",
+        "inputs": {}
+      },
+      "envelope": "run_user_tool/lookup_refused.json",
+      "replies": "run_user_tool/lookup_refused.galaxy.json"
     },
     {
       "tool": "get_invocations",
