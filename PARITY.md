@@ -133,7 +133,7 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `revert_page_revision` |  | `2` | `write (tag), requires >=26.1` | `write (hint), requires >=26.1` | `write (mcp default)` |  |  |  |
 | `run_tool` |  | `13` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
 | `run_tool` | `tool_version` |  | `type=string required=false default=none` | `type=string required=false default=none` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours can ask for a specific tool version (posted through to Galaxy, which may still fall back to an installed one); Galaxy's runs whatever version the toolbox resolves for the id and takes no version. |
-| `run_user_tool` |  | `4` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
+| `run_user_tool` |  | `5` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
 | `search_iwc_workflows` |  | `5` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `search_iwc_workflows` | `limit` |  | `type=integer required=false default=20` | `type=integer required=false default=20` | `type=integer required=false default=10` | `vs built-in: default-mismatch` | `unreviewed-gap` | Both cap the ranking and the caps differ: 20 here, 10 there. |
 | `search_iwc_workflows` | `offset` |  | `type=integer required=false default=0` | `type=integer required=false default=0` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours pages the results; Galaxy's returns the top `limit` and no more. |

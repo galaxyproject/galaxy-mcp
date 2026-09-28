@@ -189,14 +189,22 @@ export async function toolInputMismatchSentence(
 /**
  * Turn a refused run into the sentence the other server would have said, or leave it.
  *
- * The three branches are its own, in its own order: a failure whose text mentions credentials
- * gets the credentials advice, a 400 gets the input-shape explanation, and anything else is
- * left for the op's failure contract to word. The message is replaced on the error itself,
- * which keeps its class -- and with it the kind a CLI exit code is read off -- and dropping
- * the request facts is what tells the boundary this sentence is finished.
+ * The branches are its own, in its own order: for a run that can carry credentials, a failure
+ * whose text mentions them gets the credentials advice; then a 400 gets the input-shape
+ * explanation; and anything else is left for the op's failure contract to word. The message is
+ * replaced on the error itself, which keeps its class -- and with it the kind a CLI exit code
+ * is read off -- and dropping the request facts is what tells the boundary this sentence is
+ * finished.
  *
  * A 400 is the status Galaxy refuses a tool form with, which is why it decides this and not a
  * search for words in the reply; the other server reads it off the same exception field.
+ *
+ * `credentials` is what says which run this is, and it is not optional for that reason: the
+ * credentials branch belongs to run_tool, whose payload can carry a credentials context, and
+ * the user-tool run over there has no such branch anywhere in it -- a 400 goes straight to
+ * the input explanation whatever Galaxy's reply happens to mention. Sharing the branch
+ * between the two told a caller running a user-defined tool to configure stored credentials
+ * for a tool that has no credentials path, and named the wrong action while doing it.
  */
 export async function enrichedRunFailure(
   ctx: GalaxyContext,
@@ -206,7 +214,8 @@ export async function enrichedRunFailure(
     toolId: string;
     historyId: string;
     inputs: unknown;
-    usedCredentials: boolean;
+    /** `{ used }` for a run that looked credentials up; null for one with no such branch. */
+    credentials: { used: boolean } | null;
     schema?: Record<string, unknown> | null;
     shapeHint?: string;
     toolVersion?: string | null;
@@ -217,12 +226,12 @@ export async function enrichedRunFailure(
   if (!facts) return err;
   const text = pyLibraryText("bioblend-write", facts);
 
-  if (isCredentialRelatedError(text)) {
+  if (opts.credentials !== null && isCredentialRelatedError(text)) {
     const base = pyFormatError("Run tool", text, facts.status, {
       history_id: opts.historyId,
       tool_id: opts.toolId,
     });
-    return finished(err, credentialFailureSentence(base, opts.toolId, opts.usedCredentials));
+    return finished(err, credentialFailureSentence(base, opts.toolId, opts.credentials.used));
   }
 
   if (facts.status !== 400) return err;

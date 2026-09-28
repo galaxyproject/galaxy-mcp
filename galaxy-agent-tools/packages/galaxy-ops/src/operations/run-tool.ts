@@ -98,7 +98,7 @@ async function run(i: RunToolInput, ctx: GalaxyContext): Promise<ToolSubmission>
       toolId: i.toolId,
       historyId: i.historyId,
       inputs: i.inputs,
-      usedCredentials: credentials !== null,
+      credentials: { used: credentials !== null },
       toolVersion: i.toolVersion,
     });
   }

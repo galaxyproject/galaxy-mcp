@@ -144,6 +144,39 @@ describe("run_user_tool", () => {
     expect(postCalled).toBe(false);
   });
 
+  /**
+   * A refused user-tool run gets the input explanation, whatever the reply happens to say.
+   *
+   * The other server's run_user_tool has no credentials branch at all: a 400 goes straight
+   * to the enriched input sentence, and the word "credentials" in Galaxy's reply changes
+   * nothing. The branch is run_tool's, and it was firing for both -- so a user-tool run
+   * refused with "Invalid credentials" was told to configure stored credentials for a tool
+   * that has no credentials path.
+   */
+  it("explains the inputs when Galaxy's refusal mentions credentials, as the other server does", async () => {
+    const client = mockClient({
+      GET: () => ({
+        data: {
+          tool_id: "row_filter",
+          representation: { version: "1.0", inputs: [{ name: "in", type: "data" }] },
+        },
+        response: { status: 200 },
+      }),
+      POST: () => ({ error: { err_msg: "Invalid credentials" }, response: { status: 400 } }),
+    });
+    const out = await runWithEnvelope(
+      runUserToolOp as never,
+      { historyId: HISTORY_ID, toolUuid: TOOL_UUID, inputs: INPUTS },
+      ctxWith(client),
+    );
+    expect(out.success).toBe(false);
+    expect(out.message).toContain("Run user tool failed:");
+    expect(out.message).toContain("do not match the parameter schema for tool 'row_filter'");
+    expect(out.message).not.toContain("Run tool failed:");
+    expect(out.message).not.toContain("credentials were found for tool");
+    expect(out.message).not.toContain("stored credentials");
+  });
+
   it("throws when GET fails", async () => {
     const client = mockClient({
       GET: () => ({ error: "not found", response: { status: 404 } }),

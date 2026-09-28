@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 222,
-  "failureCaseCount": 64,
+  "caseCount": 223,
+  "failureCaseCount": 65,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -2473,6 +2473,24 @@
       },
       "envelope": "run_user_tool/refused_over_the_inputs.json",
       "replies": "run_user_tool/refused_over_the_inputs.galaxy.json"
+    },
+    {
+      "tool": "run_user_tool",
+      "case": "refused_with_a_reply_about_credentials",
+      "note": "a refusal that says credentials, which this tool has no branch for: the inputs explain it",
+      "outcome": "failure",
+      "input": {
+        "history_id": "h0001",
+        "tool_uuid": "61d15277-a911-45ef-aa66-5385146578cc",
+        "inputs": {
+          "input": {
+            "src": "hda",
+            "id": "d0000001"
+          }
+        }
+      },
+      "envelope": "run_user_tool/refused_with_a_reply_about_credentials.json",
+      "replies": "run_user_tool/refused_with_a_reply_about_credentials.galaxy.json"
     },
     {
       "tool": "get_iwc_workflows",

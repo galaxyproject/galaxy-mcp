@@ -88,7 +88,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<UserToolRun> {
       toolId: toolInfo.tool_id,
       historyId: i.historyId,
       inputs: i.inputs,
-      usedCredentials: false,
+      credentials: null,
       schema: (toolInfo.representation ?? null) as Record<string, unknown> | null,
       shapeHint: USER_TOOL_SHAPE_HINT,
     });

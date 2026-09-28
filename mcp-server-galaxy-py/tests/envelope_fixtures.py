@@ -3890,6 +3890,38 @@ def run_failure_cases(add: AddFailure) -> None:
             fail("/api/tools", 400, DENIED, method="POST"),
         ],
     )
+    add(
+        "run_user_tool",
+        "refused_with_a_reply_about_credentials",
+        "a refusal that says credentials, which this tool has no branch for: the inputs explain it",
+        {
+            "history_id": "h0001",
+            "tool_uuid": "61d15277-a911-45ef-aa66-5385146578cc",
+            "inputs": {"input": {"src": "hda", "id": "d0000001"}},
+        },
+        [
+            route(
+                "/api/unprivileged_tools/61d15277-a911-45ef-aa66-5385146578cc",
+                {
+                    "tool_id": "row_filter",
+                    "representation": {
+                        "id": "row_filter",
+                        "version": "0.1.0",
+                        "inputs": [{"name": "input", "type": "data", "optional": False}],
+                    },
+                },
+            ),
+            # The credentials branch is run_tool's alone -- run_user_tool goes from a 400
+            # straight to the input explanation, whatever Galaxy's reply happens to mention,
+            # and its sentence names its own action.
+            fail(
+                "/api/tools",
+                400,
+                '{"err_msg": "Invalid credentials", "err_code": 400008}',
+                method="POST",
+            ),
+        ],
+    )
 
 
 def iwc_failure_cases(add: AddFailure) -> None:

@@ -94,7 +94,9 @@ quoted verbatim in the middle of it -- the text bioblend or requests raised.
   representation it already holds. A refused run gets the enriched explanation: the
   parameter list read back, a structural example from one of the tool's own tests, the
   warning about Galaxy's misleading wording, and -- for a refusal that mentions credentials
-  -- what to check about those instead.
+  -- what to check about those instead. The credentials advice is `run_tool`'s alone, as it is
+  over there: a refused `run_user_tool` gets the input explanation whatever Galaxy's reply
+  mentions, because a user-defined tool has no credentials path to configure.
 - **Not ported, and it shows in one place:** the input checker itself. Walking Galaxy's
   parameter model -- conditionals, repeats, sections, datatype compatibility -- is its own
   piece of work. So where the other server refuses a run on its own evidence, this one
@@ -104,8 +106,8 @@ quoted verbatim in the middle of it -- the text bioblend or requests raised.
 - A failed request that never got a reply -- a refused connection, a DNS failure, an abort
   -- is now a typed failure with the shape of a Python one rather than an exception escaping
   as a bug. The text inside it is this runtime's and not requests', and no case pins either.
-- **Seventy new cases** on both replay suites, which is a failure case for all 42 open
-  tools plus the refusals that make no request: 383 files, 222 cases, of which 64 are
+- **Seventy-one new cases** on both replay suites, which is a failure case for all 42 open
+  tools plus the refusals that make no request: 385 files, 223 cases, of which 65 are
   failures.
   The generator drives the real server through an in-memory MCP client for those, because a
   failure has no envelope to write down -- what it records is the `CallToolResult` the wire
