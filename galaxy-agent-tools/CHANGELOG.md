@@ -333,6 +333,14 @@ the differences they turned up are below.
   the anonymous-response guard insists on, so a caller reading only those is
   unaffected; `CurrentUser` has gained an index signature for the rest.
 
+Fifty-three more golden cases, 143 in all across all forty-two open tools, so
+every tool either surface serves is now replayed on both and compared key for key:
+the key set, `data`, `success`, `count` and `pagination`, and `message` for the
+nine budgeted listings. `PARITY.md` gains a `Cases` column saying how many each
+tool has, and the parity check fails on an open tool that has none. Still not
+aligned: the `message` text of every tool but those nine, and the failure
+envelope.
+
 ## 0.2.0 (unreleased)
 
 Breaking, and the first release since the packages went up on npm. Everything in

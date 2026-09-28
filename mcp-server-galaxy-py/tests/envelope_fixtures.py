@@ -3143,12 +3143,23 @@ def _reset_caches() -> None:
     server._TOOL_SCHEMA_CACHE.clear()
     server._DATATYPES_MAPPING_CACHE.clear()
     clear_version_cache()
-    # The container recommender keeps a five-minute memo of every lookup, module-wide, and
-    # two cases asking about the same package would otherwise be one request and one
-    # answer. Reached inside the function because the module only exists with the
-    # container-recommend extra, which is what registers the tool at all.
-    from galaxy.tool_util.deps.mulled import recommend as mulled_recommend
+    _clear_recommendation_cache()
 
+
+def _clear_recommendation_cache() -> None:
+    """Forget what quay.io said, which is remembered module-wide for five minutes.
+
+    Three cases ask about the same package and expect three lookups; without this the
+    second and third would be answered from the first. Imported inside the function
+    because the recommender only exists with the container-recommend extra -- which is
+    also what registers the tool -- and an install without it has no memo to clear. The
+    cases that need the extra then fail with the tool's own sentence about installing it,
+    which says more than an ImportError from here would.
+    """
+    try:
+        from galaxy.tool_util.deps.mulled import recommend as mulled_recommend
+    except ImportError:
+        return
     with mulled_recommend._cache_lock:
         mulled_recommend._cache.clear()
 
