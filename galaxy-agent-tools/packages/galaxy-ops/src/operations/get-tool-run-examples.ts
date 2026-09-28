@@ -38,7 +38,8 @@ export const getToolRunExamplesOp: Operation<typeof input, ToolRunExamples> = {
   input,
   run,
   project: (out, i) => ({
-    message: `${out.test_cases.length} test case(s) for ${i.toolId}`,
+    // server.py, get_tool_run_examples.
+    message: `Retrieved ${out.test_cases.length} test cases for tool '${i.toolId}'`,
     count: out.test_cases.length,
   }),
 };

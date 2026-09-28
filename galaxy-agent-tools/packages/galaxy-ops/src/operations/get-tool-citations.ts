@@ -44,8 +44,10 @@ export const getToolCitationsOp: Operation<typeof input, ToolCitationsResult> = 
   summary: "Return citations for a Galaxy tool by id.",
   input,
   run,
+  // server.py, get_tool_citations: the id that was asked for, not the name Galaxy
+  // answered with, and no "(s)" -- the other server writes the plural either way.
   project: (out, i) => ({
-    message: `${out.citations.length} citation(s) for ${out.tool_name ?? i.toolId}`,
+    message: `Retrieved ${out.citations.length} citations for tool '${i.toolId}'`,
     count: out.citations.length,
   }),
 };

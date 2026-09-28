@@ -46,7 +46,11 @@ export const getToolInputTemplateOp: Operation<typeof input, ToolInputTemplateRe
   input,
   run,
   project: (out, i) => ({
-    message: `Input template for ${i.toolId} (${out.parameters.length} top-level param(s))`,
+    // server.py, get_tool_input_template: the same two sentences, backtick-quoted
+    // `inputs` and all. The parameter count is not in it -- the summary is in data.
+    message:
+      `Built an input template for tool '${i.toolId}'. Replace placeholders ` +
+      "(e.g. <dataset_id>) and pass the result as `inputs` to run_tool.",
   }),
 };
 

@@ -32,7 +32,9 @@ export const getToolDetailsOp: Operation<typeof input, ToolDetail> = {
   summary: "Show a Galaxy tool's metadata by id (name, version, description). Legacy endpoint.",
   input,
   run,
-  project: (t) => ({ message: `Tool ${t.id} (${t.name}${t.version ? " v" + t.version : ""})` }),
+  // server.py, get_tool_details: the id that was asked for. The name and the version
+  // Galaxy answered with are in data, and the id here is the one to ask again with.
+  project: (_t, i) => ({ message: `Retrieved details for tool '${i.toolId}'` }),
 };
 
 register(getToolDetailsOp as AnyOperation);
