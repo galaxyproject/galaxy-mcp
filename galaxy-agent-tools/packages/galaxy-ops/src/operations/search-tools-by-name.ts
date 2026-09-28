@@ -4,7 +4,7 @@ import { legacyGet } from "../legacy";
 import { pyLower } from "../python-str";
 import { paginate, shrinkPaged, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, InputOf, Operation } from "./types";
+import type { AnyOperation, Operation } from "./types";
 
 /** Hand-typed: Galaxy's tool list endpoint is not in the OpenAPI bindings. */
 export interface ToolListItem {
@@ -55,6 +55,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<ToolListItem>> {
 export const searchToolsByNameOp: Operation<typeof input, Paged<ToolListItem>> = {
   name: "search_tools_by_name",
   domain: "tools",
+  result: { kind: "object", fields: ["items", "pagination"], paginated: true },
   summary:
     "Search Galaxy tools by name, id, or description substring (case-insensitive), a page at a time.",
   input,
@@ -76,7 +77,4 @@ export const searchToolsByNameOp: Operation<typeof input, Paged<ToolListItem>> =
 
 register(searchToolsByNameOp as AnyOperation);
 
-// A library caller may leave the paged arguments out; run() applies the same
-// defaults the schema declares for the parsed surface path.
-export const searchToolsByName = (i: In, ctx: GalaxyContext) =>
-  runOperation(searchToolsByNameOp, i as InputOf<typeof input>, ctx);
+export const searchToolsByName = (i: In, ctx: GalaxyContext) => runOperation(searchToolsByNameOp, i, ctx);

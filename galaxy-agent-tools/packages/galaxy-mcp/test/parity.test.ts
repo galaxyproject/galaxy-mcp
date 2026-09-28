@@ -7,6 +7,8 @@ import {
   NORMALIZATION_RULES,
   typeToken,
   unknownKeywords,
+  DIVERGENCE_KINDS,
+  EITHER_WAY_KINDS,
   WHOLE_TOOL_KINDS,
   type Divergence,
   type JsonSchema,
@@ -35,20 +37,7 @@ import {
   type Registry,
 } from "./parity/surfaces";
 
-const KINDS = [
-  "missing-ts-tool",
-  "missing-py-tool",
-  "missing-ts-param",
-  "missing-py-param",
-  "type-mismatch",
-  "required-mismatch",
-  "default-mismatch",
-  "mutability-mismatch",
-  "requires-mismatch",
-  "missing-builtin-tool",
-  "missing-builtin-param",
-  "extra-params-mismatch",
-];
+
 
 /** The switches the check itself runs with, so a test cannot prove a shape CI never compares. */
 const RULES: Normalization = normalizationFrom(loadRegistry());
@@ -228,10 +217,13 @@ describe("contract parity with Galaxy's own MCP server", () => {
     const problems: string[] = [];
     const seen = new Set<string>();
     for (const entry of section.divergences) {
-      if (!KINDS.includes(entry.kind)) problems.push(`${where(entry)}: unknown kind`);
+      if (!DIVERGENCE_KINDS.includes(entry.kind)) problems.push(`${where(entry)}: unknown kind`);
       if (!DIVERGENCE_STATUSES.includes(entry.status)) problems.push(`${where(entry)}: unknown status`);
       if (!entry.reason?.trim()) problems.push(`${where(entry)}: needs a reason`);
-      if (WHOLE_TOOL_KINDS.includes(entry.kind) !== (entry.param === null)) {
+      if (
+        !EITHER_WAY_KINDS.includes(entry.kind) &&
+        WHOLE_TOOL_KINDS.includes(entry.kind) !== (entry.param === null)
+      ) {
         problems.push(`${where(entry)}: param must be null for whole-tool kinds and set otherwise`);
       }
       const key = divergenceKey(entry);
@@ -256,7 +248,7 @@ describe("the accepted-divergence registry itself", () => {
     const problems: string[] = [];
     const seen = new Set<string>();
     for (const entry of registry.divergences) {
-      if (!KINDS.includes(entry.kind)) problems.push(`${where(entry)}: unknown kind`);
+      if (!DIVERGENCE_KINDS.includes(entry.kind)) problems.push(`${where(entry)}: unknown kind`);
       if (!DIVERGENCE_STATUSES.includes(entry.status)) {
         problems.push(`${where(entry)}: unknown status`);
       }
@@ -264,7 +256,10 @@ describe("the accepted-divergence registry itself", () => {
       if (typeof entry.observed !== "string") {
         problems.push(`${where(entry)}: needs an observed string`);
       }
-      if (WHOLE_TOOL_KINDS.includes(entry.kind) !== (entry.param === null)) {
+      if (
+        !EITHER_WAY_KINDS.includes(entry.kind) &&
+        WHOLE_TOOL_KINDS.includes(entry.kind) !== (entry.param === null)
+      ) {
         problems.push(`${where(entry)}: param must be null for whole-tool kinds and set otherwise`);
       }
       const key = divergenceKey(entry);
@@ -291,8 +286,11 @@ describe("the accepted-divergence registry itself", () => {
   });
 
   it("covers every kind the comparator can report", () => {
-    expect([...KINDS].sort()).toEqual([...new Set(KINDS)].sort());
-    for (const kind of WHOLE_TOOL_KINDS) expect(KINDS).toContain(kind);
+    expect([...DIVERGENCE_KINDS].sort()).toEqual([...new Set(DIVERGENCE_KINDS)].sort());
+    // Both lists name kinds; a kind in neither would be reported and never checked for shape.
+    for (const kind of [...WHOLE_TOOL_KINDS, ...EITHER_WAY_KINDS]) {
+      expect(DIVERGENCE_KINDS).toContain(kind);
+    }
   });
 });
 

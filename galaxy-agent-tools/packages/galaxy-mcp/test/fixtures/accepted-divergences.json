@@ -32,6 +32,206 @@
       "observed": "python=read (tag) typescript=write (hint)",
       "status": "intentional",
       "reason": "Both surfaces write the bytes to a local path when they are given one, and both say so; they disagree because the two flags are about different things. Python's read tag is a statement about Galaxy: the tags exist to gate GALAXY_MCP_INCLUDE/EXCLUDE_TAGS, and the tool is two GETs that create, change and delete nothing on the server -- the file Python writes to file_path is outside what the tag speaks to. The MCP readOnlyHint has no such scope: the SDK defines readOnlyHint true as a tool that does not modify its environment, and with filePath the TS op overwrites whatever file is at that path, so it advertises false and clients that gate approval on the hint ask before it runs. Dannon's call (2026-09-26): each flag is correct about its own scope, so neither side moves and the mismatch is what the two scopes look like from the comparator."
+    },
+    {
+      "tool": "download_dataset",
+      "param": "file_path",
+      "kind": "result-shape",
+      "observed": "python=present typescript=absent",
+      "status": "intentional",
+      "reason": "Set only on the branch that was given a path to write to; the in-memory branch has no path to name, so the field is not promised."
+    },
+    {
+      "tool": "download_dataset",
+      "param": "file_size",
+      "kind": "result-shape",
+      "observed": "python=present typescript=absent",
+      "status": "intentional",
+      "reason": "Set only on the in-memory branch, which is the one that measured the bytes. Mutually exclusive with file_path, so neither is promised."
+    },
+    {
+      "tool": "download_dataset",
+      "param": "note",
+      "kind": "result-shape",
+      "observed": "python=present typescript=absent",
+      "status": "pending-port",
+      "reason": "Python's result carries a next-steps note and the TS op builds none."
+    },
+    {
+      "tool": "get_collection_details",
+      "param": null,
+      "kind": "result-shape",
+      "observed": "python=object[collection, collection_id, elements, elements_truncated, history_content_type, note] typescript=undeclared",
+      "status": "pending-decision",
+      "reason": "Python flattens the collection and its members into keys of its own. The TS op returns Galaxy's collection unchanged, which is the rule get_history_details writes down, but nothing records that decision for this tool."
+    },
+    {
+      "tool": "get_dataset_details",
+      "param": null,
+      "kind": "result-shape",
+      "observed": "python=object typescript=undeclared",
+      "status": "pending-decision",
+      "reason": "Python nests the dataset under a `dataset` key beside `dataset_id`; the TS op returns Galaxy's dataset at the top level with `preview` added. Python's key list is not stated because `preview` is added conditionally after the literal."
+    },
+    {
+      "tool": "get_histories",
+      "param": null,
+      "kind": "result-shape",
+      "observed": "python=undeclared typescript=object[items, pagination] paged-envelope",
+      "status": "pending-decision",
+      "reason": "The paged-listing convention above. Python's data is bioblend's return value, which the manifest generator cannot read, so only the TS side states a kind; the difference is the wrapper, not the rows."
+    },
+    {
+      "tool": "get_history_contents",
+      "param": "contents",
+      "kind": "result-shape",
+      "observed": "python=present typescript=absent",
+      "status": "pending-decision",
+      "reason": "The paged-listing convention above, where both surfaces wrap and name the rows differently: Python calls them `contents`, the TS op `items`."
+    },
+    {
+      "tool": "get_history_contents",
+      "param": "history_id",
+      "kind": "result-shape",
+      "observed": "python=present typescript=absent",
+      "status": "pending-decision",
+      "reason": "Python repeats the history id beside the rows it was asked for; the TS op does not, because the caller passed it."
+    },
+    {
+      "tool": "get_history_contents",
+      "param": "items",
+      "kind": "result-shape",
+      "observed": "python=absent typescript=present",
+      "status": "pending-decision",
+      "reason": "The TS name for Python's `contents`; see that entry."
+    },
+    {
+      "tool": "get_history_contents",
+      "param": "pagination",
+      "kind": "result-shape",
+      "observed": "python=absent typescript=present",
+      "status": "pending-decision",
+      "reason": "The window inside the data, which the paged-listing convention above decides. Both surfaces also report it in the envelope."
+    },
+    {
+      "tool": "get_history_details",
+      "param": null,
+      "kind": "result-shape",
+      "observed": "python=object[contents_summary, history] typescript=undeclared",
+      "status": "intentional",
+      "reason": "Python answers with the history and a count of its contents under keys of its own. The TS op returns the history exactly as Galaxy sent it and records the count beside the call instead, which is the choice its own comment states, so it declares no shape."
+    },
+    {
+      "tool": "get_iwc_workflows",
+      "param": null,
+      "kind": "result-shape",
+      "observed": "python=list paged-envelope typescript=object[items, pagination] paged-envelope",
+      "status": "pending-decision",
+      "reason": "Both surfaces page this listing and disagree about what `data` is: Python puts the rows there and the window beside them, the TS op puts `{items, pagination}` there and the window beside that as well. An agent reading `data` gets rows on one surface and a wrapper on the other. Which convention is right is one decision for every paged op, recorded here so it is made from the whole list rather than one tool at a time."
+    },
+    {
+      "tool": "get_server_info",
+      "param": "unsupported_ops",
+      "kind": "result-shape",
+      "observed": "python=absent typescript=present",
+      "status": "pending-decision",
+      "reason": "The TS spelling of Python's unsupported_tools; see that entry."
+    },
+    {
+      "tool": "get_server_info",
+      "param": "unsupported_tools",
+      "kind": "result-shape",
+      "observed": "python=present typescript=absent",
+      "status": "pending-decision",
+      "reason": "The same list under two names: Python calls it unsupported_tools, the TS op unsupported_ops. One name has to win and neither surface is obviously the reference for it."
+    },
+    {
+      "tool": "get_server_info",
+      "param": "version_source",
+      "kind": "result-shape",
+      "observed": "python=absent typescript=present",
+      "status": "pending-decision",
+      "reason": "Where the enforced version came from, which the TS op reports and Python does not. Useful or noise is a decision; it is not a port either way."
+    },
+    {
+      "tool": "get_tool_panel",
+      "param": null,
+      "kind": "result-shape",
+      "observed": "python=object paged-envelope typescript=object[section_count, tool_count] paged-envelope",
+      "status": "pending-decision",
+      "reason": "The panel-wide tool_count and section_count the TS op adds, because how many tools a server has installed has no other answer in the surface. Python builds two different key sets by branch, so its field list is not stated and the two cannot be lined up field by field."
+    },
+    {
+      "tool": "list_history_ids",
+      "param": null,
+      "kind": "result-shape",
+      "observed": "python=list paged-envelope typescript=object[items, pagination] paged-envelope",
+      "status": "pending-decision",
+      "reason": "Both surfaces page this listing and disagree about what `data` is: Python puts the rows there and the window beside them, the TS op puts `{items, pagination}` there and the window beside that as well. An agent reading `data` gets rows on one surface and a wrapper on the other. Which convention is right is one decision for every paged op, recorded here so it is made from the whole list rather than one tool at a time."
+    },
+    {
+      "tool": "list_page_revisions",
+      "param": null,
+      "kind": "result-shape",
+      "observed": "python=undeclared typescript=list",
+      "status": "intentional",
+      "reason": "No known difference: both return the rows, and Python's data is the route's own body, which the generator cannot read."
+    },
+    {
+      "tool": "list_pages",
+      "param": null,
+      "kind": "result-shape",
+      "observed": "python=undeclared typescript=list paged-envelope",
+      "status": "intentional",
+      "reason": "No known difference in the rows: both return them and both report a window. Python's data is the route's own body, which the generator cannot read, so only the TS side can state that it is a list."
+    },
+    {
+      "tool": "list_user_tools",
+      "param": null,
+      "kind": "result-shape",
+      "observed": "python=list paged-envelope typescript=object[items, pagination] paged-envelope",
+      "status": "pending-decision",
+      "reason": "Both surfaces page this listing and disagree about what `data` is: Python puts the rows there and the window beside them, the TS op puts `{items, pagination}` there and the window beside that as well. An agent reading `data` gets rows on one surface and a wrapper on the other. Which convention is right is one decision for every paged op, recorded here so it is made from the whole list rather than one tool at a time."
+    },
+    {
+      "tool": "list_workflows",
+      "param": null,
+      "kind": "result-shape",
+      "observed": "python=list paged-envelope typescript=object[items, pagination] paged-envelope",
+      "status": "pending-decision",
+      "reason": "Both surfaces page this listing and disagree about what `data` is: Python puts the rows there and the window beside them, the TS op puts `{items, pagination}` there and the window beside that as well. An agent reading `data` gets rows on one surface and a wrapper on the other. Which convention is right is one decision for every paged op, recorded here so it is made from the whole list rather than one tool at a time."
+    },
+    {
+      "tool": "recommend_iwc_workflows",
+      "param": null,
+      "kind": "result-shape",
+      "observed": "python=list typescript=object[items, pagination] paged-envelope",
+      "status": "pending-decision",
+      "reason": "The paged-listing convention above, on a tool Python does not page at all: it returns the rows, the TS op wraps them and reports a window."
+    },
+    {
+      "tool": "search_iwc_workflows",
+      "param": null,
+      "kind": "result-shape",
+      "observed": "python=list paged-envelope typescript=object[items, pagination] paged-envelope",
+      "status": "pending-decision",
+      "reason": "Both surfaces page this listing and disagree about what `data` is: Python puts the rows there and the window beside them, the TS op puts `{items, pagination}` there and the window beside that as well. An agent reading `data` gets rows on one surface and a wrapper on the other. Which convention is right is one decision for every paged op, recorded here so it is made from the whole list rather than one tool at a time."
+    },
+    {
+      "tool": "search_tools_by_keywords",
+      "param": null,
+      "kind": "result-shape",
+      "observed": "python=list paged-envelope typescript=object[items, pagination] paged-envelope",
+      "status": "pending-decision",
+      "reason": "Both surfaces page this listing and disagree about what `data` is: Python puts the rows there and the window beside them, the TS op puts `{items, pagination}` there and the window beside that as well. An agent reading `data` gets rows on one surface and a wrapper on the other. Which convention is right is one decision for every paged op, recorded here so it is made from the whole list rather than one tool at a time."
+    },
+    {
+      "tool": "search_tools_by_name",
+      "param": null,
+      "kind": "result-shape",
+      "observed": "python=list paged-envelope typescript=object[items, pagination] paged-envelope",
+      "status": "pending-decision",
+      "reason": "Both surfaces page this listing and disagree about what `data` is: Python puts the rows there and the window beside them, the TS op puts `{items, pagination}` there and the window beside that as well. An agent reading `data` gets rows on one surface and a wrapper on the other. Which convention is right is one decision for every paged op, recorded here so it is made from the whole list rather than one tool at a time."
     }
   ],
   "builtin": {
