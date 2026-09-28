@@ -856,6 +856,21 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         lambda: recommend_iwc_workflows_fn("café", limit=5),
         [route(IWC_MANIFEST_URL, ranked_manifest)],
     )
+    # The other side of the same rule, and the one that costs something: U+A7CB is a
+    # letter Unicode assigned after this interpreter's edition, so here it is a
+    # separator, "rnaseq" beside it is a word, and the ranking comes back full. A
+    # tokeniser reading a newer edition sees one long word, finds no term and answers
+    # "No searchable terms in query" -- five workflows against none, for one character
+    # a user could paste in without noticing. Pinned as a case because the answer
+    # depends on which Unicode edition is the contract, and this server is.
+    add(
+        "recommend_iwc_workflows",
+        "letter_added_after_unicode_15",
+        "an intent ending in a letter this interpreter has not been told about",
+        {"intent": "rnaseqꟋ", "limit": 5},
+        lambda: recommend_iwc_workflows_fn("rnaseqꟋ", limit=5),
+        [route(IWC_MANIFEST_URL, ranked_manifest)],
+    )
 
     # -- get_invocations -----------------------------------------------------
     add(

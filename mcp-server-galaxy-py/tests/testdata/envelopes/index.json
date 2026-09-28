@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 66,
+  "caseCount": 67,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -617,6 +617,17 @@
         "limit": 5
       },
       "envelope": "recommend_iwc_workflows/accented_intent.json",
+      "replies": "recommend_iwc_workflows/ranked.galaxy.json"
+    },
+    {
+      "tool": "recommend_iwc_workflows",
+      "case": "letter_added_after_unicode_15",
+      "note": "an intent ending in a letter this interpreter has not been told about",
+      "input": {
+        "intent": "rnaseqꟋ",
+        "limit": 5
+      },
+      "envelope": "recommend_iwc_workflows/letter_added_after_unicode_15.json",
       "replies": "recommend_iwc_workflows/ranked.galaxy.json"
     },
     {
