@@ -81,6 +81,7 @@ from .test_helpers import (
     list_workflows_fn,
     recommend_iwc_workflows_fn,
     revert_page_revision_fn,
+    run_tool_fn,
     run_user_tool_fn,
     search_iwc_workflows_fn,
     search_tools_by_keywords_fn,
@@ -2301,6 +2302,7 @@ def job_details_cases(add: AddCase) -> None:
 
 def mutation_cases(add: AddCase) -> None:
     history_mutation_cases(add)
+    run_tool_cases(add)
     invoke_workflow_cases(add)
     page_cases(add)
     user_tool_mutation_cases(add)
@@ -2679,6 +2681,101 @@ def user_tool_mutation_cases(add: AddCase) -> None:
             {"table": {"src": "hda", "id": "d0000001"}, "threshold": 5},
         ),
         [lookup, route("/api/tools", submission, method="POST")],
+    )
+
+
+def run_tool_cases(add: AddCase) -> None:
+    """A tool submitted, and the submission record Galaxy answers with.
+
+    This tool queues and returns: the jobs come back in the "new" state and nothing
+    here waits for them. Two things happen before the POST and neither shows in the
+    answer. Supplied inputs are checked against the tool's schema, but only when one
+    of them looks like a dataset reference -- a run made entirely of scalars skips the
+    lookup -- so the second case registers the schema and the first does not need it.
+    And stored credentials for the tool are looked up best-effort; this table answers
+    that lookup with nothing, so the run goes out without a credentials context, which
+    is what an ordinary tool run does.
+    """
+    submission = {
+        "outputs": [
+            {
+                "id": "d0000020",
+                "hid": 5,
+                "name": "FastQC on data 1: Webpage",
+                "state": "new",
+                "history_id": "h0000",
+                "output_name": "html_file",
+                "file_ext": "html",
+                "model_class": "HistoryDatasetAssociation",
+            }
+        ],
+        "output_collections": [],
+        "jobs": [
+            {
+                "model_class": "Job",
+                "id": "j0000020",
+                "state": "new",
+                "tool_id": "fastqc",
+                "tool_version": "0.74+galaxy1",
+                "create_time": "2026-01-02T03:04:05.000000",
+                "update_time": "2026-01-02T03:04:05.000000",
+                "exit_code": None,
+            }
+        ],
+        "implicit_collections": [],
+        "produces_entry_points": False,
+    }
+    tools_post = route("/api/tools", submission, method="POST")
+    add(
+        "run_tool",
+        "scalar_inputs",
+        "nothing that looks like a dataset, so the schema is never fetched",
+        {
+            "history_id": "h0000",
+            "tool_id": "fastqc",
+            "inputs": {"contaminants": "", "limits": ""},
+        },
+        lambda: run_tool_fn("h0000", "fastqc", {"contaminants": "", "limits": ""}),
+        [tools_post],
+    )
+    fastqc_schema = {
+        "id": "fastqc",
+        "name": "FastQC",
+        "version": "0.74+galaxy1",
+        "inputs": [
+            {
+                "name": "input_file",
+                "type": "data",
+                "optional": False,
+                "multiple": False,
+                "extensions": ["fastqsanger"],
+            }
+        ],
+    }
+    add(
+        "run_tool",
+        "dataset_input_checked_first",
+        "a dataset reference, so the tool's schema is read and the inputs are checked",
+        {
+            "history_id": "h0000",
+            "tool_id": "fastqc",
+            "inputs": {"input_file": {"src": "hda", "id": "d0000001"}},
+        },
+        lambda: run_tool_fn("h0000", "fastqc", {"input_file": {"src": "hda", "id": "d0000001"}}),
+        [route("/api/tools/fastqc", fastqc_schema), tools_post],
+    )
+    add(
+        "run_tool",
+        "pinned_version",
+        "a version asked for by name, which this server posts itself rather than bioblend",
+        {
+            "history_id": "h0000",
+            "tool_id": "fastqc",
+            "inputs": {"contaminants": ""},
+            "tool_version": "0.74+galaxy1",
+        },
+        lambda: run_tool_fn("h0000", "fastqc", {"contaminants": ""}, tool_version="0.74+galaxy1"),
+        [tools_post],
     )
 
 

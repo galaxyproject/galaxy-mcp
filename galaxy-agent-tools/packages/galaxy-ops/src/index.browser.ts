@@ -25,8 +25,17 @@ export { laxenLikePydantic, isPlainObject, materializeOnce } from "./laxen";
 export { jsonObject, isJsonObjectSchema } from "./json-object";
 export type { PaginationInfo, Paged } from "./operations/pagination";
 export { getUserOp, getUser, type CurrentUser } from "./operations/get-user";
-export { runToolOp, runTool } from "./operations/run-tool";
-export type { ToolRun, ToolInputs, ImplicitCollectionRef } from "./execute-tool-request";
+export { runToolOp, runTool, type ToolSubmission } from "./operations/run-tool";
+// The queue-and-wait path over /api/jobs and /api/tool_requests. `run_tool` submits and
+// returns, because that is what the other server does; a caller who wants to wait for the
+// jobs it queued calls this directly.
+export {
+  executeToolRequest,
+  type ExecuteToolRequestArgs,
+  type ToolRun,
+  type ToolInputs,
+  type ImplicitCollectionRef,
+} from "./execute-tool-request";
 export {
   getInvocationsOp,
   getInvocations,

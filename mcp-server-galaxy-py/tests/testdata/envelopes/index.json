@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 135,
+  "caseCount": 138,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -1236,6 +1236,53 @@
       },
       "envelope": "update_history/several_fields.json",
       "replies": "update_history/several_fields.galaxy.json"
+    },
+    {
+      "tool": "run_tool",
+      "case": "scalar_inputs",
+      "note": "nothing that looks like a dataset, so the schema is never fetched",
+      "input": {
+        "history_id": "h0000",
+        "tool_id": "fastqc",
+        "inputs": {
+          "contaminants": "",
+          "limits": ""
+        }
+      },
+      "envelope": "run_tool/scalar_inputs.json",
+      "replies": "run_tool/scalar_inputs.galaxy.json"
+    },
+    {
+      "tool": "run_tool",
+      "case": "dataset_input_checked_first",
+      "note": "a dataset reference, so the tool's schema is read and the inputs are checked",
+      "input": {
+        "history_id": "h0000",
+        "tool_id": "fastqc",
+        "inputs": {
+          "input_file": {
+            "src": "hda",
+            "id": "d0000001"
+          }
+        }
+      },
+      "envelope": "run_tool/dataset_input_checked_first.json",
+      "replies": "run_tool/dataset_input_checked_first.galaxy.json"
+    },
+    {
+      "tool": "run_tool",
+      "case": "pinned_version",
+      "note": "a version asked for by name, which this server posts itself rather than bioblend",
+      "input": {
+        "history_id": "h0000",
+        "tool_id": "fastqc",
+        "inputs": {
+          "contaminants": ""
+        },
+        "tool_version": "0.74+galaxy1"
+      },
+      "envelope": "run_tool/pinned_version.json",
+      "replies": "run_tool/scalar_inputs.galaxy.json"
     },
     {
       "tool": "invoke_workflow",

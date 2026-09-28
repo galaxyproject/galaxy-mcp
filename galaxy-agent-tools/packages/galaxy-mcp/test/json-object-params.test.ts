@@ -126,17 +126,11 @@ const CASES: Case[] = [
     tool: "run_tool",
     param: "inputs",
     args: `{"tool_id":"fastqc/0.74","history_id":"h1","inputs":{${PROTO},"input_file":{"src":"hda","id":"d1"}}}`,
-    answers: [
-      VERSION,
-      // Checked before the bare request id, which it contains.
-      ["/api/tool_requests/tr1/state", "submitted"],
-      ["/api/tool_requests/tr1", { id: "tr1", state: "submitted", jobs: [], implicit_collections: [] }],
-      ["/api/jobs", { tool_request_id: "tr1" }],
-    ],
-    route: "/api/jobs",
+    answers: [VERSION, ["/api/tools", { outputs: [], jobs: [] }]],
+    route: "/api/tools",
     body:
-      `{"tool_id":"fastqc/0.74","history_id":"h1","inputs":{${PROTO},"input_file":{"src":"hda","id":"d1"}},` +
-      '"strict":true,"send_email_notification":false}',
+      '{"history_id":"h1","tool_id":"fastqc/0.74","input_format":"legacy",' +
+      `"inputs":{${PROTO},"input_file":{"src":"hda","id":"d1"}}}`,
   },
   {
     tool: "run_user_tool",

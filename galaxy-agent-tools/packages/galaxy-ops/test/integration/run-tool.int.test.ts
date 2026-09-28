@@ -6,8 +6,8 @@ const KEY = process.env.GALAXY_API_KEY;
 const HISTORY = process.env.GALAXY_TEST_HISTORY_ID; // a writable history on the target
 const run = URL && KEY && HISTORY ? describe : describe.skip;
 
-run("integration: runTool reaches terminal ok on a real Galaxy", () => {
-  it("uploads-free tool runs to ok via the typed path", async () => {
+run("integration: runTool submits on a real Galaxy", () => {
+  it("queues a tool run and comes back with the jobs Galaxy made", async () => {
     const ctx = createGalaxyContext({ baseUrl: URL!, apiKey: KEY! });
     const me = await getUser({}, ctx);
     expect(me.id).toBeTruthy();
@@ -19,7 +19,9 @@ run("integration: runTool reaches terminal ok on a real Galaxy", () => {
       { toolId, historyId: HISTORY!, inputs: JSON.parse(process.env.GALAXY_TEST_TOOL_INPUTS ?? "{}") },
       ctx,
     );
-    expect(result.state).toBe("ok");
-    expect(result.jobs.every((j) => (j as { state: string }).state === "ok")).toBe(true);
+    // A submission, not a wait: run_tool queues and answers, so what comes back is the
+    // jobs in whatever state Galaxy started them in.
+    expect(Array.isArray(result.jobs)).toBe(true);
+    expect((result.jobs as unknown[]).length).toBeGreaterThan(0);
   }, 120_000);
 });

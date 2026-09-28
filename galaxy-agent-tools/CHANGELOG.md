@@ -283,6 +283,17 @@ with no fixture at all, which is where a difference hides. Every open tool now h
 golden cases generated from the Python server and replayed on both surfaces, and
 the differences they turned up are below.
 
+- **Breaking:** `run_tool` submits and returns, and answers with Galaxy's own
+  submission record. It used to POST `/api/jobs`, poll `/api/tool_requests/{id}`
+  and then wait for every job it spawned, answering with
+  `{ toolRequestId, jobs, implicitCollections, state: "ok" }` once they were all
+  terminal. The Python tool POSTs `/api/tools` and hands back what Galaxy said --
+  `{ outputs, output_collections, jobs, implicit_collections, ... }` with the jobs
+  in their starting state -- and a call that blocks for the length of a
+  bioinformatics job is a different tool from one that queues it. Poll the jobs
+  with `get_job_details`. The queue-and-wait path is still here and is now
+  exported as `executeToolRequest`, with its `ToolRun` result, for a caller who
+  wants it.
 - **Breaking:** `invoke_workflow` hands back every invocation a batch run made.
   Galaxy answers a batch with a list, and this took the first element of it and
   dropped the rest; the Python tool passes the list through, so now this does too.
