@@ -1,0 +1,73 @@
+{
+  "data": {
+    "inputs_template": {
+      "0": {
+        "src": "hda",
+        "id": "<dataset_id>"
+      },
+      "1": "<value>"
+    },
+    "slots": [
+      {
+        "step_index": 0,
+        "step_uuid": "44444444-4444-4444-4444-444444444444",
+        "label": "Input dataset (step 0)",
+        "input_type": "data",
+        "src": "hda",
+        "accepted_formats": [
+          "tabular"
+        ],
+        "collection_type": null,
+        "parameter_type": null,
+        "optional": false
+      },
+      {
+        "step_index": 1,
+        "step_uuid": null,
+        "label": "Input parameter (step 1)",
+        "input_type": "parameter",
+        "src": null,
+        "accepted_formats": [],
+        "collection_type": null,
+        "parameter_type": "text",
+        "optional": true,
+        "options": [
+          {
+            "label": "alpha",
+            "value": "alpha"
+          },
+          {
+            "label": "beta",
+            "value": "beta"
+          }
+        ],
+        "option_count": 2
+      }
+    ],
+    "inputs_by": "step_index|step_uuid",
+    "warnings": [
+      {
+        "kind": "legacy_runtime_value",
+        "message": "Tool step 'fastqc' has a RuntimeValue parameter set at runtime (legacy run-form pattern); the workflow may not run cleanly via the API."
+      }
+    ],
+    "guide": {
+      "summary": "a bare annotation",
+      "annotation": "a bare annotation",
+      "provenance": {
+        "version": 3,
+        "source": {
+          "trs_id": "#workflow/github.com/iwc-workflows/reads-qc/main",
+          "trs_url": "https://dockstore.org/api/ga4gh/trs/v2/tools/reads-qc"
+        }
+      },
+      "notes": [
+        "Parameter options (e.g. reference genome) resolve at run time; call again with a history_id for resolved values."
+      ]
+    }
+  },
+  "success": true,
+  "message": "Built an input template for workflow 'wf000002' (2 slot(s), source: ga-fallback). Fill inputs_template and invoke with inputs_by='step_index|step_uuid'.",
+  "count": 2,
+  "pagination": null
+}

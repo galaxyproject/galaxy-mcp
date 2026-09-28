@@ -74,7 +74,7 @@ const FALLBACK_LABEL: Record<string, string> = {
 
 export interface WorkflowSlot {
   step_index: number;
-  step_uuid: string | null | undefined;
+  step_uuid: unknown;
   label: string;
   input_type: string;
   src: string | null;
@@ -92,7 +92,7 @@ export interface WorkflowSlot {
 
 function makeSlot(args: {
   step_index: number;
-  step_uuid: string | null | undefined;
+  step_uuid: unknown;
   label: string;
   input_type: string;
   accepted_formats: unknown[];
@@ -187,7 +187,9 @@ export function normalizeGaSteps(definition: Record<string, unknown>): WorkflowS
     slots.push(
       makeSlot({
         step_index: index,
-        step_uuid: stepObj["uuid"] as string | undefined,
+        // `step.get("uuid")` over there: a step with no uuid gets null, and a slot
+        // that drops the key instead answers a different question.
+        step_uuid: stepObj["uuid"] ?? null,
         label,
         input_type: inputType,
         accepted_formats: asList(state["format"]),
@@ -238,15 +240,23 @@ export function normalizeRunModel(runDict: Record<string, unknown>): WorkflowSlo
     const stepObj =
       typeof step === "object" && step !== null ? (step as Record<string, unknown>) : {};
 
-    // style=run uses step_type; .ga fallback path uses type
-    const inputType =
-      INPUT_TYPE_MAP[String(stepObj["step_type"] ?? "")] ??
-      INPUT_TYPE_MAP[String(stepObj["type"] ?? "")];
+    // style=run uses step_type; the .ga fallback path uses type. ONE lookup, on
+    // whichever of the two is set, because `a or b` over there picks the key and
+    // then maps it -- mapping each in turn would let a tool step's `type` answer
+    // for a `step_type` the map has never heard of.
+    const typeKey = String(stepObj["step_type"] || stepObj["type"] || "");
+    const inputType = INPUT_TYPE_MAP[typeKey];
     if (!inputType) continue;
 
-    // style=run can expose step_index, order_index, or id; skip if none are numeric
+    // style=run can expose step_index, order_index, or id; skip if none are numeric.
+    // `dict.get(k, fallback)` falls through on an ABSENT key only, so a step_index
+    // Galaxy sent as null is a step this skips rather than one to look up an id for.
     const rawIdx =
-      stepObj["step_index"] ?? stepObj["order_index"] ?? stepObj["id"];
+      "step_index" in stepObj
+        ? stepObj["step_index"]
+        : "order_index" in stepObj
+          ? stepObj["order_index"]
+          : stepObj["id"];
     const index = safeInt(rawIdx);
     if (index == null) continue;
 
@@ -271,13 +281,14 @@ export function normalizeRunModel(runDict: Record<string, unknown>): WorkflowSlo
       String(param["label"] ?? "") ||
       labelFallback;
 
-    // parameter_type: style=run puts it on param first, then step
-    const parameterType = param["parameter_type"] ?? stepObj["parameter_type"] ?? null;
+    // parameter_type: style=run puts it on param first, then step. `or`, not `??`,
+    // because that is how the other side chains them.
+    const parameterType = param["parameter_type"] || stepObj["parameter_type"] || null;
 
     slots.push(
       makeSlot({
         step_index: index,
-        step_uuid: stepObj["uuid"] as string | undefined,
+        step_uuid: stepObj["uuid"] ?? null,
         label,
         input_type: inputType,
         accepted_formats: asList(param["extensions"]),

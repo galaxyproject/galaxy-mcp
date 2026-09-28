@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 74,
+  "caseCount": 80,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -807,6 +807,66 @@
       },
       "envelope": "get_collection_details/sparse_record.json",
       "replies": "get_collection_details/sparse_record.galaxy.json"
+    },
+    {
+      "tool": "get_workflow_input_template",
+      "case": "simple",
+      "note": "one data input off the run model, with a guide and a legacy warning",
+      "input": {
+        "workflow_id": "wf000001"
+      },
+      "envelope": "get_workflow_input_template/simple.json",
+      "replies": "get_workflow_input_template/simple.galaxy.json"
+    },
+    {
+      "tool": "get_workflow_input_template",
+      "case": "collection_input",
+      "note": "a collection slot whose type comes from collection_types rather than collection_type",
+      "input": {
+        "workflow_id": "wf000001"
+      },
+      "envelope": "get_workflow_input_template/collection_input.json",
+      "replies": "get_workflow_input_template/collection_input.galaxy.json"
+    },
+    {
+      "tool": "get_workflow_input_template",
+      "case": "parameter_selector",
+      "note": "a parameter slot whose options are a selector's choices",
+      "input": {
+        "workflow_id": "wf000001"
+      },
+      "envelope": "get_workflow_input_template/parameter_selector.json",
+      "replies": "get_workflow_input_template/parameter_selector.galaxy.json"
+    },
+    {
+      "tool": "get_workflow_input_template",
+      "case": "capped_options",
+      "note": "a selector with more choices than the template inlines, on a step with no uuid",
+      "input": {
+        "workflow_id": "wf000001"
+      },
+      "envelope": "get_workflow_input_template/capped_options.json",
+      "replies": "get_workflow_input_template/capped_options.galaxy.json"
+    },
+    {
+      "tool": "get_workflow_input_template",
+      "case": "sparse_run_step",
+      "note": "a run-model step that names almost nothing, so every fallback is exercised",
+      "input": {
+        "workflow_id": "wf000001"
+      },
+      "envelope": "get_workflow_input_template/sparse_run_step.json",
+      "replies": "get_workflow_input_template/sparse_run_step.galaxy.json"
+    },
+    {
+      "tool": "get_workflow_input_template",
+      "case": "ga_fallback",
+      "note": "the .ga path, which resolves no options and says so in the guide's notes",
+      "input": {
+        "workflow_id": "wf000002"
+      },
+      "envelope": "get_workflow_input_template/ga_fallback.json",
+      "replies": "get_workflow_input_template/ga_fallback.galaxy.json"
     },
     {
       "tool": "get_tool_citations",

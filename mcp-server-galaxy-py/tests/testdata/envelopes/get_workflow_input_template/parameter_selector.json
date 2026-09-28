@@ -1,0 +1,57 @@
+{
+  "data": {
+    "inputs_template": {
+      "0": "<value>"
+    },
+    "slots": [
+      {
+        "step_index": 0,
+        "step_uuid": "33333333-3333-3333-3333-333333333333",
+        "label": "Reference genome",
+        "input_type": "parameter",
+        "src": null,
+        "accepted_formats": [],
+        "collection_type": null,
+        "parameter_type": "text",
+        "optional": false,
+        "options": [
+          {
+            "label": "Human (hg38)",
+            "value": "hg38"
+          },
+          {
+            "label": "Mouse (mm10)",
+            "value": "mm10"
+          }
+        ],
+        "option_count": 2
+      }
+    ],
+    "inputs_by": "step_index|step_uuid",
+    "warnings": [
+      {
+        "kind": "legacy_runtime_value",
+        "message": "Tool step 'fastqc' has a RuntimeValue parameter set at runtime (legacy run-form pattern); the workflow may not run cleanly via the API."
+      }
+    ],
+    "guide": {
+      "summary": "Runs quality control over reads and reports on them.",
+      "annotation": "quality control over sequencing reads",
+      "provenance": {
+        "version": 3,
+        "source": {
+          "trs_id": "#workflow/github.com/iwc-workflows/reads-qc/main",
+          "trs_url": "https://dockstore.org/api/ga4gh/trs/v2/tools/reads-qc"
+        },
+        "freshness": {
+          "has_upgrade_messages": false,
+          "step_version_changes": []
+        }
+      }
+    }
+  },
+  "success": true,
+  "message": "Built an input template for workflow 'wf000001' (1 slot(s), source: style=run). Fill inputs_template and invoke with inputs_by='step_index|step_uuid'.",
+  "count": 1,
+  "pagination": null
+}

@@ -569,3 +569,62 @@ describe("buildGuide", () => {
     expect(guide.summary).toBe("");
   });
 });
+
+/**
+ * Four places the two builders were writing the same slot differently.
+ *
+ * The other server's output is the contract for this tool, and each of these was
+ * reachable from a run model Galaxy will actually send.
+ */
+describe("the slot contract, where the two builders used to part company", () => {
+  it("states a null step_uuid rather than leaving the field out", () => {
+    const [slot] = normalizeRunModel({
+      steps: { "0": { step_type: "data_input", step_index: 0, inputs: [{}] } },
+    });
+    expect(slot.step_uuid).toBeNull();
+    expect("step_uuid" in slot).toBe(true);
+    // Same on the .ga path, which has its own copy of the same line.
+    const [ga] = normalizeGaSteps({ steps: { "0": { type: "data_input" } } });
+    expect(ga.step_uuid).toBeNull();
+  });
+
+  /**
+   * `step.get("step_type") or step.get("type", "")` picks the key first and maps
+   * once. Mapping each in turn instead let a tool step whose `type` happens to be
+   * an input discriminator become a slot that does not exist.
+   */
+  it("does not let a step's type answer for a step_type the map has never heard of", () => {
+    expect(
+      normalizeRunModel({
+        steps: { "0": { step_type: "tool", type: "data_input", step_index: 0, inputs: [{}] } },
+      }),
+    ).toEqual([]);
+  });
+
+  /** `dict.get(k, fallback)` falls through on an absent key, not on a null value. */
+  it("skips a step whose step_index is null instead of reading its id", () => {
+    expect(
+      normalizeRunModel({
+        steps: { "0": { step_type: "data_input", step_index: null, id: 3, inputs: [{}] } },
+      }),
+    ).toEqual([]);
+    const [fromOrder] = normalizeRunModel({
+      steps: { "0": { step_type: "data_input", order_index: 4, id: 7, inputs: [{}] } },
+    });
+    expect(fromOrder.step_index).toBe(4);
+  });
+
+  it("falls through an empty parameter_type on the param to the one on the step", () => {
+    const [slot] = normalizeRunModel({
+      steps: {
+        "0": {
+          step_type: "parameter_input",
+          step_index: 0,
+          parameter_type: "integer",
+          inputs: [{ parameter_type: "" }],
+        },
+      },
+    });
+    expect(slot.parameter_type).toBe("integer");
+  });
+});

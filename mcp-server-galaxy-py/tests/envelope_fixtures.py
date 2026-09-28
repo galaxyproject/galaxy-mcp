@@ -56,6 +56,7 @@ from .test_helpers import (
     get_tool_citations_fn,
     get_tool_panel_fn,
     get_tool_run_examples_fn,
+    get_workflow_input_template_fn,
     list_history_ids_fn,
     list_page_revisions_fn,
     list_pages_fn,
@@ -1139,6 +1140,244 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
                 {"elements": [{"element_identifier": "lonely", "object": {}}]},
             )
         ],
+    )
+
+    # -- get_workflow_input_template -----------------------------------------
+    # Three independent reads of one workflow, and the two servers do not spell all
+    # three the same: the run model is `/api/workflows/{id}/download?style=run` on
+    # both, but bioblend's .ga export asks `/api/workflows/download/{id}` while the
+    # other side asks the first path with no style. Both spellings are the same
+    # endpoint to Galaxy, and this table answers questions rather than replaying a
+    # log, so the .ga body is registered under both.
+    def wf_routes(
+        workflow_id: str,
+        run_model: dict[str, Any],
+        definition: dict[str, Any],
+        show: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        return [
+            route(f"/api/workflows/{workflow_id}/download", run_model, query={"style": "run"}),
+            route(f"/api/workflows/{workflow_id}/download", definition),
+            route(f"/api/workflows/download/{workflow_id}", definition),
+            route(f"/api/workflows/{workflow_id}", show),
+        ]
+
+    # One tool step carrying an unconnected RuntimeValue, which is the legacy pattern
+    # the template warns about; the input steps around it are the slots.
+    def ga_definition(input_steps: dict[str, Any]) -> dict[str, Any]:
+        steps = dict(input_steps)
+        steps["9"] = {
+            "type": "tool",
+            "tool_id": "fastqc",
+            "label": None,
+            "tool_state": json.dumps({"adapters": {"__class__": "RuntimeValue"}}),
+        }
+        return {"a_galaxy_workflow": "true", "name": "Reads QC", "steps": steps}
+
+    wf_show = {
+        "id": "wf000001",
+        "name": "Reads QC",
+        "version": 3,
+        "annotation": "quality control over sequencing reads",
+        "readme": "# Reads QC\n\nRuns quality control over reads and reports on them.\n",
+        "help": "",
+        "source_metadata": {
+            "trs_tool_id": "#workflow/github.com/iwc-workflows/reads-qc/main",
+            "trs_url": "https://dockstore.org/api/ga4gh/trs/v2/tools/reads-qc",
+        },
+    }
+
+    def run_model(steps: dict[str, Any], **over: Any) -> dict[str, Any]:
+        model = {
+            "id": "wf000001",
+            "name": "Reads QC",
+            "has_upgrade_messages": False,
+            "step_version_changes": [],
+            "steps": steps,
+        }
+        model.update(over)
+        return model
+
+    data_step = {
+        "step_type": "data_input",
+        "step_index": 0,
+        "step_label": "Input FASTQ",
+        "uuid": "11111111-1111-1111-1111-111111111111",
+        "inputs": [
+            {
+                "extensions": ["fastqsanger"],
+                "acceptable_extensions": ["fastqsanger", "fastqsanger.gz"],
+                "optional": False,
+            }
+        ],
+    }
+    add(
+        "get_workflow_input_template",
+        "simple",
+        "one data input off the run model, with a guide and a legacy warning",
+        {"workflow_id": "wf000001"},
+        lambda: get_workflow_input_template_fn("wf000001"),
+        wf_routes(
+            "wf000001",
+            run_model({"0": data_step, "1": {"step_type": "tool", "step_index": 1, "inputs": []}}),
+            ga_definition({"0": {"type": "data_input", "label": "Input FASTQ"}}),
+            wf_show,
+        ),
+    )
+    add(
+        "get_workflow_input_template",
+        "collection_input",
+        "a collection slot whose type comes from collection_types rather than collection_type",
+        {"workflow_id": "wf000001"},
+        lambda: get_workflow_input_template_fn("wf000001"),
+        wf_routes(
+            "wf000001",
+            run_model(
+                {
+                    "0": {
+                        "step_type": "data_collection_input",
+                        "step_index": 0,
+                        "step_label": "Paired reads",
+                        "uuid": "22222222-2222-2222-2222-222222222222",
+                        "inputs": [
+                            {
+                                "extensions": [],
+                                "collection_types": ["list:paired", "paired"],
+                                "optional": True,
+                            }
+                        ],
+                    }
+                }
+            ),
+            ga_definition({"0": {"type": "data_collection_input", "label": "Paired reads"}}),
+            wf_show,
+        ),
+    )
+    # A selector and its choices: the run model hands options over as
+    # [label, value, selected] triples, and the template keeps label and value.
+    add(
+        "get_workflow_input_template",
+        "parameter_selector",
+        "a parameter slot whose options are a selector's choices",
+        {"workflow_id": "wf000001"},
+        lambda: get_workflow_input_template_fn("wf000001"),
+        wf_routes(
+            "wf000001",
+            run_model(
+                {
+                    "0": {
+                        "step_type": "parameter_input",
+                        "step_index": 0,
+                        "uuid": "33333333-3333-3333-3333-333333333333",
+                        "inputs": [
+                            {
+                                "label": "Reference genome",
+                                "parameter_type": "text",
+                                "optional": False,
+                                "options": [
+                                    ["Human (hg38)", "hg38", True],
+                                    ["Mouse (mm10)", "mm10", False],
+                                ],
+                            }
+                        ],
+                    }
+                }
+            ),
+            ga_definition({"0": {"type": "parameter_input", "label": "Reference genome"}}),
+            wf_show,
+        ),
+    )
+    # More options than the inline cap, so the sample and its sentence show up. The
+    # step carries NO uuid key at all, which is the difference between a slot whose
+    # step_uuid is null and a slot that has no such field.
+    add(
+        "get_workflow_input_template",
+        "capped_options",
+        "a selector with more choices than the template inlines, on a step with no uuid",
+        {"workflow_id": "wf000001"},
+        lambda: get_workflow_input_template_fn("wf000001"),
+        wf_routes(
+            "wf000001",
+            run_model(
+                {
+                    "0": {
+                        "step_type": "parameter_input",
+                        "step_index": 0,
+                        "step_label": "Build",
+                        "inputs": [
+                            {
+                                "parameter_type": "text",
+                                "options": [[f"Build {i}", f"b{i}", i == 0] for i in range(30)],
+                            }
+                        ],
+                    }
+                }
+            ),
+            ga_definition({"0": {"type": "parameter_input", "label": "Build"}}),
+            wf_show,
+        ),
+    )
+    # Everything the run model is allowed to leave out: no step_index (the index comes
+    # from order_index), no uuid, no label anywhere (so the slot names itself), and
+    # parameter_type on the step rather than on the param.
+    add(
+        "get_workflow_input_template",
+        "sparse_run_step",
+        "a run-model step that names almost nothing, so every fallback is exercised",
+        {"workflow_id": "wf000001"},
+        lambda: get_workflow_input_template_fn("wf000001"),
+        wf_routes(
+            "wf000001",
+            run_model(
+                {
+                    "0": {
+                        "step_type": "parameter_input",
+                        "order_index": 4,
+                        "id": 7,
+                        "parameter_type": "integer",
+                        "inputs": [{}],
+                    }
+                }
+            ),
+            ga_definition({"0": {"type": "parameter_input"}}),
+            wf_show,
+        ),
+    )
+    # The run model answers with no input steps at all, so both servers fall back to
+    # the .ga export: options come from `restrictions`, nothing is server-resolved,
+    # and the guide says so in a note.
+    add(
+        "get_workflow_input_template",
+        "ga_fallback",
+        "the .ga path, which resolves no options and says so in the guide's notes",
+        {"workflow_id": "wf000002"},
+        lambda: get_workflow_input_template_fn("wf000002"),
+        wf_routes(
+            "wf000002",
+            run_model({"0": {"step_type": "tool", "step_index": 0, "inputs": []}}),
+            ga_definition(
+                {
+                    "0": {
+                        "type": "data_input",
+                        "label": "",
+                        "uuid": "44444444-4444-4444-4444-444444444444",
+                        "tool_state": json.dumps({"format": "tabular", "optional": False}),
+                    },
+                    "1": {
+                        "type": "parameter_input",
+                        "uuid": None,
+                        "tool_state": json.dumps(
+                            {
+                                "parameter_type": "text",
+                                "restrictions": ["alpha", "beta"],
+                                "optional": True,
+                            }
+                        ),
+                    },
+                }
+            ),
+            {**wf_show, "readme": "", "help": "", "annotation": "a bare annotation"},
+        ),
     )
 
     # -- get_tool_citations --------------------------------------------------

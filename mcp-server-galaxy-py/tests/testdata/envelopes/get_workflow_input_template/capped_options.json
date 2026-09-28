@@ -1,0 +1,110 @@
+{
+  "data": {
+    "inputs_template": {
+      "0": "<value>"
+    },
+    "slots": [
+      {
+        "step_index": 0,
+        "step_uuid": null,
+        "label": "Build",
+        "input_type": "parameter",
+        "src": null,
+        "accepted_formats": [],
+        "collection_type": null,
+        "parameter_type": "text",
+        "optional": false,
+        "options": [
+          {
+            "label": "Build 0",
+            "value": "b0"
+          },
+          {
+            "label": "Build 1",
+            "value": "b1"
+          },
+          {
+            "label": "Build 2",
+            "value": "b2"
+          },
+          {
+            "label": "Build 3",
+            "value": "b3"
+          },
+          {
+            "label": "Build 4",
+            "value": "b4"
+          },
+          {
+            "label": "Build 5",
+            "value": "b5"
+          },
+          {
+            "label": "Build 6",
+            "value": "b6"
+          },
+          {
+            "label": "Build 7",
+            "value": "b7"
+          },
+          {
+            "label": "Build 8",
+            "value": "b8"
+          },
+          {
+            "label": "Build 9",
+            "value": "b9"
+          },
+          {
+            "label": "Build 10",
+            "value": "b10"
+          },
+          {
+            "label": "Build 11",
+            "value": "b11"
+          },
+          {
+            "label": "Build 12",
+            "value": "b12"
+          },
+          {
+            "label": "Build 13",
+            "value": "b13"
+          },
+          {
+            "label": "Build 14",
+            "value": "b14"
+          }
+        ],
+        "option_count": 30,
+        "options_note": "showing 15 of 30; pass verbose=true for the full list, or supply a value matching an installed option."
+      }
+    ],
+    "inputs_by": "step_index|step_uuid",
+    "warnings": [
+      {
+        "kind": "legacy_runtime_value",
+        "message": "Tool step 'fastqc' has a RuntimeValue parameter set at runtime (legacy run-form pattern); the workflow may not run cleanly via the API."
+      }
+    ],
+    "guide": {
+      "summary": "Runs quality control over reads and reports on them.",
+      "annotation": "quality control over sequencing reads",
+      "provenance": {
+        "version": 3,
+        "source": {
+          "trs_id": "#workflow/github.com/iwc-workflows/reads-qc/main",
+          "trs_url": "https://dockstore.org/api/ga4gh/trs/v2/tools/reads-qc"
+        },
+        "freshness": {
+          "has_upgrade_messages": false,
+          "step_version_changes": []
+        }
+      }
+    }
+  },
+  "success": true,
+  "message": "Built an input template for workflow 'wf000001' (1 slot(s), source: style=run). Fill inputs_template and invoke with inputs_by='step_index|step_uuid'.",
+  "count": 1,
+  "pagination": null
+}
