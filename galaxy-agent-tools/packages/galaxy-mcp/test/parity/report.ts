@@ -34,6 +34,7 @@ import {
   builtinSide,
   builtinSurface,
   loadBuiltinSnapshot,
+  loadFixtureCounts,
   loadManifest,
   loadRegistry,
   normalizationFrom,
@@ -92,6 +93,11 @@ export interface ReportInput {
   /** The switches the comparison ran with, so the report shows the shapes it compared. */
   rules: Normalization;
   builtin?: ReportBuiltin;
+  /**
+   * How many golden cases each tool has: how much of its answer is compared against the
+   * other server at all. Absent in a hand-built report, where every count reads zero.
+   */
+  caseCounts?: ReadonlyMap<string, number>;
 }
 
 /**
@@ -218,7 +224,7 @@ function toolCell(column: ReportSurface, tool: string): string {
 }
 
 export function renderReport(input: ReportInput): string {
-  const { surfaces, divergences, registry, rules, builtin } = input;
+  const { surfaces, divergences, registry, rules, builtin, caseCounts } = input;
   const tools = [...new Set(surfaces.flatMap((s) => [...s.surface.keys()]))].sort(byText);
   /**
    * The pairs this report covers, each with the rows it found and the entries somebody
@@ -341,6 +347,7 @@ export function renderReport(input: ReportInput): string {
     rows.push([
       code(tool),
       "",
+      code(String(caseCounts?.get(tool) ?? 0)),
       ...surfaces.map((column) => toolCell(column, tool)),
       ...verdicts(`${tool} :: `),
     ]);
@@ -349,6 +356,8 @@ export function renderReport(input: ReportInput): string {
       rows.push([
         code(tool),
         code(param),
+        // A count is a fact about the tool, and a parameter's row is not another tool.
+        "",
         ...surfaces.map((column) => {
           const declared = parametersOf(column, tool).get(param);
           return declared ? code(showContract(declared)) : ABSENT;
@@ -475,7 +484,17 @@ export function renderReport(input: ReportInput): string {
       "it to be, in the terms the comparison compares." +
       (second ? " A difference found against the built-in server says so in its kind." : ""),
     "",
-    ...table(["Tool", "Parameter", ...surfaces.map((s) => s.title), "Difference", "Status", "Why"], rows),
+    "`Cases` is how many golden result envelopes that tool has under " +
+      "`mcp-server-galaxy-py/tests/testdata/envelopes` -- calls the Python server answered, " +
+      "replayed through both surfaces here and compared key for key. It is not part of the " +
+      "comparison above, which is about what a tool declares; it is how much of what a tool " +
+      "ANSWERS anybody checks. A `0` on a tool that is not in the registry's `fixtures.excluded` " +
+      "list fails the parity check.",
+    "",
+    ...table(
+      ["Tool", "Parameter", "Cases", ...surfaces.map((s) => s.title), "Difference", "Status", "Why"],
+      rows,
+    ),
     "",
   ].join("\n");
 }
@@ -504,6 +523,7 @@ export async function currentInput(): Promise<ReportInput> {
     divergences: compareSurfaces(python, typescript, rules),
     registry,
     rules,
+    caseCounts: loadFixtureCounts(),
     builtin: {
       galaxy: snapshot.galaxy,
       divergences: compareSurfaces(python, builtin, rules, builtinSide(section)),

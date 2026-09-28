@@ -25,6 +25,9 @@ import {
   loadRegistry,
   normalizationFrom,
   pythonSurface,
+  fixtureCoverage,
+  fixtureProblems,
+  loadFixtureCounts,
   ratchetProblems,
   RATCHETED_STATUS,
   typescriptSurface,
@@ -369,6 +372,115 @@ describe("the ratchet on unreviewed gaps", () => {
       const declared = { ...registry, ratchet: { unreviewedGaps: nonsense } };
       expect(() => ratchetProblems(declared), String(nonsense)).toThrow(/a count/);
     }
+  });
+});
+
+/**
+ * The coverage ratchet: every tool this server serves is compared against the other two,
+ * or is on a short list of tools that are not, with a reason.
+ *
+ * Separate from the divergence ratchet above, and counted separately, because the two
+ * measure different things. A divergence is a difference somebody FOUND; this is how much
+ * of the surface anybody has looked at. A tool with no golden case has no recorded
+ * differences for the same reason an unopened box has no broken plates in it.
+ */
+describe("the coverage ratchet on golden cases", () => {
+  const FENCED = ["connect", "download_dataset", "upload_file", "upload_file_from_url"];
+  let counts: Map<string, number>;
+  let served: string[];
+
+  beforeAll(() => {
+    counts = loadFixtureCounts();
+    served = manifest.tools.map((t) => t.name);
+  });
+
+  it("has a case for every tool that is not excluded, and says so in the registry", () => {
+    expect(fixtureProblems(registry, served, counts)).toEqual([]);
+  });
+
+  it("excludes exactly the tools a pending change is about to rewrite, with one reason", () => {
+    const { excluded, uncoveredTools } = fixtureCoverage(registry);
+    expect(excluded.map((e) => e.tool).sort()).toEqual([...FENCED].sort());
+    expect([...new Set(excluded.map((e) => e.reason))]).toEqual([
+      "no fixture until the pending change to these tools lands",
+    ]);
+    expect(uncoveredTools).toBe(0);
+  });
+
+  it("counts a case for every tool the index names, and none for a tool it does not", () => {
+    // Read off the generated index rather than restated here: a count written down in two
+    // places is a count that will disagree with itself the next time a case is added.
+    for (const tool of served) {
+      const covered = !FENCED.includes(tool);
+      expect(counts.get(tool) ?? 0, tool).toBeGreaterThan(covered ? 0 : -1);
+      if (!covered) expect(counts.get(tool) ?? 0, tool).toBe(0);
+    }
+  });
+
+  it("fails on an open tool with no cases at all", () => {
+    expect(fixtureProblems(registry, [...served, "brand_new_tool"], counts)).toEqual([
+      expect.stringContaining("brand_new_tool has no golden case"),
+    ]);
+  });
+
+  it("asks for the number to come down when the last uncovered tool is covered", () => {
+    const allows = (n: number): Registry => ({
+      ...registry,
+      fixtures: { ...fixtureCoverage(registry), uncoveredTools: n },
+    } as Registry);
+    expect(fixtureProblems(allows(1), served, counts)).toEqual([
+      expect.stringContaining("Lower `fixtures.uncoveredTools` to 0"),
+    ]);
+  });
+
+  it("fails on an exclusion for a tool that has cases after all", () => {
+    const excusing = (tool: string): Registry => ({
+      ...registry,
+      fixtures: {
+        ...fixtureCoverage(registry),
+        excluded: [
+          ...fixtureCoverage(registry).excluded,
+          { tool, reason: "no fixture until the pending change to these tools lands" },
+        ],
+      },
+    } as Registry);
+    expect(fixtureProblems(excusing("get_histories"), served, counts)).toEqual([
+      expect.stringContaining("get_histories has golden cases and is still listed as excluded"),
+    ]);
+  });
+
+  it("fails on an exclusion for a tool this server does not serve", () => {
+    // Two things wrong at once, and it says both: the name nobody serves, and the four
+    // real tools that exclusion stopped excusing.
+    const excusing: Registry = {
+      ...registry,
+      fixtures: {
+        ...fixtureCoverage(registry),
+        excluded: [{ tool: "no_such_tool", reason: "because" }],
+      },
+    } as Registry;
+    expect(fixtureProblems(excusing, served, counts)).toContainEqual(
+      expect.stringContaining("excludes no_such_tool, which this server does not serve"),
+    );
+  });
+
+  it("stops the run on a registry that says nothing about coverage", () => {
+    const silent = { ...registry } as Record<string, unknown>;
+    delete silent.fixtures;
+    expect(() => fixtureCoverage(silent as unknown as Registry)).toThrow(/no "fixtures" section/);
+  });
+
+  it("stops the run on a count that is not a count", () => {
+    const wrong = { ...registry, fixtures: { uncoveredTools: "none", excluded: [] } } as Registry;
+    expect(() => fixtureCoverage(wrong)).toThrow(/"uncoveredTools" is string/);
+  });
+
+  it("stops the run on an exclusion with no reason", () => {
+    const wrong = {
+      ...registry,
+      fixtures: { uncoveredTools: 0, excluded: [{ tool: "connect" }] },
+    } as unknown as Registry;
+    expect(() => fixtureCoverage(wrong)).toThrow(/gives no reason/);
   });
 });
 

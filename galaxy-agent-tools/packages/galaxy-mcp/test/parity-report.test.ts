@@ -371,10 +371,12 @@ describe("the report's tool table", () => {
       }),
     );
 
-    expect(text).toContain("| Tool | Parameter | Python | TypeScript | Difference | Status | Why |");
-    expect(text).toContain("| `get_page` |  | `read (hint)` | `read (hint)` |  |  |  |");
     expect(text).toContain(
-      "| `only_here` |  | `read (hint)` | -- | `missing-ts-tool` | `pending-port` | " +
+      "| Tool | Parameter | Cases | Python | TypeScript | Difference | Status | Why |",
+    );
+    expect(text).toContain("| `get_page` |  | `0` | `read (hint)` | `read (hint)` |  |  |  |");
+    expect(text).toContain(
+      "| `only_here` |  | `0` | `read (hint)` | -- | `missing-ts-tool` | `pending-port` | " +
         "nobody has written the op yet |",
     );
   });
@@ -390,9 +392,9 @@ describe("the report's tool table", () => {
     );
 
     expect(text).toContain(
-      "| Tool | Parameter | Python | TypeScript | Galaxy | Difference | Status | Why |",
+      "| Tool | Parameter | Cases | Python | TypeScript | Galaxy | Difference | Status | Why |",
     );
-    expect(text).toContain("| `get_page` |  | `read (hint)` | `read (hint)` | -- |  |  |  |");
+    expect(text).toContain("| `get_page` |  | `0` | `read (hint)` | `read (hint)` | -- |  |  |  |");
   });
 
   it("gives a parameter only the second pair diverges about a row of its own", () => {
@@ -416,7 +418,7 @@ describe("the report's tool table", () => {
     );
 
     expect(text).toContain(
-      "| `get_histories` | `limit` | -- | -- | `type=integer required=false default=50` | " +
+      "| `get_histories` | `limit` |  | -- | -- | `type=integer required=false default=50` | " +
         "`vs built-in: missing-py-param` | `unreviewed-gap` | Galaxy pages it and we do not |",
     );
   });
@@ -469,7 +471,7 @@ describe("the report's tool table", () => {
     // Both differences about one parameter share its row rather than splitting it,
     // in the order the comparison reports them.
     expect(text).toContain(
-      "| `get_page` | `limit` | `type=integer required=false default=10` | " +
+      "| `get_page` | `limit` |  | `type=integer required=false default=10` | " +
         "`type=string required=false default=none` | `default-mismatch`<br>`type-mismatch` | " +
         "`unreviewed-gap`<br>`pending-decision` | " +
         "TS declares no default<br>one of the two is wrong |",
@@ -493,7 +495,7 @@ describe("the report's tool table", () => {
     );
 
     expect(text).toContain(
-      "| `get_page` | `limit` | `type=integer required=false default=none` | -- | " +
+      "| `get_page` | `limit` |  | `type=integer required=false default=none` | -- | " +
         "`missing-ts-param` | `pending-port` | not ported |",
     );
   });
@@ -529,7 +531,7 @@ describe("the report's tool table", () => {
     // Both sides' current values are in their own columns either way.
     const [python, typescript] = row
       .split(" | ")
-      .slice(2, 4)
+      .slice(3, 5)
       .map((written) => unfenced(unescaped(written)));
     expect(python).toBe("type=string required=false default=false");
     expect(typescript).toBe("type=string required=false default=true");
@@ -554,7 +556,7 @@ describe("the report's tool table", () => {
 
     expect(text).toContain("| `unregistered` | `1` |");
     expect(text).toMatch(
-      /\| `get_page` \|  \| `read \(hint\)` \| -- \| `missing-ts-tool` \| `unregistered` \|/,
+      /\| `get_page` \|  \| `0` \| `read \(hint\)` \| -- \| `missing-ts-tool` \| `unregistered` \|/,
     );
     expect(text).toContain("the parity check fails until somebody reviews it");
   });
@@ -635,7 +637,7 @@ describe("the report's tool table", () => {
     // fails here.
     const [python, typescript] = (row as string)
       .split(" | ")
-      .slice(2, 4)
+      .slice(3, 5)
       .map((written) => unfenced(unescaped(written)));
     expect(python).toBe("type=array&items<string> required=false default=none");
     expect(typescript).toBe("type=array&items<integer> required=false default=none");
@@ -665,7 +667,7 @@ describe("the report's tool table", () => {
     const row = toolTable(text).find((line) => line.includes("`mode`"));
     const [python, typescript] = (row as string)
       .split(" | ")
-      .slice(2, 4)
+      .slice(3, 5)
       .map((written) => unfenced(unescaped(written)));
     expect(python).toBe('type=string required=false default="a\\u2028b"');
     expect(typescript).toBe('type=string required=false default="a b"');
