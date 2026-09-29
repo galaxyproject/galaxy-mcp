@@ -175,6 +175,11 @@ export const recommendIwcWorkflowsOp: Operation<typeof input, Recommendations> =
               : "");
     return { data: out.items, message, count: out.items.length, pagination: null };
   },
+  // server.py, recommend_iwc_workflows: the same manifest fetch, its own sentence.
+  failure: {
+    shape: "raise-for-status",
+    sentence: (text) => `Failed to recommend IWC workflows: ${text}`,
+  },
 };
 
 register(recommendIwcWorkflowsOp as AnyOperation);

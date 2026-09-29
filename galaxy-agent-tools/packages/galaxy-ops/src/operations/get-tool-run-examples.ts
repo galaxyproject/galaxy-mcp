@@ -12,7 +12,7 @@ export interface ToolRunExamples {
 
 const input = {
   toolId: z.string().describe("tool id"),
-  toolVersion: z.string().optional().describe("specific tool version to fetch test cases for"),
+  toolVersion: z.string().nullish().describe("specific tool version to fetch test cases for"),
 };
 type In = { toolId: string; toolVersion?: string };
 
@@ -42,6 +42,16 @@ export const getToolRunExamplesOp: Operation<typeof input, ToolRunExamples> = {
     message: `Retrieved ${out.test_cases.length} test cases for tool '${i.toolId}'`,
     count: out.test_cases.length,
   }),
+  // server.py, get_tool_run_examples: the version joins the context only when one was asked
+  // for, which is what `if tool_version:` does there.
+  failure: {
+    shape: "bioblend-get",
+    action: "Get tool run examples",
+    context: (i) => ({
+      tool_id: i.toolId,
+      ...(i.toolVersion ? { tool_version: i.toolVersion } : {}),
+    }),
+  },
 };
 
 register(getToolRunExamplesOp as AnyOperation);

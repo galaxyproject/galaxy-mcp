@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from typing import Any
+from typing import Any, cast
 
 from fastmcp import Client
 
@@ -89,3 +89,18 @@ class LiveMCPSession:
         if not isinstance(payload, dict):
             raise ToolCallError(f"{tool_name} returned no structured content: {result.content!r}")
         return GalaxyResult(**payload)
+
+    def wire_result(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        """The tool result exactly as the wire carries it, a failure included.
+
+        `call()` above rebuilds a GalaxyResult and so can only describe a success: FastMCP
+        turns a raised exception into a protocol-level error result with no structured
+        content at all. This returns the `CallToolResult` the client session received,
+        dumped the way the MCP SDK dumps it onto the wire -- by alias, in JSON mode, with
+        None-valued fields left out -- so what a caller actually reads can be written down.
+        """
+        loop, client = self._require_open()
+        result = loop.run_until_complete(client.call_tool_mcp(tool_name, arguments))
+        return cast(
+            dict[str, Any], result.model_dump(by_alias=True, mode="json", exclude_none=True)
+        )

@@ -86,9 +86,17 @@ async function rawCall(params: Record<string, unknown>) {
 const rawText = (reply: { result?: { content?: Array<{ text?: string }> } }): string =>
   (reply.result?.content ?? []).map((c) => c.text ?? "").join("");
 
-/** The body of the one request that went to `route`. */
+/**
+ * The body of the one request that went to `route`.
+ *
+ * An exact path first, because a tool that reads a schema before it runs asks
+ * `/api/tools/<id>` on the way to posting `/api/tools`, and a substring match would hand back
+ * the GET. `/invocations` is a path suffix rather than a whole path, so a substring match is
+ * still the fallback.
+ */
 function postedTo(route: string): string {
-  const hit = sent.find((r) => r.url.includes(route));
+  const hit =
+    sent.find((r) => new URL(r.url).pathname === route) ?? sent.find((r) => r.url.includes(route));
   expect(hit, `nothing was sent to ${route}; asked for ${JSON.stringify(sent.map((s) => s.url))}`).toBeDefined();
   return hit!.body;
 }

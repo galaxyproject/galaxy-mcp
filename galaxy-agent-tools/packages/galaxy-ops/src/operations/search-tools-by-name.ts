@@ -75,6 +75,8 @@ export const searchToolsByNameOp: Operation<typeof input, Paged<ToolListItem>> =
     count: out.items.length,
     pagination: wirePagination(out.pagination),
   }),
+  // server.py, search_tools_by_name: format_error over a bioblend GET of the toolbox.
+  failure: { shape: "bioblend-get", action: "Search tools", context: (i) => ({ query: i.query }) },
 };
 
 register(searchToolsByNameOp as AnyOperation);

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
-import { classifyHttp } from "../errors";
+import { httpError } from "../errors";
 import { paginate, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
@@ -108,7 +108,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<HistoryContents> {
   const { data, error, response } = await ctx.client.GET("/api/histories/{history_id}/contents", {
     params: { path: { history_id: i.historyId } },
   });
-  if (error || !data) throw classifyHttp(response.status, error);
+  if (error || !data) throw httpError(response, error);
 
   const all = (Array.isArray(data) ? (data as Sortable[]) : []).map(withContentType);
   let matching = all;
@@ -143,6 +143,16 @@ export const getHistoryContentsOp: Operation<typeof input, HistoryContents> = {
     count: out.items.length,
     pagination: wirePagination(out.pagination),
   }),
+  // server.py, get_history_contents: the same pair of sentences as get_history_details.
+  failure: {
+    shape: "bioblend-get",
+    action: "Get history contents",
+    context: (i) => ({ history_id: i.historyId }),
+    sentence: (_text, status, i) =>
+      status === 404
+        ? `History ID '${i.historyId}' not found. Make sure to pass a valid history ID string.`
+        : undefined,
+  },
 };
 
 register(getHistoryContentsOp as AnyOperation);

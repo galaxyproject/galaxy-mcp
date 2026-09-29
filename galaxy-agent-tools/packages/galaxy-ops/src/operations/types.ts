@@ -1,6 +1,7 @@
 import type { z, ZodRawShape, ZodObject } from "zod";
 import type { EnvelopeFacts, GalaxyContext } from "../context";
 import type { GalaxyErrorKind } from "../errors";
+import type { HttpFailureFacts, PyRequestShape } from "../python-failure";
 
 export type OperationDomain =
   | "connection"
@@ -93,6 +94,35 @@ export interface Operation<Shape extends ZodRawShape, O> {
    * envelope-facts.ts -- and is absent when a caller projects a value by hand.
    */
   project?(output: O, input: InputOf<Shape>, facts?: EnvelopeFacts): Projection;
+  /** How a failed request is worded. See FailureContract. */
+  failure?: FailureContract<InputOf<Shape>>;
+}
+
+/**
+ * How this op's HTTP failures are worded, so a surface says what the Python server says.
+ *
+ * Only an HTTP failure consults this. A refusal of our own already carries its whole
+ * sentence -- that is the same split the other server has, where a raised ValueError goes
+ * out as it is and a caught client exception goes through `format_error`.
+ *
+ * `shape` is the one fact that cannot be read off the reply: the Python tool's wording
+ * depends on which client made the request (bioblend's GET retries and quotes the body
+ * twice; a raw requests call names the URL), and two ops that look identical here can
+ * differ there. A function of the facts is for an op whose requests do not agree -- there
+ * is one, and it asks two APIs through two clients.
+ *
+ * `action` and `context` are `format_error`'s two arguments, the context in the key order
+ * Python renders it in. `sentence` is for a tool that words its own failure instead: it
+ * returns the whole thing, or undefined to fall through to `format_error` -- which is how a
+ * tool with a sentence for a 404 and nothing to say about the rest is written. With neither
+ * an action nor a sentence, the client library's text goes out unwrapped, which is what a
+ * tool with no try block around its request does.
+ */
+export interface FailureContract<Input> {
+  shape: PyRequestShape | ((facts: HttpFailureFacts) => PyRequestShape);
+  action?: string;
+  context?(input: Input): Record<string, unknown>;
+  sentence?(text: string, status: number | null, input: Input): string | undefined;
 }
 
 /** What `project` contributes to the envelope. */

@@ -7,10 +7,17 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+import requests
 
 from galaxy_mcp.server import _shape_biocontainer_recommendation
 
-from .test_helpers import galaxy_state, recommend_biocontainer_fn, run_user_tool_fn
+from .test_helpers import (
+    delete_user_tool_fn,
+    galaxy_state,
+    list_user_tools_fn,
+    recommend_biocontainer_fn,
+    run_user_tool_fn,
+)
 
 
 class TestRunUserTool:
@@ -90,6 +97,69 @@ class TestRunUserTool:
         with patch.dict(galaxy_state, {"connected": False}):
             with pytest.raises(Exception):
                 run_user_tool_fn("hist_1", "abc", {})
+
+    def test_run_user_tool_reports_a_refused_lookup(self, mock_galaxy_instance):
+        """A lookup Galaxy refused is reported as a refusal, not as a missing tool.
+
+        The raw GET used to go unchecked, so an error body was read as a tool record and the
+        answer was "No user-defined tool found with UUID ..." -- which sends a caller looking
+        for a tool that may well exist.
+        """
+        gi = self._gi(mock_galaxy_instance)
+        gi.make_get_request.return_value.raise_for_status.side_effect = requests.HTTPError(
+            "403 Client Error: Forbidden for url: http://localhost:8080/api/unprivileged_tools/abc"
+        )
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": gi}):
+            with pytest.raises(ValueError, match="403 Client Error"):
+                run_user_tool_fn("hist_1", "abc", {})
+        gi.make_post_request.assert_not_called()
+
+
+class TestUserToolStatusChecks:
+    """The two other raw requests over the unprivileged-tools API check their status too."""
+
+    def test_list_user_tools_reports_a_refused_index(self, mock_galaxy_instance):
+        """A 500 used to be sliced as a page, and reported as 'slice(0, 25, None)'."""
+        gi = mock_galaxy_instance
+        gi.url = "http://localhost:8080/api"
+        gi.make_get_request.return_value.raise_for_status.side_effect = requests.HTTPError(
+            "500 Server Error: Internal Server Error for url: http://localhost:8080/api/"
+            "unprivileged_tools?active=true"
+        )
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": gi}):
+            with pytest.raises(ValueError, match="List user tools failed: 500 Server Error"):
+                list_user_tools_fn()
+
+    def test_delete_user_tool_reports_a_refused_delete(self, mock_galaxy_instance):
+        """A DELETE that failed is a failure.
+
+        Without the status check this answered "Deactivated user-defined tool '<uuid>'" with
+        `deactivated: True` for a tool nobody deactivated, which is the one answer a caller
+        cannot recover from.
+        """
+        gi = mock_galaxy_instance
+        gi.url = "http://localhost:8080/api"
+        gi.make_delete_request.return_value.raise_for_status.side_effect = requests.HTTPError(
+            "404 Client Error: Not Found for url: http://localhost:8080/api/unprivileged_tools/abc"
+        )
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": gi}):
+            with pytest.raises(ValueError, match="Delete user tool failed: 404 Client Error"):
+                delete_user_tool_fn("abc")
+
+    def test_delete_user_tool_reports_a_delete_that_worked(self, mock_galaxy_instance):
+        """And a 2xx still answers the way it did."""
+        gi = mock_galaxy_instance
+        gi.url = "http://localhost:8080/api"
+        gi.make_delete_request.return_value.raise_for_status.return_value = None
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": gi}):
+            result = delete_user_tool_fn("abc")
+
+        assert result.success is True
+        assert result.data == {"uuid": "abc", "deactivated": True}
 
 
 def _fake_recommend_tree(recommend, verify):

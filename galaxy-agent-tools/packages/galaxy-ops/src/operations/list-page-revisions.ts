@@ -32,6 +32,13 @@ export const listPageRevisionsOp: Operation<typeof input, PageRevisionSummary[]>
     message: `Retrieved ${revs.length} revisions for page '${i.pageId}'`,
     count: revs.length,
   }),
+  // server.py, list_page_revisions: a raw GET plus raise_for_status, with sort_desc on the
+  // query string -- so the URL in the sentence carries it.
+  failure: {
+    shape: "raise-for-status",
+    action: "List page revisions",
+    context: (i) => ({ page_id: i.pageId }),
+  },
 };
 
 register(listPageRevisionsOp as AnyOperation);

@@ -1,0 +1,10 @@
+{
+  "data": {
+    "total_disk_usage": 0,
+    "quota_percent": null
+  },
+  "success": true,
+  "message": "Retrieved user info for 'unknown'",
+  "count": null,
+  "pagination": null
+}

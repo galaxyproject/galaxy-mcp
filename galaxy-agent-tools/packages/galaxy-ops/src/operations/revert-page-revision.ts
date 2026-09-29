@@ -41,6 +41,12 @@ export const revertPageRevisionOp: Operation<typeof input, PageRevisionDetails> 
   // server.py, revert_page_revision: the page and the revision that was restored.
   // The new revision Galaxy wrote is in data, with its own id.
   project: (_rev, i) => ({ message: `Reverted page '${i.pageId}' to revision '${i.revisionId}'` }),
+  // server.py, revert_page_revision: a bioblend write.
+  failure: {
+    shape: "bioblend-write",
+    action: "Revert page revision",
+    context: (i) => ({ page_id: i.pageId, revision_id: i.revisionId }),
+  },
 };
 
 register(revertPageRevisionOp as AnyOperation);

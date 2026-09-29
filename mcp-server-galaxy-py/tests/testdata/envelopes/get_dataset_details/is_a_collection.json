@@ -1,0 +1,14 @@
+{
+  "$comment": "A failed tool call from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `result` is the CallToolResult the MCP wire carries, dumped the way the SDK dumps it (by alias, JSON mode, None-valued fields left out). `sentence` is the same text with FastMCP's own wrapper removed, which is what the tool itself said.",
+  "outcome": "failure",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Error calling tool 'get_dataset_details': The ID 'c0001' is a dataset collection, not a dataset. Collection name: 'My collection'. Use get_collection_details(collection_id) to inspect dataset collections and their members."
+      }
+    ],
+    "isError": true
+  },
+  "sentence": "The ID 'c0001' is a dataset collection, not a dataset. Collection name: 'My collection'. Use get_collection_details(collection_id) to inspect dataset collections and their members."
+}

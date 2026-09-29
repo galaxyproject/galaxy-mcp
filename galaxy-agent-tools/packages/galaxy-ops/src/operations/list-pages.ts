@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
-import { classifyHttp } from "../errors";
+import { httpError } from "../errors";
 import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import { paginationInfo, wirePagination } from "./pagination";
 import type { PageSummary } from "./pages-common";
@@ -10,16 +10,16 @@ import type { AnyOperation, InputOf, Operation } from "./types";
 const DEFAULT_LIMIT = 100;
 
 const input = {
-  historyId: z.string().min(1).optional().describe("Encoded history id; lists only that history's notebooks"),
-  search: z.string().optional().describe("Freetext filter over title, slug, tag and owner"),
+  historyId: z.string().min(1).nullish().describe("Encoded history id; lists only that history's notebooks"),
+  search: z.string().nullish().describe("Freetext filter over title, slug, tag and owner"),
   limit: z.number().int().default(DEFAULT_LIMIT).describe(`Max pages to return (default ${DEFAULT_LIMIT})`),
   offset: z.number().int().default(0).describe("Skip the first N"),
   showPublished: z.boolean().default(false).describe("Also include pages published by other users (default false)"),
   showShared: z.boolean().default(false).describe("Also include pages shared with the user (default false)"),
 };
 type In = {
-  historyId?: string;
-  search?: string;
+  historyId?: string | null;
+  search?: string | null;
   limit?: number;
   offset?: number;
   showPublished?: boolean;
@@ -52,11 +52,11 @@ async function run(i: In, ctx: GalaxyContext): Promise<PageSummary[]> {
         // its own cast. That is belt and braces rather than a guard: openapi-fetch infers the
         // init generically, so an unknown query key compiles either way. The VALUES above are
         // checked.
-        ...(i.historyId === undefined ? {} : ({ history_id: i.historyId } as never)),
+        ...(i.historyId == null ? {} : ({ history_id: i.historyId } as never)),
       },
     },
   });
-  if (error || !data) throw classifyHttp(response.status, error);
+  if (error || !data) throw httpError(response, error);
   const pages = data as PageSummary[];
   // Number(null) is 0, which would report an empty server rather than an absent
   // header, so the missing case is checked before the parse. No header means the
@@ -97,6 +97,13 @@ export const listPagesOp: Operation<typeof input, PageSummary[]> = {
       }),
     ),
   }),
+  // server.py, list_pages: a raw GET plus raise_for_status, so requests names the URL --
+  // which means the two sides have to have asked Galaxy the same question, query and all.
+  failure: {
+    shape: "raise-for-status",
+    action: "List pages",
+    context: (i) => ({ history_id: i.historyId }),
+  },
 };
 
 register(listPagesOp as AnyOperation);

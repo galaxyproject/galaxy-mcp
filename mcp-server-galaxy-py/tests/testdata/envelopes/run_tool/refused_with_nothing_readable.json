@@ -1,0 +1,14 @@
+{
+  "$comment": "A failed tool call from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `result` is the CallToolResult the MCP wire carries, dumped the way the SDK dumps it (by alias, JSON mode, None-valued fields left out). `sentence` is the same text with FastMCP's own wrapper removed, which is what the tool itself said.",
+  "outcome": "failure",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Error calling tool 'run_tool': Run tool failed: Unexpected HTTP status code: 400: {\"err_msg\": \"History is not accessible by user\", \"err_code\": 403002}. Context: history_id=h0001, tool_id=fastqc, inputs={'input_file': 'not-a-dataset'}\n\nThis most likely means the `inputs` you provided do not match the parameter schema for tool 'fastqc'. It is not a sign that the MCP or the Galaxy version is incompatible. (Galaxy sometimes reports input problems as a misleading \"Required parameter(s) kwd not provided in request\" error -- ignore that wording.)\n\nCall get_tool_details(tool_id, io_details=True) (or get_tool_input_template(tool_id)) to see the parameter schema, then rebuild `inputs` and retry."
+      }
+    ],
+    "isError": true
+  },
+  "sentence": "Run tool failed: Unexpected HTTP status code: 400: {\"err_msg\": \"History is not accessible by user\", \"err_code\": 403002}. Context: history_id=h0001, tool_id=fastqc, inputs={'input_file': 'not-a-dataset'}\n\nThis most likely means the `inputs` you provided do not match the parameter schema for tool 'fastqc'. It is not a sign that the MCP or the Galaxy version is incompatible. (Galaxy sometimes reports input problems as a misleading \"Required parameter(s) kwd not provided in request\" error -- ignore that wording.)\n\nCall get_tool_details(tool_id, io_details=True) (or get_tool_input_template(tool_id)) to see the parameter schema, then rebuild `inputs` and retry."
+}

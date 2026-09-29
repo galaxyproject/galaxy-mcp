@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- The three raw requests over the unprivileged-tools API now check the status Galaxy answered
+  with, as every other raw request in the server already did. `delete_user_tool` reported
+  `deactivated: true` for a DELETE that 404'd or 403'd, `list_user_tools` sliced an error body
+  as a page and reported the result as `List user tools failed: slice(0, 25, None)`, and
+  `run_user_tool` read one as a tool record and answered "No user-defined tool found with
+  UUID ...". All three now fail with the sentence `format_error` builds for a refused request.
+
 ## [1.4.0] - 2026-04-22
 
 ### Added

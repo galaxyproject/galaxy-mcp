@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { PostJson } from "../bindings";
 import type { GalaxyContext } from "../context";
-import { classifyHttp } from "../errors";
+import { httpError } from "../errors";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
@@ -19,7 +19,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<CreatedHistory> {
     bodySerializer: (b: unknown) => new URLSearchParams(b as Record<string, string>).toString(),
     headers: { "content-type": "application/x-www-form-urlencoded" },
   });
-  if (error || !data) throw classifyHttp(response.status, error);
+  if (error || !data) throw httpError(response, error);
   return data as CreatedHistory;
 }
 
@@ -34,6 +34,9 @@ export const createHistoryOp: Operation<typeof input, CreatedHistory> = {
   // (create_history): Galaxy is free to hand back a different one, and the caller
   // reading this line is being told what it requested went through.
   project: (_h, i) => ({ message: `Created history '${i.historyName}'` }),
+  // server.py, create_history: alone among the tools, it has no try block at all, so
+  // bioblend's own text is the whole sentence -- no action, no hint, no context.
+  failure: { shape: "bioblend-write" },
 };
 
 register(createHistoryOp as AnyOperation);

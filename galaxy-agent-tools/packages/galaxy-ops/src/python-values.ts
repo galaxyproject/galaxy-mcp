@@ -57,3 +57,21 @@ export function pyStr(value: unknown): string {
   if (typeof value === "object") return pyReprValue(value);
   return String(value);
 }
+
+/**
+ * What `type(value).__name__` says about a value that arrived as JSON.
+ *
+ * A refusal that names the type it got has to name it the way the other server names it:
+ * `got int: 3`, not `got number: 3`. The one JSON value two Python types share is a number,
+ * and `JSON.parse` has already lost which it was -- a whole number reads as `int`, which is
+ * what a container field mistyped as a number almost always is, and 3.5 reads as `float`.
+ */
+export function pyTypeName(value: unknown): string {
+  if (value === null || value === undefined) return "NoneType";
+  if (typeof value === "string") return "str";
+  if (typeof value === "boolean") return "bool";
+  if (typeof value === "number") return Number.isInteger(value) ? "int" : "float";
+  if (Array.isArray(value)) return "list";
+  if (typeof value === "object") return "dict";
+  return typeof value;
+}

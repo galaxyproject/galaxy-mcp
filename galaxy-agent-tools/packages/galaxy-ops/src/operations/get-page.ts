@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
-import { classifyHttp } from "../errors";
+import { httpError } from "../errors";
 import { stripRendered, type PageDetail } from "./pages-common";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
@@ -18,7 +18,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<PageDetail> {
   const { data, error, response } = await ctx.client.GET("/api/pages/{id}", {
     params: { path: { id: i.pageId } },
   });
-  if (error || !data) throw classifyHttp(response.status, error);
+  if (error || !data) throw httpError(response, error);
   return stripRendered(data as PageDetail, i.includeRendered ?? false);
 }
 
@@ -32,6 +32,8 @@ export const getPageOp: Operation<typeof input, PageDetail> = {
   run,
   // server.py, get_page: the id that was asked for. The title is in data.
   project: (_p, i) => ({ message: `Retrieved page '${i.pageId}'` }),
+  // server.py, get_page: a raw GET plus raise_for_status.
+  failure: { shape: "raise-for-status", action: "Get page", context: (i) => ({ page_id: i.pageId }) },
 };
 
 register(getPageOp as AnyOperation);

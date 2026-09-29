@@ -103,10 +103,10 @@ async function run(i: In, ctx: GalaxyContext): Promise<ToolPanelResult> {
   if (i.sectionId != null) {
     const section = nodes.find((n) => isSection(n) && n.id === i.sectionId);
     if (!section) {
+      // server.py, get_tool_panel: raised after the request, so it is not wrapped.
       throw new GalaxyNotFoundError(
-        `no tool panel section with id '${i.sectionId}'; ` +
-          "call get_tool_panel with no arguments and use the id of an entry whose type is " +
-          "'section' (an entry of type 'tool' is a tool, not a section)",
+        `Tool panel section '${i.sectionId}' not found. ` +
+          "Call get_tool_panel() with no arguments to list the available section ids.",
       );
     }
     const tools = (Array.isArray(section.elems) ? section.elems : []).filter(isPanelTool).map(slim);
@@ -195,6 +195,13 @@ export const getToolPanelOp: Operation<typeof input, ToolPanelResult> = {
           count: out.tools.length,
           pagination: wirePagination(out.pagination),
         },
+  // server.py, get_tool_panel: only the panel fetch is wrapped there, and the section that
+  // is not in it is refused after the request rather than through format_error.
+  failure: {
+    shape: "bioblend-get",
+    action: "Get tool panel",
+    context: (i) => ({ section_id: i.sectionId }),
+  },
 };
 
 register(getToolPanelOp as AnyOperation);

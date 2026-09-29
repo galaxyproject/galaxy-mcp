@@ -180,6 +180,12 @@ export const searchToolsByKeywordsOp: Operation<typeof input, Paged<ToolKeywordM
     count: out.items.length,
     pagination: wirePagination(out.pagination),
   }),
+  // server.py, search_tools_by_keywords: its own sentence, not format_error's, so no hint
+  // and no context. The per-tool detail fetches are best-effort on both sides.
+  failure: {
+    shape: "bioblend-get",
+    sentence: (text) => `Failed to search tools by keywords: ${text}`,
+  },
 };
 
 register(searchToolsByKeywordsOp as AnyOperation);

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
-import { classifyHttp } from "../errors";
+import { httpError } from "../errors";
 import { paginate, shrinkPaged, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
@@ -40,7 +40,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<WorkflowItem>> {
     // default is an omitted parameter rather than an explicit false.
     params: { query: { show_published: i.published ? true : null } },
   });
-  if (error || !data) throw classifyHttp(response.status, error);
+  if (error || !data) throw httpError(response, error);
   // A 200 carrying something other than a list is Galaxy breaking its contract.
   const all = (Array.isArray(data) ? data : []) as WorkflowItem[];
   // Filter then window, by exact name, which is bioblend's `[w for w in workflows
@@ -69,6 +69,12 @@ export const listWorkflowsOp: Operation<typeof input, Paged<WorkflowItem>> = {
     count: out.items.length,
     pagination: wirePagination(out.pagination),
   }),
+  // server.py, list_workflows.
+  failure: {
+    shape: "bioblend-get",
+    action: "List workflows",
+    context: (i) => ({ name: i.name, published: i.published ?? false }),
+  },
 };
 
 register(listWorkflowsOp as AnyOperation);

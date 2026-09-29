@@ -4552,6 +4552,10 @@ def list_user_tools(active: bool = True, limit: int = 25, offset: int = 0) -> Ga
     try:
         url = f"{gi.url}/unprivileged_tools?active={str(active).lower()}"
         response = gi.make_get_request(url)
+        # Every other raw request in this file checks the status; this one did not, and a
+        # Galaxy that answered 500 got as far as slicing an error dict as a page -- which
+        # reported the failure as "List user tools failed: slice(0, 25, None)".
+        response.raise_for_status()
         tools = response.json()
         # The unprivileged_tools index takes no limit/offset, so slice here.
         return _budgeted_page(
@@ -4586,7 +4590,13 @@ def delete_user_tool(uuid: str) -> GalaxyResult:
 
     try:
         url = f"{gi.url}/unprivileged_tools/{uuid}"
-        gi.make_delete_request(url)
+        # The status is the only thing this request answers with that matters. Without this
+        # check a 404 or a 403 was reported as "Deactivated user-defined tool '<uuid>'":
+        # `deactivated: True` for a tool that is still there, which is the one answer a
+        # caller cannot recover from. bioblend's own _delete raises on a non-2xx; this
+        # calls make_delete_request directly, so the check has to be here.
+        response = gi.make_delete_request(url)
+        response.raise_for_status()
         return GalaxyResult(
             data={"uuid": uuid, "deactivated": True},
             success=True,
@@ -4641,6 +4651,9 @@ def run_user_tool(history_id: str, tool_uuid: str, inputs: dict[str, Any]) -> Ga
     try:
         url = f"{gi.url}/unprivileged_tools/{tool_uuid}"
         response = gi.make_get_request(url)
+        # Same omission as list_user_tools had: an error body read as a tool record answers
+        # "No user-defined tool found with UUID ..." for a lookup that never succeeded.
+        response.raise_for_status()
         tool_info = response.json()
         tool_id = tool_info.get("tool_id")
         if not tool_id:

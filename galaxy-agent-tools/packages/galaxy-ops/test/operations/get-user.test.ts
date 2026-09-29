@@ -37,10 +37,18 @@ describe("get_user", () => {
     await expect(getUser({}, ctxWith(client))).rejects.toBeInstanceOf(GalaxyAuthError);
   });
 
-  it("throws GalaxyAuthError on an anonymous (200) response with no id", async () => {
+  // The other server answers an anonymous reply rather than refusing it: the record goes out
+  // as it arrived, and the sentence names the user "unknown" -- `dict.get("username",
+  // "unknown")`. This used to raise an auth error, which is one surface refusing what the
+  // other returns.
+  it("answers an anonymous (200) response instead of refusing it", async () => {
     const client = mockClient({
       GET: () => ({ data: { total_disk_usage: 0, quota_percent: null }, response: { status: 200 } }),
     });
-    await expect(getUser({}, ctxWith(client))).rejects.toBeInstanceOf(GalaxyAuthError);
+    const out = await getUser({}, ctxWith(client));
+    expect(out).toEqual({ total_disk_usage: 0, quota_percent: null });
+    expect(getUserOp.project?.(out, {})).toEqual({
+      message: "Retrieved user info for 'unknown'",
+    });
   });
 });

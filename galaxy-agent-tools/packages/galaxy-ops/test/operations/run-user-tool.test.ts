@@ -87,7 +87,10 @@ describe("run_user_tool", () => {
     // do not carry, so it rides the per-call facts collector runWithEnvelope sets up.
     const client = mockClient({
       GET: () => ({
-        data: { tool_id: "row_filter", representation: { version: "1.0" } },
+        data: {
+          tool_id: "row_filter",
+          representation: { version: "1.0", inputs: [{ name: "in", type: "data" }] },
+        },
         response: { status: 200 },
       }),
       POST: () => ({ data: { outputs: [], jobs: [] }, response: { status: 200 } }),
@@ -99,6 +102,27 @@ describe("run_user_tool", () => {
     );
     expect(out.message).toBe(
       `Started user tool 'row_filter' (UUID: ${TOOL_UUID}) in history '${HISTORY_ID}'`,
+    );
+  });
+
+  // A representation with no parameter list is not checkable, and the other server says so
+  // in the success message rather than implying the inputs were vetted.
+  it("says the inputs went unchecked when the representation carries no parameter list", async () => {
+    const client = mockClient({
+      GET: () => ({
+        data: { tool_id: "row_filter", representation: { version: "1.0" } },
+        response: { status: 200 },
+      }),
+      POST: () => ({ data: { outputs: [], jobs: [] }, response: { status: 200 } }),
+    });
+    const out = await runWithEnvelope(
+      runUserToolOp as never,
+      { historyId: HISTORY_ID, toolUuid: TOOL_UUID, inputs: {} },
+      ctxWith(client),
+    );
+    expect(out.message).toBe(
+      `Started user tool 'row_filter' (UUID: ${TOOL_UUID}) in history '${HISTORY_ID}' ` +
+        "(inputs not pre-checked: the definition of 'row_filter' arrived without a parameter list)",
     );
   });
 
@@ -118,6 +142,39 @@ describe("run_user_tool", () => {
       runUserTool({ historyId: HISTORY_ID, toolUuid: TOOL_UUID, inputs: {} }, ctxWith(client)),
     ).rejects.toBeInstanceOf(GalaxyNotFoundError);
     expect(postCalled).toBe(false);
+  });
+
+  /**
+   * A refused user-tool run gets the input explanation, whatever the reply happens to say.
+   *
+   * The other server's run_user_tool has no credentials branch at all: a 400 goes straight
+   * to the enriched input sentence, and the word "credentials" in Galaxy's reply changes
+   * nothing. The branch is run_tool's, and it was firing for both -- so a user-tool run
+   * refused with "Invalid credentials" was told to configure stored credentials for a tool
+   * that has no credentials path.
+   */
+  it("explains the inputs when Galaxy's refusal mentions credentials, as the other server does", async () => {
+    const client = mockClient({
+      GET: () => ({
+        data: {
+          tool_id: "row_filter",
+          representation: { version: "1.0", inputs: [{ name: "in", type: "data" }] },
+        },
+        response: { status: 200 },
+      }),
+      POST: () => ({ error: { err_msg: "Invalid credentials" }, response: { status: 400 } }),
+    });
+    const out = await runWithEnvelope(
+      runUserToolOp as never,
+      { historyId: HISTORY_ID, toolUuid: TOOL_UUID, inputs: INPUTS },
+      ctxWith(client),
+    );
+    expect(out.success).toBe(false);
+    expect(out.message).toContain("Run user tool failed:");
+    expect(out.message).toContain("do not match the parameter schema for tool 'row_filter'");
+    expect(out.message).not.toContain("Run tool failed:");
+    expect(out.message).not.toContain("credentials were found for tool");
+    expect(out.message).not.toContain("stored credentials");
   });
 
   it("throws when GET fails", async () => {

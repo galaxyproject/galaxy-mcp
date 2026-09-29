@@ -3,6 +3,8 @@ import type { GalaxyContext } from "../context";
 import { GalaxyNotFoundError } from "../errors";
 import { jsonObject } from "../json-object";
 import { legacyGet, legacyPost } from "../legacy";
+import { enrichedRunFailure, USER_TOOL_SHAPE_HINT } from "../tool-input-error";
+import { preflightToolInputs } from "../tool-preflight";
 import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
@@ -36,6 +38,14 @@ interface ToolLookup {
  */
 const userToolId = envelopeFact<string>("run_user_tool.tool_id");
 
+/**
+ * Why the inputs were not checked against the representation, when they were not.
+ *
+ * This tool holds the definition already, so nothing is fetched: either the representation
+ * carries a parameter list or it does not, and the second answer is the clause.
+ */
+const uncheckedInputs = envelopeFact<string>("run_user_tool.unchecked_inputs");
+
 async function run(i: In, ctx: GalaxyContext): Promise<UserToolRun> {
   // Step 1: look up tool_id and version from the UDT record.
   const toolInfo = await legacyGet<ToolLookup>(ctx, "/api/unprivileged_tools/{tool_uuid}", {
@@ -50,16 +60,39 @@ async function run(i: In, ctx: GalaxyContext): Promise<UserToolRun> {
 
   const toolVersion = toolInfo.representation?.version ?? "0.1.0";
 
-  // Step 2: run via POST /api/tools (the synchronous UDT path, off-schema -> legacyPost).
-  return legacyPost<UserToolRun>(ctx, "/api/tools", {
-    body: {
-      history_id: i.historyId,
-      tool_uuid: i.toolUuid,
-      tool_version: toolVersion,
-      inputs: i.inputs,
-      input_format: "legacy",
-    },
+  // The definition is in hand, so the check costs nothing and no request goes out for it.
+  // An empty representation is a schema with no parameter list, which is the clause rather
+  // than a reason to go looking for one in the toolbox -- a user tool is not in there.
+  const unchecked = await preflightToolInputs(ctx, toolInfo.tool_id, i.inputs, {
+    schema: (toolInfo.representation ?? {}) as Record<string, unknown>,
   });
+  if (unchecked !== null) recordFact(ctx, uncheckedInputs, unchecked);
+
+  // Step 2: run via POST /api/tools (the synchronous UDT path, off-schema -> legacyPost).
+  try {
+    return await legacyPost<UserToolRun>(ctx, "/api/tools", {
+      body: {
+        history_id: i.historyId,
+        tool_uuid: i.toolUuid,
+        tool_version: toolVersion,
+        inputs: i.inputs,
+        input_format: "legacy",
+      },
+    });
+  } catch (err) {
+    // The representation is the schema to explain the refusal with -- this tool is not in
+    // the toolbox, so a lookup by id would 404 and the message would come back empty. No
+    // credentials branch: the other server's user-tool run has no credentials handling.
+    throw await enrichedRunFailure(ctx, err, {
+      action: "Run user tool",
+      toolId: toolInfo.tool_id,
+      historyId: i.historyId,
+      inputs: i.inputs,
+      credentials: null,
+      schema: (toolInfo.representation ?? null) as Record<string, unknown> | null,
+      shapeHint: USER_TOOL_SHAPE_HINT,
+    });
+  }
 }
 
 export const runUserToolOp: Operation<typeof input, UserToolRun> = {
@@ -72,11 +105,22 @@ export const runUserToolOp: Operation<typeof input, UserToolRun> = {
   // server.py, run_user_tool. The tool_id is the one thing in it that the arguments
   // do not carry, and run() refuses a record without one -- so an empty name here
   // means nobody collected the fact, not that Galaxy sent no tool_id.
-  project: (_out, i, facts) => ({
-    message:
-      `Started user tool '${readFact(facts, userToolId) ?? ""}' (UUID: ${i.toolUuid}) ` +
-      `in history '${i.historyId}'`,
-  }),
+  project: (_out, i, facts) => {
+    const unchecked = readFact(facts, uncheckedInputs);
+    return {
+      message:
+        `Started user tool '${readFact(facts, userToolId) ?? ""}' (UUID: ${i.toolUuid}) ` +
+        `in history '${i.historyId}'` +
+        (unchecked ? ` (inputs not pre-checked: ${unchecked})` : ""),
+    };
+  },
+  // server.py, run_user_tool: the lookup is a raw GET it checks itself and the run is a
+  // bioblend write, so which sentence a caller reads depends on which of the two failed.
+  failure: {
+    shape: (facts) => (facts.method === "GET" ? "raise-for-status" : "bioblend-write"),
+    action: "Run user tool",
+    context: (i) => ({ history_id: i.historyId, tool_uuid: i.toolUuid }),
+  },
 };
 
 register(runUserToolOp as AnyOperation);

@@ -5,6 +5,7 @@
  * helpers used by the IWC ops.  This is NOT an op -- it carries no
  * registration and is not exported from index.ts.
  */
+import { GalaxyConnectionError } from "./errors";
 import { pySplitWhitespace, pyStrip } from "./python-str";
 import { stepsInOrder } from "./workflow-steps";
 
@@ -77,7 +78,24 @@ export async function fetchIwcWorkflows(): Promise<IwcWorkflow[]> {
   if (_cached !== null) return _cached;
 
   const resp = await globalThis.fetch(MANIFEST_URL);
-  if (!resp.ok) throw new Error(`IWC manifest fetch failed: ${resp.status} ${resp.statusText}`);
+  if (!resp.ok) {
+    // The other server fetches this with requests and checks it with raise_for_status, so
+    // every tool that reads the manifest quotes requests' own text for a refusal. The facts
+    // travel with the error and each op's own sentence wraps them -- this fetch does not go
+    // through the Galaxy client, so nothing else would have recorded them.
+    const failure = new GalaxyConnectionError(
+      `IWC manifest fetch failed: ${resp.status} ${resp.statusText}`,
+      resp.status,
+    );
+    failure.http = {
+      status: resp.status,
+      method: "GET",
+      url: MANIFEST_URL,
+      bodyText: await resp.text(),
+      reason: resp.statusText,
+    };
+    throw failure;
+  }
   const manifest = (await resp.json()) as Array<{ workflows?: unknown[] }>;
 
   const all: IwcWorkflow[] = [];

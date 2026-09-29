@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
-import { classifyHttp } from "../errors";
+import { httpError } from "../errors";
 import { pyGet, pyStr } from "../python-values";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
@@ -18,7 +18,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<WorkflowDetail> {
   const { data, error, response } = await ctx.client.GET("/api/workflows/{workflow_id}", {
     params: { path: { workflow_id: i.workflowId }, query: { version: i.version ?? null } },
   });
-  if (error || !data) throw classifyHttp(response.status, error);
+  if (error || !data) throw httpError(response, error);
   return data as WorkflowDetail;
 }
 
@@ -33,6 +33,13 @@ export const getWorkflowDetailsOp: Operation<typeof input, WorkflowDetail> = {
   project: (w, i) => ({
     message: `Retrieved details for workflow '${pyStr(pyGet(w as Record<string, unknown>, "name", i.workflowId))}'`,
   }),
+  // server.py, get_workflow_details: the version is in the context whether one was asked for
+  // or not, which is where the `version=None` in that sentence comes from.
+  failure: {
+    shape: "bioblend-get",
+    action: "Get workflow details",
+    context: (i) => ({ workflow_id: i.workflowId, version: i.version }),
+  },
 };
 
 register(getWorkflowDetailsOp as AnyOperation);
