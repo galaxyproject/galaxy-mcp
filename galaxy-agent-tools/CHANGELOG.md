@@ -49,9 +49,14 @@ quoted verbatim in the middle of it -- the text bioblend or requests raised.
   context dict rendered as `. Context: k=v, k2=v2`. Each operation declares its own action,
   context and shape; `python-failure.ts` writes the library prose.
 - **Breaking:** `update_history` refusing an update with no fields in it, and a tool run
-  Galaxy refuses over its inputs, now report `errorKind: "validation"` where they reported
-  `"connection"`. The CLI exit code for both changes from 69 to 64. Both are usage errors:
-  an agent told "connection" backs off and retries a call that can never succeed.
+  Galaxy refuses with a 400 -- over its inputs or over its credentials, on `run_tool` and
+  `run_user_tool` alike -- now report `errorKind: "validation"` where they reported
+  `"connection"`. The CLI exit code for those changes from 69 to 64. Both are usage errors:
+  an agent told "connection" backs off and retries a call that can never succeed. A refusal
+  on any other status keeps the kind its status was classified with, advice or no advice: a
+  500 that happens to mention credentials is still a server that fell over. The CLI replay
+  asserts the exact exit code for every one of the 65 failure cases now, rather than that it
+  is not zero.
 - **Breaking:** these sentences changed beyond the reformatting above, because one surface
   was refusing what the other answered, or refusing it somewhere else:
   - `get_user` no longer raises on the anonymous reply `/api/users/current` gives an

@@ -216,9 +216,105 @@ describe("the CLI's json envelope is the Python server's", () => {
   );
 });
 
+/**
+ * The exit code each failure case ends with.
+ *
+ * A CLI-only fact, which is why it lives here and not in the fixture the Python server
+ * writes: that server has no command line, so there is nothing over there to be in parity
+ * with. What the exit code IS, though, is the only part of a failure a script reads without
+ * parsing anything, so "non-zero" is not an assertion -- it passes equally for a usage error
+ * reported as a service outage. Every case names its number, and the guard below refuses to
+ * let a case exist without one.
+ *
+ * Read off `errorKind` through `exitCodeFor`, so a row here is a claim about the kind too.
+ * Three rows are a claim I would rather not be making: `create_user_tool`'s argument refusals
+ * are worded and raised before any request goes out, and still report `connection` -- the
+ * thing `errors.ts` argues against -- where `recommend_biocontainer`'s equally local refusal
+ * reports `validation`. That inconsistency is older than the failure envelope and not one of
+ * the things this round set out to change, so it is written down rather than quietly fixed;
+ * the table is what will make the change visible when it happens.
+ */
+const EXIT_CODES: Record<string, number> = {
+  // EX_USAGE 64 -- validation: the caller has to change something, and a retry cannot help
+  "get_dataset_details/is_a_collection": 64,
+  "get_history_contents/limit_below_one": 64,
+  "list_history_ids/history_without_an_id": 64,
+  "list_workflows/limit_above_the_ceiling": 64,
+  "recommend_biocontainer/package_entry_with_no_name": 64,
+  "run_tool/refused_over_credentials": 64,
+  "run_tool/refused_over_the_inputs": 64,
+  "run_tool/refused_with_nothing_readable": 64,
+  "run_user_tool/refused_over_the_inputs": 64,
+  "run_user_tool/refused_with_a_reply_about_credentials": 64,
+  "search_tools_by_name/negative_offset": 64,
+  "update_history/every_field_null": 64,
+  "update_history/nothing_to_update": 64,
+  // EX_NOINPUT 66 -- not_found: a 404, or an id nothing answers to
+  "cancel_workflow_invocation/not_found": 66,
+  "delete_user_tool/not_found": 66,
+  "delete_user_tool/not_found_with_an_empty_body": 66,
+  "get_collection_details/not_found": 66,
+  "get_history_details/not_found": 66,
+  "get_iwc_workflow_details/no_such_trs_id": 66,
+  "get_job_details/dataset_not_found": 66,
+  "get_job_details/no_job_made_this_dataset": 66,
+  "get_page/not_found": 66,
+  "get_page_revision/not_found": 66,
+  "get_tool_citations/not_found": 66,
+  "get_tool_input_template/not_found": 66,
+  "get_tool_panel/no_such_section": 66,
+  "get_workflow_details/not_found": 66,
+  "import_workflow_from_iwc/no_such_trs_id": 66,
+  "list_page_revisions/not_found": 66,
+  "revert_page_revision/not_found": 66,
+  "update_page/not_found": 66,
+  // EX_UNAVAILABLE 69 -- connection: the server answered something we cannot act on
+  "create_history/refused_by_galaxy": 69,
+  "create_page/refused_by_galaxy": 69,
+  "create_page/report_without_a_title": 69,
+  "create_user_tool/container_is_not_a_string": 69,
+  "create_user_tool/refused_by_galaxy": 69,
+  "create_user_tool/representation_missing_a_field": 69,
+  "create_user_tool/wrong_class": 69,
+  "get_histories/server_error": 69,
+  "get_invocations/error_body_under_a_200": 69,
+  "get_iwc_workflow_details/manifest_refused": 69,
+  "get_iwc_workflows/manifest_refused": 69,
+  "get_job_details/the_job_read_refused": 69,
+  "get_server_info/configuration_refused": 69,
+  "get_tool_run_examples/refused_without_a_hint": 69,
+  "get_workflow_details/server_error": 69,
+  "get_workflow_input_template/server_error": 69,
+  "import_workflow_from_iwc/manifest_refused": 69,
+  "import_workflow_from_iwc/refused_by_galaxy": 69,
+  "invoke_workflow/refused_by_galaxy": 69,
+  "list_history_ids/server_error": 69,
+  "list_user_tools/server_error": 69,
+  "recommend_iwc_workflows/manifest_refused": 69,
+  "search_iwc_workflows/manifest_refused": 69,
+  "search_tools_by_keywords/server_error": 69,
+  "update_history/refused_by_galaxy": 69,
+  // EX_PROTOCOL 76 -- version: the server is too old and nothing was sent
+  "create_page/galaxy_too_old": 76,
+  // EX_NOPERM 77 -- auth: a 401 or a 403
+  "delete_user_tool/permission_denied_with_an_empty_body": 77,
+  "get_collection_details/permission_denied": 77,
+  "get_history_contents/permission_denied": 77,
+  "get_tool_details/unauthorized": 77,
+  "get_user/unauthorized": 77,
+  "list_pages/permission_denied": 77,
+  "run_tool/permission_denied": 77,
+  "run_user_tool/lookup_refused": 77,
+};
+
 describe("the CLI's json failure says what the Python server's tool said", () => {
   it("has cases to check", () => {
     expect(failures.length).toBeGreaterThan(10);
+  });
+
+  it("knows the exit code for every failure case, and names no case that is gone", () => {
+    const cases = failures.map((c) => `${c.tool}/${c.case}`).sort();
+    expect(Object.keys(EXIT_CODES).sort()).toEqual(cases);
   });
 
   it.each(failures.map((c) => [`${c.tool} / ${c.case}`, c] as const))(
@@ -248,7 +344,7 @@ describe("the CLI's json failure says what the Python server's tool said", () =>
         "message",
         "success",
       ]);
-      expect(run.exitCode, "the exit code").not.toBe(0);
+      expect(run.exitCode, "the exit code").toBe(EXIT_CODES[`${entry.tool}/${entry.case}`]);
     },
   );
 });

@@ -148,7 +148,7 @@ The process exit code reflects the outcome, following `sysexits.h` conventions:
 | Code | Meaning |
 | --- | --- |
 | `0` | Success |
-| `64` | Usage error (bad flags / failed input validation) |
+| `64` | Usage error (bad flags, failed input validation, a run Galaxy refused with a 400) |
 | `66` | Not found |
 | `65` | Tool request rejected |
 | `69` | Connection / server unavailable |

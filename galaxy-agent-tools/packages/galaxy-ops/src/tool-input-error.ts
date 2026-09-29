@@ -18,6 +18,7 @@
  * `_format_tool_input_error`; tool_inputs.py: `format_input_mismatch_error`.
  */
 import type { GalaxyContext } from "./context";
+import { GalaxyValidationError } from "./errors";
 import { legacyGet } from "./legacy";
 import { pyFormatError, pyLibraryText, type HttpFailureFacts } from "./python-failure";
 import { schemaDescribesTool, schemaHasInputs } from "./tool-preflight";
@@ -231,7 +232,11 @@ export async function enrichedRunFailure(
       history_id: opts.historyId,
       tool_id: opts.toolId,
     });
-    return finished(err, credentialFailureSentence(base, opts.toolId, opts.credentials.used));
+    return finished(
+      err,
+      credentialFailureSentence(base, opts.toolId, opts.credentials.used),
+      facts.status,
+    );
   }
 
   if (facts.status !== 400) return err;
@@ -249,11 +254,30 @@ export async function enrichedRunFailure(
       shapeHint: opts.shapeHint,
       toolVersion: opts.toolVersion,
     }),
+    facts.status,
   );
 }
 
-/** The same error, carrying a sentence that is already whole. */
-function finished(err: unknown, sentence: string): unknown {
+/**
+ * A failure carrying a sentence that is already whole, and the kind that sentence implies.
+ *
+ * A 400 from /api/tools is Galaxy refusing the tool form, and both of the sentences above
+ * then tell the caller what to change -- the inputs, or the credentials configured for the
+ * tool. So it is a `validation` failure and not a `connection` one, which is the judgement
+ * `errors.ts` already wrote down: an agent told "connection" backs off and retries a call
+ * that can never succeed, and the CLI exits 69 "service unavailable" for a usage error. The
+ * original failure travels as the cause, since it is the only record of how the request was
+ * classified before this.
+ *
+ * Any other status keeps the class it was given: a 500 whose text happens to mention
+ * credentials is still a server that fell over, and a 403 is still a permission failure,
+ * whatever advice is appended to it.
+ *
+ * Dropping the request facts is what tells the boundary the sentence is finished -- there is
+ * nothing left for an op's failure contract to word.
+ */
+function finished(err: unknown, sentence: string, status: number | null): unknown {
+  if (status === 400) return new GalaxyValidationError(sentence, { cause: err });
   const failure = err as { message: string; http?: HttpFailureFacts };
   failure.message = sentence;
   delete failure.http;
