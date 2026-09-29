@@ -11,13 +11,21 @@ import type { AnyOperation, Operation } from "./types";
  * out of it, so neither does this: a DetailedUserModel carries the disk usage, the
  * quota, the tags in use and the stored preferences, and a caller reading any of them
  * should not have to ask Galaxy a second time. The three named fields are the ones
- * anything reading a user needs and the ones the guard below insists on; everything
- * else rides along under the index signature.
+ * anything reading a user needs; everything else rides along under the index signature.
+ *
+ * All three are OPTIONAL, because the endpoint answers `DetailedUserModel | AnonUserModel`
+ * and the anonymous half has none of them -- the bindings give it three fields,
+ * `nice_total_disk_usage`, `quota_percent` and `total_disk_usage`, and that is the whole
+ * model. A session with no key gets that reply, the tool hands it back as it arrived (which
+ * is what the other server does, naming the user "unknown" in its sentence), and a type
+ * promising three strings would let `user.username.toLowerCase()` compile and then throw at
+ * runtime. A caller that needs them has to check, which is the truth about this endpoint
+ * rather than a concession to it.
  */
 export type CurrentUser = Record<string, unknown> & {
-  id: string;
-  email: string;
-  username: string;
+  id?: string;
+  email?: string;
+  username?: string;
 };
 
 const input = {}; // no args
@@ -44,8 +52,8 @@ export const getUserOp: Operation<typeof input, CurrentUser> = {
   input,
   run,
   // server.py, get_user: the username through dict.get, so a record without one is
-  // announced as "unknown". run() has already refused an anonymous reply, so the
-  // fallback is unreachable on this path and is transcribed rather than relied on.
+  // announced as "unknown" -- which is the reachable branch and not a transcribed one,
+  // since the anonymous reply is answered rather than refused.
   project: (u) => ({ message: `Retrieved user info for '${pyStr(pyGet(u, "username", "unknown"))}'` }),
   // server.py, get_user: its own sentence, with neither a hint nor a context.
   failure: { shape: "bioblend-get", sentence: (text) => `Failed to get user: ${text}` },

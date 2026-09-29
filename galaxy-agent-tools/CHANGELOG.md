@@ -56,7 +56,11 @@ quoted verbatim in the middle of it -- the text bioblend or requests raised.
   was refusing what the other answered, or refusing it somewhere else:
   - `get_user` no longer raises on the anonymous reply `/api/users/current` gives an
     unauthenticated session. The record is handed back as it arrived and the sentence names
-    the user `'unknown'`, which is what the other server says.
+    the user `'unknown'`, which is what the other server says. **Library callers:** the
+    exported `CurrentUser` type says so now -- `id`, `email` and `username` are optional,
+    because the endpoint answers `DetailedUserModel | AnonUserModel` and the anonymous model
+    has none of the three. `user.username.toLowerCase()` used to compile and then throw; it
+    is a compile error now, and code reading any of the three has to check first.
   - `create_page` no longer refuses a standalone report with no title or slug, and
     `update_page` no longer refuses an edit with nothing in it. Neither refusal exists over
     there: the request goes out and Galaxy answers with its own reason.
