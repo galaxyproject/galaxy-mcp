@@ -125,7 +125,7 @@ uv run galaxy-mcp --transport streamable-http --host 0.0.0.0 --port 8000
 
 Images are published to the GitHub Container Registry as
 [`ghcr.io/galaxyproject/galaxy-mcp`](https://github.com/galaxyproject/galaxy-mcp/pkgs/container/galaxy-mcp).
-Use `:latest` (default) or pin a release, e.g. `:1.9.0`.
+Use `:latest` (default) or pin a release, e.g. `:1.10.0`.
 
 The published image defaults to stdio transport (no HTTP listener):
 
