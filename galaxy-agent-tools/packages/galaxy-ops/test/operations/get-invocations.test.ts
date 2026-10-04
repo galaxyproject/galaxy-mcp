@@ -72,6 +72,26 @@ describe("get_invocations", () => {
     expect(path).toBe("/api/invocations");
   });
 
+  it("asks for one invocation's step details only when told to", async () => {
+    const seen: any[] = [];
+    const client = mockClient({
+      GET: (path, init) => {
+        seen.push({ path, params: init.params });
+        return { data: { id: "inv1", steps: [] }, response: { status: 200 } };
+      },
+    });
+    await getInvocations({ invocationId: "inv1", stepDetails: true }, ctxWith(client));
+    await getInvocations({ invocationId: "inv1" }, ctxWith(client));
+    expect(seen[0]).toEqual({
+      path: "/api/invocations/{invocation_id}",
+      params: { path: { invocation_id: "inv1" }, query: { step_details: true } },
+    });
+    expect(seen[1]).toEqual({
+      path: "/api/invocations/{invocation_id}",
+      params: { path: { invocation_id: "inv1" } },
+    });
+  });
+
   it("throws GalaxyNotFoundError on 404", async () => {
     const client = mockClient({ GET: () => ({ error: {}, response: { status: 404 } }) });
     await expect(getInvocations({ invocationId: "x" }, ctxWith(client))).rejects.toBeInstanceOf(

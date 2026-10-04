@@ -1,0 +1,25 @@
+{
+  "data": {
+    "id": "inv0000",
+    "state": "scheduled",
+    "workflow_id": "w0000",
+    "history_id": "h0000",
+    "create_time": "2026-01-01T00:00:00",
+    "update_time": "2026-01-01T00:10:00",
+    "steps": [
+      {
+        "id": "s0",
+        "jobs": [
+          {
+            "id": "j0",
+            "state": "ok"
+          }
+        ]
+      }
+    ]
+  },
+  "success": true,
+  "message": "Retrieved invocation 'inv0000'",
+  "count": null,
+  "pagination": null
+}

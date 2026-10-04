@@ -59,6 +59,30 @@ class TestGetInvocationsRefusesAnErrorBody:
             with pytest.raises(ValueError, match="Invocation not accessible"):
                 get_invocations_fn(invocation_id="a1b2c3d4e5f6789a")
 
+    def test_step_details_reaches_galaxy_for_one_invocation(self, mock_galaxy_instance):
+        """show_invocation can't send step_details, and without it every step's jobs are empty."""
+        mock_galaxy_instance.invocations._make_url.return_value = "URL/inv1"
+        mock_galaxy_instance.invocations._get.return_value = {"id": "inv1", "steps": []}
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_invocations_fn(invocation_id="inv1", step_details=True)
+
+        mock_galaxy_instance.invocations._make_url.assert_called_once_with("inv1")
+        mock_galaxy_instance.invocations._get.assert_called_once_with(
+            url="URL/inv1", params={"step_details": "true"}
+        )
+        mock_galaxy_instance.invocations.show_invocation.assert_not_called()
+        assert result.data == {"id": "inv1", "steps": []}
+
+    def test_one_invocation_without_step_details_is_the_plain_show(self, mock_galaxy_instance):
+        mock_galaxy_instance.invocations.show_invocation.return_value = {"id": "inv1"}
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            get_invocations_fn(invocation_id="inv1")
+
+        mock_galaxy_instance.invocations.show_invocation.assert_called_once_with("inv1")
+        mock_galaxy_instance.invocations._get.assert_not_called()
+
     def test_err_msg_on_its_own_is_enough(self, mock_galaxy_instance):
         """err_code is not always there, and the message is the part worth raising."""
         mock_galaxy_instance.invocations.get_invocations.return_value = {
