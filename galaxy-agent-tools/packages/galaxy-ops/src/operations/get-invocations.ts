@@ -39,7 +39,9 @@ const input = {
   stepDetails: z
     .boolean()
     .default(DEFAULT_STEP_DETAILS)
-    .describe("List mode: include per-step details (only applies when view is 'element')"),
+    .describe(
+      "Include each step's jobs. Applies to one invocation by id, and in list mode only when view is 'element'",
+    ),
 };
 
 type In = {
@@ -56,8 +58,14 @@ export type GetInvocationsResult = InvocationDetail | InvocationSummary[];
 
 async function run(i: In, ctx: GalaxyContext): Promise<GetInvocationsResult> {
   if (i.invocationId) {
+    // Galaxy answers a single invocation with every step's jobs list empty unless
+    // step_details is set. Sent only when asked for, as the other server does, so the
+    // default request is unchanged.
     const { data, error, response } = await ctx.client.GET("/api/invocations/{invocation_id}", {
-      params: { path: { invocation_id: i.invocationId } },
+      params: {
+        path: { invocation_id: i.invocationId },
+        ...(i.stepDetails ? { query: { step_details: true } } : {}),
+      },
     });
     if (error || !data) throw httpError(response, error);
     return data as InvocationDetail;

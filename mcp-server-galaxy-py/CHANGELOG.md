@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as a page and reported the result as `List user tools failed: slice(0, 25, None)`, and
   `run_user_tool` read one as a tool record and answered "No user-defined tool found with
   UUID ...". All three now fail with the sentence `format_error` builds for a refused request.
+- `get_invocations(invocation_id=..., step_details=True)` now sends `step_details` to Galaxy.
+  The single-invocation path went through bioblend's `show_invocation`, which has no such
+  parameter, so the flag was dropped and Galaxy answered with every step's `jobs` list empty --
+  an invocation still running looked like one with nothing left to do. Without `step_details`
+  the request is unchanged.
 
 ## [1.4.0] - 2026-04-22
 

@@ -3267,8 +3267,9 @@ def get_invocations(
                it to see more.
         view: Level of detail to return - 'element' for detailed or 'collection' for summary
              (default: 'collection')
-        step_details: Include details on individual workflow steps
-                     (only applies when view is 'element', default: False)
+        step_details: Include details on individual workflow steps -- each step's
+                     jobs. Applies to one invocation by id, and to a listing when
+                     view is 'element' (default: False)
 
     Returns:
         GalaxyResult with workflow invocation information in data field
@@ -3279,7 +3280,16 @@ def get_invocations(
     try:
         # If invocation_id is provided, get details of a specific invocation
         if invocation_id:
-            invocation = gi.invocations.show_invocation(invocation_id)
+            if step_details:
+                # show_invocation takes no step_details, and without it Galaxy answers
+                # with every step's jobs list empty. Same client call underneath, so
+                # the request, retries and failure wording match show_invocation's.
+                invocation = gi.invocations._get(
+                    url=gi.invocations._make_url(invocation_id),
+                    params={"step_details": "true"},
+                )
+            else:
+                invocation = gi.invocations.show_invocation(invocation_id)
             _refuse_error_body("Get workflow invocations", invocation)
             return GalaxyResult(
                 data=invocation,

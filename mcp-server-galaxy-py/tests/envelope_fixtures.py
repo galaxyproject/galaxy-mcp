@@ -1260,6 +1260,23 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
     )
     add(
         "get_invocations",
+        "single_step_details",
+        "one invocation with its steps' jobs: the route answers only when step_details is sent",
+        {"invocation_id": "inv0000", "step_details": True},
+        lambda: get_invocations_fn(invocation_id="inv0000", step_details=True),
+        [
+            route(
+                "/api/invocations/inv0000",
+                {
+                    **invocation_rows(1)[0],
+                    "steps": [{"id": "s0", "jobs": [{"id": "j0", "state": "ok"}]}],
+                },
+                query={"step_details": "true"},
+            )
+        ],
+    )
+    add(
+        "get_invocations",
         "empty",
         "no invocations",
         {"limit": 5},

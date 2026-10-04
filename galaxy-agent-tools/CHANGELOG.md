@@ -4,6 +4,16 @@
 `@galaxyproject/galaxy-mcp` share a version and are published together, so one
 entry covers all three; where something only affects one surface, it says which.
 
+## 0.3.1 (unreleased)
+
+### `get_invocations` sends `step_details` for one invocation (#NNN)
+
+Given an `invocationId`, the op ignored `stepDetails` and Galaxy answered with every step's
+`jobs` list empty, which is what the Python server did too -- both now send `step_details`
+to `GET /api/invocations/{id}` when it is asked for, and the request is unchanged when it is
+not. A new golden case, `get_invocations/single_step_details`, is answered only when the flag
+arrives, so either surface dropping it again fails the replay.
+
 ## 0.3.0 (2026-10-04)
 
 Breaking on both surfaces. 0.2.0 was tagged but never reached npm, so this release

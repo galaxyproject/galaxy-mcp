@@ -492,7 +492,7 @@
           "step_details": {
             "default": false,
             "type": "boolean",
-            "description": "Include details on individual workflow steps\n         (only applies when view is 'element', default: False)"
+            "description": "Include details on individual workflow steps -- each step's\n         jobs. Applies to one invocation by id, and to a listing when\n         view is 'element' (default: False)"
           }
         },
         "type": "object"
