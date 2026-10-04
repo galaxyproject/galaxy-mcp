@@ -1,10 +1,12 @@
 name: Agent Tools (TS) Release
 
-# Publishes the @galaxyproject/galaxy-{ops,cli,mcp} packages to npm.
-# Trigger by pushing a tag like `ts-v0.1.0` (or run manually). Auth is via npm
-# trusted publishing (OIDC) -- no NPM_TOKEN. Each package needs a trusted publisher
+# Stages the @galaxyproject/galaxy-{ops,cli,mcp} packages on npm for a maintainer to
+# approve. Trigger by pushing a tag like `ts-v0.1.0` (or run manually). Auth is via npm
+# trusted publishing (OIDC) -- no NPM_TOKEN. Each package has a trusted publisher
 # configured on npmjs.com (org: galaxyproject, repo: galaxy-mcp, workflow filename:
-# agent-tools-release.yml).
+# agent-tools-release.yml) that may only stage, not publish directly, so nothing goes
+# live until a maintainer approves it with 2FA: on npmjs.com, or `npm stage list` then
+# `npm stage approve <stage-id>`. Approve galaxy-ops first; the other two depend on it.
 
 on:
   push:
@@ -54,15 +56,16 @@ jobs:
 
       # Trusted publishing (OIDC), no NPM_TOKEN: pnpm packs each package -- which
       # rewrites `workspace:*` to the concrete version inside the tarball -- then npm
-      # (>= 11.5.1) does the OIDC-authenticated upload and auto-generates provenance.
-      # We publish with npm, not `pnpm publish`, because pnpm's OIDC support is not
-      # yet reliable. galaxy-ops goes first so the surfaces' dependency already exists.
-      - name: Publish to npm (trusted publishing)
+      # does the OIDC-authenticated upload. It stages rather than publishes: the
+      # trusted publishers are configured stage-only, so a pushed tag alone can't put
+      # a version on npm. We use npm, not pnpm, because pnpm's OIDC support is not yet
+      # reliable and pnpm has no staging. galaxy-ops goes first to match approval order.
+      - name: Stage on npm (trusted publishing)
         run: |
           set -euo pipefail
-          npm install -g npm@latest   # trusted publishing needs npm >= 11.5.1
+          npm install -g npm@latest   # OIDC needs npm >= 11.5.1; `npm stage` is newer still
           for pkg in galaxy-ops galaxy-cli galaxy-mcp; do
             tgz="$(cd "packages/$pkg" && pnpm pack --pack-destination "$RUNNER_TEMP" | tail -1)"
-            echo "Publishing $tgz"
-            npm publish "$tgz" --access public
+            echo "Staging $tgz"
+            npm stage publish "$tgz" --access public
           done

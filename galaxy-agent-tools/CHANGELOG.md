@@ -4,10 +4,17 @@
 `@galaxyproject/galaxy-mcp` share a version and are published together, so one
 entry covers all three; where something only affects one surface, it says which.
 
-## 0.3.0 (unreleased)
+## 0.3.0 (2026-10-04)
 
-Breaking on both surfaces. 0.2.0 has not been published, so one release will
-carry both entries.
+Breaking on both surfaces. 0.2.0 was tagged but never reached npm, so this release
+carries both entries.
+
+### Releases are staged and approved
+
+The release workflow now stages each package on npm instead of publishing it, and the
+trusted publishers are configured stage-only. A pushed `ts-v*` tag puts the three
+packages in the registry where nobody can install them; a maintainer approves each one
+with 2FA before it goes live.
 
 ### A failed call answers the way the Python server's failed call answers (#145)
 
@@ -563,7 +570,7 @@ exactly rather than checking that it is a non-empty string.
 - The nine budgeted listings are untouched: their sentences already matched, so
   no page is cut at a different row than before.
 
-## 0.2.0 (unreleased)
+## 0.2.0 (tagged, never published -- shipped in 0.3.0)
 
 Breaking, and the first release since the packages went up on npm. Everything in
 `0.1.0` that a caller could reach still works the same way except where this
