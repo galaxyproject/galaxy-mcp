@@ -6,7 +6,7 @@ entry covers all three; where something only affects one surface, it says which.
 
 ## 0.3.1 (unreleased)
 
-### `get_invocations` sends `step_details` for one invocation (#NNN)
+### `get_invocations` sends `step_details` for one invocation (#152)
 
 Given an `invocationId`, the op ignored `stepDetails` and Galaxy answered with every step's
 `jobs` list empty, which is what the Python server did too -- both now send `step_details`
