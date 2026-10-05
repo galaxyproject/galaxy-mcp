@@ -28,11 +28,11 @@ Two differences with that server are recorded once here rather than as a row per
 
 | Status | Differences |
 | --- | --- |
-| `intentional` | `0` |
+| `intentional` | `1` |
 | `pending-port` | `0` |
 | `pending-decision` | `3` |
 | `unreviewed-gap` | `54` |
-| **total** | `57` |
+| **total** | `58` |
 
 These are counted apart and ratcheted apart -- at 54 -- because they are not this repository's to close on its own: each one is a rename, an addition or a removal somebody has to agree with galaxyproject/galaxy. Nothing here has been ruled on yet.
 
@@ -77,8 +77,9 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `get_dataset_details` | `preview_lines` |  | `type=integer required=false default=10` | `type=integer required=false default=10` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | How many lines ours reads; Galaxy's `peek` is a fixed snippet with no line count to choose. |
 | `get_histories` |  | `10` | `read (tag)` | `read (hint)` | `write (mcp default)` | `result-shape` | `intentional` | No known difference: both answer with the rows in data, and both report a window only when given a limit. Python's data is bioblend's return value, which the manifest generator cannot read, so only the TS side states a kind. |
 | `get_histories` | `limit` |  | `type=integer required=false default=none` | `type=integer required=false default=none` | `type=integer required=false default=50` | `vs built-in: default-mismatch` | `unreviewed-gap` | Ours declares no default and returns every history; Galaxy's pages at 50. |
-| `get_history_contents` |  | `6` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
+| `get_history_contents` |  | `9` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_history_contents` | `deleted` |  | `type=boolean required=false default=false` | `type=boolean required=false default=false` | `type=boolean required=false default=none` | `vs built-in: default-mismatch` | `unreviewed-gap` | Ours defaults to excluding deleted items; Galaxy's passes None through and lets the API decide. |
+| `get_history_contents` | `order` |  | `type=enum<"create_time-asc"\|"create_time-dsc"\|"extension-asc"\|"extension-dsc"\|"hid-asc"\|"hid-dsc"\|"name-asc"\|"name-dsc"\|"size-asc"\|"size-dsc"\|"update_time-asc"\|"update_time-dsc">&string required=false default="hid-asc"` | `type=enum<"create_time-asc"\|"create_time-dsc"\|"extension-asc"\|"extension-dsc"\|"hid-asc"\|"hid-dsc"\|"name-asc"\|"name-dsc"\|"size-asc"\|"size-dsc"\|"update_time-asc"\|"update_time-dsc">&string required=false default="hid-asc"` | `type=string required=false default="hid-asc"` | `vs built-in: type-mismatch` | `intentional` | Ours takes every key parse_order_by sorts one history by, with its direction spelled out, and refuses anything else before a request; Galaxy's passes any string to parse_order_by, which reads a bare 'hid' as descending and answers an unknown order with a 400. |
 | `get_history_contents` | `visible` |  | `type=boolean required=false default=true` | `type=boolean required=false default=true` | `type=boolean required=false default=none` | `vs built-in: default-mismatch` | `unreviewed-gap` | Ours defaults to visible items only; Galaxy's passes None through and lets the API decide. |
 | `get_history_details` |  | `4` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_invocation_details` |  | `0` | -- | -- | `write (mcp default)` | `vs built-in: missing-py-tool` | `unreviewed-gap` | Only Galaxy's. The same reading exists here inside get_invocations, which returns one invocation's detail when it is given invocation_id. |

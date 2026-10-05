@@ -5,10 +5,10 @@
     "content": [
       {
         "type": "text",
-        "text": "Error calling tool 'get_history_contents': Get history contents failed: GET: error 403: b'{\"err_msg\": \"History is not accessible by user\", \"err_code\": 403002}', 0 attempts left: {\"err_msg\": \"History is not accessible by user\", \"err_code\": 403002} (Permission denied - check your account permissions). Context: history_id=h0000403"
+        "text": "Error calling tool 'get_history_contents': Get history contents failed: 403 Client Error: Forbidden for url: https://galaxy.example/api/histories/h0000403/contents?v=dev&limit=100&offset=0&order=hid-asc&q=deleted&q=visible&qv=False&qv=True (Permission denied - check your account permissions). Context: history_id=h0000403"
       }
     ],
     "isError": true
   },
-  "sentence": "Get history contents failed: GET: error 403: b'{\"err_msg\": \"History is not accessible by user\", \"err_code\": 403002}', 0 attempts left: {\"err_msg\": \"History is not accessible by user\", \"err_code\": 403002} (Permission denied - check your account permissions). Context: history_id=h0000403"
+  "sentence": "Get history contents failed: 403 Client Error: Forbidden for url: https://galaxy.example/api/histories/h0000403/contents?v=dev&limit=100&offset=0&order=hid-asc&q=deleted&q=visible&qv=False&qv=True (Permission denied - check your account permissions). Context: history_id=h0000403"
 }

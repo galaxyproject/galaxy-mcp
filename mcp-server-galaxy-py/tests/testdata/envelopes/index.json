@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 233,
+  "caseCount": 236,
   "failureCaseCount": 70,
   "cases": [
     {
@@ -411,7 +411,7 @@
     {
       "tool": "get_history_contents",
       "case": "full_page",
-      "note": "a page of contents, wrapped in this tool's own data shape",
+      "note": "a page of contents Galaxy cut, wrapped in this tool's own data shape",
       "outcome": "success",
       "input": {
         "history_id": "h0000",
@@ -432,7 +432,7 @@
         "offset": 20
       },
       "envelope": "get_history_contents/last_short_page.json",
-      "replies": "get_history_contents/full_page.galaxy.json"
+      "replies": "get_history_contents/last_short_page.galaxy.json"
     },
     {
       "tool": "get_history_contents",
@@ -458,7 +458,47 @@
         "offset": 400
       },
       "envelope": "get_history_contents/past_the_end.json",
-      "replies": "get_history_contents/full_page.galaxy.json"
+      "replies": "get_history_contents/past_the_end.galaxy.json"
+    },
+    {
+      "tool": "get_history_contents",
+      "case": "newest_first",
+      "note": "an order Galaxy sorts by, passed through as the caller named it",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0000",
+        "limit": 5,
+        "offset": 0,
+        "order": "hid-dsc"
+      },
+      "envelope": "get_history_contents/newest_first.json",
+      "replies": "get_history_contents/newest_first.galaxy.json"
+    },
+    {
+      "tool": "get_history_contents",
+      "case": "without_dataset_id",
+      "note": "rows without the Dataset id Galaxy sends beside each item's own id",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0000",
+        "limit": 10,
+        "offset": 0
+      },
+      "envelope": "get_history_contents/without_dataset_id.json",
+      "replies": "get_history_contents/without_dataset_id.galaxy.json"
+    },
+    {
+      "tool": "get_history_contents",
+      "case": "cut_to_budget",
+      "note": "a page too large for the output budget, cut short with the next offset after it",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0000",
+        "limit": 50,
+        "offset": 0
+      },
+      "envelope": "get_history_contents/cut_to_budget.json",
+      "replies": "get_history_contents/cut_to_budget.galaxy.json"
     },
     {
       "tool": "get_history_details",

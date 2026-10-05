@@ -81,7 +81,7 @@ export interface Operation<Shape extends ZodRawShape, O> {
    *
    * Set it and the surface measures the serialised result and trims until it fits
    * the output budget; leave it off and the result goes out whatever size it is,
-   * which is what the two ops Python does not budget do.
+   * which is what the ops Python does not budget do.
    */
   budget?: { rows(data: O): number; shrink(data: O, keep: number): O };
   /**

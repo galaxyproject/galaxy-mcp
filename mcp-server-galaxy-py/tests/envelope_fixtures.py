@@ -773,15 +773,26 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
     )
 
     # -- get_history_contents ------------------------------------------------
+    # Galaxy windows, sorts and counts: both surfaces ask the contents index for one page
+    # with the stats media type, and Galaxy answers that page and the number that matched.
+    # Each route answers one window, so a surface that asked for any other gets nothing.
+    def contents_page(
+        rows: list[dict[str, Any]], *, limit: int, offset: int, order: str = "hid-asc"
+    ) -> dict[str, Any]:
+        return route(
+            "/api/histories/h0000/contents",
+            {"contents": rows[offset : offset + limit], "stats": {"total_matches": len(rows)}},
+            query={"v": "dev", "limit": str(limit), "offset": str(offset), "order": order},
+        )
+
     contents_25 = content_rows(25)
-    contents_route = [route("/api/histories/h0000/contents", contents_25)]
     add(
         "get_history_contents",
         "full_page",
-        "a page of contents, wrapped in this tool's own data shape",
+        "a page of contents Galaxy cut, wrapped in this tool's own data shape",
         {"history_id": "h0000", "limit": 10, "offset": 10},
         lambda: get_history_contents_fn("h0000", limit=10, offset=10),
-        contents_route,
+        [contents_page(contents_25, limit=10, offset=10)],
     )
     add(
         "get_history_contents",
@@ -789,7 +800,7 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         "the last, short page of contents",
         {"history_id": "h0000", "limit": 10, "offset": 20},
         lambda: get_history_contents_fn("h0000", limit=10, offset=20),
-        contents_route,
+        [contents_page(contents_25, limit=10, offset=20)],
     )
     add(
         "get_history_contents",
@@ -797,7 +808,7 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         "an empty history",
         {"history_id": "h0000", "limit": 10, "offset": 0},
         lambda: get_history_contents_fn("h0000", limit=10, offset=0),
-        [route("/api/histories/h0000/contents", [])],
+        [contents_page([], limit=10, offset=0)],
     )
     add(
         "get_history_contents",
@@ -805,7 +816,38 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         "an offset past the last item",
         {"history_id": "h0000", "limit": 10, "offset": 400},
         lambda: get_history_contents_fn("h0000", limit=10, offset=400),
-        contents_route,
+        [contents_page(contents_25, limit=10, offset=400)],
+    )
+    add(
+        "get_history_contents",
+        "newest_first",
+        "an order Galaxy sorts by, passed through as the caller named it",
+        {"history_id": "h0000", "limit": 5, "offset": 0, "order": "hid-dsc"},
+        lambda: get_history_contents_fn("h0000", limit=5, offset=0, order="hid-dsc"),
+        [contents_page(list(reversed(contents_25)), limit=5, offset=0, order="hid-dsc")],
+    )
+    # Galaxy sends each item's Dataset id beside its own; the rows leave it out.
+    with_dataset_ids = [{**row, "dataset_id": f"x{i:04d}"} for i, row in enumerate(content_rows(3))]
+    add(
+        "get_history_contents",
+        "without_dataset_id",
+        "rows without the Dataset id Galaxy sends beside each item's own id",
+        {"history_id": "h0000", "limit": 10, "offset": 0},
+        lambda: get_history_contents_fn("h0000", limit=10, offset=0),
+        [contents_page(with_dataset_ids, limit=10, offset=0)],
+    )
+    # A page of long names over the output budget is cut, and the next page starts at
+    # the first item it did not return.
+    long_named = [
+        {**row, "name": f"{i:04d} " + "n" * 2000} for i, row in enumerate(content_rows(60))
+    ]
+    add(
+        "get_history_contents",
+        "cut_to_budget",
+        "a page too large for the output budget, cut short with the next offset after it",
+        {"history_id": "h0000", "limit": 50, "offset": 0},
+        lambda: get_history_contents_fn("h0000", limit=50, offset=0),
+        [contents_page(long_named, limit=50, offset=0)],
     )
 
     # -- get_history_details -------------------------------------------------

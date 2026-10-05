@@ -244,6 +244,14 @@
         "reason": "Ours defaults to visible items only; Galaxy's passes None through and lets the API decide."
       },
       {
+        "tool": "get_history_contents",
+        "param": "order",
+        "kind": "type-mismatch",
+        "observed": "python=enum<\"create_time-asc\"|\"create_time-dsc\"|\"extension-asc\"|\"extension-dsc\"|\"hid-asc\"|\"hid-dsc\"|\"name-asc\"|\"name-dsc\"|\"size-asc\"|\"size-dsc\"|\"update_time-asc\"|\"update_time-dsc\">&string builtin=string",
+        "status": "intentional",
+        "reason": "Ours takes every key parse_order_by sorts one history by, with its direction spelled out, and refuses anything else before a request; Galaxy's passes any string to parse_order_by, which reads a bare 'hid' as descending and answers an unknown order with a 400."
+      },
+      {
         "tool": "get_invocation_details",
         "param": null,
         "kind": "missing-py-tool",

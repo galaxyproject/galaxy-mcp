@@ -1,0 +1,75 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example/",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/histories/h0000/contents",
+      "query": {
+        "v": "dev",
+        "limit": "5",
+        "offset": "0",
+        "order": "hid-dsc"
+      },
+      "status": 200,
+      "headers": {},
+      "body": {
+        "contents": [
+          {
+            "id": "d0024",
+            "hid": 25,
+            "name": "dataset 24",
+            "state": "ok",
+            "deleted": false,
+            "visible": true,
+            "history_content_type": "dataset",
+            "extension": "txt"
+          },
+          {
+            "id": "d0023",
+            "hid": 24,
+            "name": "dataset 23",
+            "state": "ok",
+            "deleted": false,
+            "visible": true,
+            "history_content_type": "dataset",
+            "extension": "txt"
+          },
+          {
+            "id": "d0022",
+            "hid": 23,
+            "name": "dataset 22",
+            "state": "ok",
+            "deleted": false,
+            "visible": true,
+            "history_content_type": "dataset",
+            "extension": "txt"
+          },
+          {
+            "id": "d0021",
+            "hid": 22,
+            "name": "dataset 21",
+            "state": "ok",
+            "deleted": false,
+            "visible": true,
+            "history_content_type": "dataset",
+            "extension": "txt"
+          },
+          {
+            "id": "d0020",
+            "hid": 21,
+            "name": "dataset 20",
+            "state": "ok",
+            "deleted": false,
+            "visible": true,
+            "history_content_type": "dataset",
+            "extension": "txt"
+          }
+        ],
+        "stats": {
+          "total_matches": 25
+        }
+      }
+    }
+  ]
+}

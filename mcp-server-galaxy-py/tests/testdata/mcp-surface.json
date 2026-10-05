@@ -429,7 +429,7 @@
           "limit": {
             "default": 100,
             "type": "integer",
-            "description": "Maximum number of items to return per page (default: 100, max recommended: 500)"
+            "description": "Maximum number of items to return per page (default: 100). A page too large\n   for the output budget is cut short; pagination says where the next one starts."
           },
           "offset": {
             "default": 0,
@@ -448,8 +448,22 @@
           },
           "order": {
             "default": "hid-asc",
+            "enum": [
+              "hid-asc",
+              "hid-dsc",
+              "create_time-asc",
+              "create_time-dsc",
+              "update_time-asc",
+              "update_time-dsc",
+              "name-asc",
+              "name-dsc",
+              "extension-asc",
+              "extension-dsc",
+              "size-asc",
+              "size-dsc"
+            ],
             "type": "string",
-            "description": "Sort order for results. Options include:\n  - 'hid-asc': History ID ascending (default, oldest first)\n  - 'hid-dsc': History ID descending (newest first)\n  - 'create_time-dsc': Creation time descending (most recent first)\n  - 'create_time-asc': Creation time ascending (oldest first)\n  - 'update_time-dsc': Last updated descending (most recently modified first)\n  - 'name-asc': Dataset name ascending (alphabetical)"
+            "description": "Sort order for results: hid, create_time, update_time, name, extension\n  or size, followed by '-asc' or '-dsc'. 'hid-asc' (default) is oldest\n  first."
           }
         },
         "required": [

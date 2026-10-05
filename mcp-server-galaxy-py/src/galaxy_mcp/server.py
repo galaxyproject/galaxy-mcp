@@ -11,6 +11,7 @@ import re
 import threading
 import time
 import types
+import typing
 from collections.abc import Callable, Sequence
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -394,13 +395,31 @@ def _budgeted_page(
     window = list(items[offset : offset + limit])
     if project is not None:
         window = [project(item) for item in window]
+    return _budgeted_window(
+        window, total_items=len(items), limit=limit, offset=offset, noun=noun, build=build
+    )
 
+
+def _budgeted_window(
+    window: list[Any],
+    *,
+    total_items: int,
+    limit: int,
+    offset: int,
+    noun: str,
+    build: Callable[[list[Any], PaginationInfo], GalaxyResult],
+) -> GalaxyResult:
+    """_budgeted_page for a window Galaxy already cut, with the total it counted.
+
+    The page is measured and cut the same way, and a cut page still says where the next
+    one starts: at the first item it did not return.
+    """
     page = window
     while True:
         result = build(
             page,
             _pagination_info(
-                total_items=len(items),
+                total_items=total_items,
                 returned_items=len(page),
                 limit=limit,
                 offset=offset,
@@ -2577,6 +2596,50 @@ def get_history_details(history_id: str) -> GalaxyResult:
         raise ValueError(format_error("Get history details", e, {"history_id": history_id})) from e
 
 
+# The orders get_history_contents takes: each key Galaxy sorts the contents of one history
+# by, ascending or descending (managers/history_contents.py, parse_order_by), less
+# history_id, which is the same for every row here. Galaxy's own parser reads a bare key as
+# descending, so the direction is always spelled out.
+ContentsOrder = Literal[
+    "hid-asc",
+    "hid-dsc",
+    "create_time-asc",
+    "create_time-dsc",
+    "update_time-asc",
+    "update_time-dsc",
+    "name-asc",
+    "name-dsc",
+    "extension-asc",
+    "extension-dsc",
+    "size-asc",
+    "size-dsc",
+]
+CONTENTS_ORDERS: tuple[str, ...] = typing.get_args(ContentsOrder)
+
+# Galaxy's contents index with the matching count beside the page.
+_CONTENTS_WITH_STATS = "application/vnd.galaxy.history.contents.stats+json"
+
+
+def _content_row(item: Any) -> Any:
+    """A history item as a caller reads it: what Galaxy sent, less ``dataset_id``.
+
+    ``id`` is what every dataset-taking tool accepts. ``dataset_id`` names a different
+    object -- the Dataset under the history item -- in the same encoded id space, so passed
+    where ``id`` belongs it resolves rather than failing, to an unrelated item in an
+    unrelated history. No tool here takes it.
+
+    ``history_content_type`` is filled in when Galaxy did not say, so a dataset can be told
+    from a collection whichever serializer answered.
+    """
+    if not isinstance(item, dict):
+        return item
+    row = {key: value for key, value in item.items() if key != "dataset_id"}
+    if "history_content_type" not in row:
+        is_collection = row.get("collection_type") or row.get("type") == "collection"
+        row["history_content_type"] = "dataset_collection" if is_collection else "dataset"
+    return row
+
+
 @mcp.tool(tags={"histories", "read", "core"})
 def get_history_contents(
     history_id: str,
@@ -2584,7 +2647,7 @@ def get_history_contents(
     offset: int = 0,
     deleted: bool = False,
     visible: bool = True,
-    order: str = "hid-asc",
+    order: ContentsOrder = "hid-asc",
 ) -> GalaxyResult:
     """
     Get paginated contents (datasets and collections) from a specific history with ordering support
@@ -2592,36 +2655,26 @@ def get_history_contents(
     Args:
         history_id: Galaxy history ID - a hexadecimal hash string identifying the history
                    (a 16-character hex string)
-        limit: Maximum number of items to return per page (default: 100, max recommended: 500)
+        limit: Maximum number of items to return per page (default: 100). A page too large
+               for the output budget is cut short; pagination says where the next one starts.
         offset: Number of items to skip from the beginning (default: 0, for pagination)
         deleted: Include deleted datasets in results (default: False)
         visible: Include only visible datasets (default: True, set False to include hidden)
-        order: Sort order for results. Options include:
-              - 'hid-asc': History ID ascending (default, oldest first)
-              - 'hid-dsc': History ID descending (newest first)
-              - 'create_time-dsc': Creation time descending (most recent first)
-              - 'create_time-asc': Creation time ascending (oldest first)
-              - 'update_time-dsc': Last updated descending (most recently modified first)
-              - 'name-asc': Dataset name ascending (alphabetical)
+        order: Sort order for results: hid, create_time, update_time, name, extension
+              or size, followed by '-asc' or '-dsc'. 'hid-asc' (default) is oldest
+              first.
 
     Returns:
         GalaxyResult with paginated dataset/collection list in data field and pagination metadata.
-        Each item includes a 'history_content_type' field: 'dataset' or 'dataset_collection'
-
-    Note:
-        Performance: This function uses gi.histories.show_history(contents=True) to
-        fetch all items and then paginates client-side. For very large histories,
-        this may be slower than server-side pagination, but it is required to
-        include dataset collections alongside datasets.
+        Each item includes a 'history_content_type' field: 'dataset' or 'dataset_collection'.
+        An item's 'id' is what dataset-taking tools accept.
     """
-    # Like every other listing here. No ceiling -- this tool is not in MAX_PAGE_SIZE
-    # and does not budget its page -- but a window still has to be one: limit=0 asked
-    # for a page of nothing and got a walk that reported more to come and never
-    # advanced, and a negative offset sliced from the end of the list and then
-    # described itself with arithmetic that only holds for a window starting at or
-    # after zero (offset=-1 over five items claimed a next page at offset 0, back
-    # through what had just been returned).
+    # Like every other listing here: limit=0 asked for a page of nothing and got a walk
+    # that reported more to come and never advanced, and a negative offset is a window
+    # nothing can describe.
     _validate_pagination(limit, offset)
+    if order not in CONTENTS_ORDERS:
+        raise ValueError(f"order must be one of {', '.join(CONTENTS_ORDERS)} (got {order!r})")
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
@@ -2630,74 +2683,53 @@ def get_history_contents(
             f"Getting contents for history ID: {history_id} "
             f"(limit={limit}, offset={offset}, order={order})"
         )
-
-        # Use show_history with contents=True to get both datasets and collections
-        all_contents_raw = gi.histories.show_history(history_id, contents=True)
-
-        # Add history_content_type field to distinguish datasets from collections
-        all_contents = []
-        for item in all_contents_raw:
-            # Determine content type based on 'history_content_type' field if present,
-            # otherwise infer from 'collection_type' or 'type' field
-            if "history_content_type" in item:
-                content_type = item["history_content_type"]
-            elif item.get("collection_type") or item.get("type") == "collection":
-                content_type = "dataset_collection"
-            else:
-                content_type = "dataset"
-
-            # Add the field to the item (backward compatible - adds new field)
-            item_with_type = {**item, "history_content_type": content_type}
-            all_contents.append(item_with_type)
-
-        # Filter by visibility and deleted status
-        filtered_contents = all_contents
+        # Galaxy filters, sorts and windows, and counts what matched in the same request,
+        # so a history of thousands is read a page at a time and the total is still real.
+        # v=dev is the index that honours all of it; the filters are ORM filters, which
+        # the stats media type requires (api/history_contents.py).
+        filters = []
         if not deleted:
-            filtered_contents = [
-                item for item in filtered_contents if not item.get("deleted", False)
-            ]
+            filters.append(("deleted", "False"))
         if visible:
-            filtered_contents = [item for item in filtered_contents if item.get("visible", True)]
+            filters.append(("visible", "True"))
+        params: dict[str, Any] = {
+            "v": "dev",
+            "limit": limit,
+            "offset": offset,
+            "order": order,
+            "q": [field for field, _ in filters],
+            "qv": [value for _, value in filters],
+        }
+        # make_get_request sends bioblend's own headers and takes no others, so the
+        # request goes out with a copy of them, read under the lock that guards them.
+        with _gi_lock:
+            headers = {**gi.json_headers, "Accept": _CONTENTS_WITH_STATS}
+        response = requests.get(
+            f"{gi.url}/histories/{history_id}/contents",
+            params=params,
+            headers=headers,
+            timeout=gi.timeout,
+            verify=gi.verify,
+        )
+        response.raise_for_status()
+        body = response.json()
+        window = [_content_row(item) for item in body.get("contents") or []]
+        total = (body.get("stats") or {}).get("total_matches", offset + len(window))
+        logger.info(f"Retrieved {len(window)} of {total} items (offset {offset})")
 
-        # Sort the contents based on order parameter
-        def get_sort_key(item):
-            if order.startswith("hid"):
-                return item.get("hid", 0)
-            elif order.startswith("create_time"):
-                return item.get("create_time", "")
-            elif order.startswith("update_time"):
-                return item.get("update_time", "")
-            elif order.startswith("name"):
-                return item.get("name", "")
-            else:
-                return item.get("hid", 0)
-
-        reverse = order.endswith("-dsc")
-        sorted_contents = sorted(filtered_contents, key=get_sort_key, reverse=reverse)
-
-        # Apply pagination
-        total_items = len(sorted_contents)
-        paginated_contents = sorted_contents[offset : offset + limit]
-
-        logger.info(f"Retrieved {len(paginated_contents)} of {total_items} items (offset {offset})")
-
-        # The same helper every other listing uses, so one sentence describes a page
-        # whichever tool returned it, and the navigation arithmetic cannot disagree
-        # from one tool to the next.
-        pagination = _pagination_info(
-            total_items=total_items,
-            returned_items=len(paginated_contents),
+        return _budgeted_window(
+            window,
+            total_items=total,
             limit=limit,
             offset=offset,
             noun="items",
-        )
-
-        return GalaxyResult(
-            data={"history_id": history_id, "contents": paginated_contents},
-            success=True,
-            message=f"Retrieved {len(paginated_contents)} items from history",
-            count=len(paginated_contents),
-            pagination=pagination,
+            build=lambda page, pagination: GalaxyResult(
+                data={"history_id": history_id, "contents": page},
+                success=True,
+                message=f"Retrieved {len(page)} items from history",
+                count=len(page),
+                pagination=pagination,
+            ),
         )
     except Exception as e:
         logger.error(f"Failed to get history contents for ID '{history_id}': {str(e)}")
