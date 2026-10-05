@@ -98,6 +98,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `get_page` answers with `content_hash`, Galaxy's hash of the editable source.
 
+### Breaking
+
+- `update_page` refuses content whose directives name an object by something other
+  than an encoded id (a hid, a name), which Galaxy cannot resolve, and a section edit
+  on a page authored as HTML.
+
+### Added
+
+- `update_page` takes `section_heading` and `section_content` to replace one section by
+  its heading line, as Galaxy's page editor does, and `expect_hash` to refuse a write
+  when the page changed since it was read. The answer carries the page's new
+  `content_hash`.
+
 ## [1.11.2] - 2026-10-12
 
 ### Fixed

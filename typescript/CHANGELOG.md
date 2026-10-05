@@ -137,6 +137,15 @@ Listings are unchanged. galaxy-ops exports `invocationOutcome`.
 The answer carries `content_hash`, Galaxy's hash of the editable source. galaxy-ops
 exports `contentHash`.
 
+### `update_page` replaces one section and refuses a stale write (#155)
+
+`update_page` takes `section_heading` and `section_content` to replace one section by
+its heading line, as Galaxy's page editor does, and `expect_hash` to refuse a write when
+the page changed since it was read. The answer carries the page's new `content_hash`.
+Breaking: it refuses content whose directives name an object by something other than
+an encoded id (a hid, a name), which Galaxy cannot resolve, and a section edit on a page
+authored as HTML. galaxy-ops exports `malformedObjectIds`.
+
 ## 0.3.2 (2026-10-12)
 
 ### Redirects are no longer followed, so the API key cannot leak off-origin (security)
