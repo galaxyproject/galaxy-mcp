@@ -333,6 +333,66 @@ describe("invoke_workflow op", () => {
   });
 });
 
+describe("a stored workflow version", () => {
+  function recordingClient() {
+    const gets: any[] = [];
+    const posts: any[] = [];
+    const client = mockClient({
+      GET: (path: string, init?: any) => {
+        gets.push({ path, query: init?.params?.query });
+        if (path === "/api/workflows/{workflow_id}/download") {
+          return { data: RUN_MODEL, response: { status: 200 } };
+        }
+        if (path === "/api/datatypes/types_and_mapping") {
+          return { data: DATATYPES_COMBINED, response: { status: 200 } };
+        }
+        return { data: { extension: "fastq" }, response: { status: 200 } };
+      },
+      POST: (_path: string, init?: any) => {
+        posts.push(init?.body);
+        return { data: INVOCATION_RESPONSE, response: { status: 200 } };
+      },
+    });
+    return { client, gets, posts };
+  }
+
+  it("is sent in the POST body only when one is asked for", async () => {
+    const { client, posts } = recordingClient();
+    await invokeWorkflow({ workflowId: "wf1", version: 0 }, ctxWith(client));
+    await invokeWorkflow({ workflowId: "wf1" }, ctxWith(client));
+    await invokeWorkflow({ workflowId: "wf1", version: null }, ctxWith(client));
+    expect(posts[0].version).toBe(0);
+    expect("version" in posts[1]).toBe(false);
+    expect("version" in posts[2]).toBe(false);
+  });
+
+  it("is the version the preflight reads slots from", async () => {
+    const { client, gets } = recordingClient();
+    await invokeWorkflow(
+      { workflowId: "wf1", version: 2, inputs: { "0": { src: "hda", id: "ds1" } } },
+      ctxWith(client),
+    );
+    const download = gets.find((g) => g.path === "/api/workflows/{workflow_id}/download");
+    expect(download.query).toEqual({ style: "run", instance: false, version: 2 });
+  });
+
+  it.each([-1, 1.5])("refuses %s before anything is sent", async (version) => {
+    const { client, gets, posts } = recordingClient();
+    await expect(invokeWorkflow({ workflowId: "wf1", version }, ctxWith(client))).rejects.toThrow(
+      new GalaxyValidationError(`version must be 0 or greater (got ${version})`),
+    );
+    expect(gets).toEqual([]);
+    expect(posts).toEqual([]);
+  });
+
+  it("is refused by the schema when it is not a whole number", () => {
+    const schema = z.object(invokeWorkflowOp.input);
+    expect(schema.safeParse({ workflowId: "wf1", version: 1.5 }).success).toBe(false);
+    expect(schema.safeParse({ workflowId: "wf1", version: "two" }).success).toBe(false);
+    expect(schema.safeParse({ workflowId: "wf1", version: 3 }).success).toBe(true);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // validateInputs unit tests (golden: valid -> no rejects; type mismatch -> reject)
 // ---------------------------------------------------------------------------
