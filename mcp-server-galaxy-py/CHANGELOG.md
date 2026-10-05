@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-10-05
+
+### Security
+
+Fixes [GHSA-8f3c-j762-q9q4](https://github.com/galaxyproject/galaxy-mcp/security/advisories/GHSA-8f3c-j762-q9q4).
+galaxy-mcp is first of all a local server for the person running it, and several tools
+assumed the caller owns the process. Over the HTTP transports that assumption did not hold.
+Reported by Syed Anas Mohiuddin (items 1 and 2).
+
+1. `upload_file(path)` read any path the server process could read into the caller's history.
+2. HTTP transports bound `0.0.0.0` by default with no authentication unless OAuth was
+   configured, and fell back to the operator's environment credentials.
+3. `download_dataset(file_path=...)` wrote dataset contents to any path the process could write.
+4. The CORS preflight handler reflected any `Origin`, and `Host` was never validated, so a web
+   page open in the user's browser could drive a local unauthenticated HTTP server.
+5. `connect(url=...)` without an `api_key` sent the environment's `GALAXY_API_KEY` to the
+   caller-supplied URL.
+
+What changed, and what to do if it affects you:
+
+- `upload_file` and `download_dataset(file_path=...)` refuse over HTTP. Use
+  `upload_file_from_url` and in-memory downloads, or set `GALAXY_MCP_ALLOW_LOCAL_FILES=1` on
+  a trusted single-user deployment. Stdio is unchanged.
+- HTTP binds `127.0.0.1` by default. A non-loopback bind without OAuth refuses to start unless
+  you pass `--allow-unauthenticated` (`GALAXY_MCP_ALLOW_UNAUTHENTICATED=1`). The container
+  image binds `0.0.0.0`, so running it over HTTP without OAuth now needs that flag.
+- Without OAuth, requests must carry a loopback `Host`, and browser requests are only answered
+  for loopback origins. Add names with `GALAXY_MCP_ALLOWED_HOSTS` / `GALAXY_MCP_ALLOWED_ORIGINS`.
+  With OAuth the bearer token is the gate and behaviour is unchanged.
+- `connect(url=...)` only pairs the environment's `GALAXY_API_KEY` with the configured
+  `GALAXY_URL`; any other server needs an explicit `api_key`. With OAuth enabled the
+  environment's credentials are never lent to a request, and an OAuth provider that fails to
+  initialise now stops startup instead of running without auth.
+- New `SECURITY.md`; the README has a "Serving over HTTP" section covering all of the above.
+
 ### Fixed
 
 - The three raw requests over the unprivileged-tools API now check the status Galaxy answered
