@@ -1,0 +1,51 @@
+{
+  "data": {
+    "history_id": "h0000",
+    "contents": [
+      {
+        "id": "d0000",
+        "hid": 1,
+        "name": "dataset 0",
+        "state": "ok",
+        "deleted": false,
+        "visible": true,
+        "history_content_type": "dataset",
+        "extension": "txt"
+      },
+      {
+        "id": "d0001",
+        "hid": 2,
+        "name": "dataset 1",
+        "state": "ok",
+        "deleted": false,
+        "visible": true,
+        "history_content_type": "dataset",
+        "extension": "txt"
+      },
+      {
+        "id": "d0002",
+        "hid": 3,
+        "name": "dataset 2",
+        "state": "ok",
+        "deleted": false,
+        "visible": true,
+        "history_content_type": "dataset",
+        "extension": "txt"
+      }
+    ]
+  },
+  "success": true,
+  "message": "Retrieved 3 items from history",
+  "count": 3,
+  "pagination": {
+    "total_items": 3,
+    "returned_items": 3,
+    "limit": 10,
+    "offset": 0,
+    "has_next": false,
+    "has_previous": false,
+    "next_offset": null,
+    "previous_offset": null,
+    "helper_text": "Showing 3 of 3 items (offset 0). This is the last page."
+  }
+}

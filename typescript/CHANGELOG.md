@@ -146,6 +146,19 @@ Breaking: it refuses content whose directives name an object by something other 
 an encoded id (a hid, a name), which Galaxy cannot resolve, and a section edit on a page
 authored as HTML. galaxy-ops exports `malformedObjectIds`.
 
+### `get_history_contents` pages with Galaxy's real total (#155)
+
+It asks Galaxy for one filtered, sorted window and the count it matched, instead of
+fetching the whole history; a page over the output budget is cut, and its `pagination`
+names where to continue. Breaking: rows no longer carry `dataset_id`, the id of the
+Dataset under a history item rather than of the item, which no operation takes; use
+`id`. An `order` without a direction is refused, because a bare key was read as
+ascending here while Galaxy reads it as descending; `order` is one of Galaxy's sort keys
+for a history (`hid`, `create_time`, `update_time`, `name`, `extension`, `size`) with
+`-asc` or `-dsc`, e.g. `hid-asc`. Rows are the contents index's summary view: dataset
+rows are unchanged, and collection rows gain `type_id` and `store_times_summary` and
+lose `model_class`, `populated` and `column_definitions`.
+
 ## 0.3.2 (2026-10-12)
 
 ### Redirects are no longer followed, so the API key cannot leak off-origin (security)

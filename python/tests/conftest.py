@@ -20,6 +20,10 @@ def mock_galaxy_instance():
     mock_gi.url = "http://localhost:8080/api"
     mock_gi.base_url = "http://localhost:8080"
     mock_gi.key = "test_key"
+    # The routes that make their own requests send bioblend's headers with them.
+    mock_gi.json_headers = {"Content-Type": "application/json", "x-api-key": "test_key"}
+    mock_gi.timeout = None
+    mock_gi.verify = True
 
     # Mock histories
     mock_histories = Mock()

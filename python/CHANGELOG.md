@@ -111,6 +111,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   when the page changed since it was read. The answer carries the page's new
   `content_hash`.
 
+### Breaking
+
+- `get_history_contents` rows no longer carry `dataset_id`. It is the id of the Dataset
+  under a history item, not of the item itself: no tool takes it, and passed where
+  `id` belongs it names whichever item has that number rather than this one. Use `id`.
+- `get_history_contents` refuses an `order` without a direction. A bare key was read as
+  ascending here while Galaxy reads it as descending, so one request sorted two ways.
+  `order` is one of Galaxy's sort keys for a history (`hid`, `create_time`,
+  `update_time`, `name`, `extension`, `size`) with `-asc` or `-dsc`, e.g. `hid-asc`.
+- `get_history_contents` rows are the contents index's summary view. Dataset rows are
+  unchanged; collection rows gain `type_id` and `store_times_summary` and lose
+  `model_class`, `populated` and `column_definitions`.
+
+### Changed
+
+- `get_history_contents` asks Galaxy for one filtered, sorted window and the count it
+  matched, instead of fetching the whole history; a page over the output budget is cut,
+  and its `pagination` names where to continue. A failure quotes the contents URL with
+  its query.
+
 ## [1.11.2] - 2026-10-12
 
 ### Fixed

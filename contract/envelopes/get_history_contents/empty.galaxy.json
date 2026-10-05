@@ -5,10 +5,20 @@
     {
       "method": "GET",
       "path": "/api/histories/h0000/contents",
-      "query": {},
+      "query": {
+        "v": "dev",
+        "limit": "10",
+        "offset": "0",
+        "order": "hid-asc"
+      },
       "status": 200,
       "headers": {},
-      "body": []
+      "body": {
+        "contents": [],
+        "stats": {
+          "total_matches": 0
+        }
+      }
     }
   ]
 }
