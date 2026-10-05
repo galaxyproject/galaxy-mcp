@@ -115,6 +115,10 @@ read as not found. The check accepts what Galaxy's own `uuid.UUID()` does, so th
 `delete_user_tool` and `run_user_tool`. Four golden cases: `found`, `found_without_hyphens`,
 `not_found`, `malformed_uuid`.
 
+### `update_history` is marked destructive (#155)
+
+It sets MCP's `destructiveHint`, since it deletes the history when `deleted` is true.
+
 ## 0.3.2 (2026-10-12)
 
 ### Redirects are no longer followed, so the API key cannot leak off-origin (security)
