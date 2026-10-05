@@ -27,6 +27,7 @@
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 import { describe, it, expect, vi } from "vitest";
 import { allOperations, createGalaxyContext, type AnyOperation } from "@galaxyproject/galaxy-ops";
 import { buildProgram } from "../src/program";
@@ -41,6 +42,11 @@ interface Route {
   method: string;
   path: string;
   query: Record<string, string>;
+  /**
+   * Keys the JSON request body has to carry, with these values; any others it carries are
+   * ignored. Only on a route that has to prove an argument reached a write's payload.
+   */
+  json?: Record<string, unknown>;
   status: number;
   headers: Record<string, string>;
   /** The reply as a value, for a route whose exact bytes do not matter. */
@@ -73,7 +79,7 @@ const failures = index.cases.filter((c) => c.outcome === "failure");
 
 /** The canned replies, matched the way the generator registered them. */
 function replier(baseUrl: string, routes: Route[]): typeof fetch {
-  return (async (input: unknown, init?: { method?: string }): Promise<Response> => {
+  return (async (input: unknown, init?: { method?: string; body?: unknown }): Promise<Response> => {
     const href =
       typeof input === "string"
         ? input
@@ -87,6 +93,7 @@ function replier(baseUrl: string, routes: Route[]): typeof fetch {
     const method = (
       init?.method ?? (input instanceof Request ? input.method : "GET")
     ).toUpperCase();
+    const sent = routes.some((route) => route.json) ? await sentJson(input, init) : undefined;
     const target = routes
       .filter((route) => {
         if (route.method.toUpperCase() !== method) return false;
@@ -94,9 +101,14 @@ function replier(baseUrl: string, routes: Route[]): typeof fetch {
           ? new URL(route.path)
           : new URL(route.path, baseUrl);
         if (want.origin !== url.origin || want.pathname !== url.pathname) return false;
-        return Object.entries(route.query).every(([k, v]) => url.searchParams.get(k) === v);
+        if (!Object.entries(route.query).every(([k, v]) => url.searchParams.get(k) === v)) {
+          return false;
+        }
+        return Object.entries(route.json ?? {}).every(
+          ([k, v]) => sent !== undefined && isDeepStrictEqual(sent[k], v),
+        );
       })
-      .sort((a, b) => Object.keys(b.query).length - Object.keys(a.query).length)[0];
+      .sort((a, b) => specificity(b) - specificity(a))[0];
     if (!target) {
       return new Response(JSON.stringify({ err_msg: `no canned reply for ${method} ${href}` }), {
         status: 404,
@@ -112,6 +124,32 @@ function replier(baseUrl: string, routes: Route[]): typeof fetch {
       headers: { "content-type": "application/json", ...target.headers },
     });
   }) as typeof fetch;
+}
+
+/** How much of a request a route names: the most specific matching route wins. */
+const specificity = (route: Route): number =>
+  Object.keys(route.query).length + Object.keys(route.json ?? {}).length;
+
+/**
+ * The request's JSON body as an object, or undefined when there is none to read. openapi-fetch
+ * hands over a Request, whose body is read from a clone so the reply path is left untouched.
+ */
+async function sentJson(input: unknown, init?: { body?: unknown }): Promise<Record<string, unknown> | undefined> {
+  const text =
+    input instanceof Request
+      ? await input.clone().text()
+      : typeof init?.body === "string"
+        ? init.body
+        : "";
+  if (!text) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** The op's own name for a parameter the wire spells in snake_case. */
@@ -238,6 +276,7 @@ const EXIT_CODES: Record<string, number> = {
   // EX_USAGE 64 -- validation: the caller has to change something, and a retry cannot help
   "get_dataset_details/is_a_collection": 64,
   "get_history_contents/limit_below_one": 64,
+  "invoke_workflow/negative_version": 64,
   "list_history_ids/history_without_an_id": 64,
   "list_workflows/limit_above_the_ceiling": 64,
   "recommend_biocontainer/package_entry_with_no_name": 64,

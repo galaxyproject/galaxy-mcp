@@ -119,6 +119,7 @@ def route(
     body: Any,
     *,
     query: dict[str, str] | None = None,
+    json_body: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
     status: int = 200,
     method: str = "GET",
@@ -128,6 +129,12 @@ def route(
 
     ``query`` is only set where a case needs two answers from one path; a route that
     declares none answers any query on that path.
+
+    ``json_body`` narrows a write the same way: every key it names has to be in the
+    JSON request body with that value, and keys it does not name are ignored. It is
+    for a case that has to prove an argument reached the payload, where the two sides
+    otherwise send bodies that differ in fields nobody is checking. Left out of the
+    route entirely when unset, so the tables that never needed it read as before.
 
     ``body_text`` serves those exact bytes instead of a JSON rendering of ``body``, and
     is what every failure route uses. It has to: a failure sentence quotes the reply
@@ -141,6 +148,7 @@ def route(
         "method": method,
         "path": path,
         "query": query or {},
+        **({"json": json_body} if json_body is not None else {}),
         "status": status,
         "headers": headers or {},
         # One or the other, never both: a route whose bytes matter says so, and a reader
@@ -4172,6 +4180,11 @@ def _clear_recommendation_cache() -> None:
         mulled_recommend._cache.clear()
 
 
+def specificity(spec: dict[str, Any]) -> int:
+    """Sort key putting the route that names the most of a request first."""
+    return -(len(spec["query"]) + len(spec.get("json") or {}))
+
+
 def run_case(case: Case, session: LiveMCPSession | None = None) -> GalaxyResult | dict[str, Any]:
     """Answer this case's requests from its table and return what the tool answered.
 
@@ -4192,18 +4205,33 @@ def run_case(case: Case, session: LiveMCPSession | None = None) -> GalaxyResult 
         with responses.RequestsMock(assert_all_requests_are_fired=False) as mock:
             # Most specific first: `responses` takes the first registration that matches,
             # and the TypeScript replay picks the same one by the same rule.
-            for spec in sorted(case.routes, key=lambda r: -len(r["query"])):
+            for spec in sorted(case.routes, key=specificity):
                 body = spec.get("bodyText")
                 mock.add(
                     method=spec["method"],
                     url=absolute(spec["path"]),
                     status=spec["status"],
                     headers=spec["headers"],
-                    match=(
-                        [responses.matchers.query_param_matcher(spec["query"], strict_match=False)]
-                        if spec["query"]
-                        else []
-                    ),
+                    match=[
+                        *(
+                            [
+                                responses.matchers.query_param_matcher(
+                                    spec["query"], strict_match=False
+                                )
+                            ]
+                            if spec["query"]
+                            else []
+                        ),
+                        *(
+                            [
+                                responses.matchers.json_params_matcher(
+                                    spec["json"], strict_match=False
+                                )
+                            ]
+                            if spec.get("json")
+                            else []
+                        ),
+                    ],
                     **(
                         {"body": body, "content_type": "application/json"}
                         if body is not None
