@@ -31,6 +31,15 @@ describe("waitForJob", () => {
     );
   });
 
+  // skipped and stopped are settled: the wait used to keep polling them until it timed out.
+  it.each(["skipped", "stopped", "failed", "deleted"])("stops on %s and says which state", async (state) => {
+    const ctx = ctxWith(jobStates(["running", state]));
+    ctx.poll.timeoutMs = 60_000;
+    const failure = await waitForJob("j1", ctx).catch((e) => e);
+    expect(failure).toBeInstanceOf(JobFailedError);
+    expect(String(failure.message)).toContain(state);
+  });
+
   it("honors an aborted signal", async () => {
     const ac = new AbortController();
     ac.abort();
