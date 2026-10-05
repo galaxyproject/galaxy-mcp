@@ -62,6 +62,9 @@ export const updateHistoryOp: Operation<typeof input, UpdatedHistory> = {
   summary: "Update history metadata (name, annotation, tags, deleted, published).",
   input,
   readOnly: false,
+  // Deleting the whole history is one of the updates it makes, and MCP's destructiveHint says
+  // what a tool may do.
+  destructive: true,
   run,
   project: (_data, i) => {
     // The same `!= null` the body is built with, and for the same reason: over there both
