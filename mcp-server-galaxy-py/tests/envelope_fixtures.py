@@ -162,6 +162,38 @@ def route(
 VERSION_ROUTE = route("/api/version", {"version_major": "26.1", "version_minor": "1"})
 
 
+def _same_json(a: Any, b: Any) -> bool:
+    # Python's == says True == 1; the TypeScript replay's isDeepStrictEqual
+    # doesn't, so compare the way JSON (and JavaScript) sees the values.
+    if isinstance(a, bool) or isinstance(b, bool):
+        return type(a) is type(b) and a == b
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_same_json(a[k], b[k]) for k in a)
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_same_json(x, y) for x, y in zip(a, b, strict=True))
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return a == b
+    return type(a) is type(b) and a == b
+
+
+def _json_body_matcher(expected: dict[str, Any]) -> Callable[[Any], tuple[bool, str]]:
+    """Require each key in ``expected`` in the request's JSON body, as the TS replay does."""
+
+    def match(request: Any) -> tuple[bool, str]:
+        try:
+            sent = json.loads(request.body or b"")
+        except ValueError:
+            return False, "request body is not JSON"
+        if not isinstance(sent, dict):
+            return False, "request body is not a JSON object"
+        for key, value in expected.items():
+            if key not in sent or not _same_json(sent[key], value):
+                return False, f"body {key!r} is {sent.get(key)!r}, wanted {value!r}"
+        return True, ""
+
+    return match
+
+
 @dataclass
 class Case:
     """One call, the replies it is answered with, and what it pins."""
@@ -4310,15 +4342,7 @@ def run_case(case: Case, session: LiveMCPSession | None = None) -> GalaxyResult 
                             if spec["query"]
                             else []
                         ),
-                        *(
-                            [
-                                responses.matchers.json_params_matcher(
-                                    spec["json"], strict_match=False
-                                )
-                            ]
-                            if spec.get("json")
-                            else []
-                        ),
+                        *([_json_body_matcher(spec["json"])] if spec.get("json") else []),
                     ],
                     **(
                         {"body": body, "content_type": "application/json"}
