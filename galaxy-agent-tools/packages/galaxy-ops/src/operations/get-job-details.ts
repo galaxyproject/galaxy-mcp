@@ -31,6 +31,30 @@ export interface GetJobDetailsResult {
   job_id: string;
 }
 
+/** The log fields Galaxy adds to a job when asked for it in full, and how much of each to keep. */
+const JOB_LOG_FIELDS = ["tool_stdout", "tool_stderr", "job_stdout", "job_stderr", "stdout", "stderr"];
+const JOB_LOG_BYTES = 4 * 1024;
+
+/**
+ * Both ends of a log, cut on line boundaries: the cause is usually at the end, the context at
+ * the start, and a long log keeps neither if only one end is read. Measured in UTF-8 bytes, with
+ * a line saying how much was left out -- the other server's `_ends`, byte for byte.
+ */
+export function logEnds(text: string, cap = JOB_LOG_BYTES): string {
+  const data = new TextEncoder().encode(text);
+  if (data.length <= cap) return text;
+  const half = Math.floor(cap / 2);
+  const front = data.subarray(0, half);
+  const back = data.subarray(data.length - half);
+  const cut = front.lastIndexOf(10);
+  const head = cut < 0 ? front : front.subarray(0, cut);
+  const start = back.indexOf(10);
+  const tail = start < 0 ? back : back.subarray(start + 1);
+  const dropped = data.length - head.length - tail.length;
+  const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
+  return `${decode(head)}\n[... ${dropped} of ${data.length} bytes omitted ...]\n${decode(tail)}`;
+}
+
 const input = {
   datasetId: z.string().describe("dataset (HDA) id"),
   historyId: z.string().nullish().describe("history id; speeds provenance lookup"),
@@ -73,13 +97,18 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetJobDetailsResult> {
     }
   }
 
+  // In full: a failed job's logs are only in the full view.
   const { data: jobData, error: jobError, response: jobResp } = await ctx.client.GET("/api/jobs/{job_id}", {
-    params: { path: { job_id: jobId } },
+    params: { path: { job_id: jobId }, query: { full: true } },
   });
   if (jobError || !jobData) throw httpError(jobResp, jobError);
+  const job = { ...(jobData as JobDetail) };
+  for (const field of JOB_LOG_FIELDS) {
+    if (typeof job[field] === "string") job[field] = logEnds(job[field] as string);
+  }
 
   return {
-    job: jobData as JobDetail,
+    job,
     dataset_id: i.datasetId,
     job_id: jobId,
   };
@@ -89,7 +118,11 @@ export const getJobDetailsOp: Operation<typeof input, GetJobDetailsResult> = {
   name: "get_job_details",
   domain: "jobs",
   result: { kind: "object", fields: ["job", "dataset_id", "job_id"] },
-  summary: "Get job details for the job that produced a dataset.",
+  summary:
+    "Get job details for the job that produced a dataset. The job is read in full, so a failed " +
+    "job's logs come with it: tool_stdout, tool_stderr, job_stdout, job_stderr, stdout and " +
+    "stderr. A log longer than 4 KB keeps its first and last 2 KB, cut on line boundaries, with " +
+    "a line saying how much was left out.",
   input,
   run,
   // server.py, get_job_details: the dataset that was asked about, not the job that

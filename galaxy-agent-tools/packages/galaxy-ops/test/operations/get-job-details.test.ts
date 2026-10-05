@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { getJobDetailsOp, getJobDetails } from "../../src/operations/get-job-details";
+import { getJobDetailsOp, getJobDetails, logEnds } from "../../src/operations/get-job-details";
 import { mockClient } from "../util/mock-client";
 import { DEFAULT_POLL } from "../../src/context";
 import type { GalaxyContext } from "../../src/context";
@@ -113,5 +113,46 @@ describe("get_job_details", () => {
     const out = await getJobDetails({ datasetId: "d5", historyId: "h5" }, ctxWith(client));
     expect(out.job_id).toBe("j5");
     expect(out.dataset_id).toBe("d5");
+  });
+});
+
+describe("get_job_details logs", () => {
+  /** A dataset made by job j1, whose full view carries `fields`. */
+  function job(fields: Record<string, unknown>) {
+    const queries: unknown[] = [];
+    const client = mockClient({
+      GET: (path: string, init: any) => {
+        if (path === "/api/datasets/{dataset_id}") return { data: { creating_job: "j1" }, response: { status: 200 } };
+        queries.push(init?.params?.query);
+        return { data: { id: "j1", state: "error", ...fields }, response: { status: 200 } };
+      },
+    });
+    return { queries, run: () => getJobDetails({ datasetId: "d1" }, { client, poll: DEFAULT_POLL } as never) };
+  }
+
+  it("asks for the job in full", async () => {
+    const j = job({ tool_stderr: "Traceback: boom" });
+    expect((await j.run()).job.tool_stderr).toBe("Traceback: boom");
+    expect(j.queries).toEqual([{ full: true }]);
+  });
+
+  it("keeps the first line through a flood of warnings", async () => {
+    const noise = Array(600).fill("Invalid bed line (skipped): @SQ SN:chr1 LN:248956422").join("\n");
+    const out = (await job({ tool_stderr: "Reading reference bed file: ref.dat\n" + noise }).run()).job.tool_stderr as string;
+    expect(out.startsWith("Reading reference bed file: ref.dat")).toBe(true);
+    expect(out).toContain("bytes omitted");
+  });
+
+  it("keeps the end, and whole lines at both cuts", async () => {
+    const noisy = Array.from({ length: 2000 }, (_, i) => `warning number ${i}`).join("\n") + "\nRuntimeError: the real cause";
+    const lines = ((await job({ tool_stderr: noisy }).run()).job.tool_stderr as string).split("\n");
+    expect(lines[0]).toBe("warning number 0");
+    expect(lines[lines.length - 1]).toBe("RuntimeError: the real cause");
+    expect(lines.find((l) => l.includes("omitted"))).toMatch(new RegExp(`of ${new TextEncoder().encode(noisy).length} bytes omitted \\.\\.\\.\\]$`));
+  });
+
+  it("measures in UTF-8 bytes, as the other server does", () => {
+    expect(logEnds(Array(30).fill("€".repeat(50)).join("\n"))).toContain("bytes omitted");
+    expect(logEnds("short")).toBe("short");
   });
 });

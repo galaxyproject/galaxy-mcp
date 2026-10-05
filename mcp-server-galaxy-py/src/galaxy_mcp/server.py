@@ -2735,10 +2735,39 @@ def _job_details_failed(dataset_id: str, error: Exception) -> str:
     return format_error("Get job details", error, {"dataset_id": dataset_id})
 
 
+# The log fields Galaxy adds to a job when asked for it in full, and how much of each to keep.
+_JOB_LOG_FIELDS = ("tool_stdout", "tool_stderr", "job_stdout", "job_stderr", "stdout", "stderr")
+_JOB_LOG_BYTES = 4 * 1024
+
+
+def _ends(text: str, cap: int) -> str:
+    """Both ends of a log, cut on line boundaries: the cause is usually at the end, the
+    context at the start, and a long log keeps neither if only one end is read."""
+    data = text.encode("utf-8")
+    if len(data) <= cap:
+        return text
+    half = cap // 2
+    front, back = data[:half], data[len(data) - half :]
+    cut = front.rfind(b"\n")
+    head = front if cut < 0 else front[:cut]
+    start = back.find(b"\n")
+    tail = back if start < 0 else back[start + 1 :]
+    dropped = len(data) - len(head) - len(tail)
+    return (
+        f"{head.decode('utf-8', errors='replace')}\n"
+        f"[... {dropped} of {len(data)} bytes omitted ...]\n"
+        f"{tail.decode('utf-8', errors='replace')}"
+    )
+
+
 @mcp.tool(tags={"jobs", "read", "core"})
 def get_job_details(dataset_id: str, history_id: str | None = None) -> GalaxyResult:
     """
     Get detailed information about the job that created a specific dataset
+
+    The job is read in full, so a failed job's logs come back with it: tool_stdout,
+    tool_stderr, job_stdout, job_stderr, stdout and stderr. A log longer than 4 KB keeps its
+    first and last 2 KB, cut on line boundaries, with a line saying how much was left out.
 
     Args:
         dataset_id: Galaxy dataset ID - a hexadecimal hash string identifying the dataset
@@ -2805,11 +2834,14 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> GalaxyRes
     url = f"{base_url}api/jobs/{job_id}"
     headers = {"x-api-key": api_key}
     try:
-        response = requests.get(url, headers=headers, timeout=30)
+        response = requests.get(url, headers=headers, params={"full": "true"}, timeout=30)
         response.raise_for_status()
         job_info = response.json()
     except Exception as e:
         raise ValueError(_job_details_failed(dataset_id, e)) from e
+    for field in _JOB_LOG_FIELDS:
+        if isinstance(job_info.get(field), str):
+            job_info[field] = _ends(job_info[field], _JOB_LOG_BYTES)
 
     return GalaxyResult(
         data={"job": job_info, "dataset_id": dataset_id, "job_id": job_id},

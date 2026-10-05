@@ -2401,6 +2401,28 @@ def job_details_cases(add: AddCase) -> None:
         lambda: get_job_details_fn("d0000002"),
         [dataset_route, job_route],
     )
+    noisy_log = "\n".join(f"warning number {i}" for i in range(400)) + "\nRuntimeError: the cause\n"
+    add(
+        "get_job_details",
+        "long_logs_kept_at_both_ends",
+        "a failed job read in full, whose long logs keep their first and last lines",
+        {"dataset_id": "d0000002"},
+        lambda: get_job_details_fn("d0000002"),
+        [
+            dataset_route,
+            route(
+                "/api/jobs/j0000001",
+                {
+                    "id": "j0000001",
+                    "state": "error",
+                    "tool_id": "fastqc",
+                    "tool_stderr": noisy_log,
+                    "tool_stdout": "Started analysis of reads.fq\n",
+                    "stderr": "€" * 1500,
+                },
+            ),
+        ],
+    )
     add(
         "get_job_details",
         "provenance_without_a_job_id",
