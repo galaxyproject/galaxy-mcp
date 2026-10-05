@@ -82,7 +82,7 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `get_history_contents` | `visible` |  | `type=boolean required=false default=true` | `type=boolean required=false default=true` | `type=boolean required=false default=none` | `vs built-in: default-mismatch` | `unreviewed-gap` | Ours defaults to visible items only; Galaxy's passes None through and lets the API decide. |
 | `get_history_details` |  | `4` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_invocation_details` |  | `0` | -- | -- | `write (mcp default)` | `vs built-in: missing-py-tool` | `unreviewed-gap` | Only Galaxy's. The same reading exists here inside get_invocations, which returns one invocation's detail when it is given invocation_id. |
-| `get_invocations` |  | `5` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
+| `get_invocations` |  | `6` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_invocations` | `invocation_id` |  | `type=string required=false default=none` | `type=string required=false default=none` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours takes an invocation id and returns that one invocation's detail; Galaxy's splits that into get_invocation_details. |
 | `get_invocations` | `limit` |  | `type=integer required=false default=none` | `type=integer required=false default=none` | `type=integer required=false default=50` | `vs built-in: default-mismatch` | `unreviewed-gap` | Ours declares no default; Galaxy's pages at 50. |
 | `get_invocations` | `offset` |  | -- | -- | `type=integer required=false default=0` | `vs built-in: missing-py-param` | `unreviewed-gap` | Galaxy's pages with limit+offset; ours takes limit only. |
