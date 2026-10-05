@@ -4877,6 +4877,20 @@ def _strip_rendered(page: dict[str, Any], include_rendered: bool) -> dict[str, A
     return page
 
 
+def _content_hash(page: dict[str, Any]) -> str:
+    """Galaxy's page hash of the editable source, so a caller can tell whether a page changed.
+
+    The source is ``content_editor``, or ``content`` for an HTML page, which Galaxy fills on
+    the markdown path only. The hash is ``_djb2_hash`` in lib/galaxy/agents/page_assistant.py:
+    djb2 over code points, eight hex digits. (Galaxy's client spells it over UTF-16 code units,
+    which differs only for characters outside the Basic Multilingual Plane.)
+    """
+    h = 5381
+    for c in page.get("content_editor") or page.get("content") or "":
+        h = ((h * 33) + ord(c)) & 0xFFFFFFFF
+    return format(h, "08x")
+
+
 def _with_editable_content(revision: dict[str, Any]) -> dict[str, Any]:
     """Give a revision one field to edit whatever the server sent, and say which it was.
 
@@ -4996,7 +5010,9 @@ def get_page(page_id: str, include_rendered: bool = False) -> GalaxyResult:
 
     Returns `content_editor`: the editable Galaxy-flavored markdown, with
     ENCODED ids in directives (e.g. `history_dataset_id=<encoded-dataset-id>`).
-    This is the form to edit and pass back to update_page.
+    This is the form to edit and pass back to update_page. Also returns
+    `content_hash`, Galaxy's page hash of that source: read the page again and
+    compare it to tell whether anyone changed the page since.
 
     Args:
         page_id: Encoded id of the page (from list_pages / create_page).
@@ -5005,8 +5021,8 @@ def get_page(page_id: str, include_rendered: bool = False) -> GalaxyResult:
             large; omit unless you need the rendered output.
 
     Returns:
-        GalaxyResult with page details including `content_editor`, metadata, and
-        `edit_source` of the latest revision in data.
+        GalaxyResult with page details including `content_editor`, `content_hash`,
+        metadata, and `edit_source` of the latest revision in data.
 
     NEXT STEPS:
     - Edit it: update_page(page_id, content=...)
@@ -5018,7 +5034,11 @@ def get_page(page_id: str, include_rendered: bool = False) -> GalaxyResult:
     try:
         response = gi.make_get_request(f"{gi.url}/pages/{page_id}")
         response.raise_for_status()
-        page = _strip_rendered(response.json(), include_rendered)
+        raw = response.json()
+        # Hashed before the render is dropped: an HTML page's source is in `content`.
+        content_hash = _content_hash(raw)
+        page = _strip_rendered(raw, include_rendered)
+        page["content_hash"] = content_hash
         return GalaxyResult(
             data=page,
             success=True,

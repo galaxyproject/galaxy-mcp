@@ -119,6 +119,7 @@ export { revertPageRevisionOp, revertPageRevision } from "./operations/revert-pa
 export type {
   PageSummary,
   PageDetail,
+  HashedPage,
   PageRevisionSummary,
   PageRevisionDetails,
   ContentEditorSource,

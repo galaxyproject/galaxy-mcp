@@ -132,6 +132,35 @@ class TestPageOperations:
         assert "content" not in result.data
         assert self.gi.make_get_request.call_args.args[0] == f"{GALAXY_API_URL}/pages/page1"
 
+    def test_get_page_hashes_the_editable_source_as_galaxy_does(self):
+        self.gi.make_get_request.return_value = _get_response(
+            {"id": "page1", "content": "<rendered html>", "content_editor": "raw markdown"}
+        )
+
+        result = get_page_fn("page1")
+
+        # page_assistant.py's _djb2_hash("raw markdown"), worked out independently.
+        assert result.data["content_hash"] == "f2285a32"
+
+    def test_get_page_hashes_an_html_page_by_its_body_even_when_the_render_is_dropped(self):
+        # Galaxy fills content_editor on the markdown path only; an HTML page's body is content.
+        self.gi.make_get_request.return_value = _get_response(
+            {"id": "page1", "content": "<p>html body</p>", "content_editor": ""}
+        )
+
+        result = get_page_fn("page1")
+
+        assert "content" not in result.data
+        assert result.data["content_hash"] == "a014134b"
+
+    def test_get_page_hashes_code_points_as_galaxys_page_assistant_does(self):
+        # Galaxy's client walks UTF-16 code units and would say 65861004 here.
+        self.gi.make_get_request.return_value = _get_response(
+            {"id": "page1", "content_editor": "# \U0001f9ec genes"}
+        )
+
+        assert get_page_fn("page1").data["content_hash"] == "52098886"
+
     def test_get_page_include_rendered(self):
         self.gi.make_get_request.return_value = _get_response(
             {

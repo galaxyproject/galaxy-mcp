@@ -28,6 +28,28 @@ describe("get_page", () => {
     expect("content" in out).toBe(false);
   });
 
+  it("hashes the editable source as Galaxy's page assistant does", async () => {
+    const client = mockClient({ GET: () => ({ data: { ...page }, response: { status: 200 } }) });
+    const out = await getPage({ pageId: "page1" }, ctxWith(client));
+    // The other server's value for "raw markdown", which page_assistant.py's _djb2_hash gives.
+    expect(out.content_hash).toBe("f2285a32");
+  });
+
+  it("hashes an html page by its body, although the render is dropped", async () => {
+    const html = { id: "page2", content: "<p>html body</p>", content_editor: "" };
+    const client = mockClient({ GET: () => ({ data: html, response: { status: 200 } }) });
+    const out = await getPage({ pageId: "page2" }, ctxWith(client));
+    expect("content" in out).toBe(false);
+    expect(out.content_hash).toBe("a014134b");
+  });
+
+  it("hashes code points, not UTF-16 code units", async () => {
+    // Galaxy's client walks code units and would say 65861004 here; the other server says this.
+    const emoji = { id: "page3", content_editor: "# \u{1F9EC} genes" };
+    const client = mockClient({ GET: () => ({ data: emoji, response: { status: 200 } }) });
+    expect((await getPage({ pageId: "page3" }, ctxWith(client))).content_hash).toBe("52098886");
+  });
+
   it("keeps the rendered form when it is asked for", async () => {
     const client = mockClient({ GET: () => ({ data: { ...page }, response: { status: 200 } }) });
     const out = await getPage({ pageId: "page1", includeRendered: true }, ctxWith(client));

@@ -61,6 +61,25 @@ export interface PageDetail extends PageSummary {
   generate_version?: string | null;
 }
 
+/** A page as get_page answers: the editable source and Galaxy's hash of it. */
+export type HashedPage = PageDetail & { content_hash: string };
+
+/**
+ * Galaxy's page hash of the editable source, so a caller can tell whether a page changed.
+ *
+ * The source is `content_editor`, or `content` for an HTML page, which Galaxy fills on the
+ * markdown path only. The hash is `_djb2_hash` in lib/galaxy/agents/page_assistant.py: djb2
+ * over code points, eight hex digits, as the other server computes it. (Galaxy's client spells
+ * it over UTF-16 code units, which differs only outside the Basic Multilingual Plane.)
+ */
+export function contentHash(page: Pick<PageDetail, "content_editor" | "content">): string {
+  let h = 5381;
+  for (const c of page.content_editor || page.content || "") {
+    h = (h * 33 + c.codePointAt(0)!) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+
 /** One entry of GET /api/pages/{id}/revisions. */
 export interface PageRevisionSummary {
   id: string;
