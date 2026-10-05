@@ -94,6 +94,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Galaxy's `state` describes scheduling and reports `completed` for a run whose jobs
   failed. Listings are unchanged.
 
+### Added
+
+- `get_page` answers with `content_hash`, Galaxy's hash of the editable source.
+
 ## [1.11.2] - 2026-10-12
 
 ### Fixed

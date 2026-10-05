@@ -132,6 +132,11 @@ Given an invocation id, the answer adds `job_states` and `outcome` (`failing`, `
 `state` describes scheduling and reports `completed` for a run whose jobs failed.
 Listings are unchanged. galaxy-ops exports `invocationOutcome`.
 
+### `get_page` answers with a content hash (#155)
+
+The answer carries `content_hash`, Galaxy's hash of the editable source. galaxy-ops
+exports `contentHash`.
+
 ## 0.3.2 (2026-10-12)
 
 ### Redirects are no longer followed, so the API key cannot leak off-origin (security)

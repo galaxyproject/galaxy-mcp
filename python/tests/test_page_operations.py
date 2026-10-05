@@ -132,6 +132,14 @@ class TestPageOperations:
         assert "content" not in result.data
         assert self.gi.make_get_request.call_args.args[0] == f"{GALAXY_API_URL}/pages/page1"
 
+    def test_get_page_hashes_code_points_as_galaxys_page_assistant_does(self):
+        # Galaxy's client walks UTF-16 code units and would say 65861004 here.
+        self.gi.make_get_request.return_value = _get_response(
+            {"id": "page1", "content_editor": "# \U0001f9ec genes"}
+        )
+
+        assert get_page_fn("page1").data["content_hash"] == "52098886"
+
     def test_get_page_include_rendered(self):
         self.gi.make_get_request.return_value = _get_response(
             {
