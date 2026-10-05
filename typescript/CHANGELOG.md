@@ -119,6 +119,12 @@ read as not found. The check accepts what Galaxy's own `uuid.UUID()` does, so th
 
 It sets MCP's `destructiveHint`, since it deletes the history when `deleted` is true.
 
+### One list of settled job states (#155)
+
+galaxy-ops exports Galaxy's job, dataset and invocation state lists. Breaking for the
+library: `waitForJob` ends on a skipped or stopped job with `JobFailedError` instead
+of polling until the timeout.
+
 ## 0.3.2 (2026-10-12)
 
 ### Redirects are no longer followed, so the API key cannot leak off-origin (security)

@@ -14,19 +14,25 @@ export const DATASET_TERMINAL_STATES = [
 ] as const;
 // NOTE: "paused" and "new" are explicitly NOT terminal (no_data_states / non_ready_states).
 
-// Job.terminal_states is exactly {ok, error, deleted}. "failed" is in the JobState enum
-// but NOT in terminal_states; we still treat it as a terminal-FAILURE at runtime so the
-// poll loop can't hang on it (see wait.ts).
+// Job.terminal_states is exactly {ok, error, deleted}, which the drift test holds to the model.
 export const JOB_MODEL_TERMINAL_STATES = ["ok", "error", "deleted"] as const;
-export const JOB_TERMINAL_FAILURE_STATES = ["error", "deleted", "failed"] as const;
-export const JOB_WAIT_TERMINAL_STATES = ["ok", "error", "deleted", "failed"] as const;
+/**
+ * Job states that will not change again, read off `JobState` (lib/galaxy/schema/states.py):
+ * the model's terminal_states (ok, error, deleted) plus failed, skipped -- a conditional step
+ * that did not run -- and stopped. Every other state counts as still moving, so a state Galaxy
+ * adds later keeps a wait open rather than calling it finished. The one list anything that waits
+ * on a job settles on.
+ */
+export const JOB_SETTLED_STATES = ["ok", "skipped", "stopped", "error", "failed", "deleted"] as const;
+/** The settled job states that are a failure. */
+export const JOB_FAILED_STATES = ["error", "failed", "deleted"] as const;
 
 export const INVOCATION_NON_TERMINAL_STATES = ["new", "ready"] as const;
 // "Truly finished": cancelled | failed | completed. "scheduled"/"cancelling" are in-flight.
 export const INVOCATION_FINISHED_STATES = ["cancelled", "failed", "completed"] as const;
 
 export function isJobTerminal(state: string): boolean {
-  return (JOB_WAIT_TERMINAL_STATES as readonly string[]).includes(state);
+  return (JOB_SETTLED_STATES as readonly string[]).includes(state);
 }
 export function isJobSuccess(state: string): boolean {
   return state === "ok";
