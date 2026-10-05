@@ -6,6 +6,20 @@ entry covers all three; where something only affects one surface, it says which.
 
 ## 0.3.1 (unreleased)
 
+### `invoke_workflow` takes a workflow `version`
+
+All three surfaces take an optional `version` (`--version` on the CLI) to run one stored
+version of the workflow instead of the latest -- numbered from 0, oldest first, the same
+number `get_workflow_details` reports and accepts. It goes into the invocation POST, and the
+input preflight reads that version's run model, so inputs that suit it aren't refused against
+the newest version's slots. A negative version is refused before anything is sent, since
+Galaxy would read it as a list index counted from the newest end. Without `version` the request
+is unchanged. Two new golden cases, `invoke_workflow/with_version` and
+`invoke_workflow/inputs_checked_against_that_version`, are answered only when `version` reaches
+the request, so a surface dropping it fails the replay; `invoke_workflow/negative_version` pins
+the refusal. The fixture route table can now narrow a write on keys in its JSON body, which is
+what those cases need.
+
 ### `get_invocations` sends `step_details` for one invocation (#152)
 
 Given an `invocationId`, the op ignored `stepDetails` and Galaxy answered with every step's

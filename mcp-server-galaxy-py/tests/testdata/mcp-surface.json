@@ -977,6 +977,18 @@
             "default": false,
             "type": "boolean",
             "description": "Whether parameters are already in normalized format"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Which stored version of the workflow to run (optional; the latest when\n    omitted). Versions are numbered from 0, oldest first -- the number\n    get_workflow_details reports as `version` and accepts back. Galaxy\n    refuses a number past the newest with \"Version does not exist\". Must be\n    0 or greater."
           }
         },
         "required": [

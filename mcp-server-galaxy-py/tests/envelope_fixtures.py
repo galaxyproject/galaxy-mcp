@@ -3213,6 +3213,87 @@ def invoke_workflow_cases(add: AddCase) -> None:
             invocations_route,
         ],
     )
+    # A stored version by number. Both routes below answer only when `version` reaches
+    # what Galaxy is sent, so a surface that drops it on the way fails the case rather
+    # than quietly running the latest.
+    add(
+        "invoke_workflow",
+        "with_version",
+        "an earlier stored version run by number: the POST answers only when version is in it",
+        {"workflow_id": "wf000001", "history_id": "h0000", "version": 1},
+        lambda: invoke_workflow_fn("wf000001", history_id="h0000", version=1),
+        [
+            route(
+                "/api/workflows/wf000001/invocations",
+                invocation,
+                method="POST",
+                json_body={"version": 1},
+            )
+        ],
+    )
+    # The preflight has to check the version being run. The latest one here takes only
+    # BAM, so reading its slots instead would refuse the FASTQ before anything is posted.
+    latest_run_model = {
+        **run_model_for_invoke,
+        "steps": {
+            "0": {
+                **run_model_for_invoke["steps"]["0"],
+                "inputs": [{"extensions": ["bam"], "optional": False}],
+            }
+        },
+    }
+    add(
+        "invoke_workflow",
+        "inputs_checked_against_that_version",
+        "the preflight reads the asked-for version's run model, which takes the FASTQ",
+        {
+            "workflow_id": "wf000001",
+            "history_id": "h0000",
+            "inputs": {"0": {"id": "d0000001", "src": "hda"}},
+            "version": 1,
+        },
+        lambda: invoke_workflow_fn(
+            "wf000001",
+            inputs={"0": {"id": "d0000001", "src": "hda"}},
+            history_id="h0000",
+            version=1,
+        ),
+        [
+            route("/api/workflows/wf000001/download", latest_run_model, query={"style": "run"}),
+            route(
+                "/api/workflows/wf000001/download",
+                run_model_for_invoke,
+                query={"style": "run", "version": "1"},
+            ),
+            route(
+                "/api/datatypes/types_and_mapping",
+                {
+                    "datatypes_mapping": {
+                        "ext_to_class_name": {
+                            "fastqsanger": "galaxy.datatypes.sequence.FastqSanger",
+                            "bam": "galaxy.datatypes.binary.Bam",
+                        },
+                        "class_to_classes": {
+                            "galaxy.datatypes.sequence.FastqSanger": {
+                                "galaxy.datatypes.sequence.FastqSanger": True
+                            },
+                            "galaxy.datatypes.binary.Bam": {"galaxy.datatypes.binary.Bam": True},
+                        },
+                    }
+                },
+            ),
+            route(
+                "/api/datasets/d0000001",
+                {"id": "d0000001", "name": "reads.fastqsanger", "extension": "fastqsanger"},
+            ),
+            route(
+                "/api/workflows/wf000001/invocations",
+                invocation,
+                method="POST",
+                json_body={"version": 1},
+            ),
+        ],
+    )
     add(
         "invoke_workflow",
         "batch_answers_with_a_list",
@@ -4018,6 +4099,13 @@ def refusal_cases(add: AddFailure) -> None:
         "negative_offset",
         "the offset floor",
         {"query": "cat", "offset": -1},
+        [],
+    )
+    add(
+        "invoke_workflow",
+        "negative_version",
+        "a version below 0, which Galaxy would read as counted from the newest end",
+        {"workflow_id": "wf000001", "version": -1},
         [],
     )
     add(

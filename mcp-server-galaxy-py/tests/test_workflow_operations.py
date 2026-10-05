@@ -412,6 +412,7 @@ class TestWorkflowOperations:
                 history_name=None,
                 inputs_by="step_index",
                 parameters_normalized=False,
+                version=None,
             )
 
     def test_invoke_workflow_fn_with_history_name(self, mock_galaxy_instance):
@@ -442,7 +443,25 @@ class TestWorkflowOperations:
                 history_name="RNA-seq Analysis Results",
                 inputs_by="name",
                 parameters_normalized=False,
+                version=None,
             )
+
+    def test_invoke_workflow_fn_passes_version_through(self, mock_galaxy_instance):
+        """A caller can run the stored version a user approved, not whatever is latest."""
+        mock_galaxy_instance.workflows.invoke_workflow.return_value = {"id": "inv1"}
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            invoke_workflow_fn(workflow_id="workflow1", history_id="h1", version=0)
+
+        assert mock_galaxy_instance.workflows.invoke_workflow.call_args.kwargs["version"] == 0
+
+    def test_invoke_workflow_fn_refuses_a_negative_version(self, mock_galaxy_instance):
+        """Galaxy would read -1 as a list index from the newest end and run that."""
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError, match=r"version must be 0 or greater \(got -1\)"):
+                invoke_workflow_fn(workflow_id="workflow1", version=-1)
+
+        mock_galaxy_instance.workflows.invoke_workflow.assert_not_called()
 
     def test_cancel_workflow_invocation_fn(self, mock_galaxy_instance):
         """Test cancelling a workflow invocation"""
@@ -601,6 +620,21 @@ def test_resolve_slots_requests_instance_false():
     # gi.url is already the API root -- a doubled /api/api 404s and this path
     # quietly falls back to the .ga export instead of erroring.
     assert url.startswith("https://g/api/workflows/wfid/download?")
+    assert "version=" not in url
+
+
+def test_resolve_slots_reads_the_asked_for_version():
+    # Validating against the latest version's slots would refuse inputs that are right
+    # for the version actually being run.
+    gi = Mock()
+    gi.url = "https://g/api"
+    run_resp = Mock()
+    run_resp.status_code = 500
+    gi.make_get_request.return_value = run_resp
+    gi.workflows.export_workflow_dict.return_value = {"steps": {}}
+    _resolve_workflow_slots(gi, "wfid", version=2)
+    assert "&version=2" in gi.make_get_request.call_args.args[0]
+    gi.workflows.export_workflow_dict.assert_called_once_with("wfid", version=2)
 
 
 # ---------------------------------------------------------------------------

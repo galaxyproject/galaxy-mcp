@@ -152,6 +152,13 @@ const input = {
     .boolean()
     .default(DEFAULT_PARAMETERS_NORMALIZED)
     .describe("Whether legacy parameters are already normalized (indexed by order_index)"),
+  version: z
+    .number()
+    .int()
+    .nullish()
+    .describe(
+      "Which stored version of the workflow to run (the latest when omitted). Versions are numbered from 0, oldest first -- the version get_workflow_details reports and accepts. Galaxy refuses a number past the newest with 'Version does not exist'. Must be 0 or greater.",
+    ),
 };
 
 type JsonObjectArg = Record<string, unknown> | string;
@@ -164,6 +171,7 @@ type In = {
   historyName?: string | null;
   inputsBy?: string;
   parametersNormalized?: boolean;
+  version?: number | null;
 };
 
 /**
@@ -209,6 +217,12 @@ function describeJson(value: unknown): string {
 }
 
 async function run(i: In, ctx: GalaxyContext): Promise<InvokeWorkflowResult> {
+  // Galaxy indexes its version list with this number, so a negative one would silently
+  // run a version counted from the newest end rather than fail. Refused before anything
+  // else, where the other server refuses it.
+  if (i.version != null && (!Number.isInteger(i.version) || i.version < 0)) {
+    throw new GalaxyValidationError(`version must be 0 or greater (got ${i.version})`);
+  }
   const inputs = coerceJsonObject(i.inputs, "inputs");
   const params = coerceJsonObject(i.params, "params");
 
@@ -222,7 +236,13 @@ async function run(i: In, ctx: GalaxyContext): Promise<InvokeWorkflowResult> {
     let slots: Awaited<ReturnType<typeof resolveWorkflowSlots>>["slots"] = [];
     let warnings: unknown[] = [];
     try {
-      const resolved = await resolveWorkflowSlots(ctx, i.workflowId, i.historyId ?? undefined);
+      // The version being run, or inputs right for it are refused against the latest's slots.
+      const resolved = await resolveWorkflowSlots(
+        ctx,
+        i.workflowId,
+        i.historyId ?? undefined,
+        i.version ?? undefined,
+      );
       slots = resolved.slots;
       const mapping = await getDatatypesMapping(ctx);
       const enriched = await enrichSuppliedInputs(ctx, inputs);
@@ -262,6 +282,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<InvokeWorkflowResult> {
     parameters_normalized: i.parametersNormalized ?? DEFAULT_PARAMETERS_NORMALIZED,
   };
   if (historyField != null) body["history"] = historyField;
+  if (i.version != null) body["version"] = i.version;
 
   const { data, error, response } = await ctx.client.POST(
     "/api/workflows/{workflow_id}/invocations",

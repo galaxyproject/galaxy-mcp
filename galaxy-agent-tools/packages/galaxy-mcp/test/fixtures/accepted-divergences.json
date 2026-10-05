@@ -340,6 +340,14 @@
         "reason": "One parameter map under two names: `params` here, `parameters` there."
       },
       {
+        "tool": "invoke_workflow",
+        "param": "version",
+        "kind": "missing-builtin-param",
+        "observed": "python=type=integer required=false default=none",
+        "status": "pending-decision",
+        "reason": "Ours can run one stored version of the workflow by number, so a caller can invoke the version a user approved rather than whatever is newest when the call lands; Dannon approved adding it on 2026-10-05. Galaxy's invoke_workflow goes through AgentOperationsManager.invoke_workflow (lib/galaxy/agents/operations.py:548), which builds InvokeWorkflowPayload without a version, so it always runs the latest even though the REST endpoint underneath takes one. Read on both sides; whether to propose the same parameter to galaxyproject/galaxy is the call nobody has made yet."
+      },
+      {
         "tool": "list_file_source_templates",
         "param": null,
         "kind": "missing-py-tool",
