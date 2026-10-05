@@ -5,6 +5,7 @@ import {
   getInvocations,
   type InvocationSummary,
 } from "../../src/operations/get-invocations";
+import { invocationOutcome } from "../../src/invocation-outcome";
 import { mockClient } from "../util/mock-client";
 import { DEFAULT_POLL } from "../../src/context";
 import { GalaxyAuthError, GalaxyConnectionError, GalaxyNotFoundError, GalaxyValidationError } from "../../src/errors";
@@ -26,6 +27,18 @@ const summary = (id: string) => ({
 
 const page = (n: number, from = 0) => Array.from({ length: n }, (_, k) => summary(`inv${from + k + 1}`));
 
+/**
+ * These tests are about the request get_invocations makes; the jobs it reads for an outcome
+ * are the subject of their own tests below, so their requests are answered and left out here.
+ */
+const withoutRollup = (handlers: any) => ({
+  ...handlers,
+  GET: (path: string, init: any) =>
+    path.endsWith("/jobs_summary")
+      ? { data: { states: {} }, response: { status: 200 } }
+      : handlers.GET(path, init),
+});
+
 const asList = (result: unknown): InvocationSummary[] => result as InvocationSummary[];
 
 // By id, the id has to look like one -- hex, as Galaxy writes them -- and the reply has to
@@ -35,26 +48,26 @@ const INV = "1e1d0c0b0a090807";
 describe("get_invocations", () => {
   it("has parity name and returns the invocation", async () => {
     expect(getInvocationsOp.name).toBe("get_invocations");
-    const client = mockClient({
+    const client = mockClient(withoutRollup({
       GET: (path, init) => {
         expect(path).toBe("/api/invocations/{invocation_id}");
         expect(init.params.path.invocation_id).toBe(INV);
         return { data: { id: INV, state: "scheduled", steps: [] }, response: { status: 200 } };
       },
-    });
+    }));
     const inv = await getInvocations({ invocationId: INV }, ctxWith(client));
     expect((inv as any).id).toBe(INV);
   });
 
   it("takes the id and leaves the filters alone when both are given", async () => {
     const seen: string[] = [];
-    const client = mockClient({
+    const client = mockClient(withoutRollup({
       GET: (path, init) => {
         seen.push(path);
         expect(init.params.path.invocation_id).toBe(INV);
         return { data: { id: INV, state: "ok" }, response: { status: 200 } };
       },
-    });
+    }));
     const inv = await getInvocations(
       { invocationId: INV, workflowId: "wf1", historyId: "hist1", limit: 2, view: "element" },
       ctxWith(client),
@@ -66,24 +79,24 @@ describe("get_invocations", () => {
 
   it("lists when the id is an empty string, the way a falsy id does on the other surface", async () => {
     let path = "";
-    const client = mockClient({
+    const client = mockClient(withoutRollup({
       GET: (p) => {
         path = p;
         return { data: page(1), response: { status: 200 } };
       },
-    });
+    }));
     expect(asList(await getInvocations({ invocationId: "" }, ctxWith(client)))).toHaveLength(1);
     expect(path).toBe("/api/invocations");
   });
 
   it("asks for one invocation's step details only when told to", async () => {
     const seen: any[] = [];
-    const client = mockClient({
+    const client = mockClient(withoutRollup({
       GET: (path, init) => {
         seen.push({ path, params: init.params });
         return { data: { id: INV, steps: [] }, response: { status: 200 } };
       },
-    });
+    }));
     await getInvocations({ invocationId: INV, stepDetails: true }, ctxWith(client));
     await getInvocations({ invocationId: INV }, ctxWith(client));
     expect(seen[0]).toEqual({
@@ -105,12 +118,12 @@ describe("get_invocations", () => {
 
   it("lists every invocation when no id and no filters are given", async () => {
     let seen: any;
-    const client = mockClient({
+    const client = mockClient(withoutRollup({
       GET: (path, init) => {
         seen = { path, query: init.params.query };
         return { data: page(3), response: { status: 200 } };
       },
-    });
+    }));
     const result = asList(await getInvocations({}, ctxWith(client)));
     expect(seen.path).toBe("/api/invocations");
     expect(seen.query).toEqual({
@@ -129,12 +142,12 @@ describe("get_invocations", () => {
 
   it("passes the filters, the limit and the detail level through to the index", async () => {
     let query: any;
-    const client = mockClient({
+    const client = mockClient(withoutRollup({
       GET: (_path, init) => {
         query = init.params.query;
         return { data: page(1), response: { status: 200 } };
       },
-    });
+    }));
     await getInvocations(
       { workflowId: "wf1", historyId: "hist1", view: "element", stepDetails: true, limit: 5 },
       ctxWith(client),
@@ -149,13 +162,13 @@ describe("get_invocations", () => {
   });
 
   it("hands back the page the index sent, without a bound of its own", async () => {
-    const client = mockClient({ GET: () => ({ data: page(9), response: { status: 200 } }) });
+    const client = mockClient(withoutRollup({ GET: () => ({ data: page(9), response: { status: 200 } }) }));
     const result = asList(await getInvocations({ limit: 4 }, ctxWith(client)));
     expect(result).toHaveLength(9);
   });
 
   it("returns a short page whole", async () => {
-    const client = mockClient({ GET: () => ({ data: page(2), response: { status: 200 } }) });
+    const client = mockClient(withoutRollup({ GET: () => ({ data: page(2), response: { status: 200 } }) }));
     expect(asList(await getInvocations({ limit: 5 }, ctxWith(client)))).toHaveLength(2);
   });
 
@@ -346,12 +359,12 @@ describe("get_invocations", () => {
 
   it("reads an explicit null as not supplied, the way the other surface reads None", async () => {
     let query: any;
-    const client = mockClient({
+    const client = mockClient(withoutRollup({
       GET: (_path, init) => {
         query = init.params.query;
         return { data: page(1), response: { status: 200 } };
       },
-    });
+    }));
     const schema = z.object(getInvocationsOp.input);
     const parsed = schema.parse({ invocationId: null, workflowId: null, historyId: null, limit: null });
     // The coercion is the trap: Number(null) is 0, and Galaxy rejects limit=0.
@@ -372,12 +385,12 @@ describe("get_invocations", () => {
 
   it("treats a blank filter as no filter, the way the other surface's truthiness check does", async () => {
     let query: any;
-    const client = mockClient({
+    const client = mockClient(withoutRollup({
       GET: (_path, init) => {
         query = init.params.query;
         return { data: page(1), response: { status: 200 } };
       },
-    });
+    }));
     await getInvocations({ workflowId: "", historyId: "" }, ctxWith(client));
     // Sent as "", Galaxy's encoded-id validator rejects the listing outright.
     expect(query.workflow_id).toBeNull();
@@ -400,27 +413,27 @@ describe("get_invocations", () => {
   });
 
   it("returns an empty listing as an empty list", async () => {
-    const client = mockClient({ GET: () => ({ data: [], response: { status: 200 } }) });
+    const client = mockClient(withoutRollup({ GET: () => ({ data: [], response: { status: 200 } }) }));
     expect(asList(await getInvocations({ limit: 5 }, ctxWith(client)))).toEqual([]);
   });
 
   it("raises the index's own error rather than reporting it as an empty list", async () => {
-    const client = mockClient({
+    const client = mockClient(withoutRollup({
       GET: () => ({ data: { err_msg: "History is not accessible" }, response: { status: 200 } }),
-    });
+    }));
     await expect(getInvocations({}, ctxWith(client))).rejects.toThrow(/History is not accessible/);
   });
 
   it("says so when the index answers with something that is not a list at all", async () => {
-    const client = mockClient({ GET: () => ({ data: { anything: 1 }, response: { status: 200 } }) });
+    const client = mockClient(withoutRollup({ GET: () => ({ data: { anything: 1 }, response: { status: 200 } }) }));
     await expect(getInvocations({}, ctxWith(client))).rejects.toThrow(/did not return a list/);
   });
 
   it("classifies a failure on the listing path, not just on the detail path", async () => {
-    const forbidden = mockClient({ GET: () => ({ error: {}, response: { status: 403 } }) });
+    const forbidden = mockClient(withoutRollup({ GET: () => ({ error: {}, response: { status: 403 } }) }));
     await expect(getInvocations({}, ctxWith(forbidden))).rejects.toBeInstanceOf(GalaxyAuthError);
 
-    const broken = mockClient({ GET: () => ({ error: { err_msg: "boom" }, response: { status: 500 } }) });
+    const broken = mockClient(withoutRollup({ GET: () => ({ error: { err_msg: "boom" }, response: { status: 500 } }) }));
     await expect(getInvocations({ workflowId: "wf1" }, ctxWith(broken))).rejects.toThrow(/boom/);
   });
 
@@ -446,5 +459,42 @@ describe("get_invocations", () => {
     expect(detailMeta.message).toBe("Retrieved invocation 'inv1'");
     expect(detailMeta.count).toBeUndefined();
     expect(detailMeta.pagination).toBeUndefined();
+  });
+});
+
+describe("get_invocations outcome", () => {
+  it.each([
+    ["completed", { ok: 3, error: 1 }, "failed"],
+    ["scheduled", { error: 1, running: 2 }, "failing"],
+    ["scheduled", { ok: 2, error: 1, paused: 3 }, "failed"],
+    ["scheduled", { ok: 2, paused: 1 }, "scheduled"],
+    ["scheduled", { ok: 2, skipped: 1 }, "completed"],
+    ["cancelled", { ok: 1 }, "cancelled"],
+  ])("calls %s with jobs %o %s", (state, jobStates, outcome) => {
+    expect(invocationOutcome(state, jobStates)).toBe(outcome);
+  });
+
+  it("gives no outcome when the summary cannot be read", async () => {
+    const client = mockClient({
+      GET: (path: string) => {
+        if (path.endsWith("/jobs_summary")) throw new Error("500");
+        return { data: { id: INV, state: "completed" }, response: { status: 200 } };
+      },
+    });
+    const out = await getInvocations({ invocationId: INV }, ctxWith(client));
+    expect(out).toEqual({ id: INV, state: "completed" });
+  });
+
+  it("sends no request per row for a listing", async () => {
+    const asked: string[] = [];
+    const listed = Array.from({ length: 25 }, (_, n) => ({ id: `i${n}`, state: "scheduled" }));
+    const client = mockClient({
+      GET: (path: string) => {
+        asked.push(path);
+        return { data: listed, response: { status: 200 } };
+      },
+    });
+    expect(await getInvocations({}, ctxWith(client))).toEqual(listed);
+    expect(asked).toEqual(["/api/invocations"]);
   });
 });

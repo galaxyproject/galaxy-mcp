@@ -87,6 +87,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   accepts what Galaxy's own `uuid.UUID()` does, so the bare 32-digit, braced and `urn:uuid:`
   spellings find the tool as they already do for `delete_user_tool` and `run_user_tool`.
 
+### Added
+
+- `get_invocations` given an invocation id adds `job_states` and `outcome` (`failing`,
+  `failed`, `cancelled`, `completed`), read from its jobs summary with one more request:
+  Galaxy's `state` describes scheduling and reports `completed` for a run whose jobs
+  failed. Listings are unchanged.
+
 ## [1.11.2] - 2026-10-12
 
 ### Fixed

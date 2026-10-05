@@ -6,6 +6,7 @@ import { pyFormatError } from "../python-failure";
 import { pyStr } from "../python-values";
 import { isEncodedId, isThisRecord, notAGalaxyId, notThatRecord } from "./encoded-id";
 import { validatePagination } from "./pagination";
+import { withOutcome, type JobStates } from "../invocation-outcome";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
 
@@ -125,6 +126,27 @@ function refuseErrorBody(data: unknown, status: number): void {
   }
 }
 
+/**
+ * How many of an invocation's jobs are in each state, or undefined when the summary cannot be
+ * read: the invocation is still worth answering with, but not with an outcome guessed from no
+ * jobs.
+ */
+async function jobStates(ctx: GalaxyContext, invocationId: string): Promise<JobStates | undefined> {
+  let states: unknown;
+  try {
+    const { data } = await ctx.client.GET("/api/invocations/{invocation_id}/jobs_summary", {
+      params: { path: { invocation_id: invocationId } },
+    });
+    states = (data as { states?: unknown } | undefined)?.states;
+  } catch {
+    return undefined;
+  }
+  if (!states || typeof states !== "object" || Array.isArray(states)) return undefined;
+  return Object.fromEntries(
+    Object.entries(states).filter(([, n]) => typeof n === "number" && Number.isInteger(n)),
+  ) as JobStates;
+}
+
 async function run(i: In, ctx: GalaxyContext): Promise<GetInvocationsResult> {
   if (i.invocationId) {
     // Not an id, not a request: see encoded-id.ts for what a stray "." would turn into.
@@ -160,7 +182,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetInvocationsResult> {
     if (!isThisRecord(data, i.invocationId)) {
       throw new GalaxyConnectionError(notThatRecord("invocation", i.invocationId), response.status);
     }
-    return data as InvocationDetail;
+    return withOutcome(data as InvocationDetail, await jobStates(ctx, i.invocationId));
   }
 
   // server.py, get_invocations: the window is checked before anything is sent. Galaxy's
@@ -208,7 +230,9 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetInvocationsResult> {
 
   // Whatever the index sends back for the window it was asked for. Trimming the page here
   // would be a bound Python does not apply, and an agent comparing the two surfaces would
-  // have no way to see where the missing rows went.
+  // have no way to see where the missing rows went. A listing carries Galaxy's scheduling
+  // state only: an outcome needs each invocation's jobs, one request each, so it is read for
+  // one invocation by id rather than for every row of a page.
   return data as InvocationSummary[];
 }
 
@@ -216,7 +240,12 @@ export const getInvocationsOp: Operation<typeof input, GetInvocationsResult> = {
   name: "get_invocations", // parity: Python server get_invocations
   domain: "invocations",
   summary:
-    "View one workflow invocation by id, or list invocations, optionally filtered by workflow or history.",
+    "View one workflow invocation by id, or list invocations, optionally filtered by workflow or " +
+    "history. Galaxy's `state` describes scheduling only, not what the jobs did. One invocation " +
+    "by id also carries `job_states`, how many of its jobs are in each state, and `outcome` -- " +
+    "failing, failed, cancelled, completed, or Galaxy's state while that is all the jobs say -- " +
+    "for what the run amounted to; both are left out when Galaxy's jobs summary cannot be read. " +
+    "Get an invocation by id to learn its outcome.",
   input,
   run,
   project: (result, i) => {

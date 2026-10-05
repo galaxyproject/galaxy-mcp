@@ -1282,6 +1282,28 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
     )
     add(
         "get_invocations",
+        "completed_with_a_failed_job",
+        "Galaxy says completed; the jobs summary says one failed, so the outcome is failed",
+        {"invocation_id": inv_hex},
+        lambda: get_invocations_fn(invocation_id=inv_hex),
+        [
+            route(
+                f"/api/invocations/{inv_hex}",
+                {**invocation_rows(1)[0], "id": inv_hex, "state": "completed"},
+            ),
+            route(
+                f"/api/invocations/{inv_hex}/jobs_summary",
+                {
+                    "id": inv_hex,
+                    "model": "WorkflowInvocation",
+                    "populated_state": "ok",
+                    "states": {"ok": 3, "error": 1},
+                },
+            ),
+        ],
+    )
+    add(
+        "get_invocations",
         "single_step_details",
         "one invocation with its steps' jobs: the route answers only when step_details is sent",
         {"invocation_id": inv_hex, "step_details": True},

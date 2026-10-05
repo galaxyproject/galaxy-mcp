@@ -125,6 +125,13 @@ galaxy-ops exports Galaxy's job, dataset and invocation state lists. Breaking fo
 library: `waitForJob` ends on a skipped or stopped job with `JobFailedError` instead
 of polling until the timeout.
 
+### `get_invocations` says what one invocation amounted to (#155)
+
+Given an invocation id, the answer adds `job_states` and `outcome` (`failing`, `failed`,
+`cancelled`, `completed`), read from its jobs summary with one more request: Galaxy's
+`state` describes scheduling and reports `completed` for a run whose jobs failed.
+Listings are unchanged. galaxy-ops exports `invocationOutcome`.
+
 ## 0.3.2 (2026-10-12)
 
 ### Redirects are no longer followed, so the API key cannot leak off-origin (security)
