@@ -23,6 +23,14 @@ def run() -> None:
         help="Optional HTTP path when using streamable transports.",
     )
     parser.add_argument(
+        "--allow-unauthenticated",
+        action="store_true",
+        help=(
+            "Serve HTTP on a non-loopback address without OAuth. Only use this when "
+            "something else controls who can reach the listener."
+        ),
+    )
+    parser.add_argument(
         "--discovery-mode",
         choices=["full", "code"],
         help=(
@@ -39,15 +47,20 @@ def run() -> None:
         os.environ["GALAXY_MCP_DISCOVERY_MODE"] = args.discovery_mode
 
     from . import server
+    from .http_security import HTTPStartupError
 
     selected = (args.transport or os.environ.get("GALAXY_MCP_TRANSPORT") or "stdio").lower()
     if selected in {"streamable-http", "sse"}:
-        server.run_http_server(
-            host=args.host,
-            port=args.port,
-            transport=selected,
-            path=args.path,
-        )
+        try:
+            server.run_http_server(
+                host=args.host,
+                port=args.port,
+                transport=selected,
+                path=args.path,
+                allow_unauthenticated=args.allow_unauthenticated,
+            )
+        except HTTPStartupError as exc:
+            parser.error(str(exc))
     else:
         server.mcp.run()
 

@@ -103,8 +103,10 @@ For OAuth flows the server exchanges user credentials for short-lived Galaxy API
 you typically leave `GALAXY_API_KEY` unset.
 
 For non-OAuth HTTP clients, `connect(url=..., api_key=...)` stores Galaxy credentials per MCP
-session rather than globally. Clients normally preserve MCP sessions by default, which allows
-multiple users to share the same MCP server while keeping their Galaxy credentials isolated.
+session rather than globally. That keeps sessions apart but is not authentication: the HTTP
+transports bind to `127.0.0.1` by default, refuse to serve a non-loopback address without OAuth
+unless you pass `--allow-unauthenticated`, and disable the tools that touch the server's
+filesystem. See [Serving over HTTP](mcp-server-galaxy-py/README.md#serving-over-http).
 
 ### Alternative Installation
 
@@ -118,7 +120,7 @@ galaxy-mcp
 # Or from source using uv
 cd mcp-server-galaxy-py
 uv sync
-uv run galaxy-mcp --transport streamable-http --host 0.0.0.0 --port 8000
+uv run galaxy-mcp --transport streamable-http --port 8000
 ```
 
 ## Container Usage

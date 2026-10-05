@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from functools import lru_cache, wraps
 from pathlib import Path
 from typing import Any, Literal, TypeVar, cast
+from urllib.parse import urlsplit
 
 import bioblend
 import pydantic_core
@@ -26,15 +27,26 @@ from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_context
 from mcp.server.auth.middleware.auth_context import get_access_token
 from pydantic import BaseModel, Field
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
 
 from galaxy_mcp.auth import (
     GalaxyOAuthProvider,
     SessionSecretRequiredError,
     configure_auth_provider,
     get_active_session,
+)
+from galaxy_mcp.http_security import (
+    ALLOW_UNAUTHENTICATED_ENV,
+    ALLOWED_HOSTS_ENV,
+    ALLOWED_ORIGINS_ENV,
+    DEFAULT_HTTP_HOST,
+    HTTPSecurityMiddleware,
+    check_http_startup,
+    env_flag,
+    env_list,
+    in_http_request,
+    is_loopback_host,
+    require_local_files,
 )
 from galaxy_mcp.middleware import ToolVisibilityMiddleware
 from galaxy_mcp.tool_inputs import (
@@ -898,7 +910,9 @@ if public_base_url and normalized_galaxy_url:
         # disabled would leave the server unauthenticated, so fail loudly instead.
         raise
     except Exception as exc:  # pragma: no cover - defensive logging
+        # Same reasoning: the operator asked for OAuth, so don't carry on without it
         logger.error("Failed to initialize OAuth provider: %s", exc, exc_info=True)
+        raise
 elif public_base_url and not normalized_galaxy_url:
     logger.warning(
         "GALAXY_MCP_PUBLIC_URL is set but GALAXY_URL is missing. "
@@ -994,35 +1008,6 @@ if auth_provider:
 else:
     mcp = FastMCP("Galaxy", **_mcp_kwargs)
 
-# Allow browser preflight CORS requests to bypass FastMCP auth
-
-
-class _PreflightMiddleware(BaseHTTPMiddleware):
-    """Ensure CORS preflight requests succeed for browser-based clients."""
-
-    async def dispatch(self, request, call_next):
-        origin = request.headers.get("origin", "*")
-        allow_methods = request.headers.get("access-control-request-method", "POST,GET,OPTIONS")
-        allow_headers = request.headers.get(
-            "access-control-request-headers", "authorization,content-type"
-        )
-
-        cors_headers = {
-            "access-control-allow-origin": origin,
-            "access-control-allow-methods": allow_methods,
-            "access-control-allow-headers": allow_headers,
-            "access-control-max-age": "600",
-        }
-
-        if request.method.upper() == "OPTIONS":
-            return Response(status_code=204, headers=cors_headers)
-
-        response = await call_next(request)
-        for header, value in cors_headers.items():
-            response.headers.setdefault(header, value)
-        return response
-
-
 _original_http_app = FastMCP.http_app
 
 
@@ -1065,16 +1050,21 @@ class _OAuthPublicRoutes:
         await self._app(scope, receive, send)
 
 
-def _http_app_with_preflight(self, *args, **kwargs):
+def _http_app_with_security(self, *args, **kwargs):
     app = _original_http_app(self, *args, **kwargs)
-    app.add_middleware(_PreflightMiddleware)
+    app.add_middleware(
+        HTTPSecurityMiddleware,
+        auth_enabled=auth_provider is not None,
+        allowed_hosts=env_list(ALLOWED_HOSTS_ENV),
+        allowed_origins=env_list(ALLOWED_ORIGINS_ENV),
+    )
     if auth_provider:
         base_path = kwargs.get("path")
         app = _OAuthPublicRoutes(app, auth_provider, base_path)
     return app
 
 
-mcp.http_app = types.MethodType(_http_app_with_preflight, mcp)  # type: ignore[method-assign]
+mcp.http_app = types.MethodType(_http_app_with_security, mcp)  # type: ignore[method-assign]
 
 
 # Initialize Galaxy client if environment variables are set
@@ -1130,6 +1120,17 @@ def _get_request_connection_state() -> dict[str, Any]:
                 "source": "session",
                 "session": {"id": session_id},
             }
+
+    # An OAuth request that couldn't resolve its own session must not borrow the operator's
+    if auth_provider and in_http_request():
+        return {
+            "url": normalized_galaxy_url,
+            "api_key": None,
+            "gi": None,
+            "connected": False,
+            "source": None,
+            "session": None,
+        }
 
     return {
         "url": galaxy_state.get("url") or normalized_galaxy_url,
@@ -1290,6 +1291,36 @@ mcp.add_middleware(
 )
 
 
+def _same_galaxy_url(first: str, second: str) -> bool:
+    def normalize(value: str) -> tuple[str, str, str]:
+        parts = urlsplit(value.strip())
+        return (parts.scheme.lower(), parts.netloc.lower(), parts.path.rstrip("/"))
+
+    return normalize(first) == normalize(second)
+
+
+def _resolve_connect_credentials(
+    url: str | None, api_key: str | None
+) -> tuple[str | None, str | None]:
+    """Fill in connect() arguments from the environment, where that is safe.
+
+    The URL is caller-controlled, and callers include agents acting on text they read
+    somewhere. The environment's API key therefore only ever goes to the environment's
+    URL -- otherwise connect(url=...) would mail the operator's key to any server named.
+    OAuth deployments never lend out the operator's credentials at all.
+    """
+    if auth_provider and in_http_request():
+        return url, api_key
+
+    env_url = os.environ.get("GALAXY_URL")
+    env_key = os.environ.get("GALAXY_API_KEY")
+    use_url = url or env_url
+    use_api_key = api_key
+    if not use_api_key and use_url and env_url and _same_galaxy_url(use_url, env_url):
+        use_api_key = env_key
+    return use_url, use_api_key
+
+
 @mcp.tool(tags={"connection", "write", "core"})
 def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
     """
@@ -1339,8 +1370,7 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
             )
 
         # Use provided parameters or fall back to environment variables
-        use_url = url or os.environ.get("GALAXY_URL")
-        use_api_key = api_key or os.environ.get("GALAXY_API_KEY")
+        use_url, use_api_key = _resolve_connect_credentials(url, api_key)
 
         # Check if we have the necessary credentials
         if not use_url or not use_api_key:
@@ -1349,11 +1379,15 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
             if dotenv_path:
                 load_dotenv(dotenv_path, override=True)
                 # Check again after loading .env
-                use_url = url or os.environ.get("GALAXY_URL")
-                use_api_key = api_key or os.environ.get("GALAXY_API_KEY")
+                use_url, use_api_key = _resolve_connect_credentials(url, api_key)
 
             # If still missing credentials, report error
             if not use_url or not use_api_key:
+                if url and not api_key and os.environ.get("GALAXY_API_KEY"):
+                    raise ValueError(
+                        "The configured GALAXY_API_KEY is only used with the configured "
+                        "GALAXY_URL. Pass api_key explicitly to connect to a different server."
+                    )
                 missing = []
                 if not use_url:
                     missing.append("URL")
@@ -3036,6 +3070,11 @@ def download_dataset(
     environments), omit the file_path parameter to download content to memory. Only
     specify file_path if you can actually write files to the local filesystem.
     """
+    if file_path:
+        require_local_files(
+            "download_dataset(file_path=...)",
+            "Omit file_path to receive the content in the response instead.",
+        )
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
@@ -3165,6 +3204,10 @@ def upload_file(path: str, history_id: str | None = None) -> GalaxyResult:
     - "Permission denied": Ensure file has read permissions
     - "Quota exceeded": User's Galaxy storage quota may be full
     """
+    require_local_files(
+        "upload_file",
+        "Use upload_file_from_url to load data the Galaxy server can fetch itself.",
+    )
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
@@ -5128,9 +5171,23 @@ def run_http_server(
     port: int | None = None,
     transport: str | None = None,
     path: str | None = None,
+    allow_unauthenticated: bool = False,
 ) -> None:
     """Run the MCP server over HTTP-based transport."""
-    resolved_host = host or os.environ.get("GALAXY_MCP_HOST", "0.0.0.0")
+    resolved_host = host or os.environ.get("GALAXY_MCP_HOST") or DEFAULT_HTTP_HOST
+    check_http_startup(
+        resolved_host,
+        auth_enabled=auth_provider is not None,
+        allow_unauthenticated=allow_unauthenticated or env_flag(ALLOW_UNAUTHENTICATED_ENV),
+    )
+    if not auth_provider and not is_loopback_host(resolved_host):
+        logger.warning(
+            "Serving HTTP on %s without authentication%s.",
+            resolved_host,
+            "; every caller acts with the GALAXY_API_KEY from this environment"
+            if galaxy_state.get("api_key")
+            else "",
+        )
     resolved_port = port if port is not None else int(os.environ.get("GALAXY_MCP_PORT", "8000"))
     resolved_transport = (
         transport or os.environ.get("GALAXY_MCP_TRANSPORT") or "streamable-http"
