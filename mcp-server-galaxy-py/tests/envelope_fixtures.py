@@ -2763,6 +2763,55 @@ def page_cases(add: AddCase) -> None:
             ),
         ],
     )
+    sectioned = "# Reads QC\n\n## Methods\n\nold\n\n## Results\n\nfindings\n"
+    add(
+        "update_page",
+        "section_replaced",
+        "one section replaced by its heading, read first and the rest left as it was",
+        {
+            "page_id": "pg000001",
+            "section_heading": "## Methods",
+            "section_content": "## Methods\n\nnew\n",
+        },
+        lambda: update_page_fn(
+            "pg000001", section_heading="## Methods", section_content="## Methods\n\nnew\n"
+        ),
+        [
+            VERSION_ROUTE,
+            route("/api/pages/pg000001", page_record(content_editor=sectioned)),
+            route(
+                "/api/pages/pg000001",
+                page_record(
+                    content_editor="# Reads QC\n\n## Methods\n\nnew\n\n## Results\n\nfindings\n",
+                    latest_revision_id="rev00003",
+                    revision_ids=["rev00001", "rev00002", "rev00003"],
+                ),
+                method="PUT",
+            ),
+        ],
+    )
+    add(
+        "update_page",
+        "expected_hash_matches",
+        "the page is as it was read, so the write goes",
+        {"page_id": "pg000001", "content": "# Reads QC\n\nrewritten\n", "expect_hash": "862b1e76"},
+        lambda: update_page_fn(
+            "pg000001", content="# Reads QC\n\nrewritten\n", expect_hash="862b1e76"
+        ),
+        [
+            VERSION_ROUTE,
+            route("/api/pages/pg000001", page_record()),
+            route(
+                "/api/pages/pg000001",
+                page_record(
+                    content_editor="# Reads QC\n\nrewritten\n",
+                    latest_revision_id="rev00003",
+                    revision_ids=["rev00001", "rev00002", "rev00003"],
+                ),
+                method="PUT",
+            ),
+        ],
+    )
     add(
         "update_page",
         "title_only_on_an_html_page",
@@ -3800,6 +3849,58 @@ def more_http_failure_cases(add: AddFailure) -> None:
         "a write to a page that is not there",
         {"page_id": "p0000404", "title": "Renamed"},
         [VERSION_ROUTE, fail("/api/pages/p0000404", 404, MISSING, method="PUT")],
+    )
+    add(
+        "update_page",
+        "page_changed_since_read",
+        "a stale expect_hash: read, compared, and refused with the hash the page has now",
+        {"page_id": "pg000001", "content": "# Reads QC\n\nrewritten\n", "expect_hash": "deadbeef"},
+        [VERSION_ROUTE, route("/api/pages/pg000001", page_record())],
+    )
+    add(
+        "update_page",
+        "directive_id_not_encoded",
+        "a directive naming a dataset by a hid, refused before anything is sent",
+        {
+            "page_id": "pg000001",
+            "content": "```galaxy\nhistory_dataset_display(history_dataset_id=3)\n```\n",
+        },
+        [VERSION_ROUTE],
+    )
+    add(
+        "update_page",
+        "half_a_section_edit",
+        "a heading with no section text, refused before anything is sent",
+        {"page_id": "pg000001", "section_heading": "## Methods"},
+        [VERSION_ROUTE],
+    )
+    add(
+        "update_page",
+        "read_not_found",
+        "the read a section edit needs, on a page that is not there",
+        {
+            "page_id": "p0000404",
+            "section_heading": "## Methods",
+            "section_content": "## Methods\n\nnew\n",
+        },
+        [VERSION_ROUTE, fail("/api/pages/p0000404", 404, MISSING)],
+    )
+    add(
+        "update_page",
+        "section_on_html",
+        "a section edit on a page authored as HTML, refused after the read and before a write",
+        {
+            "page_id": "pg000001",
+            "section_heading": "## Methods",
+            "section_content": "## Methods\n\nnew\n",
+        },
+        [
+            VERSION_ROUTE,
+            route(
+                "/api/pages/pg000001",
+                page_record(content_format="html", content_editor=None, content="<p>body</p>"),
+            ),
+        ],
     )
     add(
         "list_page_revisions",

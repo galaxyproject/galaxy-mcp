@@ -330,3 +330,106 @@ class TestPageOperations:
         galaxy_state["connected"] = False
         with pytest.raises(ValueError, match="Not connected to Galaxy"):
             list_pages_fn()
+
+
+class TestUpdatePageSectionsAndHash:
+    """update_page's section edits and expect_hash, as the TypeScript surface answers them."""
+
+    DOC = "## Record\n\nintro\n\n## Methods\n\nold\n\n## Results\n\nfindings\n"
+
+    def setup_method(self):
+        self.gi = Mock()
+        self.gi.url = GALAXY_API_URL
+        self.gi.make_put_request.side_effect = lambda url, payload: {
+            "id": "page1",
+            "content_editor": payload.get("content", self.DOC),
+            "content": "<render>",
+        }
+        galaxy_state["connected"] = True
+        galaxy_state["gi"] = self.gi
+
+    def teardown_method(self):
+        galaxy_state["connected"] = False
+        galaxy_state["gi"] = None
+
+    def _page(self, doc, content_format="markdown"):
+        self.gi.make_get_request.return_value = _get_response(
+            {"id": "page1", "content_format": content_format, "content_editor": doc}
+        )
+
+    def _call(self, **kwargs):
+        return update_page_fn("page1", **kwargs)
+
+    def test_replaces_one_section_and_leaves_the_others(self):
+        self._page(self.DOC)
+        self._call(section_heading="## Methods", section_content="## Methods\n\nnew\n")
+        sent = self.gi.make_put_request.call_args.kwargs["payload"]["content"]
+        assert sent == "## Record\n\nintro\n\n## Methods\n\nnew\n\n## Results\n\nfindings\n"
+
+    def test_refuses_a_section_edit_on_an_html_page(self):
+        self._page("<p>body</p>", content_format="html")
+        with pytest.raises(ValueError, match="is authored as html; a section can be replaced only"):
+            self._call(section_heading="## Notes", section_content="## Notes\n\nadded")
+        self.gi.make_put_request.assert_not_called()
+
+    def test_appends_a_section_the_page_lacks(self):
+        self._page(self.DOC)
+        self._call(section_heading="## Notes", section_content="## Notes\n\nadded")
+        sent = self.gi.make_put_request.call_args.kwargs["payload"]["content"]
+        assert sent.endswith("findings\n\n## Notes\n\nadded")
+
+    def test_answers_with_the_new_hash_and_without_the_render(self):
+        result = self._call(content="raw markdown")
+        assert result.data["content_hash"] == "f2285a32"
+        assert "content" not in result.data
+        self.gi.make_get_request.assert_not_called()
+
+    def test_refuses_a_stale_hash_without_writing(self):
+        self._page("raw markdown")
+        with pytest.raises(ValueError) as caught:
+            self._call(content="x", expect_hash="deadbeef")
+        assert str(caught.value) == (
+            "Page 'page1' changed since it was read: its content_hash is now f2285a32, not "
+            "deadbeef. Read it again with get_page and make the edit against what is there now."
+        )
+        self.gi.make_put_request.assert_not_called()
+
+    def test_writes_against_the_current_hash(self):
+        self._page("raw markdown")
+        self._call(content="fresh", expect_hash="f2285a32")
+        assert self.gi.make_put_request.call_args.kwargs["payload"] == {
+            "edit_source": "agent",
+            "content": "fresh",
+        }
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"section_heading": "## Methods"},
+            {"section_content": "## Methods\n\nnew"},
+            {"content": "x", "section_heading": "## Methods", "section_content": "## Methods"},
+        ],
+    )
+    def test_refuses_half_a_section_edit_or_both_kinds_before_asking_galaxy(self, kwargs):
+        with pytest.raises(ValueError):
+            self._call(**kwargs)
+        self.gi.make_get_request.assert_not_called()
+        self.gi.make_put_request.assert_not_called()
+
+    def test_refuses_directive_ids_that_are_not_encoded_and_ignores_prose(self):
+        content = (
+            "about history_id=3 in prose\n"
+            "```galaxy\nhistory_dataset_display(history_dataset_id=reads)\n```\n"
+            "${galaxy job_metrics(job_id=12)} "
+            "${galaxy history_dataset_name(history_dataset_id=0c97fda4aafcf418)}"
+        )
+        with pytest.raises(ValueError) as caught:
+            self._call(content=content)
+        assert "history_dataset_id=reads, job_id=12." in str(caught.value)
+        assert "history_id=3" not in str(caught.value)
+        self.gi.make_put_request.assert_not_called()
+
+    def test_takes_an_encoded_id_of_any_length_the_cipher_produces(self):
+        long = "0c97fda4aafcf418" * 2
+        self._call(content=f"```galaxy\ninvocation_outputs(invocation_id={long})\n```")
+        self.gi.make_put_request.assert_called_once()

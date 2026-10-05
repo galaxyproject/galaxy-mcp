@@ -556,6 +556,30 @@
         "reason": "Only here. Galaxy's server can create a history and read it, but cannot rename, annotate, tag, publish or delete one."
       },
       {
+        "tool": "update_page",
+        "param": "expect_hash",
+        "kind": "missing-builtin-param",
+        "observed": "python=type=string required=false default=none",
+        "status": "pending-decision",
+        "reason": "Ours can replace one section by its heading and refuse a write whose expect_hash no longer matches the page, both with Galaxy's own section and hash rules (sectionDiffUtils.ts, page_assistant.py); the built-in update_page writes the whole page unconditionally. Whether it should take them is galaxyproject/galaxy's call."
+      },
+      {
+        "tool": "update_page",
+        "param": "section_content",
+        "kind": "missing-builtin-param",
+        "observed": "python=type=string required=false default=none",
+        "status": "pending-decision",
+        "reason": "Ours can replace one section by its heading and refuse a write whose expect_hash no longer matches the page, both with Galaxy's own section and hash rules (sectionDiffUtils.ts, page_assistant.py); the built-in update_page writes the whole page unconditionally. Whether it should take them is galaxyproject/galaxy's call."
+      },
+      {
+        "tool": "update_page",
+        "param": "section_heading",
+        "kind": "missing-builtin-param",
+        "observed": "python=type=string required=false default=none",
+        "status": "pending-decision",
+        "reason": "Ours can replace one section by its heading and refuse a write whose expect_hash no longer matches the page, both with Galaxy's own section and hash rules (sectionDiffUtils.ts, page_assistant.py); the built-in update_page writes the whole page unconditionally. Whether it should take them is galaxyproject/galaxy's call."
+      },
+      {
         "tool": "upload_file",
         "param": null,
         "kind": "missing-builtin-tool",

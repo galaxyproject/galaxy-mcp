@@ -1714,6 +1714,42 @@
             ],
             "default": null,
             "description": "New title. Omit to leave unchanged."
+          },
+          "section_heading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The exact heading line of the section to replace (markdown\npages only; every section with that heading line is replaced)."
+          },
+          "section_content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "That section's new text, heading line included."
+          },
+          "expect_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "content_hash from when the page was read; refused if it changed."
           }
         },
         "required": [

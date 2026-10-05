@@ -30,9 +30,9 @@ Two differences with that server are recorded once here rather than as a row per
 | --- | --- |
 | `intentional` | `0` |
 | `pending-port` | `0` |
-| `pending-decision` | `0` |
+| `pending-decision` | `3` |
 | `unreviewed-gap` | `54` |
-| **total** | `54` |
+| **total** | `57` |
 
 These are counted apart and ratcheted apart -- at 54 -- because they are not this repository's to close on its own: each one is a rename, an addition or a removal somebody has to agree with galaxyproject/galaxy. Nothing here has been ruled on yet.
 
@@ -146,7 +146,10 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `search_tools_by_name` | `limit` |  | `type=integer required=false default=25` | `type=integer required=false default=25` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours pages the matches; Galaxy's returns them all. |
 | `search_tools_by_name` | `offset` |  | `type=integer required=false default=0` | `type=integer required=false default=0` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | The other half of that window; Galaxy's has none. |
 | `update_history` |  | `6` | `write (tag)` | `write (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Galaxy's server can create a history and read it, but cannot rename, annotate, tag, publish or delete one. |
-| `update_page` |  | `3` | `write (tag), requires >=26.1` | `write (hint), requires >=26.1` | `write (mcp default)` |  |  |  |
+| `update_page` |  | `10` | `write (tag), requires >=26.1` | `write (hint), requires >=26.1` | `write (mcp default)` |  |  |  |
+| `update_page` | `expect_hash` |  | `type=string required=false default=none` | `type=string required=false default=none` | -- | `vs built-in: missing-builtin-param` | `pending-decision` | Ours can replace one section by its heading and refuse a write whose expect_hash no longer matches the page, both with Galaxy's own section and hash rules (sectionDiffUtils.ts, page_assistant.py); the built-in update_page writes the whole page unconditionally. Whether it should take them is galaxyproject/galaxy's call. |
+| `update_page` | `section_content` |  | `type=string required=false default=none` | `type=string required=false default=none` | -- | `vs built-in: missing-builtin-param` | `pending-decision` | Ours can replace one section by its heading and refuse a write whose expect_hash no longer matches the page, both with Galaxy's own section and hash rules (sectionDiffUtils.ts, page_assistant.py); the built-in update_page writes the whole page unconditionally. Whether it should take them is galaxyproject/galaxy's call. |
+| `update_page` | `section_heading` |  | `type=string required=false default=none` | `type=string required=false default=none` | -- | `vs built-in: missing-builtin-param` | `pending-decision` | Ours can replace one section by its heading and refuse a write whose expect_hash no longer matches the page, both with Galaxy's own section and hash rules (sectionDiffUtils.ts, page_assistant.py); the built-in update_page writes the whole page unconditionally. Whether it should take them is galaxyproject/galaxy's call. |
 | `upload_file` |  | `0` | `write (tag)` | `write (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Galaxy's server uploads only from a URL; there is no tool for a local path (the tus upload). |
 | `upload_file_from_url` |  | `0` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
 | `upload_file_from_url` | `history_id` |  | `type=string required=false default=none` | `type=string required=false default=none` | `type=string required=true default=none` | `vs built-in: required-mismatch` | `unreviewed-gap` | Galaxy's requires the target history; ours takes it optionally and uploads into the current one when it is left out. |

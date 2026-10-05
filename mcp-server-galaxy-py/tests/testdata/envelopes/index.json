@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 226,
-  "failureCaseCount": 65,
+  "caseCount": 233,
+  "failureCaseCount": 70,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -1746,6 +1746,32 @@
     },
     {
       "tool": "update_page",
+      "case": "section_replaced",
+      "note": "one section replaced by its heading, read first and the rest left as it was",
+      "outcome": "success",
+      "input": {
+        "page_id": "pg000001",
+        "section_heading": "## Methods",
+        "section_content": "## Methods\n\nnew\n"
+      },
+      "envelope": "update_page/section_replaced.json",
+      "replies": "update_page/section_replaced.galaxy.json"
+    },
+    {
+      "tool": "update_page",
+      "case": "expected_hash_matches",
+      "note": "the page is as it was read, so the write goes",
+      "outcome": "success",
+      "input": {
+        "page_id": "pg000001",
+        "content": "# Reads QC\n\nrewritten\n",
+        "expect_hash": "862b1e76"
+      },
+      "envelope": "update_page/expected_hash_matches.json",
+      "replies": "update_page/expected_hash_matches.galaxy.json"
+    },
+    {
+      "tool": "update_page",
       "case": "title_only_on_an_html_page",
       "note": "a title change on a page whose body is the expanded render, which still goes",
       "outcome": "success",
@@ -2373,6 +2399,69 @@
       },
       "envelope": "update_page/not_found.json",
       "replies": "update_page/not_found.galaxy.json"
+    },
+    {
+      "tool": "update_page",
+      "case": "page_changed_since_read",
+      "note": "a stale expect_hash: read, compared, and refused with the hash the page has now",
+      "outcome": "failure",
+      "input": {
+        "page_id": "pg000001",
+        "content": "# Reads QC\n\nrewritten\n",
+        "expect_hash": "deadbeef"
+      },
+      "envelope": "update_page/page_changed_since_read.json",
+      "replies": "update_page/page_changed_since_read.galaxy.json"
+    },
+    {
+      "tool": "update_page",
+      "case": "directive_id_not_encoded",
+      "note": "a directive naming a dataset by a hid, refused before anything is sent",
+      "outcome": "failure",
+      "input": {
+        "page_id": "pg000001",
+        "content": "```galaxy\nhistory_dataset_display(history_dataset_id=3)\n```\n"
+      },
+      "envelope": "update_page/directive_id_not_encoded.json",
+      "replies": "update_page/directive_id_not_encoded.galaxy.json"
+    },
+    {
+      "tool": "update_page",
+      "case": "half_a_section_edit",
+      "note": "a heading with no section text, refused before anything is sent",
+      "outcome": "failure",
+      "input": {
+        "page_id": "pg000001",
+        "section_heading": "## Methods"
+      },
+      "envelope": "update_page/half_a_section_edit.json",
+      "replies": "update_page/directive_id_not_encoded.galaxy.json"
+    },
+    {
+      "tool": "update_page",
+      "case": "read_not_found",
+      "note": "the read a section edit needs, on a page that is not there",
+      "outcome": "failure",
+      "input": {
+        "page_id": "p0000404",
+        "section_heading": "## Methods",
+        "section_content": "## Methods\n\nnew\n"
+      },
+      "envelope": "update_page/read_not_found.json",
+      "replies": "update_page/read_not_found.galaxy.json"
+    },
+    {
+      "tool": "update_page",
+      "case": "section_on_html",
+      "note": "a section edit on a page authored as HTML, refused after the read and before a write",
+      "outcome": "failure",
+      "input": {
+        "page_id": "pg000001",
+        "section_heading": "## Methods",
+        "section_content": "## Methods\n\nnew\n"
+      },
+      "envelope": "update_page/section_on_html.json",
+      "replies": "update_page/section_on_html.galaxy.json"
     },
     {
       "tool": "list_page_revisions",

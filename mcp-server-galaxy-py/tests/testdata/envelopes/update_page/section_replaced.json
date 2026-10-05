@@ -21,13 +21,13 @@
     "tags": [],
     "create_time": "2026-01-02T03:04:05.000000",
     "update_time": "2026-01-02T03:14:05.000000",
-    "content_editor": "# Reads QC\n\nrewritten\n",
+    "content_editor": "# Reads QC\n\n## Methods\n\nnew\n\n## Results\n\nfindings\n",
     "content_format": "markdown",
     "annotation": null,
     "edit_source": "agent",
     "generate_time": null,
     "generate_version": null,
-    "content_hash": "3ece60ad"
+    "content_hash": "e5d07b73"
   },
   "success": true,
   "message": "Updated page 'pg000001'",
