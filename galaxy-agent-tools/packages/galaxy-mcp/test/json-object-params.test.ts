@@ -4,6 +4,7 @@ import { runInNewContext } from "node:vm";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { GALAXY_MCP_SURFACE } from "@galaxyproject/galaxy-ops";
 import { buildServer } from "../src/server";
 
 /**
@@ -356,37 +357,26 @@ describe("a key at the top level of an object-valued parameter", () => {
     const client = new Client({ name: "json-object-params", version: "0" });
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     const { tools } = await client.listTools();
+    // The shape, apart from the description, which is the Python server's own sentence.
     const schemaOf = (tool: string, param: string): string => {
       const found = tools.find((t) => t.name === tool);
       expect(found, tool).toBeDefined();
-      const properties = found!.inputSchema.properties as Record<string, unknown>;
-      return JSON.stringify(properties[param]);
+      const properties = found!.inputSchema.properties as Record<string, Record<string, unknown>>;
+      const { description, ...shape } = properties[param]!;
+      expect(description, `${tool}.${param}`).toBe(GALAXY_MCP_SURFACE[tool]!.parameters[param]);
+      return JSON.stringify(shape);
     };
     const open = '"type":"object","propertyNames":{"type":"string"},"additionalProperties":{}';
 
-    expect(schemaOf("create_user_tool", "representation")).toBe(
-      `{${open},"description":"a GalaxyUserTool representation: {class:'GalaxyUserTool', id, ` +
-        `version, name, shell_command, container:'<image>'}"}`,
-    );
-    expect(schemaOf("run_tool", "inputs")).toBe(
-      `{${open},"description":"Tool input parameters in Galaxy's legacy format: dataset inputs as ` +
-        `{\\"input_name\\": {\\"src\\": \\"hda\\", \\"id\\": \\"dataset_id\\"}}; a parameter inside a ` +
-        `section, conditional or repeat as one flat key joined with '|', e.g. ` +
-        `\\"reference_source|ref_file\\" -- not nested objects."}`,
-    );
-    expect(schemaOf("run_user_tool", "inputs")).toBe(
-      `{${open},"description":"tool inputs; dataset refs as {src:'hda',id}"}`,
-    );
+    expect(schemaOf("create_user_tool", "representation")).toBe(`{${open}}`);
+    expect(schemaOf("run_tool", "inputs")).toBe(`{${open}}`);
+    expect(schemaOf("run_user_tool", "inputs")).toBe(`{${open}}`);
     // The two that are an object OR the JSON string of one, and nullable with it.
     expect(schemaOf("invoke_workflow", "inputs")).toBe(
-      '{"description":"Workflow inputs keyed by step_index. Each value is {src, id} for ' +
-        'datasets/collections or a scalar for parameters. A JSON object string is accepted too.",' +
-        `"anyOf":[{"anyOf":[{${open}},{"type":"string"}]},{"type":"null"}]}`,
+      `{"anyOf":[{"anyOf":[{${open}},{"type":"string"}]},{"type":"null"}]}`,
     );
     expect(schemaOf("invoke_workflow", "params")).toBe(
-      '{"description":"Legacy step parameter overrides (use inputs for formal inputs instead). ' +
-        'A JSON object string is accepted too.",' +
-        `"anyOf":[{"anyOf":[{${open}},{"type":"string"}]},{"type":"null"}]}`,
+      `{"anyOf":[{"anyOf":[{${open}},{"type":"string"}]},{"type":"null"}]}`,
     );
     // And they are required exactly where they were.
     const required = (tool: string) =>

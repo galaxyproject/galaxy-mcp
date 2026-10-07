@@ -29,6 +29,7 @@ export {
   spellParamNames,
 } from "./operations/registry";
 export { validatePagination, paginate, paginationInfo, OUTPUT_BUDGET_BYTES } from "./operations/pagination";
+export { GALAXY_MCP_SURFACE, type GalaxyMcpTool } from "./galaxy-mcp-surface";
 export { laxenLikePydantic, isPlainObject, materializeOnce } from "./laxen";
 export { jsonObject, isJsonObjectSchema } from "./json-object";
 export type { PaginationInfo, Paged } from "./operations/pagination";

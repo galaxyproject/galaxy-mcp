@@ -69,9 +69,10 @@ Since 0.2.0 the camelCase names used by
 are therefore not parameters of this server. Importing an op from that package
 still uses camelCase, and `galaxy-cli`'s flags are unchanged.
 
-A tool's description names its parameters in the spelling this server accepts
-them, so a tool that tells you to pass `section_id` is telling you something you
-can pass.
+A tool is described as the Python server describes the same tool, its parameters
+included, so a client is told the same thing by either server. Those descriptions
+name parameters in the spelling this server accepts them, so a tool that tells you
+to pass `section_id` is telling you something you can pass.
 
 ## Documentation
 

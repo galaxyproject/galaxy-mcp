@@ -10,6 +10,7 @@
         "workflows",
         "write"
       ],
+      "description": "Cancel a running workflow invocation",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -40,6 +41,7 @@
         "core",
         "write"
       ],
+      "description": "Connect to Galaxy server",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -89,6 +91,7 @@
         "histories",
         "write"
       ],
+      "description": "Create a new history to organize datasets and analyses.\n\nA history is the primary workspace in Galaxy. Create a new history for each\ndistinct project or analysis to keep your work organized.\n\nRECOMMENDED WORKFLOW:\n1. Create a history with a descriptive name\n2. Upload your input data: upload_file() or upload_file_from_url()\n3. Run tools on the data: run_tool()\n4. View results: get_history_contents()",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -111,6 +114,7 @@
         "pages",
         "write"
       ],
+      "description": "Create a markdown page (Galaxy Notebook or Report).\n\nRequires Galaxy 26.1 or newer.\n\nAttaching a page to a history is what needs the newer server, and the whole\ntool is refused rather than only that call: an older one has no history_id\non the create payload, and answers with a summary carrying no editable\ncontent whichever kind you asked for.\n\nPass history_id to create a history-attached notebook (title auto-fills\nfrom the history if omitted). Omit history_id to create a standalone\nreport -- reports REQUIRE both a title and a unique slug\n(lowercase/digits/hyphens).\n\nContent is Galaxy-flavored markdown. To embed a dataset, use a directive\nwith the ENCODED dataset id, e.g.\n`history_dataset_display(history_dataset_id=<encoded-dataset-id>)` or\n`history_dataset_collection_display(history_dataset_collection_id=...)`.\nGet encoded ids from get_history_contents / get_dataset_details.",
       "requires": {
         "galaxy": ">=26.1"
       },
@@ -189,6 +193,7 @@
         "tools",
         "write"
       ],
+      "description": "Create a user-defined tool in Galaxy from a YAML tool definition.\n\nUser-defined tools are lightweight, containerized tools that can be created\nwithout admin privileges. They are stored in the database, scoped to the\ncreating user, and can be embedded in workflows (importing the workflow\nautomatically creates the tool for the importing user).",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -212,6 +217,7 @@
         "tools",
         "write"
       ],
+      "description": "Deactivate a user-defined tool. Deactivated tools are not loaded into the toolbox.",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -242,6 +248,7 @@
         "datasets",
         "read"
       ],
+      "description": "Download a dataset from Galaxy to the local filesystem or memory",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -299,6 +306,7 @@
         "extended",
         "read"
       ],
+      "description": "Get detailed information about a dataset collection and its members\n\nDataset collections group multiple datasets together (e.g., paired-end reads,\nsample lists). This tool shows the collection structure and member datasets.",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -338,6 +346,7 @@
         "datasets",
         "read"
       ],
+      "description": "Get detailed information about a specific dataset, optionally including a content preview",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -374,6 +383,7 @@
         "histories",
         "read"
       ],
+      "description": "Get list of user's histories with optional pagination and filtering.\n\nHistories are Galaxy's primary organizational unit - each contains datasets,\ncollections, and records of analyses. Most operations require a history_id.\n\nRECOMMENDED WORKFLOW:\n1. Call get_histories() to see existing histories\n2. Either use an existing history_id or create_history() for new work\n3. Upload data or run tools in the selected history",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -418,6 +428,7 @@
         "histories",
         "read"
       ],
+      "description": "Get paginated contents (datasets and collections) from a specific history with ordering support",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -487,6 +498,7 @@
         "histories",
         "read"
       ],
+      "description": "Get history metadata and summary count ONLY - does not return actual datasets\n\nThis function provides quick access to history information without loading all datasets.\nFor the actual datasets/contents, use get_history_contents() which supports\npagination and ordering.",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -517,6 +529,7 @@
         "read",
         "workflows"
       ],
+      "description": "View workflow invocations in Galaxy",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -590,6 +603,7 @@
         "niche",
         "read"
       ],
+      "description": "Get comprehensive details about a specific IWC workflow before importing.\n\nUse this to examine a workflow's full documentation, inputs, and complexity\nbefore deciding to import it into your Galaxy instance.\n\nRECOMMENDED WORKFLOW:\n1. Search workflows with search_iwc_workflows() or recommend_iwc_workflows()\n2. Call this function with the trsID to get full details\n3. Review the readme and inputs to ensure it fits your needs\n4. Import with import_workflow_from_iwc(trs_id)",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -612,6 +626,7 @@
         "niche",
         "read"
       ],
+      "description": "List workflows published by the IWC (Intergalactic Workflow Commission).\n\nReturns one page of workflow summaries - the same shape search_iwc_workflows\nreturns - not the raw manifest entries. A single raw entry carries the whole\nworkflow definition: median ~50 KB, largest ~500 KB, so even one of them can\noverflow an MCP client's output limit. Use get_iwc_workflow_details(trs_id) for\nthe full record.",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -641,6 +656,7 @@
         "jobs",
         "read"
       ],
+      "description": "Get detailed information about the job that created a specific dataset\n\nThe job is read in full, so a failed job's logs come back with it: tool_stdout,\ntool_stderr, job_stdout, job_stderr, stdout and stderr. A log longer than 4 KB keeps its\nfirst and last 2 KB, cut on line boundaries, with a line saying how much was left out.",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -684,6 +700,7 @@
         "pages",
         "read"
       ],
+      "description": "Get a page and the content of its latest revision.\n\nReturns `content_editor`: the editable Galaxy-flavored markdown, with\nENCODED ids in directives (e.g. `history_dataset_id=<encoded-dataset-id>`).\nThis is the form to edit and pass back to update_page. Also returns\n`content_hash`, Galaxy's page hash of that source: read the page again and\ncompare it to tell whether anyone changed the page since.",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -711,6 +728,7 @@
         "pages",
         "read"
       ],
+      "description": "Get the content of a single page revision.\n\nRequires Galaxy 26.1 or newer.\n\nEdit `content_editor` and pass it to update_page; `content` is the same\ndocument with its embeds expanded for export, not the editable form. Galaxy\nonly began sending content_editor on a revision after 26.1, so check\n`content_editor_source`: \"content\" means the server sent none and the\neditable text you are being handed is that expanded form -- editing it and\nsaving it bakes the expansion into the page.",
       "requires": {
         "galaxy": ">=26.1"
       },
@@ -741,6 +759,7 @@
         "core",
         "read"
       ],
+      "description": "Get Galaxy server information including version, URL, and configuration details\n\nAlso reports which tools this server is too old to run, in `unsupported_tools`,\nand whether its version could be read at all, in `version_known` -- an empty\n`unsupported_tools` means nothing is ruled out only when `version_known` is true.\n\nReturns:\n    GalaxyResult with server information in data field",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -766,6 +785,7 @@
         "read",
         "tools"
       ],
+      "description": "Get citation information for a specific tool",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -797,6 +817,7 @@
         "read",
         "tools"
       ],
+      "description": "Get detailed information about a specific tool including its input parameters.\n\nRECOMMENDED WORKFLOW:\n1. First find tools using search_tools_by_name() or get_tool_panel()\n2. Call this function with io_details=True to see all input parameters\n3. Use the inputs schema to construct the inputs dict for run_tool()",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -824,6 +845,7 @@
         "read",
         "tools"
       ],
+      "description": "Return a ready-to-fill ``inputs`` skeleton for a tool, plus a compact schema.\n\nCall this before run_tool when you are unsure how to shape ``inputs``. Replace\nplaceholders (e.g. ``<dataset_id>``) with real values. Repeats show one\ninstance (``name_0|...``); duplicate with ``name_1|...`` to add more. The\nflattened-key convention is ``section|param``, ``cond|selector``,\n``repeat_0|param``.",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -854,6 +876,7 @@
         "read",
         "tools"
       ],
+      "description": "Browse the Galaxy tool panel (toolbox) one level at a time.\n\nThe whole panel is megabytes on a production server, so it is never returned\nwhole. Called with no arguments this lists the top-level entries - each section\nwith the number of tools in it, plus any tools that sit outside a section.\nPass section_id to list the tools in one section.",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -895,6 +918,7 @@
         "read",
         "tools"
       ],
+      "description": "Return the exact XML test definitions (inputs, outputs, assertions, required files)\nfor a Galaxy tool so an LLM can study real, working run configurations.",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -938,6 +962,7 @@
         "read",
         "user"
       ],
+      "description": "Get current user information\n\nReturns:\n    GalaxyResult with current user details in data field",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -952,6 +977,7 @@
         "read",
         "workflows"
       ],
+      "description": "Get detailed information about a specific workflow",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -986,6 +1012,7 @@
         "read",
         "workflows"
       ],
+      "description": "Return a ready-to-fill template plus a run guide for a workflow.\n\nCall this before invoke_workflow. Each slot lists its label, expected source\n(hda/hdca), accepted datatypes, collection type, and -- for parameters --\nselectable `options` as [{label, value}]. On the `style=run` path these are\nGalaxy-resolved: reference-genome dbkeys come from the server regardless of\nhistory, and passing `history_id` additionally surfaces that history's\ncompatible datasets as candidates. The legacy .ga fallback carries only the\nstatic restrictions baked into the workflow -- no server- or history-resolved\nvalues -- see `guide.notes`. `guide` carries a short description and provenance.\nFill `inputs_template` (keyed by step_index) and invoke with\n`inputs_by=\"step_index|step_uuid\"`. Pass `verbose=True` for the full readme\nand uncapped option lists. `warnings` flags legacy patterns.",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -1022,6 +1049,7 @@
         "niche",
         "write"
       ],
+      "description": "Import a workflow from IWC to the user's Galaxy instance",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -1044,6 +1072,7 @@
         "workflows",
         "write"
       ],
+      "description": "Invoke (run) a workflow with specified inputs and parameters",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -1132,6 +1161,7 @@
         "histories",
         "read"
       ],
+      "description": "Get a simplified, paginated list of history IDs and names for easy reference",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -1161,6 +1191,7 @@
         "pages",
         "read"
       ],
+      "description": "List the revision history of a page.\n\nRequires Galaxy 26.1 or newer.\n\nEach revision carries an `edit_source` (\"user\", \"agent\", or \"restore\")\nrecording who made the edit.",
       "requires": {
         "galaxy": ">=26.1"
       },
@@ -1191,6 +1222,7 @@
         "pages",
         "read"
       ],
+      "description": "List Galaxy pages (markdown documents) viewable by the user.\n\nRequires Galaxy 26.1 or newer.\n\nThe history is what needs the newer server, and the whole tool is refused\nrather than only a filtered call: an older one has no history_id query\nparameter and no history_id on a page, so it would answer with every page\nthe user can see and no way to tell a notebook from a report.\n\nA page attached to a history is a \"Galaxy Notebook\"; a standalone page is\na \"Report\". Pass history_id to list only that history's notebooks.",
       "requires": {
         "galaxy": ">=26.1"
       },
@@ -1253,6 +1285,7 @@
         "read",
         "tools"
       ],
+      "description": "List user-defined tools belonging to the current user, one page at a time.",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -1287,6 +1320,7 @@
         "read",
         "workflows"
       ],
+      "description": "List workflows available in the Galaxy instance, one page at a time",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -1333,6 +1367,7 @@
         "read",
         "tools"
       ],
+      "description": "Resolve a verified quay.io/biocontainers image for a set of conda packages.\n\nUse this to pick the ``container`` for create_user_tool instead of guessing an\nimage. The result is verified against quay.io rather than hallucinated, which\navoids the most common user-defined-tool failure: inventing a tag, or using a\nbare image (e.g. \"python:3.12-slim\") that doesn't ship the libraries the tool\nimports.",
       "conditionalOn": "container-recommend",
       "annotations": {},
       "inputSchema": {
@@ -1359,6 +1394,7 @@
         "niche",
         "read"
       ],
+      "description": "Semantic search for IWC workflows based on natural language description.\n\nUse this when you have a general analysis goal and want to find the best\nmatching workflows. Uses BM25 ranking to search across names, descriptions,\nreadmes, tags, and tool names.\n\nRECOMMENDED WORKFLOW:\n1. Describe your analysis goal in natural language\n2. Review ranked recommendations with match explanations\n3. Get details for promising workflows: get_iwc_workflow_details(trs_id)\n4. Import the best match: import_workflow_from_iwc(trs_id)",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -1390,6 +1426,7 @@
         "pages",
         "write"
       ],
+      "description": "Roll a page back to an earlier revision.\n\nRequires Galaxy 26.1 or newer.\n\nCreates a NEW revision from the target revision's content, recorded with\nedit_source=\"restore\" (the history is append-only -- nothing is deleted).\nThe new revision comes back the way get_page_revision returns one, with\n`content_editor` and the `content_editor_source` that says where it came from.",
       "requires": {
         "galaxy": ">=26.1"
       },
@@ -1420,6 +1457,7 @@
         "tools",
         "write"
       ],
+      "description": "Run a Galaxy tool on datasets in a history.\n\nRECOMMENDED WORKFLOW:\n1. Create or select a history: create_history() or get_histories()\n2. Upload data: upload_file() or upload_file_from_url()\n3. Get tool parameters: get_tool_details(tool_id, io_details=True)\n4. Call this function with properly formatted inputs\n5. Monitor job: get_job_details() or check history contents",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -1465,6 +1503,7 @@
         "tools",
         "write"
       ],
+      "description": "Run a user-defined tool via the standard Galaxy tools API.\n\nSubmits the UDT with POST /api/tools carrying the tool UUID. This\nsynchronous endpoint runs user-defined tools on every Galaxy that\nsupports them and needs no Celery -- unlike the newer POST /api/jobs\ntool-request path, which is Celery-only and 500s for UDTs on 26.0.\nIt returns the job and output dataset handles immediately; the job\nthen runs asynchronously on the cluster (poll it for state).",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -1498,6 +1537,7 @@
         "niche",
         "read"
       ],
+      "description": "Search for workflows in the IWC (Intergalactic Workflow Commission) manifest.\n\nIWC hosts curated, best-practice workflows for common bioinformatics analyses.\nThis function searches across workflow names, descriptions, tags, and readmes.\nResults are paginated: pagination.total_items is how many workflows matched,\npagination.next_offset is where the next page starts.\n\nRECOMMENDED WORKFLOW:\n1. Search for workflows matching your analysis need\n2. Review the results - check step_count for complexity, readme_summary for details\n3. Call get_iwc_workflow_details(trs_id) for full information\n4. Import with import_workflow_from_iwc(trs_id)\n5. Run with invoke_workflow()",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -1534,6 +1574,7 @@
         "read",
         "tools"
       ],
+      "description": "Recommend Galaxy tools based on a list of keywords.\n\nMatches on name and description first, then on accepted input formats, and keeps\nthat order so paging is stable. Results are paginated: pagination.total_items is\nthe full match count, pagination.next_offset is where the next page starts.\n\nExpensive: finding the format matches costs one detail lookup per tool that did\nnot match by name, and every page repeats the whole scan. Prefer\nsearch_tools_by_name when a name or description substring will do.",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -1573,6 +1614,7 @@
         "read",
         "tools"
       ],
+      "description": "Search Galaxy tools whose name, ID, or description contains the given query (substring match).\n\nResults are paginated. pagination.total_items is how many tools matched in total;\npagination.next_offset is where the next page starts (None on the last page).\n\nRECOMMENDED WORKFLOW:\n1. Use this function to find tools by name/keyword\n2. Review the returned tool IDs and names\n3. Call get_tool_details(tool_id) for full input parameters\n4. Call run_tool() with the correct inputs",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -1609,6 +1651,7 @@
         "histories",
         "write"
       ],
+      "description": "Update an existing Galaxy history's metadata.\n\nAny combination of name, annotation, tags, deleted, and published can be updated\nin a single call. Fields left as None are not modified.",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -1694,6 +1737,7 @@
         "pages",
         "write"
       ],
+      "description": "Update a page, creating a new revision when content changes.\n\nRequires Galaxy 26.1 or newer.\n\nReplace one section instead of the whole page by passing section_heading\n(the exact heading line, e.g. '## Methods') with section_content (its new\ntext, heading line included); a heading the page lacks is appended, and every\nsection with that heading line is replaced, as Galaxy's page editor does.\nMarkdown pages only. Pass the\ncontent_hash get_page returned as expect_hash and the write is refused if the\npage changed since you read it.\n\nContent is Galaxy-flavored markdown using ENCODED ids in directives\n(e.g. `history_dataset_id=<encoded-dataset-id>`) -- never raw integer ids or\nHIDs. Get encoded ids from get_history_contents / get_dataset_details.\nEdits made through this tool are recorded with edit_source=\"agent\". This does\nnot change the page's content_format, so editing a page originally authored\nas HTML with markdown content can mislabel it.",
       "requires": {
         "galaxy": ">=26.1"
       },
@@ -1779,6 +1823,7 @@
         "datasets",
         "write"
       ],
+      "description": "Upload a local file to Galaxy for analysis.\n\nGalaxy automatically detects the file type (FASTQ, BAM, BED, etc.) and\nindexes the file appropriately. Large files are uploaded efficiently.\n\nRECOMMENDED WORKFLOW:\n1. Create a history: create_history(\"My Analysis\")\n2. Upload your data files with this function\n3. Wait for upload to complete (check dataset state)\n4. Run tools on the uploaded data: run_tool()",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
@@ -1813,6 +1858,7 @@
         "datasets",
         "write"
       ],
+      "description": "Upload a file from a URL to Galaxy",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
