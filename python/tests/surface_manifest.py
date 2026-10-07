@@ -222,6 +222,9 @@ _SOURCE_FUNCTIONS = _source_functions()
 
 def _entry(tool: Tool, conditional_on: str | None) -> dict[str, Any]:
     entry: dict[str, Any] = {"name": tool.name, "tags": sorted(tool.tags)}
+    # What a client is told about the tool, as it is advertised: the docstring with the declared
+    # Galaxy requirement in it. Kept here so another surface can say the same thing.
+    entry["description"] = tool.description or ""
     # Recorded structurally rather than left to the description, so the TypeScript side's
     # `requires` can be compared against this one instead of against English.
     requires = TOOL_REQUIREMENTS.get(tool.name)

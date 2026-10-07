@@ -159,6 +159,12 @@ for a history (`hid`, `create_time`, `update_time`, `name`, `extension`, `size`)
 rows are unchanged, and collection rows gain `type_id` and `store_times_summary` and
 lose `model_class`, `populated` and `column_definitions`.
 
+### Both MCP servers describe each tool the same way (#155)
+
+galaxy-ops exports `GALAXY_MCP_SURFACE`, the description and parameter descriptions the
+Python server advertises, generated from its surface manifest, and the TypeScript server
+advertises them.
+
 ## 0.3.2 (2026-10-12)
 
 ### Redirects are no longer followed, so the API key cannot leak off-origin (security)

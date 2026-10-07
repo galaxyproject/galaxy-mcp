@@ -87,8 +87,14 @@ function describedInWireNames(schema: ZodRawShape[string], input: ZodRawShape): 
  *
  * Two parameters converging on one name would leave a tool quietly missing a parameter, so
  * it stops the server being built rather than the call being made.
+ *
+ * `described` replaces a parameter's own description with the one given under its wire name,
+ * where there is one.
  */
-export function wireShape(op: { name: string; input: ZodRawShape }): WireShape {
+export function wireShape(
+  op: { name: string; input: ZodRawShape },
+  described: Readonly<Record<string, string>> = {},
+): WireShape {
   const renamed: [string, ZodRawShape[string]][] = [];
   const toInput = new Map<string, string>();
   for (const [key, schema] of Object.entries(op.input)) {
@@ -101,7 +107,11 @@ export function wireShape(op: { name: string; input: ZodRawShape }): WireShape {
       );
     }
     toInput.set(wire, key);
-    renamed.push([wire, describedInWireNames(schema, op.input)]);
+    const said = described[wire];
+    renamed.push([
+      wire,
+      said ? (schema as unknown as ZodType).describe(said) : describedInWireNames(schema, op.input),
+    ]);
   }
   const shape: ZodRawShape = Object.fromEntries(renamed);
   const declared = new Set(toInput.keys());

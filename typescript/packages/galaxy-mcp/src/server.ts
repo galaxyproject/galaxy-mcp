@@ -1,7 +1,13 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { ZodRawShape } from "zod";
-import { allOperations, createGalaxyContext, describeOperation, runWithEnvelope } from "@galaxyproject/galaxy-ops";
+import {
+  allOperations,
+  createGalaxyContext,
+  describeOperation,
+  GALAXY_MCP_SURFACE,
+  runWithEnvelope,
+} from "@galaxyproject/galaxy-ops";
 import { LaxArgumentsTransport } from "./lax-transport.js";
 import { inWireNames, toOperationInput, wireShape } from "./wire-names.js";
 // The version a client is told, read from the package rather than written twice. tsup
@@ -74,13 +80,16 @@ export function buildServer(conn: { baseUrl: string; apiKey: string }): McpServe
   const shapes = new Map<string, ZodRawShape>();
   for (const op of allOperations) {
     // Advertised, validated and decoded under the Python parameter names; the op is handed
-    // back its own. See wire-names.ts for why the rename stops at the top level.
-    const { shape, object, toInput } = wireShape(op);
+    // back its own. See wire-names.ts for why the rename stops at the top level. A tool the
+    // Python server also serves is described as that server describes it, so a client is told
+    // the same thing by either.
+    const advertised = GALAXY_MCP_SURFACE[op.name];
+    const { shape, object, toInput } = wireShape(op, advertised?.parameters);
     shapes.set(op.name, shape);
     server.registerTool(
       op.name,
       {
-        description: inWireNames(describeOperation(op), op.input),
+        description: advertised?.description ?? inWireNames(describeOperation(op), op.input),
         inputSchema: object,
         annotations: annotations[op.name],
       },

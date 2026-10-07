@@ -3,9 +3,9 @@ import { runInNewContext } from "node:vm";
 import { z, type ZodType } from "zod";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { allOperations } from "@galaxyproject/galaxy-ops";
+import { allOperations, describeOperation } from "@galaxyproject/galaxy-ops";
 import { buildServer } from "../src/server";
-import { toOperationInput, toSnakeCase, wireShape } from "../src/wire-names";
+import { inWireNames, toOperationInput, toSnakeCase, wireShape } from "../src/wire-names";
 import { loadManifest, loadRegistry } from "./parity/surfaces";
 
 /** Every request one test made: the URL it asked for and what it sent. */
@@ -213,12 +213,18 @@ describe("the parameter names this surface advertises", () => {
   });
 
   /** The four sentences that told a caller to send a name this server now refuses. */
-  it("tells a caller to pass the name it takes", async () => {
-    const tools = await withClient(async (client) => (await client.listTools()).tools);
-    const find = (name: string) => tools.find((t) => t.name === name)!;
-    const property = (name: string, param: string) =>
-      ((find(name).inputSchema as { properties: Record<string, { description?: string }> })
-        .properties[param]?.description ?? "");
+  /**
+   * The ops' own text, which this surface advertises wherever the Python server has none for a
+   * tool or a parameter, respelled the way the schema is.
+   */
+  const op = (name: string) => allOperations.find((o) => o.name === name)!;
+  const find = (name: string) => ({
+    description: inWireNames(describeOperation(op(name)), op(name).input),
+  });
+  const property = (name: string, param: string) =>
+    ((wireShape(op(name)).shape[param] as { description?: string } | undefined)?.description ?? "");
+
+  it("tells a caller to pass the name it takes", () => {
 
     expect(find("get_tool_panel").description).toContain("Pass section_id to list one section");
     expect(property("get_tool_panel", "limit")).toContain("when section_id is absent");
@@ -233,9 +239,8 @@ describe("the parameter names this surface advertises", () => {
    * these words is a parameter somewhere, and every one of them is also ordinary English in
    * a sentence that has nothing to do with that parameter.
    */
-  it("leaves the single-word parameters, and the English around them, alone", async () => {
-    const tools = await withClient(async (client) => (await client.listTools()).tools);
-    const description = (name: string) => tools.find((t) => t.name === name)!.description ?? "";
+  it("leaves the single-word parameters, and the English around them, alone", () => {
+    const description = (name: string) => find(name).description;
     expect(description("get_histories")).toContain("(id, name, counts)");
     expect(description("get_workflow_details")).toContain("(name, steps, inputs)");
     expect(description("update_history")).toContain("(name, annotation, tags, deleted, published)");
