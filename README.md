@@ -18,6 +18,10 @@ The two are meant to stay in step: an operation keeps its name and its meaning a
 both. They are still separate codebases with separate release trains, though, so each
 README lists the operations that surface actually has -- read the one you are using.
 
+[ROADMAP.md](ROADMAP.md) explains why there are two implementations, how they relate to
+Galaxy's built-in MCP server, and what comes next. [PARITY.md](PARITY.md) is the generated,
+CI-checked record of where they differ.
+
 ## Key Features
 
 - **Galaxy Connection**: Connect to any Galaxy instance with a URL and API key
