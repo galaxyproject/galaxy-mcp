@@ -6,6 +6,52 @@ entry covers all three; where something only affects one surface, it says which.
 
 ## 0.3.1 (unreleased)
 
+Each change below applies to both MCP surfaces and matches the Python server's change of the same
+name, unless it says otherwise.
+
+### Breaking
+
+- `get_history_contents` rows no longer carry `dataset_id`. It is the id of the Dataset under a
+  history item, not of the item itself: no operation takes it, and passed where `id` belongs it
+  names whichever item has that number rather than this one. Use `id`.
+- `get_history_contents` refuses an `order` without a direction. A bare key was read as ascending
+  here while Galaxy reads it as descending, so one request sorted two ways. `order` is one of
+  Galaxy's sort keys for a history (`hid`, `create_time`, `update_time`, `name`, `extension`,
+  `size`) with `-asc` or `-dsc`, e.g. `hid-asc`.
+- `get_history_contents` rows are the contents index's summary view. Dataset rows are unchanged;
+  collection rows gain `type_id` and `store_times_summary` and lose `model_class`, `populated` and
+  `column_definitions`.
+- `update_page` refuses content whose directives name an object by something other than an
+  encoded id (a hid, a name), which Galaxy cannot resolve, and a section edit on a page authored
+  as HTML.
+- `waitForJob` (library only) ends on a skipped or stopped job with `JobFailedError` instead of
+  polling until the timeout.
+
+### Added
+
+- `update_page` takes `section_heading` and `section_content` to replace one section by its
+  heading line, as Galaxy's page editor does, and `expect_hash` to refuse a write when the page
+  changed since it was read. The answer carries the page's new `content_hash`.
+- `get_page` answers with `content_hash`, Galaxy's hash of the editable source.
+- `get_invocations` given an invocation id adds `job_states` and `outcome` (`failing`, `failed`,
+  `cancelled`, `completed`), read from its jobs summary with one more request: Galaxy's `state`
+  describes scheduling and reports `completed` for a run whose jobs failed. Listings are unchanged.
+- Both MCP servers describe each tool the same way. galaxy-ops exports `GALAXY_MCP_SURFACE`, the
+  description and parameter descriptions the Python server advertises, generated from its surface
+  manifest, and the TypeScript server advertises them.
+- galaxy-ops exports the job, dataset and invocation state lists, `invocationOutcome`,
+  `contentHash` and `malformedObjectIds`.
+
+### Changed
+
+- `get_history_contents` asks Galaxy for one filtered, sorted window and the count it matched,
+  instead of fetching the whole history; a page over the output budget is cut, and its
+  `pagination` names where to continue.
+- `get_job_details` reads the job with `full=true`, so a failed job's logs come back; a log over
+  4 KB keeps its first and last 2 KB.
+- `update_history` sets MCP's `destructiveHint`, since it deletes the history when `deleted` is
+  true.
+
 ### `get_invocations` sends `step_details` for one invocation (#152)
 
 Given an `invocationId`, the op ignored `stepDetails` and Galaxy answered with every step's
