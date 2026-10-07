@@ -249,6 +249,9 @@ const EXIT_CODES: Record<string, number> = {
   "search_tools_by_name/negative_offset": 64,
   "update_history/every_field_null": 64,
   "update_history/nothing_to_update": 64,
+  "update_page/directive_id_not_encoded": 64,
+  "update_page/half_a_section_edit": 64,
+  "update_page/page_changed_since_read": 64,
   // EX_NOINPUT 66 -- not_found: a 404, or an id nothing answers to
   "cancel_workflow_invocation/not_found": 66,
   "delete_user_tool/not_found": 66,
@@ -268,6 +271,8 @@ const EXIT_CODES: Record<string, number> = {
   "list_page_revisions/not_found": 66,
   "revert_page_revision/not_found": 66,
   "update_page/not_found": 66,
+  "update_page/read_not_found": 66,
+  "update_page/section_on_html": 64,
   // EX_UNAVAILABLE 69 -- connection: the server answered something we cannot act on
   "create_history/refused_by_galaxy": 69,
   "create_page/refused_by_galaxy": 69,

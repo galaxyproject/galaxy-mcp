@@ -16,8 +16,8 @@ export type OperationDomain =
   | "iwc"
   | "pages";
 
-/** The parsed input object derived from an op's raw Zod shape. */
-export type InputOf<Shape extends ZodRawShape> = z.infer<ZodObject<Shape>>;
+/** The input side, not the parsed side: nothing validates before run(), so a default is run()'s. */
+export type InputOf<Shape extends ZodRawShape> = z.input<ZodObject<Shape>>;
 
 /**
  * Where a page sits, AS THE WIRE CARRIES IT.
@@ -69,13 +69,19 @@ export interface Operation<Shape extends ZodRawShape, O> {
   readonly readOnly?: boolean;
   /** Destructive (delete/cancel) ops set this true (drives MCP destructiveHint). */
   readonly destructive?: boolean;
+  /**
+   * What a caller reads: the envelope's `data` after projection, which `runWithEnvelope` and the
+   * MCP surface expose. The value `run` returns is the projection's input and is not declared.
+   * Declared only where this package owns the shape rather than Galaxy.
+   */
+  readonly result?: ResultShape;
   run(input: InputOf<Shape>, ctx: GalaxyContext): Promise<O>;
   /**
    * How to cut this op's page down, for the ops the Python server budgets.
    *
    * Set it and the surface measures the serialised result and trims until it fits
    * the output budget; leave it off and the result goes out whatever size it is,
-   * which is what the two ops Python does not budget do.
+   * which is what the ops Python does not budget do.
    */
   budget?: { rows(data: O): number; shrink(data: O, keep: number): O };
   /**
@@ -134,6 +140,23 @@ export interface Projection {
   count?: number | null;
   pagination?: Pagination | null;
 }
+
+/**
+ * The data a caller reads is a sequence of rows or an object with named keys, and either may page.
+ *
+ * `fields` is left out when the keys vary by branch: the kind is still a fact then, the list is
+ * not. `paginated` says the envelope carries the page window beside the data, which a test holds
+ * to what `project` really emits. The Python surface states the same three things, so the parity
+ * report compares them.
+ *
+ * A paged result keeps its rows in the data and its window in the envelope, never inside the
+ * data: a listing is `kind: "list"` with `paginated`, and an object that pages names its rows
+ * among its own keys (get_history_contents' `contents`). Both surfaces answer that way.
+ */
+export type ResultShape = { paginated?: boolean } & (
+  | { kind: "object"; fields?: readonly string[] }
+  | { kind: "list" }
+);
 
 /** Heterogeneous registry element. */
 export type AnyOperation = Operation<ZodRawShape, unknown>;

@@ -7,9 +7,11 @@ import inspect
 import json
 import logging
 import os
+import re
 import threading
 import time
 import types
+import typing
 from collections.abc import Callable, Sequence
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -393,13 +395,31 @@ def _budgeted_page(
     window = list(items[offset : offset + limit])
     if project is not None:
         window = [project(item) for item in window]
+    return _budgeted_window(
+        window, total_items=len(items), limit=limit, offset=offset, noun=noun, build=build
+    )
 
+
+def _budgeted_window(
+    window: list[Any],
+    *,
+    total_items: int,
+    limit: int,
+    offset: int,
+    noun: str,
+    build: Callable[[list[Any], PaginationInfo], GalaxyResult],
+) -> GalaxyResult:
+    """_budgeted_page for a window Galaxy already cut, with the total it counted.
+
+    The page is measured and cut the same way, and a cut page still says where the next
+    one starts: at the first item it did not return.
+    """
     page = window
     while True:
         result = build(
             page,
             _pagination_info(
-                total_items=len(items),
+                total_items=total_items,
                 returned_items=len(page),
                 limit=limit,
                 offset=offset,
@@ -2576,6 +2596,50 @@ def get_history_details(history_id: str) -> GalaxyResult:
         raise ValueError(format_error("Get history details", e, {"history_id": history_id})) from e
 
 
+# The orders get_history_contents takes: each key Galaxy sorts the contents of one history
+# by, ascending or descending (managers/history_contents.py, parse_order_by), less
+# history_id, which is the same for every row here. Galaxy's own parser reads a bare key as
+# descending, so the direction is always spelled out.
+ContentsOrder = Literal[
+    "hid-asc",
+    "hid-dsc",
+    "create_time-asc",
+    "create_time-dsc",
+    "update_time-asc",
+    "update_time-dsc",
+    "name-asc",
+    "name-dsc",
+    "extension-asc",
+    "extension-dsc",
+    "size-asc",
+    "size-dsc",
+]
+CONTENTS_ORDERS: tuple[str, ...] = typing.get_args(ContentsOrder)
+
+# Galaxy's contents index with the matching count beside the page.
+_CONTENTS_WITH_STATS = "application/vnd.galaxy.history.contents.stats+json"
+
+
+def _content_row(item: Any) -> Any:
+    """A history item as a caller reads it: what Galaxy sent, less ``dataset_id``.
+
+    ``id`` is what every dataset-taking tool accepts. ``dataset_id`` names a different
+    object -- the Dataset under the history item -- in the same encoded id space, so passed
+    where ``id`` belongs it resolves rather than failing, to an unrelated item in an
+    unrelated history. No tool here takes it.
+
+    ``history_content_type`` is filled in when Galaxy did not say, so a dataset can be told
+    from a collection whichever serializer answered.
+    """
+    if not isinstance(item, dict):
+        return item
+    row = {key: value for key, value in item.items() if key != "dataset_id"}
+    if "history_content_type" not in row:
+        is_collection = row.get("collection_type") or row.get("type") == "collection"
+        row["history_content_type"] = "dataset_collection" if is_collection else "dataset"
+    return row
+
+
 @mcp.tool(tags={"histories", "read", "core"})
 def get_history_contents(
     history_id: str,
@@ -2583,7 +2647,7 @@ def get_history_contents(
     offset: int = 0,
     deleted: bool = False,
     visible: bool = True,
-    order: str = "hid-asc",
+    order: ContentsOrder = "hid-asc",
 ) -> GalaxyResult:
     """
     Get paginated contents (datasets and collections) from a specific history with ordering support
@@ -2591,36 +2655,26 @@ def get_history_contents(
     Args:
         history_id: Galaxy history ID - a hexadecimal hash string identifying the history
                    (a 16-character hex string)
-        limit: Maximum number of items to return per page (default: 100, max recommended: 500)
+        limit: Maximum number of items to return per page (default: 100). A page too large
+               for the output budget is cut short; pagination says where the next one starts.
         offset: Number of items to skip from the beginning (default: 0, for pagination)
         deleted: Include deleted datasets in results (default: False)
         visible: Include only visible datasets (default: True, set False to include hidden)
-        order: Sort order for results. Options include:
-              - 'hid-asc': History ID ascending (default, oldest first)
-              - 'hid-dsc': History ID descending (newest first)
-              - 'create_time-dsc': Creation time descending (most recent first)
-              - 'create_time-asc': Creation time ascending (oldest first)
-              - 'update_time-dsc': Last updated descending (most recently modified first)
-              - 'name-asc': Dataset name ascending (alphabetical)
+        order: Sort order for results: hid, create_time, update_time, name, extension
+              or size, followed by '-asc' or '-dsc'. 'hid-asc' (default) is oldest
+              first.
 
     Returns:
         GalaxyResult with paginated dataset/collection list in data field and pagination metadata.
-        Each item includes a 'history_content_type' field: 'dataset' or 'dataset_collection'
-
-    Note:
-        Performance: This function uses gi.histories.show_history(contents=True) to
-        fetch all items and then paginates client-side. For very large histories,
-        this may be slower than server-side pagination, but it is required to
-        include dataset collections alongside datasets.
+        Each item includes a 'history_content_type' field: 'dataset' or 'dataset_collection'.
+        An item's 'id' is what dataset-taking tools accept.
     """
-    # Like every other listing here. No ceiling -- this tool is not in MAX_PAGE_SIZE
-    # and does not budget its page -- but a window still has to be one: limit=0 asked
-    # for a page of nothing and got a walk that reported more to come and never
-    # advanced, and a negative offset sliced from the end of the list and then
-    # described itself with arithmetic that only holds for a window starting at or
-    # after zero (offset=-1 over five items claimed a next page at offset 0, back
-    # through what had just been returned).
+    # Like every other listing here: limit=0 asked for a page of nothing and got a walk
+    # that reported more to come and never advanced, and a negative offset is a window
+    # nothing can describe.
     _validate_pagination(limit, offset)
+    if order not in CONTENTS_ORDERS:
+        raise ValueError(f"order must be one of {', '.join(CONTENTS_ORDERS)} (got {order!r})")
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
@@ -2629,74 +2683,53 @@ def get_history_contents(
             f"Getting contents for history ID: {history_id} "
             f"(limit={limit}, offset={offset}, order={order})"
         )
-
-        # Use show_history with contents=True to get both datasets and collections
-        all_contents_raw = gi.histories.show_history(history_id, contents=True)
-
-        # Add history_content_type field to distinguish datasets from collections
-        all_contents = []
-        for item in all_contents_raw:
-            # Determine content type based on 'history_content_type' field if present,
-            # otherwise infer from 'collection_type' or 'type' field
-            if "history_content_type" in item:
-                content_type = item["history_content_type"]
-            elif item.get("collection_type") or item.get("type") == "collection":
-                content_type = "dataset_collection"
-            else:
-                content_type = "dataset"
-
-            # Add the field to the item (backward compatible - adds new field)
-            item_with_type = {**item, "history_content_type": content_type}
-            all_contents.append(item_with_type)
-
-        # Filter by visibility and deleted status
-        filtered_contents = all_contents
+        # Galaxy filters, sorts and windows, and counts what matched in the same request,
+        # so a history of thousands is read a page at a time and the total is still real.
+        # v=dev is the index that honours all of it; the filters are ORM filters, which
+        # the stats media type requires (api/history_contents.py).
+        filters = []
         if not deleted:
-            filtered_contents = [
-                item for item in filtered_contents if not item.get("deleted", False)
-            ]
+            filters.append(("deleted", "False"))
         if visible:
-            filtered_contents = [item for item in filtered_contents if item.get("visible", True)]
+            filters.append(("visible", "True"))
+        params: dict[str, Any] = {
+            "v": "dev",
+            "limit": limit,
+            "offset": offset,
+            "order": order,
+            "q": [field for field, _ in filters],
+            "qv": [value for _, value in filters],
+        }
+        # make_get_request sends bioblend's own headers and takes no others, so the
+        # request goes out with a copy of them, read under the lock that guards them.
+        with _gi_lock:
+            headers = {**gi.json_headers, "Accept": _CONTENTS_WITH_STATS}
+        response = requests.get(
+            f"{gi.url}/histories/{history_id}/contents",
+            params=params,
+            headers=headers,
+            timeout=gi.timeout,
+            verify=gi.verify,
+        )
+        response.raise_for_status()
+        body = response.json()
+        window = [_content_row(item) for item in body.get("contents") or []]
+        total = (body.get("stats") or {}).get("total_matches", offset + len(window))
+        logger.info(f"Retrieved {len(window)} of {total} items (offset {offset})")
 
-        # Sort the contents based on order parameter
-        def get_sort_key(item):
-            if order.startswith("hid"):
-                return item.get("hid", 0)
-            elif order.startswith("create_time"):
-                return item.get("create_time", "")
-            elif order.startswith("update_time"):
-                return item.get("update_time", "")
-            elif order.startswith("name"):
-                return item.get("name", "")
-            else:
-                return item.get("hid", 0)
-
-        reverse = order.endswith("-dsc")
-        sorted_contents = sorted(filtered_contents, key=get_sort_key, reverse=reverse)
-
-        # Apply pagination
-        total_items = len(sorted_contents)
-        paginated_contents = sorted_contents[offset : offset + limit]
-
-        logger.info(f"Retrieved {len(paginated_contents)} of {total_items} items (offset {offset})")
-
-        # The same helper every other listing uses, so one sentence describes a page
-        # whichever tool returned it, and the navigation arithmetic cannot disagree
-        # from one tool to the next.
-        pagination = _pagination_info(
-            total_items=total_items,
-            returned_items=len(paginated_contents),
+        return _budgeted_window(
+            window,
+            total_items=total,
             limit=limit,
             offset=offset,
             noun="items",
-        )
-
-        return GalaxyResult(
-            data={"history_id": history_id, "contents": paginated_contents},
-            success=True,
-            message=f"Retrieved {len(paginated_contents)} items from history",
-            count=len(paginated_contents),
-            pagination=pagination,
+            build=lambda page, pagination: GalaxyResult(
+                data={"history_id": history_id, "contents": page},
+                success=True,
+                message=f"Retrieved {len(page)} items from history",
+                count=len(page),
+                pagination=pagination,
+            ),
         )
     except Exception as e:
         logger.error(f"Failed to get history contents for ID '{history_id}': {str(e)}")
@@ -2735,10 +2768,39 @@ def _job_details_failed(dataset_id: str, error: Exception) -> str:
     return format_error("Get job details", error, {"dataset_id": dataset_id})
 
 
+# The log fields Galaxy adds to a job when asked for it in full, and how much of each to keep.
+_JOB_LOG_FIELDS = ("tool_stdout", "tool_stderr", "job_stdout", "job_stderr", "stdout", "stderr")
+_JOB_LOG_BYTES = 4 * 1024
+
+
+def _ends(text: str, cap: int) -> str:
+    """Both ends of a log, cut on line boundaries: the cause is usually at the end, the
+    context at the start, and a long log keeps neither if only one end is read."""
+    data = text.encode("utf-8")
+    if len(data) <= cap:
+        return text
+    half = cap // 2
+    front, back = data[:half], data[len(data) - half :]
+    cut = front.rfind(b"\n")
+    head = front if cut < 0 else front[:cut]
+    start = back.find(b"\n")
+    tail = back if start < 0 else back[start + 1 :]
+    dropped = len(data) - len(head) - len(tail)
+    return (
+        f"{head.decode('utf-8', errors='replace')}\n"
+        f"[... {dropped} of {len(data)} bytes omitted ...]\n"
+        f"{tail.decode('utf-8', errors='replace')}"
+    )
+
+
 @mcp.tool(tags={"jobs", "read", "core"})
 def get_job_details(dataset_id: str, history_id: str | None = None) -> GalaxyResult:
     """
     Get detailed information about the job that created a specific dataset
+
+    The job is read in full, so a failed job's logs come back with it: tool_stdout,
+    tool_stderr, job_stdout, job_stderr, stdout and stderr. A log longer than 4 KB keeps its
+    first and last 2 KB, cut on line boundaries, with a line saying how much was left out.
 
     Args:
         dataset_id: Galaxy dataset ID - a hexadecimal hash string identifying the dataset
@@ -2805,11 +2867,14 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> GalaxyRes
     url = f"{base_url}api/jobs/{job_id}"
     headers = {"x-api-key": api_key}
     try:
-        response = requests.get(url, headers=headers, timeout=30)
+        response = requests.get(url, headers=headers, params={"full": "true"}, timeout=30)
         response.raise_for_status()
         job_info = response.json()
     except Exception as e:
         raise ValueError(_job_details_failed(dataset_id, e)) from e
+    for field in _JOB_LOG_FIELDS:
+        if isinstance(job_info.get(field), str):
+            job_info[field] = _ends(job_info[field], _JOB_LOG_BYTES)
 
     return GalaxyResult(
         data={"job": job_info, "dataset_id": dataset_id, "job_id": job_id},
@@ -3286,6 +3351,65 @@ def upload_file_from_url(
         ) from e
 
 
+# Job states that will not change again, read off JobState (lib/galaxy/schema/states.py): the
+# model's terminal_states plus failed, skipped (a conditional step that did not run) and
+# stopped. Every other state counts as still moving.
+_JOB_SETTLED_STATES = frozenset({"ok", "skipped", "stopped", "error", "failed", "deleted"})
+_JOB_FAILED_STATES = frozenset({"error", "failed", "deleted"})
+_SCHEDULING_DONE = frozenset({"scheduled", "cancelled", "failed", "completed"})
+
+
+def _invocation_outcome(state: str | None, job_states: dict[str, int]) -> str | None:
+    """What an invocation amounts to once its jobs are counted.
+
+    Galaxy's `state` describes scheduling: 26.x says `completed` for a run whose jobs
+    failed. `failing` while a job failed and others still move, `failed` once all settled
+    with a failure, `cancelled` for a stop someone asked for, `completed` when jobs came
+    back ok, and Galaxy's own state otherwise.
+
+    A paused job does not move until someone resumes it. Galaxy pauses the jobs downstream
+    of a failed one, so a failure with paused jobs behind it is `failed`; paused jobs
+    without a failure leave Galaxy's own state.
+    """
+    failed = sum(n for s, n in job_states.items() if n and s in _JOB_FAILED_STATES)
+    paused = job_states.get("paused", 0)
+    active = sum(
+        n for s, n in job_states.items() if n and s != "paused" and s not in _JOB_SETTLED_STATES
+    )
+    if (state or "") not in _SCHEDULING_DONE or active:
+        return "failing" if failed else state
+    if state == "cancelled":
+        return "cancelled"
+    if failed or state == "failed":
+        return "failed"
+    if paused:
+        return state
+    return "completed" if job_states.get("ok") else state
+
+
+def _job_states(gi: GalaxyInstance, invocation_id: str) -> dict[str, int] | None:
+    """How many of an invocation's jobs are in each state, or None when the summary cannot
+    be read: the invocation is still worth answering with, but not with an outcome guessed
+    from no jobs."""
+    try:
+        summary = gi.invocations.get_invocation_summary(invocation_id)
+    except Exception:
+        return None
+    states = summary.get("states") if isinstance(summary, dict) else None
+    if not isinstance(states, dict):
+        return None
+    return {s: n for s, n in states.items() if isinstance(s, str) and isinstance(n, int)}
+
+
+def _with_outcome(invocation: Any, job_states: dict[str, int] | None) -> Any:
+    """The invocation with its jobs' states and the outcome they give it; as Galaxy sent it
+    when there are no job states to read an outcome from."""
+    if job_states is None or not isinstance(invocation, dict):
+        return invocation
+    outcome = _invocation_outcome(invocation.get("state"), job_states)
+    return {**invocation, "job_states": job_states, "outcome": outcome}
+
+
 @mcp.tool(tags={"workflows", "read", "extended"})
 def get_invocations(
     invocation_id: str | None = None,
@@ -3314,6 +3438,13 @@ def get_invocations(
                      jobs. Applies to one invocation by id, and to a listing when
                      view is 'element' (default: False)
 
+    Galaxy's `state` describes scheduling only -- it says completed for a run whose
+    jobs failed. One invocation by id also carries `job_states`, how many of its jobs
+    are in each state, and `outcome` (failing, failed, cancelled, completed, or Galaxy's
+    state while that is all the jobs say) for what the run amounted to; both are left
+    out when Galaxy's jobs summary cannot be read. Get an invocation by id to learn its
+    outcome.
+
     Returns:
         GalaxyResult with workflow invocation information in data field
     """
@@ -3335,7 +3466,7 @@ def get_invocations(
                 invocation = gi.invocations.show_invocation(invocation_id)
             _refuse_error_body("Get workflow invocations", invocation)
             return GalaxyResult(
-                data=invocation,
+                data=_with_outcome(invocation, _job_states(gi, invocation_id)),
                 success=True,
                 message=f"Retrieved invocation '{invocation_id}'",
             )
@@ -4779,6 +4910,76 @@ def _strip_rendered(page: dict[str, Any], include_rendered: bool) -> dict[str, A
     return page
 
 
+def _content_hash(page: dict[str, Any]) -> str:
+    """Galaxy's page hash of the editable source, so a caller can tell whether a page changed.
+
+    The source is ``content_editor``, or ``content`` for an HTML page, which Galaxy fills on
+    the markdown path only. The hash is ``_djb2_hash`` in lib/galaxy/agents/page_assistant.py:
+    djb2 over code points, eight hex digits. (Galaxy's client spells it over UTF-16 code units,
+    which differs only for characters outside the Basic Multilingual Plane.)
+    """
+    h = 5381
+    for c in page.get("content_editor") or page.get("content") or "":
+        h = ((h * 33) + ord(c)) & 0xFFFFFFFF
+    return format(h, "08x")
+
+
+# Galaxy's heading rule, client/src/components/PageEditor/sectionDiffUtils.ts.
+_HEADING = re.compile(r"^#{1,6}\s")
+
+# The directive arguments Galaxy decodes as encoded ids (lib/galaxy/managers/markdown_util.py),
+# and where it reads directives: fenced galaxy blocks and ``${galaxy ...}`` embeds.
+_ID_ARGUMENT = re.compile(
+    r"\b(history_id|workflow_id|history_dataset_id|history_dataset_collection_id|job_id"
+    r"|implicit_collection_jobs_id|invocation_id)\s*=\s*[\"']?([^\s,)\"']+)"
+)
+# An encoded id: Galaxy's cipher works in 8-byte blocks, so hex in runs of sixteen.
+_ENCODED_ID = re.compile(r"^(?:[0-9a-f]{16})+$")
+_DIRECTIVES = re.compile(r"^```[ \t]*galaxy[^\n]*\n[\s\S]*?^```|\$\{galaxy\s[^}]*\}", re.MULTILINE)
+
+
+def _markdown_sections(content: str) -> list[tuple[str, str]]:
+    """Markdown split at headings as Galaxy's page editor splits it (``markdownSections``).
+
+    The text before the first heading is a section whose heading is "", and each section's
+    text includes its heading line.
+    """
+    if not content:
+        return []
+    sections: list[tuple[str, str]] = []
+    heading = ""
+    current: list[str] = []
+    for i, line in enumerate(content.split("\n")):
+        if _HEADING.match(line) and i > 0:
+            sections.append((heading, "\n".join(current)))
+            heading, current = line, [line]
+        elif _HEADING.match(line):
+            heading, current = line, [line]
+        else:
+            current.append(line)
+    if current:
+        sections.append((heading, "\n".join(current)))
+    return sections
+
+
+def _apply_section_edit(original: str, heading: str, section: str) -> str:
+    """Replace the section under ``heading``, appending it when absent (``applySectionEdit``)."""
+    parts = [section if h == heading else text for h, text in _markdown_sections(original)]
+    if not any(h == heading for h, _ in _markdown_sections(original)):
+        parts.append(section)
+    return "\n".join(parts)
+
+
+def _malformed_object_ids(content: str | None) -> list[str]:
+    """Directive arguments naming a Galaxy object by something that is not its encoded id."""
+    found: list[str] = []
+    for directive in _DIRECTIVES.finditer(content or ""):
+        for name, value in _ID_ARGUMENT.findall(directive.group()):
+            if not _ENCODED_ID.match(value):
+                found.append(f"{name}={value}")
+    return found
+
+
 def _with_editable_content(revision: dict[str, Any]) -> dict[str, Any]:
     """Give a revision one field to edit whatever the server sent, and say which it was.
 
@@ -4898,7 +5099,9 @@ def get_page(page_id: str, include_rendered: bool = False) -> GalaxyResult:
 
     Returns `content_editor`: the editable Galaxy-flavored markdown, with
     ENCODED ids in directives (e.g. `history_dataset_id=<encoded-dataset-id>`).
-    This is the form to edit and pass back to update_page.
+    This is the form to edit and pass back to update_page. Also returns
+    `content_hash`, Galaxy's page hash of that source: read the page again and
+    compare it to tell whether anyone changed the page since.
 
     Args:
         page_id: Encoded id of the page (from list_pages / create_page).
@@ -4907,8 +5110,8 @@ def get_page(page_id: str, include_rendered: bool = False) -> GalaxyResult:
             large; omit unless you need the rendered output.
 
     Returns:
-        GalaxyResult with page details including `content_editor`, metadata, and
-        `edit_source` of the latest revision in data.
+        GalaxyResult with page details including `content_editor`, `content_hash`,
+        metadata, and `edit_source` of the latest revision in data.
 
     NEXT STEPS:
     - Edit it: update_page(page_id, content=...)
@@ -4920,7 +5123,11 @@ def get_page(page_id: str, include_rendered: bool = False) -> GalaxyResult:
     try:
         response = gi.make_get_request(f"{gi.url}/pages/{page_id}")
         response.raise_for_status()
-        page = _strip_rendered(response.json(), include_rendered)
+        raw = response.json()
+        # Hashed before the render is dropped: an HTML page's source is in `content`.
+        content_hash = _content_hash(raw)
+        page = _strip_rendered(raw, include_rendered)
+        page["content_hash"] = content_hash
         return GalaxyResult(
             data=page,
             success=True,
@@ -5007,8 +5214,19 @@ def update_page(
     page_id: str,
     content: str | None = None,
     title: str | None = None,
+    section_heading: str | None = None,
+    section_content: str | None = None,
+    expect_hash: str | None = None,
 ) -> GalaxyResult:
     """Update a page, creating a new revision when content changes.
+
+    Replace one section instead of the whole page by passing section_heading
+    (the exact heading line, e.g. '## Methods') with section_content (its new
+    text, heading line included); a heading the page lacks is appended, and every
+    section with that heading line is replaced, as Galaxy's page editor does.
+    Markdown pages only. Pass the
+    content_hash get_page returned as expect_hash and the write is refused if the
+    page changed since you read it.
 
     Content is Galaxy-flavored markdown using ENCODED ids in directives
     (e.g. `history_dataset_id=<encoded-dataset-id>`) -- never raw integer ids or
@@ -5021,9 +5239,14 @@ def update_page(
         page_id: Encoded id of the page.
         content: New markdown content. Omit to leave content unchanged.
         title: New title. Omit to leave unchanged.
+        section_heading: The exact heading line of the section to replace (markdown
+            pages only; every section with that heading line is replaced).
+        section_content: That section's new text, heading line included.
+        expect_hash: content_hash from when the page was read; refused if it changed.
 
     Returns:
-        GalaxyResult with the updated page details including content_editor in data.
+        GalaxyResult with the updated page details including content_editor and its new
+        content_hash in data.
 
     NEXT STEPS:
     - Inspect revisions: list_page_revisions(page_id)
@@ -5031,6 +5254,52 @@ def update_page(
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
+
+    section = section_heading is not None or section_content is not None
+    if section and (section_heading is None or section_content is None):
+        raise ValueError(
+            "section_heading and section_content go together: give both to replace one section."
+        )
+    if section and content is not None:
+        raise ValueError("Give either content or a section to replace, not both.")
+    malformed = _malformed_object_ids(section_content if section else content)
+    if malformed:
+        raise ValueError(
+            "These directive arguments name a Galaxy object by something that is not its "
+            f"encoded id: {', '.join(malformed)}. Galaxy cannot resolve them, so the embed "
+            "would render nothing. Use the encoded id a tool returned, e.g. from "
+            "get_history_contents."
+        )
+
+    # A section edit and an expected hash both need the page as it is now. Galaxy's PUT has
+    # no precondition of its own, so this read and the write are two requests, and a writer
+    # that lands between them is not seen.
+    if section_heading is not None or expect_hash is not None:
+        try:
+            response = gi.make_get_request(f"{gi.url}/pages/{page_id}")
+            response.raise_for_status()
+            current = response.json()
+        except Exception as e:
+            raise ValueError(format_error("Update page", e, {"page_id": page_id})) from e
+        actual = _content_hash(current)
+        if expect_hash is not None and expect_hash != actual:
+            raise ValueError(
+                f"Page '{page_id}' changed since it was read: its content_hash is now {actual}, "
+                f"not {expect_hash}. Read it again with get_page and make the edit against what "
+                "is there now."
+            )
+        if section_heading is not None:
+            if current.get("content_format") != "markdown":
+                raise ValueError(
+                    f"Page '{page_id}' is authored as {current.get('content_format')}; a "
+                    "section can be replaced only in a markdown page. Send the whole content "
+                    "instead."
+                )
+            content = _apply_section_edit(
+                current.get("content_editor") or current.get("content") or "",
+                section_heading,
+                section_content or "",
+            )
 
     try:
         # edit_source attributes the revision to the agent, not a human user.
@@ -5040,10 +5309,10 @@ def update_page(
         if title is not None:
             payload["title"] = title
 
-        page = _strip_rendered(
-            gi.make_put_request(f"{gi.url}/pages/{page_id}", payload=payload),
-            include_rendered=False,
-        )
+        written = gi.make_put_request(f"{gi.url}/pages/{page_id}", payload=payload)
+        content_hash = _content_hash(written)
+        page = _strip_rendered(written, include_rendered=False)
+        page["content_hash"] = content_hash
         return GalaxyResult(
             data=page,
             success=True,

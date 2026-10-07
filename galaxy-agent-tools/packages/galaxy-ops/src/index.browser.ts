@@ -10,7 +10,15 @@ export {
   type GalaxyVersion,
   type VersionRequirement,
 } from "./version";
-export { isJobTerminal, isJobSuccess } from "./terminal-states";
+export {
+  isJobTerminal,
+  isJobSuccess,
+  DATASET_TERMINAL_STATES,
+  INVOCATION_FINISHED_STATES,
+  JOB_FAILED_STATES,
+  JOB_SETTLED_STATES,
+} from "./terminal-states";
+export { invocationOutcome, type JobStates } from "./invocation-outcome";
 export type { Operation, OperationDomain, GalaxyResult, Pagination, InputOf, AnyOperation } from "./operations/types";
 export {
   allOperations,
@@ -21,6 +29,7 @@ export {
   spellParamNames,
 } from "./operations/registry";
 export { validatePagination, paginate, paginationInfo, OUTPUT_BUDGET_BYTES } from "./operations/pagination";
+export { GALAXY_MCP_SURFACE, type GalaxyMcpTool } from "./galaxy-mcp-surface";
 export { laxenLikePydantic, isPlainObject, materializeOnce } from "./laxen";
 export { jsonObject, isJsonObjectSchema } from "./json-object";
 export type { PaginationInfo, Paged } from "./operations/pagination";
@@ -108,9 +117,11 @@ export { updatePageOp, updatePage } from "./operations/update-page";
 export { listPageRevisionsOp, listPageRevisions } from "./operations/list-page-revisions";
 export { getPageRevisionOp, getPageRevision } from "./operations/get-page-revision";
 export { revertPageRevisionOp, revertPageRevision } from "./operations/revert-page-revision";
+export { contentHash, malformedObjectIds } from "./operations/pages-common";
 export type {
   PageSummary,
   PageDetail,
+  HashedPage,
   PageRevisionSummary,
   PageRevisionDetails,
   ContentEditorSource,

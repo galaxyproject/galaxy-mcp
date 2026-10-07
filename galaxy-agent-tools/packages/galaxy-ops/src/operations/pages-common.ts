@@ -61,6 +61,102 @@ export interface PageDetail extends PageSummary {
   generate_version?: string | null;
 }
 
+/** A page as get_page answers: the editable source and Galaxy's hash of it. */
+export type HashedPage = PageDetail & { content_hash: string };
+
+/**
+ * Galaxy's page hash of the editable source, so a caller can tell whether a page changed.
+ *
+ * The source is `content_editor`, or `content` for an HTML page, which Galaxy fills on the
+ * markdown path only. The hash is `_djb2_hash` in lib/galaxy/agents/page_assistant.py: djb2
+ * over code points, eight hex digits, as the other server computes it. (Galaxy's client spells
+ * it over UTF-16 code units, which differs only outside the Basic Multilingual Plane.)
+ */
+export function contentHash(page: Pick<PageDetail, "content_editor" | "content">): string {
+  let h = 5381;
+  for (const c of page.content_editor || page.content || "") {
+    h = (h * 33 + c.codePointAt(0)!) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+
+/** Galaxy's heading rule, client/src/components/PageEditor/sectionDiffUtils.ts. */
+const HEADING = /^#{1,6}\s/;
+
+/**
+ * Markdown split into sections at headings, as Galaxy's page editor splits it
+ * (`markdownSections` in sectionDiffUtils.ts): the text before the first heading is a section
+ * whose heading is "", and each section's text includes its heading line.
+ */
+export function markdownSections(content: string): { heading: string; content: string }[] {
+  if (!content) return [];
+  const lines = content.split("\n");
+  const sections: { heading: string; content: string }[] = [];
+  let heading = "";
+  let current: string[] = [];
+  lines.forEach((line, i) => {
+    if (HEADING.test(line) && i > 0) {
+      sections.push({ heading, content: current.join("\n") });
+      heading = line;
+      current = [line];
+    } else if (HEADING.test(line)) {
+      heading = line;
+      current = [line];
+    } else {
+      current.push(line);
+    }
+  });
+  if (current.length > 0) sections.push({ heading, content: current.join("\n") });
+  return sections;
+}
+
+/**
+ * Replace the section under `heading` with `section` (its heading line included), appending it
+ * when no section has that heading -- `applySectionEdit` in sectionDiffUtils.ts, which is how
+ * Galaxy applies its own page assistant's section patches.
+ */
+export function applySectionEdit(original: string, heading: string, section: string): string {
+  let found = false;
+  const parts = markdownSections(original).map((s) => {
+    if (s.heading !== heading) return s.content;
+    found = true;
+    return section;
+  });
+  if (!found) parts.push(section);
+  return parts.join("\n");
+}
+
+/** The directive arguments Galaxy decodes as encoded ids, lib/galaxy/managers/markdown_util.py. */
+const ID_ARGUMENTS = [
+  "history_id",
+  "workflow_id",
+  "history_dataset_id",
+  "history_dataset_collection_id",
+  "job_id",
+  "implicit_collection_jobs_id",
+  "invocation_id",
+];
+const ID_ARGUMENT = new RegExp(`\\b(${ID_ARGUMENTS.join("|")})\\s*=\\s*["']?([^\\s,)"']+)`, "g");
+/** An encoded id: Galaxy's cipher works in 8-byte blocks, so hex in runs of sixteen. */
+const ENCODED_ID = /^(?:[0-9a-f]{16})+$/;
+/** Where Galaxy reads directives: fenced galaxy blocks and `${galaxy ...}` embeds. */
+const DIRECTIVES = /^```[ \t]*galaxy[^\n]*\n[\s\S]*?^```|\$\{galaxy\s[^}]*\}/gm;
+
+/**
+ * Directive arguments that name a Galaxy object by something that is not an encoded id -- a
+ * hid, a name, a decoded integer -- spelled `name=value`. Galaxy decodes these when it stores a
+ * page, so such a value is one it cannot resolve. Prose outside directives is not read.
+ */
+export function malformedObjectIds(content: string | null | undefined): string[] {
+  const found: string[] = [];
+  for (const directive of (content ?? "").match(DIRECTIVES) ?? []) {
+    for (const [, name, value] of directive.matchAll(ID_ARGUMENT)) {
+      if (!ENCODED_ID.test(value!)) found.push(`${name}=${value}`);
+    }
+  }
+  return found;
+}
+
 /** One entry of GET /api/pages/{id}/revisions. */
 export interface PageRevisionSummary {
   id: string;

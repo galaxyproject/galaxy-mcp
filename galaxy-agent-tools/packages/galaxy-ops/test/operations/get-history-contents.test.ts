@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { getHistoryContentsOp, getHistoryContents } from "../../src/operations/get-history-contents";
+import {
+  CONTENTS_ORDERS,
+  getHistoryContentsOp,
+  getHistoryContents,
+} from "../../src/operations/get-history-contents";
 import { mockClient } from "../util/mock-client";
 import { mcpPayloadBytes } from "../util/byte-budget";
 import { runWithEnvelope } from "../../src/operations/registry";
@@ -40,151 +44,113 @@ const item = (hid: number, state: { deleted?: boolean; visible?: boolean; name?:
 });
 
 /**
- * The contents index as Galaxy answers it with no query parameters, which is what
- * `show_history(contents=True)` asks for on the other surface: everything, in hid
- * order, deleted and hidden items included.
+ * Galaxy's contents index as the stats media type answers it: filtered by the q/qv
+ * pairs, sorted by `order`, windowed by limit and offset, and counted. `asked`
+ * collects each request's query and headers.
  */
-const serving = (total: number, seen?: (query: any) => void) =>
+const serving = (rows: ReturnType<typeof item>[], asked: any[] = []) =>
   mockClient({
     GET: (path, init) => {
       expect(path).toBe("/api/histories/{history_id}/contents");
-      seen?.(init.params.query);
+      const { query, header } = init.params;
+      asked.push({ query, header, historyId: init.params.path.history_id });
+      const where = Object.fromEntries(query.q.map((field: string, k: number) => [field, query.qv[k]]));
+      let matching = rows.filter(
+        (row) => !(where.deleted === "False" && row.deleted) && !(where.visible === "True" && !row.visible),
+      );
+      const [field, direction] = query.order.split("-") as [keyof typeof matching[0], string];
+      matching = [...matching].sort((a, b) => (a[field]! < b[field]! ? -1 : a[field]! > b[field]! ? 1 : 0));
+      if (direction === "dsc") matching.reverse();
       return {
-        data: Array.from({ length: total }, (_, k) =>
-          item(k + 1, { deleted: k % 4 === 1, visible: k % 4 !== 2 }),
-        ),
+        data: {
+          contents: matching.slice(query.offset, query.offset + query.limit),
+          stats: { total_matches: matching.length },
+        },
         response: { status: 200 },
       };
     },
   });
 
-/** How many of `serving(total)` survive the default filters. */
+/** `total` items, every fourth one deleted and every fourth hidden, offset by one. */
+const history = (total: number) =>
+  Array.from({ length: total }, (_, k) => item(k + 1, { deleted: k % 4 === 1, visible: k % 4 !== 2 }));
+
+/** How many of `history(total)` survive the default filters. */
 const live = (total: number) =>
   Array.from({ length: total }, (_, k) => k).filter((k) => k % 4 !== 1 && k % 4 !== 2).length;
 
 describe("get_history_contents", () => {
-  it("lists a history's contents by id", async () => {
-    const client = mockClient({
-      GET: (path, init) => {
-        expect(init.params.path.history_id).toBe("h1");
-        return { data: [item(1)], response: { status: 200 } };
+  it("asks Galaxy for one filtered, sorted window with its count", async () => {
+    const asked: any[] = [];
+    await getHistoryContents({ historyId: "h1", limit: 7, offset: 14 }, ctxWith(serving(history(40), asked)));
+    expect(asked).toEqual([
+      {
+        historyId: "h1",
+        query: {
+          v: "dev",
+          limit: 7,
+          offset: 14,
+          order: "hid-asc",
+          q: ["deleted", "visible"],
+          qv: ["False", "True"],
+        },
+        header: { accept: "application/vnd.galaxy.history.contents.stats+json" },
       },
-    });
-    const out = await getHistoryContents({ historyId: "h1" }, ctxWith(client));
-    expect(out.items).toHaveLength(1);
-  });
-
-  it("asks Galaxy for the whole index and windows it here, the way the Python tool does", async () => {
-    let query: any;
-    const out = await getHistoryContents({ historyId: "h1" }, ctxWith(serving(500, (q) => (query = q))));
-    // No filters, no order, no window on the wire: Galaxy is asked for everything.
-    expect(query).toBeUndefined();
-    expect(out.items).toHaveLength(100);
-    expect(out.pagination.total).toBe(live(500));
-  });
-
-  it("excludes deleted and hidden items by default, and includes them when asked", async () => {
-    const byDefault = await getHistoryContents({ historyId: "h1" }, ctxWith(serving(20)));
-    expect(byDefault.items.every((entry: any) => !entry.deleted && entry.visible)).toBe(true);
-    expect(byDefault.pagination.total).toBe(live(20));
-
-    const everything = await getHistoryContents(
-      { historyId: "h1", deleted: true, visible: false },
-      ctxWith(serving(20)),
-    );
-    expect(everything.pagination.total).toBe(20);
-  });
-
-  it("reports a real total, because it did the counting", async () => {
-    const out = await getHistoryContents({ historyId: "h1", limit: 5, offset: 5 }, ctxWith(serving(100)));
-    expect(out.pagination).toMatchObject({
-      total: live(100),
-      returned: 5,
-      offset: 5,
-      hasNext: true,
-      hasPrevious: true,
-      nextOffset: 10,
-      previousOffset: 0,
-    });
-  });
-
-  /**
-   * The ordering rules are the Python tool's, which are not Galaxy's: it tests the
-   * prefix of `order` and reverses only on `-dsc`, so "hid" is ascending where
-   * Galaxy's index would answer descending, and an order it does not recognise is
-   * hid ascending rather than a 400.
-   */
-  it("sorts by the prefix of order and reverses only on -dsc", async () => {
-    const hids = async (order?: string) =>
-      (await getHistoryContents({ historyId: "h1", order, limit: 4 }, ctxWith(serving(40)))).items.map(
-        (entry: any) => entry.hid,
-      );
-    const ascending = await hids("hid-asc");
-    expect(await hids("hid")).toEqual(ascending);
-    expect(await hids("nonsense-asc")).toEqual(ascending);
-    expect(await hids()).toEqual(ascending);
-    // -dsc is the only suffix that reverses, and it reverses the whole set before
-    // the window, so the first page is the highest hids rather than the lowest.
-    const descending = await hids("hid-dsc");
-    expect(descending[0]).toBeGreaterThan(descending[3]!);
-    expect(descending[0]).toBeGreaterThan(ascending[3]!);
-  });
-
-  it("sorts by name and by time when asked", async () => {
-    const named = mockClient({
-      GET: () => ({
-        data: [item(1, { name: "zeta" }), item(2, { name: "alpha" }), item(3, { name: "mu" })],
-        response: { status: 200 },
-      }),
-    });
-    const byName = await getHistoryContents({ historyId: "h1", order: "name-asc" }, ctxWith(named));
-    expect(byName.items.map((entry: any) => entry.name)).toEqual(["alpha", "mu", "zeta"]);
-    const byNameDown = await getHistoryContents({ historyId: "h1", order: "name-dsc" }, ctxWith(named));
-    expect(byNameDown.items.map((entry: any) => entry.name)).toEqual(["zeta", "mu", "alpha"]);
-  });
-
-  it("says what each item is when Galaxy did not", async () => {
-    const client = mockClient({
-      GET: () => ({
-        data: [
-          { hid: 1, name: "a dataset" },
-          { hid: 2, name: "a collection", collection_type: "list" },
-          { hid: 3, name: "explicit", history_content_type: "dataset_collection" },
-        ],
-        response: { status: 200 },
-      }),
-    });
-    const out = await getHistoryContents({ historyId: "h1" }, ctxWith(client));
-    expect(out.items.map((entry: any) => entry.history_content_type)).toEqual([
-      "dataset",
-      "dataset_collection",
-      "dataset_collection",
     ]);
   });
 
-  it("honours an explicit page", async () => {
-    const out = await getHistoryContents({ historyId: "h1", limit: 5, offset: 20 }, ctxWith(serving(500)));
-    expect(out.items).toHaveLength(5);
-    expect(out.pagination).toMatchObject({ limit: 5, offset: 20 });
+  it("drops a filter the caller widened", async () => {
+    const asked: any[] = [];
+    await getHistoryContents({ historyId: "h1", deleted: true, visible: false }, ctxWith(serving([], asked)));
+    expect(asked[0].query).toMatchObject({ q: [], qv: [] });
   });
 
-  /**
-   * A window has to be a window, and the sentence saying so is the other server's.
-   *
-   * This listing used to take anything: limit 0 sliced to nothing and then reported
-   * more to come with a next offset equal to the one asked for, and offset -1 took
-   * the last item and described it with arithmetic that only holds from zero
-   * upwards -- five items with limit 10 and offset -1 claimed a next page at offset
-   * 0, back through what had just been handed over. The Python tool took them too;
-   * it validates now, and these are the strings its `_validate_pagination` raises,
-   * written out rather than imported so the two have to be kept the same by hand
-   * and a change to either is visible here.
-   *
-   * There is still no ceiling: neither server caps this tool.
-   */
+  it("reports the total Galaxy counted, not the page it sent", async () => {
+    const out = await getHistoryContents({ historyId: "h1", limit: 10 }, ctxWith(serving(history(500))));
+    expect(out.items).toHaveLength(10);
+    expect(out.pagination).toMatchObject({ total: live(500), hasNext: true, nextOffset: 10 });
+  });
+
+  it("passes each documented order to Galaxy as named", async () => {
+    for (const order of CONTENTS_ORDERS) {
+      const asked: any[] = [];
+      await getHistoryContents({ historyId: "h1", order }, ctxWith(serving([], asked)));
+      expect(asked[0].query.order).toBe(order);
+    }
+  });
+
+  it("refuses any other order before it asks Galaxy anything", async () => {
+    const asked: any[] = [];
+    await expect(
+      getHistoryContents({ historyId: "h1", order: "hid" as never }, ctxWith(serving([], asked))),
+    ).rejects.toThrow(
+      "order must be one of hid-asc, hid-dsc, create_time-asc, create_time-dsc, update_time-asc, update_time-dsc, name-asc, name-dsc, extension-asc, extension-dsc, size-asc, size-dsc (got 'hid')",
+    );
+    expect(asked).toEqual([]);
+    expect(getHistoryContentsOp.input.order.safeParse("nonsense-asc").success).toBe(false);
+  });
+
+  it("says what each item is when Galaxy did not", async () => {
+    const untyped = ({ history_content_type: _, ...row }: ReturnType<typeof item>) => row;
+    const rows = [untyped(item(1)), { ...untyped(item(2)), collection_type: "list" }];
+    const out = await getHistoryContents({ historyId: "h1" }, ctxWith(serving(rows as never)));
+    expect(out.items.map((i: any) => i.history_content_type)).toEqual(["dataset", "dataset_collection"]);
+  });
+
+  it("leaves dataset_id out of the rows a caller reads, and keeps id", async () => {
+    const result = await runWithEnvelope(
+      getHistoryContentsOp as never,
+      { historyId: "h1" } as never,
+      ctxWith(serving([item(1)])),
+    );
+    const [row] = (result.data as { contents: Record<string, unknown>[] }).contents;
+    expect(row).not.toHaveProperty("dataset_id");
+    expect(row.id).toBe(item(1).id);
+  });
+
   describe("a window that is not a window", () => {
     it("refuses a limit below one, in the Python server's words", async () => {
-      const client = serving(8);
+      const client = serving(history(8));
       await expect(getHistoryContents({ historyId: "h1", limit: 0 }, ctxWith(client))).rejects.toThrow(
         "limit must be at least 1 (got 0)",
       );
@@ -194,7 +160,7 @@ describe("get_history_contents", () => {
     });
 
     it("refuses a negative offset, in the Python server's words", async () => {
-      const client = serving(8);
+      const client = serving(history(8));
       await expect(
         getHistoryContents({ historyId: "h1", limit: 10, offset: -1 }, ctxWith(client)),
       ).rejects.toThrow("offset must be 0 or greater (got -1)");
@@ -208,14 +174,14 @@ describe("get_history_contents", () => {
     // The two sentences are written out rather than imported, so a change to either
     // has to be made here as well as in the notes that quote them.
     it("refuses a limit that is not a whole number of rows", async () => {
-      const client = serving(8);
+      const client = serving(history(8));
       await expect(getHistoryContents({ historyId: "h1", limit: 1.5 }, ctxWith(client))).rejects.toThrow(
         "limit must be a whole number (got 1.5)",
       );
     });
 
     it("refuses a fractional offset with the sentence it refuses a negative one with", async () => {
-      const client = serving(8);
+      const client = serving(history(8));
       await expect(
         getHistoryContents({ historyId: "h1", limit: 10, offset: 0.5 }, ctxWith(client)),
       ).rejects.toThrow("offset must be 0 or greater (got 0.5)");
@@ -226,7 +192,7 @@ describe("get_history_contents", () => {
       const counting = mockClient({
         GET: () => {
           asked += 1;
-          return { data: [], response: { status: 200 } };
+          return { data: { contents: [], stats: { total_matches: 0 } }, response: { status: 200 } };
         },
       });
       await expect(getHistoryContents({ historyId: "h1", limit: 0 }, ctxWith(counting))).rejects.toThrow();
@@ -234,46 +200,49 @@ describe("get_history_contents", () => {
     });
 
     it("still takes a limit no ceiling would allow, because neither server caps this one", async () => {
-      const client = serving(8);
-      expect((await getHistoryContents({ historyId: "h1", limit: 5000 }, ctxWith(client))).items).toHaveLength(
-        live(8),
-      );
+      const out = await getHistoryContents({ historyId: "h1", limit: 5000 }, ctxWith(serving(history(8))));
+      expect(out.items).toHaveLength(live(8));
     });
 
     it("takes the smallest window there is", async () => {
-      const out = await getHistoryContents({ historyId: "h1", limit: 1, offset: 0 }, ctxWith(serving(8)));
+      const out = await getHistoryContents({ historyId: "h1", limit: 1, offset: 0 }, ctxWith(serving(history(8))));
       expect(out.items).toHaveLength(1);
       expect(out.pagination).toMatchObject({ limit: 1, offset: 0, hasNext: true, nextOffset: 1 });
     });
   });
 
   it("handles an empty history", async () => {
-    const out = await getHistoryContents({ historyId: "h1" }, ctxWith(serving(0)));
+    const out = await getHistoryContents({ historyId: "h1" }, ctxWith(serving([])));
     expect(out.items).toEqual([]);
     expect(out.pagination).toMatchObject({ total: 0, returned: 0, hasNext: false });
   });
 
   it("reports a short final page as the last one", async () => {
     const total = live(500);
-    const out = await getHistoryContents({ historyId: "h1", limit: 10, offset: total - 3 }, ctxWith(serving(500)));
+    const out = await getHistoryContents(
+      { historyId: "h1", limit: 10, offset: total - 3 },
+      ctxWith(serving(history(500))),
+    );
     expect(out.items).toHaveLength(3);
     expect(out.pagination).toMatchObject({ hasNext: false, hasPrevious: true });
   });
 
   /**
-   * Neither surface bounds this one. The Python tool has no MAX_PAGE_SIZE entry
-   * and does not go through _budgeted_page, so a default page of 100 fat records
-   * is whatever size it is -- 56,856 bytes for the records above, past what a
-   * client will pass through. Pinned rather than fixed: closing it means changing
-   * the Python tool too, and the two have to keep answering the same way.
+   * A default page of 100 full records is 56,856 bytes on the wire, past what a client
+   * passes through. Both surfaces cut it to the shared output budget, and the next page
+   * starts at the first item this one did not return.
    */
-  it("returns the page whole, because the Python tool does not budget this one either", async () => {
+  it("cuts a page over the output budget and continues from the first item it left out", async () => {
     const input = { historyId: "h1", limit: 100, offset: 0 };
-    const out = await getHistoryContents(input, ctxWith(serving(500)));
-    const result = await runWithEnvelope(getHistoryContentsOp as never, input as never, ctxWith(serving(500)));
-    expect(out.items).toHaveLength(100);
-    expect((result.data as { contents: unknown[] }).contents).toHaveLength(100);
-    expect(result.pagination?.helper_text).not.toContain("cut short");
+    const out = await getHistoryContents(input, ctxWith(serving(history(500))));
     expect(mcpPayloadBytes(getHistoryContentsOp, out, input)).toBeGreaterThan(OUTPUT_BUDGET_BYTES);
+    const result = await runWithEnvelope(getHistoryContentsOp as never, input as never, ctxWith(serving(history(500))));
+    const contents = (result.data as { contents: { hid: number }[] }).contents;
+    const returned = contents.length;
+    expect(returned).toBeGreaterThan(0);
+    expect(returned).toBeLessThan(100);
+    expect(new TextEncoder().encode(JSON.stringify(result)).length).toBeLessThanOrEqual(OUTPUT_BUDGET_BYTES);
+    expect(result.pagination).toMatchObject({ total_items: live(500), next_offset: returned, has_next: true });
+    expect(result.pagination?.helper_text).toContain("cut short to fit the output budget");
   });
 });

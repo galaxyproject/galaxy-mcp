@@ -18,6 +18,10 @@ def mock_galaxy_instance():
     # Mock(spec=GalaxyInstance) does not have one. The routes that build their own
     # URL -- the dataset text preview among them -- read it.
     mock_gi.url = "http://localhost:8080/api"
+    # The routes that make their own requests send bioblend's headers with them.
+    mock_gi.json_headers = {"Content-Type": "application/json", "x-api-key": "test_key"}
+    mock_gi.timeout = None
+    mock_gi.verify = True
 
     # Mock histories
     mock_histories = Mock()

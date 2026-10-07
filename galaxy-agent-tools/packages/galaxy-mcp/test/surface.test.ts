@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { allOperations, requirementSentence } from "@galaxyproject/galaxy-ops";
+import { allOperations, GALAXY_MCP_SURFACE, requirementSentence } from "@galaxyproject/galaxy-ops";
 import { buildServer, toolNames, toolAnnotations, annotationsFor, toolResult } from "../src/server";
 import { inWireNames } from "../src/wire-names";
 
@@ -35,6 +35,8 @@ describe("MCP surface is a mechanical projection", () => {
     expect(ann.get_histories?.readOnlyHint).toBe(true);
     expect(ann.create_history?.readOnlyHint).toBe(false);
     expect(ann.create_history?.destructiveHint).toBe(false);
+    // update_history deletes the history when asked to, and the hint says what a tool may do.
+    expect(ann.update_history?.destructiveHint).toBe(true);
     expect(ann.run_tool?.readOnlyHint).toBe(false); // executes a tool
   });
 
@@ -47,7 +49,7 @@ describe("MCP surface is a mechanical projection", () => {
     });
   });
 
-  it("tells a model what an op needs from the server, in the op's own description", async () => {
+  it("describes each tool as the Python server does, and what it needs from the server", async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const server = buildServer({ baseUrl: "https://g.example", apiKey: "K" });
     const client = new Client({ name: "surface-check", version: "0" });
@@ -55,11 +57,22 @@ describe("MCP surface is a mechanical projection", () => {
     try {
       const { tools } = await client.listTools();
       const byName = new Map(tools.map((t) => [t.name, t.description ?? ""]));
+      type Schema = { properties?: Record<string, { description?: string }> };
+      const schemas = new Map(tools.map((t) => [t.name, t.inputSchema as Schema]));
       for (const op of allOperations) {
         const described = byName.get(op.name) ?? "";
-        // The op's summary, with any parameter it names spelled the way this wire takes it,
-        // and then the bound. The spelling has tests of its own in wire-names.test.ts.
-        expect(described.startsWith(inWireNames(op.summary, op.input)), op.name).toBe(true);
+        // What the Python server advertises for the same tool; an op it does not serve keeps
+        // its own summary, spelled the way this wire takes it (wire-names.test.ts).
+        const python = GALAXY_MCP_SURFACE[op.name];
+        if (python !== undefined) {
+          expect(described, op.name).toBe(python.description);
+          const properties = schemas.get(op.name)?.properties ?? {};
+          for (const [param, said] of Object.entries(python.parameters)) {
+            if (said) expect(properties[param]?.description, `${op.name}.${param}`).toBe(said);
+          }
+        } else {
+          expect(described.startsWith(inWireNames(op.summary, op.input)), op.name).toBe(true);
+        }
         expect(described.includes("Requires Galaxy"), op.name).toBe(op.requires !== undefined);
         // The bound it names, not merely that it names one. The parity check reads this
         // side's requirement off the op, because MCP has no field for it, and that is

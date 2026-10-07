@@ -1,0 +1,14 @@
+{
+  "$comment": "A failed tool call from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `result` is the CallToolResult the MCP wire carries, dumped the way the SDK dumps it (by alias, JSON mode, None-valued fields left out). `sentence` is the same text with FastMCP's own wrapper removed, which is what the tool itself said.",
+  "outcome": "failure",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Error calling tool 'update_page': These directive arguments name a Galaxy object by something that is not its encoded id: history_dataset_id=3. Galaxy cannot resolve them, so the embed would render nothing. Use the encoded id a tool returned, e.g. from get_history_contents."
+      }
+    ],
+    "isError": true
+  },
+  "sentence": "These directive arguments name a Galaxy object by something that is not its encoded id: history_dataset_id=3. Galaxy cannot resolve them, so the embed would render nothing. Use the encoded id a tool returned, e.g. from get_history_contents."
+}

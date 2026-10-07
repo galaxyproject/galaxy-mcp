@@ -3,7 +3,8 @@ Test history-related operations
 """
 
 import asyncio
-from unittest.mock import patch
+import contextlib
+from unittest.mock import Mock, patch
 
 import bioblend
 import pytest
@@ -16,6 +17,40 @@ from .test_helpers import (
     list_history_ids_fn,
     update_history_fn,
 )
+
+
+@contextlib.contextmanager
+def galaxy_contents(rows):
+    """Galaxy's contents index as the stats media type answers it.
+
+    Filtered by the q/qv pairs, sorted by ``order``, windowed by limit and offset, and
+    counted, from the query the tool sent. Yields the requests made, so a test can read
+    what was asked for.
+    """
+    asked = []
+
+    def get(url, params=None, headers=None, **_kwargs):
+        asked.append({"url": url, "params": params, "headers": headers})
+        where = dict(zip(params["q"], params["qv"], strict=True))
+        matching = [
+            row
+            for row in rows
+            if not (where.get("deleted") == "False" and row.get("deleted", False))
+            and not (where.get("visible") == "True" and not row.get("visible", True))
+        ]
+        field, _, direction = params["order"].partition("-")
+        matching = sorted(matching, key=lambda row: row[field], reverse=direction == "dsc")
+        offset, limit = params["offset"], params["limit"]
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "contents": matching[offset : offset + limit],
+            "stats": {"total_matches": len(matching)},
+        }
+        return response
+
+    with patch("galaxy_mcp.server.requests.get", side_effect=get):
+        yield asked
 
 
 class TestHistoryOperations:
@@ -121,7 +156,7 @@ class TestHistoryOperations:
     def test_get_history_contents_paginated(self, mock_galaxy_instance):
         """Test get_history_contents with pagination"""
         # Mock show_history to return all contents
-        mock_galaxy_instance.histories.show_history.return_value = [
+        rows = [
             {"id": "dataset1", "hid": 1, "visible": True, "deleted": False},
             {"id": "dataset2", "hid": 2, "visible": True, "deleted": False},
             {"id": "dataset3", "hid": 3, "visible": True, "deleted": False},
@@ -129,7 +164,10 @@ class TestHistoryOperations:
             {"id": "dataset5", "hid": 5, "visible": True, "deleted": False},
         ]
 
-        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        with (
+            patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+            galaxy_contents(rows),
+        ):
             from tests.test_helpers import get_history_contents_fn
 
             result = get_history_contents_fn("test_history_1", limit=2, offset=0)
@@ -146,13 +184,16 @@ class TestHistoryOperations:
 
     def test_get_history_contents_no_pagination(self, mock_galaxy_instance):
         """Test get_history_contents without pagination (default)"""
-        mock_galaxy_instance.histories.show_history.return_value = [
+        rows = [
             {"id": "dataset1", "hid": 1, "visible": True, "deleted": False},
             {"id": "dataset2", "hid": 2, "visible": True, "deleted": False},
             {"id": "dataset3", "hid": 3, "visible": True, "deleted": False},
         ]
 
-        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        with (
+            patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+            galaxy_contents(rows),
+        ):
             from tests.test_helpers import get_history_contents_fn
 
             result = get_history_contents_fn("test_history_1")
@@ -166,7 +207,7 @@ class TestHistoryOperations:
 
     def test_get_history_contents_most_recent_first(self, mock_galaxy_instance):
         """Test get_history_contents with ordering for most recent datasets"""
-        mock_galaxy_instance.histories.show_history.return_value = [
+        rows = [
             {
                 "id": "dataset3",
                 "hid": 3,
@@ -190,7 +231,10 @@ class TestHistoryOperations:
             },
         ]
 
-        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        with (
+            patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+            galaxy_contents(rows) as asked,
+        ):
             from tests.test_helpers import get_history_contents_fn
 
             result = get_history_contents_fn("test_history_1", limit=2, order="create_time-dsc")
@@ -201,10 +245,10 @@ class TestHistoryOperations:
             assert result.data["contents"][1]["id"] == "dataset4"
             assert result.pagination.total_items == 3
 
-            # Verify show_history was called
-            mock_galaxy_instance.histories.show_history.assert_called_once_with(
-                "test_history_1", contents=True
-            )
+            # Galaxy sorted and cut the page, from one request.
+            assert len(asked) == 1
+            assert asked[0]["params"]["order"] == "create_time-dsc"
+            assert asked[0]["params"]["limit"] == 2
 
     def test_update_history_name(self, mock_galaxy_instance):
         """Test update_history updates the history name"""
@@ -287,7 +331,7 @@ class TestHistoryOperations:
     def test_get_history_contents_with_collections(self, mock_galaxy_instance):
         """Test get_history_contents returns both datasets and collections with proper type flags"""
         # Mock show_history to return both datasets and collections
-        mock_galaxy_instance.histories.show_history.return_value = [
+        rows = [
             {
                 "id": "dataset1",
                 "name": "My Dataset",
@@ -315,7 +359,10 @@ class TestHistoryOperations:
             },
         ]
 
-        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        with (
+            patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+            galaxy_contents(rows) as asked,
+        ):
             from tests.test_helpers import get_history_contents_fn
 
             result = get_history_contents_fn("test_history_1")
@@ -337,8 +384,9 @@ class TestHistoryOperations:
             assert result.data["contents"][2]["history_content_type"] == "dataset"
             assert result.data["contents"][2]["id"] == "dataset2"
 
-            mock_galaxy_instance.histories.show_history.assert_called_once_with(
-                "test_history_1", contents=True
+            assert asked[0]["url"] == "http://localhost:8080/api/histories/test_history_1/contents"
+            assert asked[0]["headers"]["Accept"] == (
+                "application/vnd.galaxy.history.contents.stats+json"
             )
 
 
@@ -417,9 +465,12 @@ class TestSharedPaginationWording:
         assert result.count == 3
 
     def test_get_history_contents_page_reads_like_the_others(self, mock_galaxy_instance):
-        mock_galaxy_instance.histories.show_history.return_value = self._contents(25)
+        rows = self._contents(25)
 
-        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        with (
+            patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+            galaxy_contents(rows),
+        ):
             from tests.test_helpers import get_history_contents_fn
 
             result = get_history_contents_fn("test_history_1", limit=10, offset=10)
@@ -430,9 +481,12 @@ class TestSharedPaginationWording:
         assert result.pagination.previous_offset == 0
 
     def test_get_history_contents_last_page(self, mock_galaxy_instance):
-        mock_galaxy_instance.histories.show_history.return_value = self._contents(25)
+        rows = self._contents(25)
 
-        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        with (
+            patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+            galaxy_contents(rows),
+        ):
             from tests.test_helpers import get_history_contents_fn
 
             result = get_history_contents_fn("test_history_1", limit=10, offset=20)
@@ -443,9 +497,12 @@ class TestSharedPaginationWording:
         assert result.pagination.next_offset is None
 
     def test_get_history_contents_past_the_end(self, mock_galaxy_instance):
-        mock_galaxy_instance.histories.show_history.return_value = self._contents(5)
+        rows = self._contents(5)
 
-        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        with (
+            patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+            galaxy_contents(rows),
+        ):
             from tests.test_helpers import get_history_contents_fn
 
             result = get_history_contents_fn("test_history_1", limit=10, offset=50)
@@ -589,34 +646,33 @@ class TestGetHistoryContentsRefusesAWindowThatIsNotOne:
     also the words the TypeScript surfaces use.
     """
 
-    @staticmethod
-    def _five(mock_galaxy_instance):
-        mock_galaxy_instance.histories.show_history.return_value = [
-            {"id": f"d{i}", "hid": i, "visible": True, "deleted": False} for i in range(5)
-        ]
+    FIVE = [{"id": f"d{i}", "hid": i, "visible": True, "deleted": False} for i in range(5)]
 
     def test_a_negative_offset_is_refused(self, mock_galaxy_instance):
-        self._five(mock_galaxy_instance)
-
-        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        with (
+            patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+            galaxy_contents(self.FIVE),
+        ):
             with pytest.raises(ValueError) as caught:
                 get_history_contents_fn("test_history_1", limit=10, offset=-1)
 
         assert str(caught.value) == "offset must be 0 or greater (got -1)"
 
     def test_a_zero_limit_is_refused(self, mock_galaxy_instance):
-        self._five(mock_galaxy_instance)
-
-        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        with (
+            patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+            galaxy_contents(self.FIVE),
+        ):
             with pytest.raises(ValueError) as caught:
                 get_history_contents_fn("test_history_1", limit=0)
 
         assert str(caught.value) == "limit must be at least 1 (got 0)"
 
     def test_the_smallest_window_there_is_still_works(self, mock_galaxy_instance):
-        self._five(mock_galaxy_instance)
-
-        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        with (
+            patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+            galaxy_contents(self.FIVE),
+        ):
             result = get_history_contents_fn("test_history_1", limit=1, offset=0)
 
         assert result.count == 1
@@ -626,9 +682,10 @@ class TestGetHistoryContentsRefusesAWindowThatIsNotOne:
         assert result.pagination.next_offset == 1
 
     def test_no_ceiling_here_because_this_server_does_not_cap_this_tool(self, mock_galaxy_instance):
-        self._five(mock_galaxy_instance)
-
-        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        with (
+            patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+            galaxy_contents(self.FIVE),
+        ):
             result = get_history_contents_fn("test_history_1", limit=100_000)
 
         assert result.count == 5
@@ -763,9 +820,10 @@ class TestBothHistoryListingsKeepTheirNumbers:
             contents = [
                 {"id": f"d{i}", "hid": i, "visible": True, "deleted": False} for i in range(total)
             ]
-            mock_galaxy_instance.histories.show_history.return_value = contents
-
-            with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with (
+                patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+                galaxy_contents(contents),
+            ):
                 result = get_history_contents_fn("test_history_1", limit=limit, offset=offset)
 
             assert self._seen(result.pagination) == self._expected(total, limit, offset), (
@@ -773,3 +831,78 @@ class TestBothHistoryListingsKeepTheirNumbers:
                 limit,
                 offset,
             )
+
+
+class TestGetHistoryContentsAsGalaxyPagesIt:
+    """Galaxy filters, sorts, windows and counts; the tool shapes and budgets the page."""
+
+    def test_an_order_outside_the_documented_ones_is_refused_before_anything_is_sent(
+        self, mock_galaxy_instance
+    ):
+        with (
+            patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+            galaxy_contents([]) as asked,
+        ):
+            with pytest.raises(ValueError) as caught:
+                get_history_contents_fn("test_history_1", order="hid")
+
+        assert str(caught.value) == (
+            "order must be one of hid-asc, hid-dsc, create_time-asc, create_time-dsc, "
+            "update_time-asc, update_time-dsc, name-asc, name-dsc, extension-asc, "
+            "extension-dsc, size-asc, size-dsc (got 'hid')"
+        )
+        assert asked == []
+
+    def test_asks_galaxy_for_one_filtered_window(self, mock_galaxy_instance):
+        with (
+            patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+            galaxy_contents([]) as asked,
+        ):
+            get_history_contents_fn("test_history_1", limit=7, offset=14, deleted=True)
+
+        assert asked[0]["params"] == {
+            "v": "dev",
+            "limit": 7,
+            "offset": 14,
+            "order": "hid-asc",
+            "q": ["visible"],
+            "qv": ["True"],
+        }
+
+    def test_rows_leave_out_the_dataset_id(self, mock_galaxy_instance):
+        rows = [{"id": "hda1", "dataset_id": "ds1", "hid": 1, "visible": True, "deleted": False}]
+        with (
+            patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+            galaxy_contents(rows),
+        ):
+            result = get_history_contents_fn("test_history_1")
+
+        assert result.data["contents"] == [
+            {
+                "id": "hda1",
+                "hid": 1,
+                "visible": True,
+                "deleted": False,
+                "history_content_type": "dataset",
+            }
+        ]
+
+    def test_a_page_over_budget_continues_from_the_first_item_it_did_not_return(
+        self, mock_galaxy_instance
+    ):
+        rows = [
+            {"id": f"d{i}", "hid": i, "name": "n" * 2000, "visible": True, "deleted": False}
+            for i in range(60)
+        ]
+        with (
+            patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+            galaxy_contents(rows),
+        ):
+            result = get_history_contents_fn("test_history_1", limit=50)
+
+        returned = result.pagination.returned_items
+        assert 0 < returned < 50
+        assert result.pagination.total_items == 60
+        assert result.pagination.next_offset == returned
+        assert result.data["contents"][-1]["hid"] == returned - 1
+        assert "cut short to fit the output budget" in result.pagination.helper_text

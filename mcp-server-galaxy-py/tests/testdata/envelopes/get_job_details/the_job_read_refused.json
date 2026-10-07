@@ -5,10 +5,10 @@
     "content": [
       {
         "type": "text",
-        "text": "Error calling tool 'get_job_details': Get job details failed: 500 Server Error: Internal Server Error for url: https://galaxy.example/api/jobs/j0000500 (Server error - try again later or contact admin). Context: dataset_id=d0002"
+        "text": "Error calling tool 'get_job_details': Get job details failed: 500 Server Error: Internal Server Error for url: https://galaxy.example/api/jobs/j0000500?full=true (Server error - try again later or contact admin). Context: dataset_id=d0002"
       }
     ],
     "isError": true
   },
-  "sentence": "Get job details failed: 500 Server Error: Internal Server Error for url: https://galaxy.example/api/jobs/j0000500 (Server error - try again later or contact admin). Context: dataset_id=d0002"
+  "sentence": "Get job details failed: 500 Server Error: Internal Server Error for url: https://galaxy.example/api/jobs/j0000500?full=true (Server error - try again later or contact admin). Context: dataset_id=d0002"
 }

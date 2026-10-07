@@ -1,0 +1,25 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example/",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/version",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "version_major": "26.1",
+        "version_minor": "1"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/pages/p0000404",
+      "query": {},
+      "status": 404,
+      "headers": {},
+      "bodyText": "{\"err_msg\": \"History not found\", \"err_code\": 404001}"
+    }
+  ]
+}

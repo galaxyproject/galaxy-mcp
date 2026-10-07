@@ -261,14 +261,17 @@ operation's help says what its default is, and the result carries a `pagination`
 block with the offset to ask for next. Nine of them also have a ceiling -- the
 same one the Python server enforces -- and refuse a bigger `limit` before the
 call goes out; a page that would still be too many bytes is cut to fit and says
-so. Three do not fit that description: `get_histories` has no default limit and
-no ceiling, so leaving `limit` off returns everything there is;
-`get_history_contents` has a default but no ceiling, and neither of those two has a
-byte budget either, exactly as on the Python side; and `recommend_iwc_workflows`
-takes a `limit` but no `offset`, because a ranking is cut from the bottom rather
-than paged through. The two history listings count their own items and filter,
-sort and slice them here rather than asking Galaxy to, which is what the Python
-tools do and is why they can report a real total. The Pages operations sit half
+so. Three do not fit that description: `get_histories` has no default limit, no
+ceiling and no byte budget, so leaving `limit` off returns everything there is;
+`get_history_contents` has a default and a byte budget but no ceiling; and
+`recommend_iwc_workflows` takes a `limit` but no `offset`, because a ranking is cut
+from the bottom rather than paged through. `get_history_contents` lets Galaxy
+filter, sort and window the history and count what matched in the same request
+(the contents index's stats media type), so a history of thousands is read a page
+at a time and the total is still real; its `order` takes the six values it
+documents and nothing else. Its rows leave out `dataset_id`, the id of the Dataset
+under each item, which no tool takes and which resolves to an unrelated item when
+passed where `id` belongs. The Pages operations sit half
 in: `list_pages` takes `limit` and `offset` and reports the total the server
 counted, on a `total_matches` header, with the same helper sentence the other
 listings carry; `list_page_revisions` returns every revision at once.

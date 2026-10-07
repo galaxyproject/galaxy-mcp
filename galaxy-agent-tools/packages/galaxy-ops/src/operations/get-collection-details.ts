@@ -5,7 +5,7 @@ import { httpError } from "../errors";
 import { pyGet, pyStr } from "../python-values";
 import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, InputOf, Operation } from "./types";
+import type { AnyOperation, Operation } from "./types";
 
 export type CollectionDetail = GetJson<"/api/dataset_collections/{hdca_id}">;
 
@@ -84,6 +84,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<CollectionDetail> {
 export const getCollectionDetailsOp: Operation<typeof input, CollectionDetail> = {
   name: "get_collection_details",
   domain: "collections",
+  result: { kind: "object", fields: ["collection_id", "history_content_type", "collection", "elements", "elements_truncated", "note"] },
   summary: "Show a dataset collection by id, with its elements (optionally truncated).",
   input,
   run,
@@ -139,7 +140,4 @@ export const getCollectionDetailsOp: Operation<typeof input, CollectionDetail> =
 
 register(getCollectionDetailsOp as AnyOperation);
 
-// A library caller may leave the defaulted arguments out; run() applies the same
-// values the schema declares for the parsed surface path.
-export const getCollectionDetails = (i: In, ctx: GalaxyContext) =>
-  runOperation(getCollectionDetailsOp, i as InputOf<typeof input>, ctx);
+export const getCollectionDetails = (i: In, ctx: GalaxyContext) => runOperation(getCollectionDetailsOp, i, ctx);

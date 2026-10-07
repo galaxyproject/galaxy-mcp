@@ -773,15 +773,26 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
     )
 
     # -- get_history_contents ------------------------------------------------
+    # Galaxy windows, sorts and counts: both surfaces ask the contents index for one page
+    # with the stats media type, and Galaxy answers that page and the number that matched.
+    # Each route answers one window, so a surface that asked for any other gets nothing.
+    def contents_page(
+        rows: list[dict[str, Any]], *, limit: int, offset: int, order: str = "hid-asc"
+    ) -> dict[str, Any]:
+        return route(
+            "/api/histories/h0000/contents",
+            {"contents": rows[offset : offset + limit], "stats": {"total_matches": len(rows)}},
+            query={"v": "dev", "limit": str(limit), "offset": str(offset), "order": order},
+        )
+
     contents_25 = content_rows(25)
-    contents_route = [route("/api/histories/h0000/contents", contents_25)]
     add(
         "get_history_contents",
         "full_page",
-        "a page of contents, wrapped in this tool's own data shape",
+        "a page of contents Galaxy cut, wrapped in this tool's own data shape",
         {"history_id": "h0000", "limit": 10, "offset": 10},
         lambda: get_history_contents_fn("h0000", limit=10, offset=10),
-        contents_route,
+        [contents_page(contents_25, limit=10, offset=10)],
     )
     add(
         "get_history_contents",
@@ -789,7 +800,7 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         "the last, short page of contents",
         {"history_id": "h0000", "limit": 10, "offset": 20},
         lambda: get_history_contents_fn("h0000", limit=10, offset=20),
-        contents_route,
+        [contents_page(contents_25, limit=10, offset=20)],
     )
     add(
         "get_history_contents",
@@ -797,7 +808,7 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         "an empty history",
         {"history_id": "h0000", "limit": 10, "offset": 0},
         lambda: get_history_contents_fn("h0000", limit=10, offset=0),
-        [route("/api/histories/h0000/contents", [])],
+        [contents_page([], limit=10, offset=0)],
     )
     add(
         "get_history_contents",
@@ -805,7 +816,38 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         "an offset past the last item",
         {"history_id": "h0000", "limit": 10, "offset": 400},
         lambda: get_history_contents_fn("h0000", limit=10, offset=400),
-        contents_route,
+        [contents_page(contents_25, limit=10, offset=400)],
+    )
+    add(
+        "get_history_contents",
+        "newest_first",
+        "an order Galaxy sorts by, passed through as the caller named it",
+        {"history_id": "h0000", "limit": 5, "offset": 0, "order": "hid-dsc"},
+        lambda: get_history_contents_fn("h0000", limit=5, offset=0, order="hid-dsc"),
+        [contents_page(list(reversed(contents_25)), limit=5, offset=0, order="hid-dsc")],
+    )
+    # Galaxy sends each item's Dataset id beside its own; the rows leave it out.
+    with_dataset_ids = [{**row, "dataset_id": f"x{i:04d}"} for i, row in enumerate(content_rows(3))]
+    add(
+        "get_history_contents",
+        "without_dataset_id",
+        "rows without the Dataset id Galaxy sends beside each item's own id",
+        {"history_id": "h0000", "limit": 10, "offset": 0},
+        lambda: get_history_contents_fn("h0000", limit=10, offset=0),
+        [contents_page(with_dataset_ids, limit=10, offset=0)],
+    )
+    # A page of long names over the output budget is cut, and the next page starts at
+    # the first item it did not return.
+    long_named = [
+        {**row, "name": f"{i:04d} " + "n" * 2000} for i, row in enumerate(content_rows(60))
+    ]
+    add(
+        "get_history_contents",
+        "cut_to_budget",
+        "a page too large for the output budget, cut short with the next offset after it",
+        {"history_id": "h0000", "limit": 50, "offset": 0},
+        lambda: get_history_contents_fn("h0000", limit=50, offset=0),
+        [contents_page(long_named, limit=50, offset=0)],
     )
 
     # -- get_history_details -------------------------------------------------
@@ -1257,6 +1299,25 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         {"invocation_id": "inv0000"},
         lambda: get_invocations_fn(invocation_id="inv0000"),
         [route("/api/invocations/inv0000", invocation_rows(1)[0])],
+    )
+    add(
+        "get_invocations",
+        "completed_with_a_failed_job",
+        "Galaxy says completed; the jobs summary says one failed, so the outcome is failed",
+        {"invocation_id": "inv0000"},
+        lambda: get_invocations_fn(invocation_id="inv0000"),
+        [
+            route("/api/invocations/inv0000", {**invocation_rows(1)[0], "state": "completed"}),
+            route(
+                "/api/invocations/inv0000/jobs_summary",
+                {
+                    "id": "inv0000",
+                    "model": "WorkflowInvocation",
+                    "populated_state": "ok",
+                    "states": {"ok": 3, "error": 1},
+                },
+            ),
+        ],
     )
     add(
         "get_invocations",
@@ -2401,6 +2462,28 @@ def job_details_cases(add: AddCase) -> None:
         lambda: get_job_details_fn("d0000002"),
         [dataset_route, job_route],
     )
+    noisy_log = "\n".join(f"warning number {i}" for i in range(400)) + "\nRuntimeError: the cause\n"
+    add(
+        "get_job_details",
+        "long_logs_kept_at_both_ends",
+        "a failed job read in full, whose long logs keep their first and last lines",
+        {"dataset_id": "d0000002"},
+        lambda: get_job_details_fn("d0000002"),
+        [
+            dataset_route,
+            route(
+                "/api/jobs/j0000001",
+                {
+                    "id": "j0000001",
+                    "state": "error",
+                    "tool_id": "fastqc",
+                    "tool_stderr": noisy_log,
+                    "tool_stdout": "Started analysis of reads.fq\n",
+                    "stderr": "€" * 1500,
+                },
+            ),
+        ],
+    )
     add(
         "get_job_details",
         "provenance_without_a_job_id",
@@ -2711,6 +2794,55 @@ def page_cases(add: AddCase) -> None:
         lambda: update_page_fn("pg000001", content="# Reads QC\n\nrewritten\n"),
         [
             VERSION_ROUTE,
+            route(
+                "/api/pages/pg000001",
+                page_record(
+                    content_editor="# Reads QC\n\nrewritten\n",
+                    latest_revision_id="rev00003",
+                    revision_ids=["rev00001", "rev00002", "rev00003"],
+                ),
+                method="PUT",
+            ),
+        ],
+    )
+    sectioned = "# Reads QC\n\n## Methods\n\nold\n\n## Results\n\nfindings\n"
+    add(
+        "update_page",
+        "section_replaced",
+        "one section replaced by its heading, read first and the rest left as it was",
+        {
+            "page_id": "pg000001",
+            "section_heading": "## Methods",
+            "section_content": "## Methods\n\nnew\n",
+        },
+        lambda: update_page_fn(
+            "pg000001", section_heading="## Methods", section_content="## Methods\n\nnew\n"
+        ),
+        [
+            VERSION_ROUTE,
+            route("/api/pages/pg000001", page_record(content_editor=sectioned)),
+            route(
+                "/api/pages/pg000001",
+                page_record(
+                    content_editor="# Reads QC\n\n## Methods\n\nnew\n\n## Results\n\nfindings\n",
+                    latest_revision_id="rev00003",
+                    revision_ids=["rev00001", "rev00002", "rev00003"],
+                ),
+                method="PUT",
+            ),
+        ],
+    )
+    add(
+        "update_page",
+        "expected_hash_matches",
+        "the page is as it was read, so the write goes",
+        {"page_id": "pg000001", "content": "# Reads QC\n\nrewritten\n", "expect_hash": "862b1e76"},
+        lambda: update_page_fn(
+            "pg000001", content="# Reads QC\n\nrewritten\n", expect_hash="862b1e76"
+        ),
+        [
+            VERSION_ROUTE,
+            route("/api/pages/pg000001", page_record()),
             route(
                 "/api/pages/pg000001",
                 page_record(
@@ -3759,6 +3891,58 @@ def more_http_failure_cases(add: AddFailure) -> None:
         "a write to a page that is not there",
         {"page_id": "p0000404", "title": "Renamed"},
         [VERSION_ROUTE, fail("/api/pages/p0000404", 404, MISSING, method="PUT")],
+    )
+    add(
+        "update_page",
+        "page_changed_since_read",
+        "a stale expect_hash: read, compared, and refused with the hash the page has now",
+        {"page_id": "pg000001", "content": "# Reads QC\n\nrewritten\n", "expect_hash": "deadbeef"},
+        [VERSION_ROUTE, route("/api/pages/pg000001", page_record())],
+    )
+    add(
+        "update_page",
+        "directive_id_not_encoded",
+        "a directive naming a dataset by a hid, refused before anything is sent",
+        {
+            "page_id": "pg000001",
+            "content": "```galaxy\nhistory_dataset_display(history_dataset_id=3)\n```\n",
+        },
+        [VERSION_ROUTE],
+    )
+    add(
+        "update_page",
+        "half_a_section_edit",
+        "a heading with no section text, refused before anything is sent",
+        {"page_id": "pg000001", "section_heading": "## Methods"},
+        [VERSION_ROUTE],
+    )
+    add(
+        "update_page",
+        "read_not_found",
+        "the read a section edit needs, on a page that is not there",
+        {
+            "page_id": "p0000404",
+            "section_heading": "## Methods",
+            "section_content": "## Methods\n\nnew\n",
+        },
+        [VERSION_ROUTE, fail("/api/pages/p0000404", 404, MISSING)],
+    )
+    add(
+        "update_page",
+        "section_on_html",
+        "a section edit on a page authored as HTML, refused after the read and before a write",
+        {
+            "page_id": "pg000001",
+            "section_heading": "## Methods",
+            "section_content": "## Methods\n\nnew\n",
+        },
+        [
+            VERSION_ROUTE,
+            route(
+                "/api/pages/pg000001",
+                page_record(content_format="html", content_editor=None, content="<p>body</p>"),
+            ),
+        ],
     )
     add(
         "list_page_revisions",

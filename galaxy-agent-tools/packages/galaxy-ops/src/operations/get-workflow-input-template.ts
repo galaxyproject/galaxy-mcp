@@ -13,7 +13,7 @@ import {
   type WorkflowSlot,
 } from "../workflow-inputs";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, InputOf, Operation } from "./types";
+import type { AnyOperation, Operation } from "./types";
 
 // ---------------------------------------------------------------------------
 // Types for the off-schema endpoints
@@ -156,6 +156,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<WorkflowInputTemplate> {
 export const getWorkflowInputTemplateOp: Operation<typeof input, WorkflowInputTemplate> = {
   name: "get_workflow_input_template",
   domain: "workflows",
+  result: { kind: "object", fields: ["inputs_template", "inputs_by", "slots", "guide", "warnings"] },
   summary:
     "Return a ready-to-fill input template plus a run guide for a workflow. Call this before invoke_workflow. Each slot lists its label, expected src (hda/hdca), accepted datatypes, collection type, and -- for parameters -- selectable options.",
   input,
@@ -190,7 +191,4 @@ export const getWorkflowInputTemplateOp: Operation<typeof input, WorkflowInputTe
 
 register(getWorkflowInputTemplateOp as AnyOperation);
 
-// A library caller may leave the defaulted arguments out; run() applies the same
-// values the schema declares for the parsed surface path.
-export const getWorkflowInputTemplate = (i: In, ctx: GalaxyContext) =>
-  runOperation(getWorkflowInputTemplateOp, i as InputOf<typeof input>, ctx);
+export const getWorkflowInputTemplate = (i: In, ctx: GalaxyContext) => runOperation(getWorkflowInputTemplateOp, i, ctx);

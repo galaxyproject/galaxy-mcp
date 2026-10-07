@@ -55,6 +55,7 @@ const CONTENTS_NOTE =
 export const getHistoryDetailsOp: Operation<typeof input, HistoryDetail> = {
   name: "get_history_details",
   domain: "histories",
+  result: { kind: "object", fields: ["history", "contents_summary"] },
   summary: "Show a single history's details by id (name, state, counts).",
   input,
   run,

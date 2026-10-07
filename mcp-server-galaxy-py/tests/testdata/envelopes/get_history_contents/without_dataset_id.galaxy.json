@@ -1,0 +1,58 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example/",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/histories/h0000/contents",
+      "query": {
+        "v": "dev",
+        "limit": "10",
+        "offset": "0",
+        "order": "hid-asc"
+      },
+      "status": 200,
+      "headers": {},
+      "body": {
+        "contents": [
+          {
+            "id": "d0000",
+            "hid": 1,
+            "name": "dataset 0",
+            "state": "ok",
+            "deleted": false,
+            "visible": true,
+            "history_content_type": "dataset",
+            "extension": "txt",
+            "dataset_id": "x0000"
+          },
+          {
+            "id": "d0001",
+            "hid": 2,
+            "name": "dataset 1",
+            "state": "ok",
+            "deleted": false,
+            "visible": true,
+            "history_content_type": "dataset",
+            "extension": "txt",
+            "dataset_id": "x0001"
+          },
+          {
+            "id": "d0002",
+            "hid": 3,
+            "name": "dataset 2",
+            "state": "ok",
+            "deleted": false,
+            "visible": true,
+            "history_content_type": "dataset",
+            "extension": "txt",
+            "dataset_id": "x0002"
+          }
+        ],
+        "stats": {
+          "total_matches": 3
+        }
+      }
+    }
+  ]
+}

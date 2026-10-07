@@ -25,7 +25,8 @@
     "annotation": null,
     "edit_source": "agent",
     "generate_time": null,
-    "generate_version": null
+    "generate_version": null,
+    "content_hash": "862b1e76"
   },
   "success": true,
   "message": "Retrieved page 'pg000001'",

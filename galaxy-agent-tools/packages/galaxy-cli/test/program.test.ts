@@ -119,7 +119,11 @@ describe("buildProgram", () => {
     // parity change made it optional, which moves it to --invocation-id.
     const asked: string[] = [];
     const run = await runCli(["get_invocations", "--invocation-id", "inv1", "--format", "json"], invocationsContext(asked));
-    expect(asked).toEqual([expect.stringContaining("/api/invocations/inv1")]);
+    // The invocation, then its jobs for the outcome.
+    expect(asked).toEqual([
+      expect.stringContaining("/api/invocations/inv1"),
+      expect.stringContaining("/api/invocations/inv1/jobs_summary"),
+    ]);
     expect(run.stdout).toContain('"success": true');
     expect(run.exitCode).toBe(0);
   });

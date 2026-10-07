@@ -353,12 +353,18 @@ export function renderReport(input: ReportInput): string {
     ]);
     const parameters = [...(diverging.get(tool) ?? [])].sort(byText);
     for (const param of parameters) {
+      // A result field is not a parameter, so the parameter columns have nothing to say about
+      // it; borrowing them would print an input contract beside a claim about the result.
+      const aboutTheResult = divergences.some(
+        (d) => d.tool === tool && d.param === param && d.kind === "result-shape",
+      );
       rows.push([
         code(tool),
         code(param),
         // A count is a fact about the tool, and a parameter's row is not another tool.
         "",
         ...surfaces.map((column) => {
+          if (aboutTheResult) return ABSENT;
           const declared = parametersOf(column, tool).get(param);
           return declared ? code(showContract(declared)) : ABSENT;
         }),
@@ -407,9 +413,11 @@ export function renderReport(input: ReportInput): string {
       ". Compared: which tools " +
       "exist, what parameters they take, their types, requiredness and declared defaults, " +
       "whether a tool takes parameters it does not declare, whether it says it changes " +
-      "anything, and what it says it needs from the server. " +
-      "Not compared: result shapes, wording, value constraints, what is inside an object, and " +
-      "everything else -- so a difference can be real and have no row here.",
+      "anything, what it says it needs from the server, and -- where both surfaces state one -- " +
+      "whether the result is a sequence or an object, whether the page window sits in the " +
+      "envelope or in the data, and which top-level keys it carries. " +
+      "Not compared: wording, value constraints, what is inside a key, and everything else -- " +
+      "so a difference can be real and have no row here.",
     "",
     "Every difference carries the status and the reason recorded in " +
       "`galaxy-agent-tools/packages/galaxy-mcp/test/fixtures/accepted-divergences.json`, which " +
