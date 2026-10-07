@@ -69,11 +69,13 @@ export async function resolveWorkflowSlots(
   ctx: GalaxyContext,
   workflowId: string,
   historyId?: string | null,
+  version?: number | null,
 ): Promise<ResolvedSlots> {
   // Primary: style=run -- off-schema endpoint, use legacyGet
   try {
     const query: Record<string, unknown> = { style: "run", instance: false };
     if (historyId) query["history_id"] = historyId;
+    if (version != null) query["version"] = version;
 
     const runModel = await legacyGet<RunModelDict>(
       ctx,
@@ -92,7 +94,12 @@ export async function resolveWorkflowSlots(
   const definition = await legacyGet<WorkflowDict>(
     ctx,
     "/api/workflows/{workflow_id}/download",
-    { params: { path: { workflow_id: workflowId } } },
+    {
+      params: {
+        path: { workflow_id: workflowId },
+        ...(version != null ? { query: { version } } : {}),
+      },
+    },
   );
   const slots = normalizeGaSteps(definition as Record<string, unknown>);
   return { slots, provenance: "ga-fallback", runModel: null };

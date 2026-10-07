@@ -30,6 +30,7 @@
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -50,6 +51,11 @@ interface Route {
   method: string;
   path: string;
   query: Record<string, string>;
+  /**
+   * Keys the JSON request body has to carry, with these values; any others it carries are
+   * ignored. Only on a route that has to prove an argument reached a write's payload.
+   */
+  json?: Record<string, unknown>;
   status: number;
   headers: Record<string, string>;
   /** The reply as a value, for a route whose exact bytes do not matter. */
@@ -107,6 +113,7 @@ function replier(baseUrl: string, routes: Route[]): typeof fetch {
     const method = (
       init?.method ?? (input instanceof Request ? input.method : "GET")
     ).toUpperCase();
+    const sent = routes.some((route) => route.json) ? await sentJson(input, init) : undefined;
     const target = routes
       .filter((route) => {
         if (route.method.toUpperCase() !== method) return false;
@@ -114,9 +121,14 @@ function replier(baseUrl: string, routes: Route[]): typeof fetch {
           ? new URL(route.path)
           : new URL(route.path, baseUrl);
         if (want.origin !== url.origin || want.pathname !== url.pathname) return false;
-        return Object.entries(route.query).every(([k, v]) => url.searchParams.get(k) === v);
+        if (!Object.entries(route.query).every(([k, v]) => url.searchParams.get(k) === v)) {
+          return false;
+        }
+        return Object.entries(route.json ?? {}).every(
+          ([k, v]) => sent !== undefined && isDeepStrictEqual(sent[k], v),
+        );
       })
-      .sort((a, b) => Object.keys(b.query).length - Object.keys(a.query).length)[0];
+      .sort((a, b) => specificity(b) - specificity(a))[0];
     if (!target) {
       return new Response(JSON.stringify({ err_msg: `no canned reply for ${method} ${href}` }), {
         status: 404,
@@ -132,6 +144,32 @@ function replier(baseUrl: string, routes: Route[]): typeof fetch {
       headers: { "content-type": "application/json", ...target.headers },
     });
   }) as typeof fetch;
+}
+
+/** How much of a request a route names: the most specific matching route wins. */
+const specificity = (route: Route): number =>
+  Object.keys(route.query).length + Object.keys(route.json ?? {}).length;
+
+/**
+ * The request's JSON body as an object, or undefined when there is none to read. openapi-fetch
+ * hands over a Request, whose body is read from a clone so the reply path is left untouched.
+ */
+async function sentJson(input: unknown, init?: { body?: unknown }): Promise<Record<string, unknown> | undefined> {
+  const text =
+    input instanceof Request
+      ? await input.clone().text()
+      : typeof init?.body === "string"
+        ? init.body
+        : "";
+  if (!text) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Call one tool the way a client does, and hand back the parsed text block. */

@@ -30,11 +30,11 @@ Two differences with that server are recorded once here rather than as a row per
 | --- | --- |
 | `intentional` | `0` |
 | `pending-port` | `0` |
-| `pending-decision` | `0` |
+| `pending-decision` | `1` |
 | `unreviewed-gap` | `54` |
-| **total** | `54` |
+| **total** | `55` |
 
-These are counted apart and ratcheted apart -- at 54 -- because they are not this repository's to close on its own: each one is a rename, an addition or a removal somebody has to agree with galaxyproject/galaxy. Nothing here has been ruled on yet.
+These are counted apart and ratcheted apart -- at 54 -- because they are not this repository's to close on its own: each one is a rename, an addition or a removal somebody has to agree with galaxyproject/galaxy. One has been ruled on so far; the rest have not.
 
 ## What each surface is missing
 
@@ -107,12 +107,13 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `get_workflow_details` |  | `5` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_workflow_input_template` |  | `8` | `read (tag)` | `read (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Same gap before invoke_workflow: no template, no run guide, no input validation on that side. |
 | `import_workflow_from_iwc` |  | `4` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
-| `invoke_workflow` |  | `4` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
+| `invoke_workflow` |  | `7` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
 | `invoke_workflow` | `inputs` |  | `type=anyOf<object\|string> required=false default=none` | `type=anyOf<object\|string> required=false default=none` | `type=object required=false default=none` | `vs built-in: type-mismatch` | `unreviewed-gap` | Ours also accepts the JSON text of the object, because that is what a CLI flag and some clients send; Galaxy's takes the object only. |
 | `invoke_workflow` | `inputs_by` |  | `type=string required=false default="step_index"` | `type=string required=false default="step_index"` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours lets the caller say how inputs are keyed (step index, step id, name); Galaxy's uses the API default. |
 | `invoke_workflow` | `parameters` |  | -- | -- | `type=object required=false default=none` | `vs built-in: missing-py-param` | `unreviewed-gap` | One parameter map under two names: `parameters` there, `params` here. |
 | `invoke_workflow` | `parameters_normalized` |  | `type=boolean required=false default=false` | `type=boolean required=false default=false` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours passes Galaxy's parameters_normalized flag through; Galaxy's does not expose it. |
 | `invoke_workflow` | `params` |  | `type=anyOf<object\|string> required=false default=none` | `type=anyOf<object\|string> required=false default=none` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | One parameter map under two names: `params` here, `parameters` there. |
+| `invoke_workflow` | `version` |  | `type=integer required=false default=none` | `type=integer required=false default=none` | -- | `vs built-in: missing-builtin-param` | `pending-decision` | Ours can run one stored version of the workflow by number, so a caller can invoke the version a user approved rather than whatever is newest when the call lands; Dannon approved adding it on 2026-10-05. Galaxy's invoke_workflow goes through AgentOperationsManager.invoke_workflow (lib/galaxy/agents/operations.py:548), which builds InvokeWorkflowPayload without a version, so it always runs the latest even though the REST endpoint underneath takes one. Read on both sides; whether to propose the same parameter to galaxyproject/galaxy is the call nobody has made yet. |
 | `list_file_source_templates` |  | `0` | -- | -- | `write (mcp default)` | `vs built-in: missing-py-tool` | `unreviewed-gap` | Only Galaxy's: the catalog of remote file-source plugin templates (Dropbox, S3, Zenodo, ...). Nothing here exposes file sources at all. |
 | `list_history_ids` |  | `8` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `list_history_ids` | `offset` |  | `type=integer required=false default=0` | `type=integer required=false default=0` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours pages with limit+offset; Galaxy's takes limit only. |

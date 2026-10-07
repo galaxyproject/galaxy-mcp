@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `invoke_workflow(version=...)` runs a specific stored version of the workflow instead of the
+  latest. Versions are numbered from 0, oldest first, which is the `version` that
+  `get_workflow_details` reports and accepts. The input preflight reads that version's slots
+  too, so inputs that are right for an older version aren't refused against the newest one's.
+  A negative version is refused before anything is sent, since Galaxy would read it as a list
+  index counted from the newest end. Without `version` the request is unchanged.
+
 ## [1.11.0] - 2026-10-05
 
 ### Security

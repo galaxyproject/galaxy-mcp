@@ -119,6 +119,7 @@ def route(
     body: Any,
     *,
     query: dict[str, str] | None = None,
+    json_body: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
     status: int = 200,
     method: str = "GET",
@@ -128,6 +129,12 @@ def route(
 
     ``query`` is only set where a case needs two answers from one path; a route that
     declares none answers any query on that path.
+
+    ``json_body`` narrows a write the same way: every key it names has to be in the
+    JSON request body with that value, and keys it does not name are ignored. It is
+    for a case that has to prove an argument reached the payload, where the two sides
+    otherwise send bodies that differ in fields nobody is checking. Left out of the
+    route entirely when unset, so the tables that never needed it read as before.
 
     ``body_text`` serves those exact bytes instead of a JSON rendering of ``body``, and
     is what every failure route uses. It has to: a failure sentence quotes the reply
@@ -141,6 +148,7 @@ def route(
         "method": method,
         "path": path,
         "query": query or {},
+        **({"json": json_body} if json_body is not None else {}),
         "status": status,
         "headers": headers or {},
         # One or the other, never both: a route whose bytes matter says so, and a reader
@@ -152,6 +160,38 @@ def route(
 # Galaxy 26.1, for the two tools that refuse anything older. Both surfaces ask
 # /api/version before they run one.
 VERSION_ROUTE = route("/api/version", {"version_major": "26.1", "version_minor": "1"})
+
+
+def _same_json(a: Any, b: Any) -> bool:
+    # Python's == says True == 1; the TypeScript replay's isDeepStrictEqual
+    # doesn't, so compare the way JSON (and JavaScript) sees the values.
+    if isinstance(a, bool) or isinstance(b, bool):
+        return type(a) is type(b) and a == b
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_same_json(a[k], b[k]) for k in a)
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_same_json(x, y) for x, y in zip(a, b, strict=True))
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return a == b
+    return type(a) is type(b) and a == b
+
+
+def _json_body_matcher(expected: dict[str, Any]) -> Callable[[Any], tuple[bool, str]]:
+    """Require each key in ``expected`` in the request's JSON body, as the TS replay does."""
+
+    def match(request: Any) -> tuple[bool, str]:
+        try:
+            sent = json.loads(request.body or b"")
+        except ValueError:
+            return False, "request body is not JSON"
+        if not isinstance(sent, dict):
+            return False, "request body is not a JSON object"
+        for key, value in expected.items():
+            if key not in sent or not _same_json(sent[key], value):
+                return False, f"body {key!r} is {sent.get(key)!r}, wanted {value!r}"
+        return True, ""
+
+    return match
 
 
 @dataclass
@@ -3205,6 +3245,87 @@ def invoke_workflow_cases(add: AddCase) -> None:
             invocations_route,
         ],
     )
+    # A stored version by number. Both routes below answer only when `version` reaches
+    # what Galaxy is sent, so a surface that drops it on the way fails the case rather
+    # than quietly running the latest.
+    add(
+        "invoke_workflow",
+        "with_version",
+        "an earlier stored version run by number: the POST answers only when version is in it",
+        {"workflow_id": "wf000001", "history_id": "h0000", "version": 1},
+        lambda: invoke_workflow_fn("wf000001", history_id="h0000", version=1),
+        [
+            route(
+                "/api/workflows/wf000001/invocations",
+                invocation,
+                method="POST",
+                json_body={"version": 1},
+            )
+        ],
+    )
+    # The preflight has to check the version being run. The latest one here takes only
+    # BAM, so reading its slots instead would refuse the FASTQ before anything is posted.
+    latest_run_model = {
+        **run_model_for_invoke,
+        "steps": {
+            "0": {
+                **run_model_for_invoke["steps"]["0"],
+                "inputs": [{"extensions": ["bam"], "optional": False}],
+            }
+        },
+    }
+    add(
+        "invoke_workflow",
+        "inputs_checked_against_that_version",
+        "the preflight reads the asked-for version's run model, which takes the FASTQ",
+        {
+            "workflow_id": "wf000001",
+            "history_id": "h0000",
+            "inputs": {"0": {"id": "d0000001", "src": "hda"}},
+            "version": 1,
+        },
+        lambda: invoke_workflow_fn(
+            "wf000001",
+            inputs={"0": {"id": "d0000001", "src": "hda"}},
+            history_id="h0000",
+            version=1,
+        ),
+        [
+            route("/api/workflows/wf000001/download", latest_run_model, query={"style": "run"}),
+            route(
+                "/api/workflows/wf000001/download",
+                run_model_for_invoke,
+                query={"style": "run", "version": "1"},
+            ),
+            route(
+                "/api/datatypes/types_and_mapping",
+                {
+                    "datatypes_mapping": {
+                        "ext_to_class_name": {
+                            "fastqsanger": "galaxy.datatypes.sequence.FastqSanger",
+                            "bam": "galaxy.datatypes.binary.Bam",
+                        },
+                        "class_to_classes": {
+                            "galaxy.datatypes.sequence.FastqSanger": {
+                                "galaxy.datatypes.sequence.FastqSanger": True
+                            },
+                            "galaxy.datatypes.binary.Bam": {"galaxy.datatypes.binary.Bam": True},
+                        },
+                    }
+                },
+            ),
+            route(
+                "/api/datasets/d0000001",
+                {"id": "d0000001", "name": "reads.fastqsanger", "extension": "fastqsanger"},
+            ),
+            route(
+                "/api/workflows/wf000001/invocations",
+                invocation,
+                method="POST",
+                json_body={"version": 1},
+            ),
+        ],
+    )
     add(
         "invoke_workflow",
         "batch_answers_with_a_list",
@@ -4013,6 +4134,13 @@ def refusal_cases(add: AddFailure) -> None:
         [],
     )
     add(
+        "invoke_workflow",
+        "negative_version",
+        "a version below 0, which Galaxy would read as counted from the newest end",
+        {"workflow_id": "wf000001", "version": -1},
+        [],
+    )
+    add(
         "get_history_details",
         "not_found",
         "the tool's own 404 sentence, which says what kind of argument it wanted",
@@ -4172,6 +4300,11 @@ def _clear_recommendation_cache() -> None:
         mulled_recommend._cache.clear()
 
 
+def specificity(spec: dict[str, Any]) -> int:
+    """Sort key putting the route that names the most of a request first."""
+    return -(len(spec["query"]) + len(spec.get("json") or {}))
+
+
 def run_case(case: Case, session: LiveMCPSession | None = None) -> GalaxyResult | dict[str, Any]:
     """Answer this case's requests from its table and return what the tool answered.
 
@@ -4192,18 +4325,25 @@ def run_case(case: Case, session: LiveMCPSession | None = None) -> GalaxyResult 
         with responses.RequestsMock(assert_all_requests_are_fired=False) as mock:
             # Most specific first: `responses` takes the first registration that matches,
             # and the TypeScript replay picks the same one by the same rule.
-            for spec in sorted(case.routes, key=lambda r: -len(r["query"])):
+            for spec in sorted(case.routes, key=specificity):
                 body = spec.get("bodyText")
                 mock.add(
                     method=spec["method"],
                     url=absolute(spec["path"]),
                     status=spec["status"],
                     headers=spec["headers"],
-                    match=(
-                        [responses.matchers.query_param_matcher(spec["query"], strict_match=False)]
-                        if spec["query"]
-                        else []
-                    ),
+                    match=[
+                        *(
+                            [
+                                responses.matchers.query_param_matcher(
+                                    spec["query"], strict_match=False
+                                )
+                            ]
+                            if spec["query"]
+                            else []
+                        ),
+                        *([_json_body_matcher(spec["json"])] if spec.get("json") else []),
+                    ],
                     **(
                         {"body": body, "content_type": "application/json"}
                         if body is not None

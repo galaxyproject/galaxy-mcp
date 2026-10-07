@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "mcp-server-galaxy-py/src/galaxy_mcp/server.py",
-  "caseCount": 224,
-  "failureCaseCount": 65,
+  "caseCount": 227,
+  "failureCaseCount": 66,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -1617,6 +1617,38 @@
     },
     {
       "tool": "invoke_workflow",
+      "case": "with_version",
+      "note": "an earlier stored version run by number: the POST answers only when version is in it",
+      "outcome": "success",
+      "input": {
+        "workflow_id": "wf000001",
+        "history_id": "h0000",
+        "version": 1
+      },
+      "envelope": "invoke_workflow/with_version.json",
+      "replies": "invoke_workflow/with_version.galaxy.json"
+    },
+    {
+      "tool": "invoke_workflow",
+      "case": "inputs_checked_against_that_version",
+      "note": "the preflight reads the asked-for version's run model, which takes the FASTQ",
+      "outcome": "success",
+      "input": {
+        "workflow_id": "wf000001",
+        "history_id": "h0000",
+        "inputs": {
+          "0": {
+            "id": "d0000001",
+            "src": "hda"
+          }
+        },
+        "version": 1
+      },
+      "envelope": "invoke_workflow/inputs_checked_against_that_version.json",
+      "replies": "invoke_workflow/inputs_checked_against_that_version.galaxy.json"
+    },
+    {
+      "tool": "invoke_workflow",
       "case": "batch_answers_with_a_list",
       "note": "Galaxy expanded the run, so the answer is every invocation it made",
       "outcome": "success",
@@ -2623,6 +2655,18 @@
         "offset": -1
       },
       "envelope": "search_tools_by_name/negative_offset.json",
+      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+    },
+    {
+      "tool": "invoke_workflow",
+      "case": "negative_version",
+      "note": "a version below 0, which Galaxy would read as counted from the newest end",
+      "outcome": "failure",
+      "input": {
+        "workflow_id": "wf000001",
+        "version": -1
+      },
+      "envelope": "invoke_workflow/negative_version.json",
       "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
     },
     {
