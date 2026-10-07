@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Restrict connections to `GALAXY_URL` and the optional administrator-configured `GALAXY_MCP_EXTRA_ALLOWED_URLS` list. Extra destinations require an explicit API key; the environment key stays bound to `GALAXY_URL`.
+- Disable Galaxy API redirects and omit upstream response bodies from connection errors.
+
 ## [1.11.0] - 2026-10-05
 
 ### Security

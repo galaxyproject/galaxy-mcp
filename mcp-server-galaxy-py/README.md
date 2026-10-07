@@ -137,9 +137,21 @@ HTTP transports come with a few guards:
   trusted single-user deployment can turn them back on with `GALAXY_MCP_ALLOW_LOCAL_FILES=1`.
   Never set that on a server other people can reach -- it lets every caller read and write
   whatever the server process can.
-- **Environment credentials stay put.** `connect(url=...)` only uses the environment's
-  `GALAXY_API_KEY` when the URL is the configured `GALAXY_URL`; any other server needs an explicit
-  `api_key`. With OAuth enabled the environment's credentials are never lent to a request.
+- **Allowed Galaxy destinations.** `GALAXY_URL` is the default and is always allowed.
+  Optional `GALAXY_MCP_EXTRA_ALLOWED_URLS` lists additional base URLs, separated by commas.
+  `connect(url=..., api_key=...)` must match one of these URLs, including scheme, port, and path
+  (host/scheme case and trailing slashes are normalized). No wildcards or prefix matches.
+  Extra destinations require an explicit API key; the environment key is only used for `GALAXY_URL`.
+  Requests do not follow redirects, and connection errors omit upstream response bodies.
+  Both URL settings are read at startup; restart after changing them or upgrading to clear sessions.
+  With OAuth enabled the environment's credentials are never lent to a request.
+
+For example, to allow two additional Galaxy instances:
+
+```bash
+GALAXY_URL="https://primary.example/"
+GALAXY_MCP_EXTRA_ALLOWED_URLS="https://second.example/,https://third.example/galaxy/"
+```
 
 None of this can see a reverse proxy: a loopback listener behind nginx looks local from here, so
 a proxied deployment needs OAuth (or authentication at the proxy) just as a directly exposed one

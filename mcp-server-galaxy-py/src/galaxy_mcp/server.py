@@ -21,7 +21,6 @@ from urllib.parse import urlsplit
 import bioblend
 import pydantic_core
 import requests
-from bioblend.galaxy import GalaxyInstance
 from dotenv import find_dotenv, load_dotenv
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_context
@@ -35,6 +34,7 @@ from galaxy_mcp.auth import (
     configure_auth_provider,
     get_active_session,
 )
+from galaxy_mcp.client import GalaxyInstance, normalize_galaxy_url
 from galaxy_mcp.http_security import (
     ALLOW_UNAUTHENTICATED_ENV,
     ALLOWED_HOSTS_ENV,
@@ -874,8 +874,11 @@ if dotenv_path:
 
 # Configure Galaxy target and client state
 raw_galaxy_url = os.environ.get("GALAXY_URL")
-normalized_galaxy_url = (
-    raw_galaxy_url if not raw_galaxy_url or raw_galaxy_url.endswith("/") else f"{raw_galaxy_url}/"
+normalized_galaxy_url = normalize_galaxy_url(raw_galaxy_url) if raw_galaxy_url else None
+extra_allowed_galaxy_urls = tuple(
+    normalize_galaxy_url(value.strip())
+    for value in os.environ.get("GALAXY_MCP_EXTRA_ALLOWED_URLS", "").split(",")
+    if value.strip()
 )
 galaxy_state: dict[str, Any] = {
     "url": normalized_galaxy_url,
@@ -1148,8 +1151,7 @@ def ensure_connected() -> dict[str, Any]:
     if not state["connected"] or not state["gi"]:
         raise ValueError(
             "Not connected to Galaxy. Authenticate via OAuth or run connect() with your "
-            "Galaxy URL and API key. Example: connect(url='https://your-galaxy.org', "
-            "api_key='your-key')"
+            "API key. Example: connect(api_key='your-key')"
         )
     _assert_version_supported(state)
     return state
@@ -1302,19 +1304,27 @@ def _same_galaxy_url(first: str, second: str) -> bool:
 def _resolve_connect_credentials(
     url: str | None, api_key: str | None
 ) -> tuple[str | None, str | None]:
-    """Fill in connect() arguments from the environment, where that is safe.
-
-    The URL is caller-controlled, and callers include agents acting on text they read
-    somewhere. The environment's API key therefore only ever goes to the environment's
-    URL -- otherwise connect(url=...) would mail the operator's key to any server named.
-    OAuth deployments never lend out the operator's credentials at all.
-    """
+    """Restrict destinations while keeping environment credentials on the default Galaxy."""
+    env_url = normalized_galaxy_url
+    if not env_url:
+        raise ValueError("The server administrator must configure GALAXY_URL before connecting.")
+    use_url: str | None = env_url
+    if url is not None:
+        requested_url = normalize_galaxy_url(url)
+        use_url = next(
+            (
+                allowed_url
+                for allowed_url in (env_url, *extra_allowed_galaxy_urls)
+                if _same_galaxy_url(requested_url, allowed_url)
+            ),
+            None,
+        )
+        if use_url is None:
+            raise ValueError("Galaxy URL is not allowed by this server.")
     if auth_provider and in_http_request():
-        return url, api_key
+        return use_url, api_key
 
-    env_url = os.environ.get("GALAXY_URL")
     env_key = os.environ.get("GALAXY_API_KEY")
-    use_url = url or env_url
     use_api_key = api_key
     if not use_api_key and use_url and env_url and _same_galaxy_url(use_url, env_url):
         use_api_key = env_key
@@ -1333,8 +1343,7 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
     Returns:
         GalaxyResult with connection status and user information in data field
     """
-    use_url = url
-    use_api_key = api_key
+    use_url, use_api_key = _resolve_connect_credentials(url, api_key)
     galaxy_url: str | None = None
 
     try:
@@ -1427,23 +1436,14 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
                 else f"Validated global Galaxy connection at {galaxy_url}"
             ),
         )
-    except Exception as e:
+    except Exception:
         session_id = _get_current_session_id()
         if session_id:
             _clear_session_connection(session_id)
-
-        galaxy_url = galaxy_url or use_url or normalized_galaxy_url or "unknown"
-        error_msg = f"Failed to connect to Galaxy at {galaxy_url}: {str(e)}"
-        if "401" in str(e) or "authentication" in str(e).lower():
-            error_msg += " Check that your API key is valid and has the necessary permissions."
-        elif "404" in str(e) or "not found" in str(e).lower():
-            error_msg += " Check that the Galaxy URL is correct and accessible."
-        elif "connection" in str(e).lower() or "timeout" in str(e).lower():
-            error_msg += " Check your network connection and that the Galaxy server is running."
-        else:
-            error_msg += " Verify the URL format (should end with /) and API key."
-
-        raise ValueError(error_msg) from e
+        raise ValueError(
+            "Failed to connect to the configured Galaxy server. "
+            "Check your API key and contact the server administrator if the problem persists."
+        ) from None
 
 
 @mcp.tool(tags={"tools", "read", "extended"})
@@ -2805,7 +2805,7 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> GalaxyRes
     url = f"{base_url}api/jobs/{job_id}"
     headers = {"x-api-key": api_key}
     try:
-        response = requests.get(url, headers=headers, timeout=30)
+        response = requests.get(url, headers=headers, timeout=30, allow_redirects=False)
         response.raise_for_status()
         job_info = response.json()
     except Exception as e:
