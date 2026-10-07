@@ -273,6 +273,7 @@ class TestConnectCredentials:
 
     @pytest.fixture(autouse=True)
     def _env(self, monkeypatch):
+        monkeypatch.setattr(server, "normalized_galaxy_url", "https://usegalaxy.org/")
         monkeypatch.setenv("GALAXY_URL", "https://usegalaxy.org/")
         monkeypatch.setenv("GALAXY_API_KEY", "operator-key")
 
@@ -295,24 +296,28 @@ class TestConnectCredentials:
         ],
     )
     def test_env_key_is_withheld_from_other_urls(self, url):
-        assert server._resolve_connect_credentials(url, None) == (url, None)
+        with pytest.raises(ValueError, match="Galaxy URL"):
+            server._resolve_connect_credentials(url, None)
 
-    def test_explicit_key_is_used_anywhere(self):
-        resolved = server._resolve_connect_credentials("https://other.example/", "mine")
-        assert resolved == ("https://other.example/", "mine")
+    def test_explicit_key_cannot_override_destination(self):
+        with pytest.raises(ValueError, match="not allowed"):
+            server._resolve_connect_credentials("https://other.example/", "mine")
 
     def test_oauth_http_requests_never_get_env_credentials(self):
         with (
             patch.object(server, "auth_provider", MagicMock()),
             patch.object(server, "in_http_request", return_value=True),
         ):
-            assert server._resolve_connect_credentials(None, None) == (None, None)
+            assert server._resolve_connect_credentials(None, None) == (
+                "https://usegalaxy.org/",
+                None,
+            )
 
     def test_connect_does_not_contact_a_foreign_url_with_the_env_key(self):
         with (
             patch.object(server, "find_dotenv", return_value=""),
             patch.object(server, "GalaxyInstance") as galaxy_instance,
-            pytest.raises(ValueError, match="only used with the configured GALAXY_URL"),
+            pytest.raises(ValueError, match="not allowed"),
         ):
             connect_fn(url="https://evil.example/")
         galaxy_instance.assert_not_called()

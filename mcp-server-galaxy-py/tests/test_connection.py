@@ -16,6 +16,10 @@ from .test_helpers import connect_fn, ensure_connected, galaxy_state, get_server
 class TestConnection:
     """Test connection functionality"""
 
+    @pytest.fixture(autouse=True)
+    def _configured_destination(self, monkeypatch):
+        monkeypatch.setattr(server, "normalized_galaxy_url", "https://test.galaxy.com/")
+
     def test_initial_state(self):
         """Test initial galaxy state before connection"""
         with patch.dict(galaxy_state, {"connected": False, "gi": None}):
@@ -104,12 +108,12 @@ class TestConnection:
 
         with patch("galaxy_mcp.server.get_context", return_value=mock_context):
             with patch("galaxy_mcp.server.GalaxyInstance", return_value=mock_galaxy_instance):
-                result = connect_fn(url="https://session.galaxy", api_key="session-key")
+                result = connect_fn(api_key="session-key")
 
         assert result.success is True
         assert result.data["auth"] == "session"
         session_state = server._session_connections["session-123"]
-        assert session_state.url == "https://session.galaxy/"
+        assert session_state.url == "https://test.galaxy.com/"
         assert session_state.api_key == "session-key"
         assert session_state.gi is mock_galaxy_instance
         assert galaxy_state["connected"] is False
@@ -170,7 +174,7 @@ class TestConnection:
 
         with patch("galaxy_mcp.server.get_context", return_value=mock_context):
             with pytest.raises(
-                ValueError, match="No Galaxy connection is available for this MCP session"
+                ValueError, match="Failed to connect to the configured Galaxy server"
             ):
                 connect_fn()
 
@@ -207,7 +211,7 @@ class TestConnection:
         ):
             with patch("galaxy_mcp.server.get_context", side_effect=RuntimeError("no session")):
                 with patch("galaxy_mcp.server.GalaxyInstance", return_value=mock_galaxy_instance):
-                    result = connect_fn(url="https://other.galaxy", api_key="other-key")
+                    result = connect_fn(api_key="other-key")
 
             assert result.success is True
             assert result.data["auth"] == "global"
