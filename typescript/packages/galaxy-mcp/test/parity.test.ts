@@ -92,7 +92,7 @@ describe("contract parity with the Python MCP server", () => {
     expect(
       unregistered.map(formatDivergence),
       `${unregistered.length} unregistered divergence(s) between the TS ops and the Python ` +
-        "server. Review each one and add it to test/fixtures/accepted-divergences.json, or " +
+        "server. Review each one and add it to contract/accepted-divergences.json, or " +
         "close the gap in the op.",
     ).toEqual([]);
   });
@@ -201,7 +201,7 @@ describe("contract parity with Galaxy's own MCP server", () => {
     expect(
       unregistered.map(formatDivergence),
       `${unregistered.length} unregistered difference(s) between this server and Galaxy's own. ` +
-        "Add each to the `builtin` section of test/fixtures/accepted-divergences.json, or close " +
+        "Add each to the `builtin` section of contract/accepted-divergences.json, or close " +
         "the gap.",
     ).toEqual([]);
   });

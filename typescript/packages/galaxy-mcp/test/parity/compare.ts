@@ -1,6 +1,6 @@
 /**
  * Contract comparison between the Python MCP server's generated surface manifest
- * (python/tests/testdata/mcp-surface.json) and the tools this
+ * (contract/mcp-surface.json) and the tools this
  * package advertises.
  *
  * Both sides describe themselves as JSON Schema, so the comparison is over

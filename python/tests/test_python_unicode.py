@@ -1,6 +1,6 @@
 """The checked-in Unicode tables still say what this interpreter says.
 
-``tests/testdata/python-unicode-15.0.0.json`` is the contract the TypeScript
+``contract/python-unicode/python-unicode-15.0.0.json`` is the contract the TypeScript
 tokeniser and text helpers are built from: they do not ask Node's tables anything,
 because Node's tables are a different edition of Unicode and would answer differently.
 A file that has stopped matching the interpreter is worse than no file, so this

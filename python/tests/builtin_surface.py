@@ -49,7 +49,7 @@ from datetime import (
 from pathlib import Path
 from typing import Any
 
-SNAPSHOT_PATH = Path(__file__).parent / "testdata" / "galaxy-builtin-surface.json"
+SNAPSHOT_PATH = Path(__file__).resolve().parents[2] / "contract" / "galaxy-builtin-surface.json"
 MODULE_PATH = "lib/galaxy/webapps/galaxy/api/mcp.py"
 REGENERATE_COMMAND = (
     "export GALAXY_ROOT=/path/to/galaxy && "

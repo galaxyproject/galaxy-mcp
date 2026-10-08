@@ -33,7 +33,7 @@ import { buildProgram } from "../src/program";
 import { classifyField, flagName } from "../src/flags";
 
 const FIXTURES = new URL(
-  "../../../../python/tests/testdata/envelopes/",
+  "../../../../contract/envelopes/",
   import.meta.url,
 );
 

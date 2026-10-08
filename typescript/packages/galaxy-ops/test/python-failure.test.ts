@@ -2,7 +2,7 @@
  * The Python server's failure prose, at the branches no golden case reaches.
  *
  * Every shape here is pinned end to end by a case under
- * python/tests/testdata/envelopes, replayed through both surfaces. What that
+ * contract/envelopes, replayed through both surfaces. What that
  * cannot reach is the exotic input: a reply body carrying a quote, or bytes that are not
  * ASCII, or a failure with no status on it at all. Those are checked here, against values
  * read off the interpreter rather than recalled -- `repr(text.encode("utf-8"))` on CPython

@@ -42,7 +42,7 @@ import {
 } from "../src/python-unicode-data";
 import { isPyWordChar, isPySpace, pyLower } from "../src/python-str";
 
-const TESTDATA = new URL("../../../../python/tests/testdata/", import.meta.url);
+const TESTDATA = new URL("../../../../contract/python-unicode/", import.meta.url);
 
 interface Table {
   count: number;

@@ -17,8 +17,8 @@
     "unreviewedGaps": 0
   },
   "fixtures": {
-    "$comment": "How much of the surface is compared against the other server at all, which is a different question from how the two surfaces disagree -- so it is counted here rather than as divergence rows. Every tool this server serves answers with a GalaxyResult, and the golden cases under python/tests/testdata/envelopes are what that answer is, replayed through the TypeScript MCP server and CLI and compared key for key. A tool with no case is a tool the two can answer differently for ever without anything noticing, which is why the count below is 0 and is held there in both directions: the check fails when an open tool has none, and fails asking for the number to come down when it is above the real count. `excluded` is the short list of tools that may have none, each with the reason; an excluded tool that turns out to HAVE cases fails the check too, so the list cannot outlive what it is excusing.",
-    "source": "python/tests/testdata/envelopes/index.json",
+    "$comment": "How much of the surface is compared against the other server at all, which is a different question from how the two surfaces disagree -- so it is counted here rather than as divergence rows. Every tool this server serves answers with a GalaxyResult, and the golden cases under contract/envelopes are what that answer is, replayed through the TypeScript MCP server and CLI and compared key for key. A tool with no case is a tool the two can answer differently for ever without anything noticing, which is why the count below is 0 and is held there in both directions: the check fails when an open tool has none, and fails asking for the number to come down when it is above the real count. `excluded` is the short list of tools that may have none, each with the reason; an excluded tool that turns out to HAVE cases fails the check too, so the list cannot outlive what it is excusing.",
+    "source": "contract/envelopes/index.json",
     "uncoveredTools": 0,
     "excluded": [
       { "tool": "connect", "reason": "no fixture until the pending change to these tools lands" },
@@ -47,7 +47,7 @@
   ],
   "builtin": {
     "$comment": "The third surface: the MCP server Galaxy itself serves (lib/galaxy/webapps/galaxy/api/mcp.py, behind enable_mcp_server), read from the snapshot named in `source`. It calls Galaxy's AgentOperationsManager in process, where the Python tools here go through bioblend and REST and the TypeScript ops through REST -- so the three are three implementations over one Galaxy, not one implementation behind three fronts, and a difference below can sit in either implementation (get_histories' name filter, say, is exact-after-pagination here and name-contains-in-the-query there). This section is kept apart from the python-to-typescript one above on purpose: those two are released together and their ratchet is a promise about this repository, while these rows are a to-do list for a conversation with galaxyproject/galaxy. Same statuses, same rule that an entry the surfaces no longer support fails the check, and its own ratchet, also down-only.",
-    "source": "python/tests/testdata/galaxy-builtin-surface.json",
+    "source": "contract/galaxy-builtin-surface.json",
     "aliases": {
       "list_histories": "get_histories",
       "search_tools": "search_tools_by_name"

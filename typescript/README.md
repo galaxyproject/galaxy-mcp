@@ -504,7 +504,7 @@ types, requiredness and declared defaults, whether a tool takes parameters it do
 not declare, whether it says it changes anything, and what it says it needs from
 the Galaxy it runs against. Anything the
 two disagree about has to be listed in
-`packages/galaxy-mcp/test/fixtures/accepted-divergences.json` with a status and a
+`../contract/accepted-divergences.json` with a status and a
 reason, and an entry the surfaces no longer support fails the check too, so the
 list cannot quietly rot. The `unreviewed-gap` status -- the comparator found it and
 nobody has read both sides -- is ratcheted: the registry pins how many of those it

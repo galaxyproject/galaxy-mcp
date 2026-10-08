@@ -1,7 +1,7 @@
 /**
  * The MCP surface answers with the Python server's envelope, case for case.
  *
- * The fixtures under python/tests/testdata/envelopes are what that
+ * The fixtures under contract/envelopes are what that
  * server emitted for a set of calls, written down by a generator over there
  * (`uv run python -m tests.envelope_fixtures`) alongside the Galaxy replies it was
  * answered with. Each case is replayed here through the real MCP call path -- a
@@ -42,7 +42,7 @@ import { __resetIwcCacheForTest } from "../../galaxy-ops/src/iwc-manifest";
 import { __clearRecommendationCacheForTest } from "../../galaxy-ops/src/mulled";
 
 const FIXTURES = new URL(
-  "../../../../python/tests/testdata/envelopes/",
+  "../../../../contract/envelopes/",
   import.meta.url,
 );
 

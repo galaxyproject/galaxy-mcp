@@ -1,6 +1,6 @@
 """The checked-in MCP surface manifest has to match the tools the server registers.
 
-`tests/testdata/mcp-surface.json` is what the TypeScript parity check compares its
+`contract/mcp-surface.json` is what the TypeScript parity check compares its
 ops against, so a tool added, renamed, or re-signatured here has to land in the
 manifest in the same commit -- otherwise the cross-language check goes on passing
 against a description of a server that no longer exists.

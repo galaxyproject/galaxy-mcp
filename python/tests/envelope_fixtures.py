@@ -7,7 +7,7 @@ decided here and nowhere else. The TypeScript MCP server and CLI in
 ``typescript/`` have to produce the same thing, and the only way to hold them to
 it is to write down what this side emits and replay it there.
 
-Each case stores two files under ``testdata/envelopes/<tool>/``:
+Each case stores two files under ``contract/envelopes/<tool>/``:
 
 * ``<case>.json`` -- the envelope, exactly the JSON FastMCP would send, re-indented for
   review. Whitespace between tokens is the only difference; keys, nulls and values are
@@ -93,7 +93,7 @@ from .test_helpers import (
     update_page_fn,
 )
 
-FIXTURE_ROOT = Path(__file__).parent / "testdata" / "envelopes"
+FIXTURE_ROOT = Path(__file__).resolve().parents[2] / "contract" / "envelopes"
 REGENERATE_COMMAND = "uv run python -m tests.envelope_fixtures"
 
 # Where the fake Galaxy lives. The TypeScript replay uses the same base, so a route's

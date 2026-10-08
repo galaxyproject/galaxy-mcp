@@ -20,7 +20,7 @@ from fastmcp.tools import Tool
 from galaxy_mcp import server
 from galaxy_mcp.version import TOOL_REQUIREMENTS
 
-MANIFEST_PATH = Path(__file__).parent / "testdata" / "mcp-surface.json"
+MANIFEST_PATH = Path(__file__).resolve().parents[2] / "contract" / "mcp-surface.json"
 REGENERATE_COMMAND = "uv run python -m tests.surface_manifest"
 
 # Tools FastMCP registers only when an optional extra is present. Synthesizing

@@ -19,7 +19,7 @@
 import { readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const TESTDATA = new URL("../../../../python/tests/testdata/", import.meta.url);
+const TESTDATA = new URL("../../../../contract/python-unicode/", import.meta.url);
 const OUT = new URL("../src/python-unicode-data.ts", import.meta.url);
 
 const names = readdirSync(fileURLToPath(TESTDATA)).filter(

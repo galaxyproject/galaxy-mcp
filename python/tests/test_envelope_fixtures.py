@@ -1,6 +1,6 @@
 """The checked-in golden envelopes still describe what the tools return.
 
-The files under ``testdata/envelopes`` are the contract the TypeScript MCP server and
+The files under ``contract/envelopes`` are the contract the TypeScript MCP server and
 CLI are held to. They are only worth anything while they say what this server actually
 emits, so this regenerates every case and compares. A tool whose envelope changes fails
 here first -- before the other language's replay -- with the command to regenerate.

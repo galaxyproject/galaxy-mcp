@@ -91,7 +91,7 @@ from pathlib import Path
 # moved in the counts below, and say so in the CHANGELOG.
 PINNED_UNICODE_VERSION = "15.0.0"
 
-TESTDATA = Path(__file__).parent / "testdata"
+TESTDATA = Path(__file__).resolve().parents[2] / "contract" / "python-unicode"
 DATA_PATH = TESTDATA / f"python-unicode-{PINNED_UNICODE_VERSION}.json"
 PROBE_PATH = TESTDATA / f"python-lower-probes-{PINNED_UNICODE_VERSION}.json"
 REGENERATE_COMMAND = "uv run python -m tests.python_unicode"

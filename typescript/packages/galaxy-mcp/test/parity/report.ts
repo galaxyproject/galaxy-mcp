@@ -397,7 +397,7 @@ export function renderReport(input: ReportInput): string {
     "",
     "Three surfaces expose the same Galaxy operations, and this is every way they disagree. " +
       "The Python column is the checked-in surface manifest " +
-      "(`python/tests/testdata/mcp-surface.json`); the TypeScript column is what " +
+      "(`contract/mcp-surface.json`); the TypeScript column is what " +
       "a client is really advertised by `@galaxyproject/galaxy-mcp`" +
       (builtin
         ? "; the Built-in column is the MCP server Galaxy itself serves " +
@@ -412,7 +412,7 @@ export function renderReport(input: ReportInput): string {
       "everything else -- so a difference can be real and have no row here.",
     "",
     "Every difference carries the status and the reason recorded in " +
-      "`typescript/packages/galaxy-mcp/test/fixtures/accepted-divergences.json`, which " +
+      "`contract/accepted-divergences.json`, which " +
       "is also where the statuses themselves are explained. A status says how well a difference " +
       "is understood, not that it is acceptable.",
     "",
@@ -485,7 +485,7 @@ export function renderReport(input: ReportInput): string {
       (second ? " A difference found against the built-in server says so in its kind." : ""),
     "",
     "`Cases` is how many golden result envelopes that tool has under " +
-      "`python/tests/testdata/envelopes` -- calls the Python server answered, " +
+      "`contract/envelopes` -- calls the Python server answered, " +
       "replayed through both surfaces here and compared key for key. It is not part of the " +
       "comparison above, which is about what a tool declares; it is how much of what a tool " +
       "ANSWERS anybody checks. A `0` fails the parity check for a tool the Python server " +

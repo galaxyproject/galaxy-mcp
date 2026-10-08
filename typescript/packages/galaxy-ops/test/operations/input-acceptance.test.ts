@@ -22,7 +22,7 @@ const ctxWith = (client: any): GalaxyContext => ({ client, poll: DEFAULT_POLL })
 
 /**
  * What these schemas declare, against what the Python server's manifest declares
- * (`python/tests/testdata/mcp-surface.json`).
+ * (`contract/mcp-surface.json`).
  *
  * This is about the contract, not about what a caller may send. Both surfaces publish
  * `type: integer` and mean it here: the schema takes a number and refuses a string, a list

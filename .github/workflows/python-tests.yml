@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - "python/**"
+      - "contract/**"
       - ".github/workflows/python-tests.yml"
   pull_request:
     branches: [main]
     paths:
       - "python/**"
+      - "contract/**"
       - ".github/workflows/python-tests.yml"
   workflow_dispatch:
 

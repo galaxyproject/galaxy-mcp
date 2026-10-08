@@ -17,7 +17,7 @@
  *
  * Measured against fastmcp 3.4.2, bioblend 1.9.0, requests 2.x and CPython 3.12, and every
  * shape here is pinned by a golden case under
- * python/tests/testdata/envelopes.
+ * contract/envelopes.
  */
 import { pyStr } from "./python-values";
 
