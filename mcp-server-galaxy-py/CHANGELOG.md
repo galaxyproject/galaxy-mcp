@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Galaxy GET requests no longer follow redirects (bioblend already refused them on writes).
 - A `.env` reloaded after startup can no longer send its `GALAXY_API_KEY` to a `GALAXY_URL` it
   replaced.
+- A process serving HTTP never treats a tool call as the operator's, even when the call can't
+  see its HTTP request. This applies to the `connect` allowlist, the local-file guard from 1.11.0
+  and the OAuth rule against falling back to the operator's connection.
 
 ## [1.11.0] - 2026-10-05
 

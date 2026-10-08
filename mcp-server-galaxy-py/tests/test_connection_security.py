@@ -8,7 +8,7 @@ import responses
 from fastmcp import Client
 from starlette.testclient import TestClient
 
-from galaxy_mcp import server
+from galaxy_mcp import http_security, server
 from galaxy_mcp.client import GalaxyInstance, normalize_galaxy_url
 
 from .test_helpers import connect_fn
@@ -21,7 +21,7 @@ def _configured_destination(monkeypatch):
     monkeypatch.setattr(server, "auth_provider", None)
     monkeypatch.setattr(server, "_get_current_session_id", lambda: "security-test")
     # The destination allowlist guards callers who are not the operator, i.e. HTTP requests.
-    monkeypatch.setattr(server, "in_http_request", lambda: True)
+    monkeypatch.setattr(server, "remote_caller_possible", lambda: True)
 
 
 @pytest.mark.parametrize(
@@ -311,7 +311,7 @@ class TestStdioIsUnrestricted:
 
     @pytest.fixture(autouse=True)
     def _stdio(self, monkeypatch):
-        monkeypatch.setattr(server, "in_http_request", lambda: False)
+        monkeypatch.setattr(server, "remote_caller_possible", lambda: False)
         monkeypatch.setattr(server, "normalized_galaxy_url", None)
         monkeypatch.setenv("GALAXY_URL", "https://usegalaxy.org/")
         monkeypatch.setenv("GALAXY_API_KEY", "operator-key")
@@ -341,3 +341,68 @@ class TestStdioIsUnrestricted:
         )
         with pytest.raises(ValueError, match="Provided API key is not valid"):
             connect_fn(url="http://localhost:8080", api_key="mine")
+
+
+def test_real_http_transport_is_detected_without_patching(monkeypatch):
+    # Every other test here forces the HTTP decision; this one lets the transport make it.
+    monkeypatch.setattr(server, "remote_caller_possible", http_security.remote_caller_possible)
+    headers = {"Accept": "application/json, text/event-stream"}
+    with patch("requests.sessions.Session.send") as outgoing:
+        with TestClient(server.mcp.http_app(), base_url="http://localhost") as client:
+            response = client.post(
+                "/mcp",
+                headers=headers,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {"name": "test", "version": "1.0.0"},
+                    },
+                },
+            )
+            headers["mcp-session-id"] = response.headers["mcp-session-id"]
+            client.post(
+                "/mcp",
+                headers=headers,
+                json={"jsonrpc": "2.0", "method": "notifications/initialized"},
+            )
+            response = client.post(
+                "/mcp",
+                headers=headers,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "connect",
+                        "arguments": {
+                            "url": "http://169.254.169.254/latest/meta-data/#/",
+                            "api_key": "junk",
+                        },
+                    },
+                },
+            )
+            assert "not allowed by this server" in response.text or "Galaxy URL" in response.text
+    outgoing.assert_not_called()
+
+
+class TestServingHttpFailsClosed:
+    """A process that serves HTTP never treats a call as the operator's, even with no request
+    context in sight (a worker thread, a code-mode sandbox)."""
+
+    @pytest.fixture(autouse=True)
+    def _serving_without_request_context(self, monkeypatch):
+        monkeypatch.setattr(server, "remote_caller_possible", http_security.remote_caller_possible)
+        monkeypatch.setattr(http_security, "in_http_request", lambda: False)
+        http_security.mark_serving_http()
+
+    def test_connect_allowlist_still_applies(self):
+        with pytest.raises(ValueError, match="not allowed by this server"):
+            server._resolve_connect_credentials("http://169.254.169.254/", "junk")
+
+    def test_local_files_stay_off(self, monkeypatch):
+        monkeypatch.delenv(http_security.ALLOW_LOCAL_FILES_ENV, raising=False)
+        assert http_security.local_files_allowed() is False

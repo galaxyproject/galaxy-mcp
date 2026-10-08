@@ -305,7 +305,7 @@ class TestConnectCredentials:
     def test_oauth_http_requests_never_get_env_credentials(self):
         with (
             patch.object(server, "auth_provider", MagicMock()),
-            patch.object(server, "in_http_request", return_value=True),
+            patch.object(server, "remote_caller_possible", return_value=True),
         ):
             assert server._resolve_connect_credentials(None, None) == (
                 "https://usegalaxy.org/",
@@ -326,7 +326,7 @@ def test_oauth_request_without_a_session_gets_no_global_fallback(mock_galaxy_ins
     with (
         patch.object(server, "auth_provider", MagicMock()),
         patch.object(server, "get_active_session", return_value=(None, None)),
-        patch.object(server, "in_http_request", return_value=True),
+        patch.object(server, "remote_caller_possible", return_value=True),
         patch.dict(
             server.galaxy_state,
             {"connected": True, "gi": mock_galaxy_instance, "api_key": "operator-key"},

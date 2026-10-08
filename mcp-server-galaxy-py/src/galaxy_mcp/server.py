@@ -44,8 +44,9 @@ from galaxy_mcp.http_security import (
     check_http_startup,
     env_flag,
     env_list,
-    in_http_request,
     is_loopback_host,
+    mark_serving_http,
+    remote_caller_possible,
     require_local_files,
 )
 from galaxy_mcp.middleware import ToolVisibilityMiddleware
@@ -1125,7 +1126,7 @@ def _get_request_connection_state() -> dict[str, Any]:
             }
 
     # An OAuth request that couldn't resolve its own session must not borrow the operator's
-    if auth_provider and in_http_request():
+    if auth_provider and remote_caller_possible():
         return {
             "url": normalized_galaxy_url,
             "api_key": None,
@@ -1318,7 +1319,7 @@ def _resolve_connect_credentials(
     only goes to the environment's URL, and OAuth deployments never lend out the operator's
     credentials at all.
     """
-    if in_http_request():
+    if remote_caller_possible():
         env_url = normalized_galaxy_url
         if not env_url:
             raise _ConnectRefusedError(
@@ -1485,7 +1486,7 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
         galaxy_url = galaxy_url or use_url or normalized_galaxy_url or "unknown"
         # Over HTTP the response body is whatever the remote host said, and repeating it would
         # hand the caller a read of that host. Over stdio the caller is the operator.
-        detail = _connect_failure_summary(e) if in_http_request() else str(e)
+        detail = _connect_failure_summary(e) if remote_caller_possible() else str(e)
         error_msg = f"Failed to connect to Galaxy at {galaxy_url}: {detail}"
         if "401" in detail or "authentication" in detail.lower():
             error_msg += " Check that your API key is valid and has the necessary permissions."
@@ -1496,7 +1497,7 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
         else:
             error_msg += " Verify the URL format (should end with /) and API key."
 
-        raise ValueError(error_msg) from (None if in_http_request() else e)
+        raise ValueError(error_msg) from (None if remote_caller_possible() else e)
 
 
 @mcp.tool(tags={"tools", "read", "extended"})
@@ -5251,6 +5252,7 @@ def run_http_server(
         )
     # Type-safe cast after validation
     http_transport = cast(Literal["streamable-http", "sse"], resolved_transport)
+    mark_serving_http()
 
     resolved_path = path or os.environ.get("GALAXY_MCP_HTTP_PATH")
     if resolved_path is None and resolved_transport == "streamable-http":
