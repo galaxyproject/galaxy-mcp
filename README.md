@@ -107,7 +107,8 @@ For OAuth flows the server exchanges user credentials for short-lived Galaxy API
 you typically leave `GALAXY_API_KEY` unset.
 
 For non-OAuth HTTP clients, `connect(url=..., api_key=...)` stores Galaxy credentials per MCP
-session rather than globally. That keeps sessions apart but is not authentication: the HTTP
+session rather than globally, for a URL the operator allowed (`GALAXY_URL` or
+`GALAXY_MCP_EXTRA_ALLOWED_URLS`). That keeps sessions apart but is not authentication: the HTTP
 transports bind to `127.0.0.1` by default, refuse to serve a non-loopback address without OAuth
 unless you pass `--allow-unauthenticated`, and disable the tools that touch the server's
 filesystem. See [Serving over HTTP](mcp-server-galaxy-py/README.md#serving-over-http).

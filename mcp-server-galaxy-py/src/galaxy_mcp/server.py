@@ -1151,7 +1151,8 @@ def ensure_connected() -> dict[str, Any]:
     if not state["connected"] or not state["gi"]:
         raise ValueError(
             "Not connected to Galaxy. Authenticate via OAuth or run connect() with your "
-            "API key. Example: connect(api_key='your-key')"
+            "Galaxy URL and API key. Example: connect(url='https://your-galaxy.org', "
+            "api_key='your-key')"
         )
     _assert_version_supported(state)
     return state
@@ -1301,34 +1302,72 @@ def _same_galaxy_url(first: str, second: str) -> bool:
     return normalize(first) == normalize(second)
 
 
+class _ConnectRefusedError(ValueError):
+    """A connect() refusal this server decided on, safe to show the caller verbatim."""
+
+
 def _resolve_connect_credentials(
     url: str | None, api_key: str | None
 ) -> tuple[str | None, str | None]:
-    """Restrict destinations while keeping environment credentials on the default Galaxy."""
-    env_url = normalized_galaxy_url
-    if not env_url:
-        raise ValueError("The server administrator must configure GALAXY_URL before connecting.")
-    use_url: str | None = env_url
-    if url is not None:
-        requested_url = normalize_galaxy_url(url)
-        use_url = next(
-            (
-                allowed_url
-                for allowed_url in (env_url, *extra_allowed_galaxy_urls)
-                if _same_galaxy_url(requested_url, allowed_url)
-            ),
-            None,
-        )
-        if use_url is None:
-            raise ValueError("Galaxy URL is not allowed by this server.")
-    if auth_provider and in_http_request():
-        return use_url, api_key
+    """Fill in connect() arguments from the environment, where that is safe.
 
-    env_key = os.environ.get("GALAXY_API_KEY")
+    Over HTTP the caller is not the operator, so the destination has to be one the operator
+    configured -- GALAXY_URL or GALAXY_MCP_EXTRA_ALLOWED_URLS, matched exactly -- or
+    connect(url=...) would make this server fetch whatever URL it is handed. Over stdio the
+    caller is the operator, and any Galaxy is fair game. Either way the environment's API key
+    only goes to the environment's URL, and OAuth deployments never lend out the operator's
+    credentials at all.
+    """
+    if in_http_request():
+        env_url = normalized_galaxy_url
+        if not env_url:
+            raise _ConnectRefusedError(
+                "The server administrator must configure GALAXY_URL before connecting."
+            )
+        use_url: str | None = env_url
+        if url is not None:
+            requested_url = normalize_galaxy_url(url)
+            use_url = next(
+                (
+                    allowed_url
+                    for allowed_url in (env_url, *extra_allowed_galaxy_urls)
+                    if _same_galaxy_url(requested_url, allowed_url)
+                ),
+                None,
+            )
+            if use_url is None:
+                raise _ConnectRefusedError("Galaxy URL is not allowed by this server.")
+        if auth_provider:
+            return use_url, api_key
+    else:
+        env_url = os.environ.get("GALAXY_URL")
+        use_url = url or env_url
+
+    # A .env reloaded after startup can change GALAXY_API_KEY without changing the allowlist,
+    # so the key also has to belong to the GALAXY_URL in the environment right now.
+    live_env_url = os.environ.get("GALAXY_URL")
     use_api_key = api_key
-    if not use_api_key and use_url and env_url and _same_galaxy_url(use_url, env_url):
-        use_api_key = env_key
+    if (
+        not use_api_key
+        and use_url
+        and env_url
+        and live_env_url
+        and _same_galaxy_url(use_url, env_url)
+        and _same_galaxy_url(use_url, live_env_url)
+    ):
+        use_api_key = os.environ.get("GALAXY_API_KEY")
     return use_url, use_api_key
+
+
+def _connect_failure_summary(e: Exception) -> str:
+    """Describe a failed connection without quoting what the remote server sent back."""
+    status = getattr(e, "status_code", None)
+    response = getattr(e, "response", None)
+    if status is None and response is not None:
+        status = getattr(response, "status_code", None)
+    if status is not None:
+        return f"HTTP {status}"
+    return type(e).__name__
 
 
 @mcp.tool(tags={"connection", "write", "core"})
@@ -1371,7 +1410,7 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
             )
 
         if session_id and not url and not api_key and not state["connected"]:
-            raise ValueError(
+            raise _ConnectRefusedError(
                 "No Galaxy connection is available for this MCP session. "
                 "It may not have been configured yet, or it may have been evicted from the "
                 "session connection cache. Call connect(url='https://your-galaxy.org', "
@@ -1393,7 +1432,7 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
             # If still missing credentials, report error
             if not use_url or not use_api_key:
                 if url and not api_key and os.environ.get("GALAXY_API_KEY"):
-                    raise ValueError(
+                    raise _ConnectRefusedError(
                         "The configured GALAXY_API_KEY is only used with the configured "
                         "GALAXY_URL. Pass api_key explicitly to connect to a different server."
                     )
@@ -1403,7 +1442,7 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
                 if not use_api_key:
                     missing.append("API key")
                 missing_str = " and ".join(missing)
-                raise ValueError(
+                raise _ConnectRefusedError(
                     f"Missing Galaxy {missing_str}. Please provide as arguments, "
                     f"set environment variables, or create a .env file with "
                     f"GALAXY_URL and GALAXY_API_KEY."
@@ -1436,14 +1475,28 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
                 else f"Validated global Galaxy connection at {galaxy_url}"
             ),
         )
-    except Exception:
+    except Exception as e:
         session_id = _get_current_session_id()
         if session_id:
             _clear_session_connection(session_id)
-        raise ValueError(
-            "Failed to connect to the configured Galaxy server. "
-            "Check your API key and contact the server administrator if the problem persists."
-        ) from None
+        if isinstance(e, _ConnectRefusedError):
+            raise
+
+        galaxy_url = galaxy_url or use_url or normalized_galaxy_url or "unknown"
+        # Over HTTP the response body is whatever the remote host said, and repeating it would
+        # hand the caller a read of that host. Over stdio the caller is the operator.
+        detail = _connect_failure_summary(e) if in_http_request() else str(e)
+        error_msg = f"Failed to connect to Galaxy at {galaxy_url}: {detail}"
+        if "401" in detail or "authentication" in detail.lower():
+            error_msg += " Check that your API key is valid and has the necessary permissions."
+        elif "404" in detail or "not found" in detail.lower():
+            error_msg += " Check that the Galaxy URL is correct and accessible."
+        elif "connection" in detail.lower() or "timeout" in detail.lower():
+            error_msg += " Check your network connection and that the Galaxy server is running."
+        else:
+            error_msg += " Verify the URL format (should end with /) and API key."
+
+        raise ValueError(error_msg) from (None if in_http_request() else e)
 
 
 @mcp.tool(tags={"tools", "read", "extended"})

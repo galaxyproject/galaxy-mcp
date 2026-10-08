@@ -9,8 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- Restrict connections to `GALAXY_URL` and the optional administrator-configured `GALAXY_MCP_EXTRA_ALLOWED_URLS` list. Extra destinations require an explicit API key; the environment key stays bound to `GALAXY_URL`.
-- Disable Galaxy API redirects and omit upstream response bodies from connection errors.
+- Over the HTTP transports, `connect` only reaches the Galaxy in `GALAXY_URL` and any base URLs
+  the operator lists in the new `GALAXY_MCP_EXTRA_ALLOWED_URLS`, matched exactly. Before this, an
+  authenticated HTTP caller could pass any URL and a junk key, have the server request it, and read
+  the reply back out of the connection error. `GALAXY_URL` is now required for HTTP use. stdio is
+  unchanged: its caller is the operator.
+- A failed connection over HTTP reports the HTTP status, not the body the remote host sent.
+- Galaxy GET requests no longer follow redirects (bioblend already refused them on writes).
+- A `.env` reloaded after startup can no longer send its `GALAXY_API_KEY` to a `GALAXY_URL` it
+  replaced.
 
 ## [1.11.0] - 2026-10-05
 

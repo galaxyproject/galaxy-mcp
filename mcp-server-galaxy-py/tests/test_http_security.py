@@ -296,12 +296,11 @@ class TestConnectCredentials:
         ],
     )
     def test_env_key_is_withheld_from_other_urls(self, url):
-        with pytest.raises(ValueError, match="Galaxy URL"):
-            server._resolve_connect_credentials(url, None)
+        assert server._resolve_connect_credentials(url, None) == (url, None)
 
-    def test_explicit_key_cannot_override_destination(self):
-        with pytest.raises(ValueError, match="not allowed"):
-            server._resolve_connect_credentials("https://other.example/", "mine")
+    def test_explicit_key_is_used_anywhere(self):
+        resolved = server._resolve_connect_credentials("https://other.example/", "mine")
+        assert resolved == ("https://other.example/", "mine")
 
     def test_oauth_http_requests_never_get_env_credentials(self):
         with (
@@ -317,7 +316,7 @@ class TestConnectCredentials:
         with (
             patch.object(server, "find_dotenv", return_value=""),
             patch.object(server, "GalaxyInstance") as galaxy_instance,
-            pytest.raises(ValueError, match="not allowed"),
+            pytest.raises(ValueError, match="only used with the configured GALAXY_URL"),
         ):
             connect_fn(url="https://evil.example/")
         galaxy_instance.assert_not_called()

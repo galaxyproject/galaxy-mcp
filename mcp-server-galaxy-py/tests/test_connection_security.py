@@ -20,6 +20,8 @@ def _configured_destination(monkeypatch):
     monkeypatch.setattr(server, "extra_allowed_galaxy_urls", ())
     monkeypatch.setattr(server, "auth_provider", None)
     monkeypatch.setattr(server, "_get_current_session_id", lambda: "security-test")
+    # The destination allowlist guards callers who are not the operator, i.e. HTTP requests.
+    monkeypatch.setattr(server, "in_http_request", lambda: True)
 
 
 @pytest.mark.parametrize(
@@ -111,7 +113,7 @@ def test_extra_destination_cannot_inherit_environment_key(monkeypatch):
     monkeypatch.setattr(server, "extra_allowed_galaxy_urls", ("https://second.example/",))
     monkeypatch.setenv("GALAXY_API_KEY", "operator-key")
     with patch.object(server, "GalaxyInstance") as constructor:
-        with pytest.raises(ValueError, match="Failed to connect"):
+        with pytest.raises(ValueError, match="only used with the configured GALAXY_URL"):
             connect_fn(url="https://second.example/")
     constructor.assert_not_called()
 
@@ -272,3 +274,70 @@ async def test_mcp_tool_errors_do_not_expose_upstream_body(mock_galaxy_instance)
 def test_invalid_administrator_url_rejected(url):
     with pytest.raises(ValueError):
         normalize_galaxy_url(url)
+
+
+@responses.activate
+def test_http_connection_error_names_the_status(monkeypatch):
+    responses.get(
+        "https://approved.example/galaxy/api/users/current",
+        status=401,
+        body="PRIVATE_UPSTREAM_BODY",
+    )
+    with pytest.raises(ValueError, match="HTTP 401") as error:
+        connect_fn(api_key="dummy-key")
+    assert "PRIVATE_UPSTREAM_BODY" not in str(error.value)
+    assert "API key is valid" in str(error.value)
+
+
+def test_http_refusals_keep_their_own_message(monkeypatch):
+    monkeypatch.setattr(server, "_get_request_connection_state", lambda: {"connected": False})
+    with pytest.raises(ValueError, match="No Galaxy connection is available"):
+        connect_fn()
+
+
+def test_reloaded_env_key_does_not_follow_a_changed_galaxy_url(monkeypatch):
+    # The allowlist is fixed at startup; a .env reload that moves GALAXY_URL must not send the
+    # new key to the old URL.
+    monkeypatch.setenv("GALAXY_URL", "https://elsewhere.example/")
+    monkeypatch.setenv("GALAXY_API_KEY", "new-key")
+    assert server._resolve_connect_credentials(None, None) == (
+        "https://approved.example/galaxy/",
+        None,
+    )
+
+
+class TestStdioIsUnrestricted:
+    """Over stdio the caller is the operator, who may point the server at any Galaxy."""
+
+    @pytest.fixture(autouse=True)
+    def _stdio(self, monkeypatch):
+        monkeypatch.setattr(server, "in_http_request", lambda: False)
+        monkeypatch.setattr(server, "normalized_galaxy_url", None)
+        monkeypatch.setenv("GALAXY_URL", "https://usegalaxy.org/")
+        monkeypatch.setenv("GALAXY_API_KEY", "operator-key")
+
+    def test_any_url_with_an_explicit_key(self):
+        assert server._resolve_connect_credentials("http://localhost:8080", "mine") == (
+            "http://localhost:8080",
+            "mine",
+        )
+
+    def test_env_key_still_only_goes_to_env_url(self):
+        assert server._resolve_connect_credentials("https://other.example/", None) == (
+            "https://other.example/",
+            None,
+        )
+        assert server._resolve_connect_credentials(None, None) == (
+            "https://usegalaxy.org/",
+            "operator-key",
+        )
+
+    @responses.activate
+    def test_connection_error_keeps_the_detail(self):
+        responses.get(
+            "http://localhost:8080/api/users/current",
+            status=401,
+            body="Provided API key is not valid.",
+        )
+        with pytest.raises(ValueError, match="Provided API key is not valid"):
+            connect_fn(url="http://localhost:8080", api_key="mine")

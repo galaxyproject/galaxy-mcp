@@ -74,7 +74,7 @@ How you authenticate depends on your transport:
   Optionally set `GALAXY_MCP_CLIENT_REGISTRY` to control where OAuth client registrations are stored.
 
   For non-OAuth HTTP clients, `connect(url=..., api_key=...)` stores Galaxy credentials per MCP
-  session rather than globally, so sessions don't see each other's credentials. That is not
+  session rather than globally (the URL has to be one the operator allowed -- see below), so sessions don't see each other's credentials. That is not
   authentication, though -- without OAuth, anything that can reach the listener can call every
   tool. See [Serving over HTTP](#serving-over-http) before exposing the server to anyone else.
 
@@ -137,14 +137,16 @@ HTTP transports come with a few guards:
   trusted single-user deployment can turn them back on with `GALAXY_MCP_ALLOW_LOCAL_FILES=1`.
   Never set that on a server other people can reach -- it lets every caller read and write
   whatever the server process can.
-- **Allowed Galaxy destinations.** `GALAXY_URL` is the default and is always allowed.
-  Optional `GALAXY_MCP_EXTRA_ALLOWED_URLS` lists additional base URLs, separated by commas.
-  `connect(url=..., api_key=...)` must match one of these URLs, including scheme, port, and path
-  (host/scheme case and trailing slashes are normalized). No wildcards or prefix matches.
-  Extra destinations require an explicit API key; the environment key is only used for `GALAXY_URL`.
-  Requests do not follow redirects, and connection errors omit upstream response bodies.
-  Both URL settings are read at startup; restart after changing them or upgrading to clear sessions.
-  With OAuth enabled the environment's credentials are never lent to a request.
+- **Allowed Galaxy destinations.** Over HTTP, `connect` only reaches Galaxies the operator
+  configured: `GALAXY_URL`, plus any base URLs in `GALAXY_MCP_EXTRA_ALLOWED_URLS` (comma
+  separated). `connect(url=...)` has to match one of them exactly -- scheme, host, port and path,
+  with host/scheme case and a trailing slash normalised; no wildcards or prefixes -- so the server
+  cannot be pointed at an arbitrary host. Over HTTP `GALAXY_URL` is therefore required. Extra
+  destinations need an explicit `api_key`; the environment's key only goes to `GALAXY_URL`, and
+  with OAuth enabled the environment's credentials are never lent to a request. Galaxy requests
+  do not follow redirects, and a failed connection reports the HTTP status but not the body the
+  remote host sent. Both URL settings are read at startup, so restart after changing them.
+  stdio is not restricted: there the caller is the operator and can connect to any Galaxy.
 
 For example, to allow two additional Galaxy instances:
 
