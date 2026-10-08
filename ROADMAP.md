@@ -1,8 +1,8 @@
 # Galaxy MCP roadmap
 
 This repo holds two implementations of one agent-facing surface for Galaxy: a Python MCP server
-(`mcp-server-galaxy-py`, on PyPI as `galaxy-mcp`) and a TypeScript workspace
-(`galaxy-agent-tools`, on npm as `@galaxyproject/galaxy-ops`, `galaxy-cli` and `galaxy-mcp`).
+(`python/`, on PyPI as `galaxy-mcp`) and a TypeScript workspace
+(`typescript/`, on npm as `@galaxyproject/galaxy-ops`, `galaxy-cli` and `galaxy-mcp`).
 Galaxy itself ships a third, built-in MCP server. This page explains why each exists, how they
 relate, where things stand, and what the work ahead is. `PARITY.md` next to it is the generated,
 CI-checked record of where the implementations disagree.
@@ -162,7 +162,7 @@ MCP server: a fix or a new operation reaches both, and the parity check covers i
 
 Counting MCP servers gives the wrong number. What costs effort is the number of places the Galaxy
 choreography is written down, and there are three: the in-process operations in Galaxy, the
-Python operations in `mcp-server-galaxy-py`, and the TypeScript operations in galaxy-ops. The
+Python operations in `python/`, and the TypeScript operations in galaxy-ops. The
 first two are separated by the boundary above and cannot be merged. The question is the third.
 
 The Python server came first and is what is deployed: it is what Galaxy's own documentation
@@ -310,7 +310,7 @@ the hand-rolled checker rather than port it to TypeScript.
 
 ### Python as a library
 
-- **Framework-free Python operations.** The operations in `mcp-server-galaxy-py` become
+- **Framework-free Python operations.** The operations in `python/` become
   importable without the MCP framework, so a Python agent can call Galaxy as code the way a
   TypeScript one can, and the server and any CLI become adapters over them. Whether that package
   lives here or in bioblend is undecided; bioblend is what Python agents script with today, which

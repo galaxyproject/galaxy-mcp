@@ -1,0 +1,1379 @@
+{
+  "$comment": "Generated snapshot of the MCP tool surface Galaxy itself serves -- do not edit by hand. Regenerate with `export GALAXY_ROOT=/path/to/galaxy && \"$GALAXY_ROOT/.venv/bin/python\" -B python/tests/builtin_surface.py`. Not checked for staleness in CI: it needs a Galaxy checkout, so it is refreshed by hand and says which commit it describes.",
+  "source": "galaxy:lib/galaxy/webapps/galaxy/api/mcp.py",
+  "galaxy": {
+    "version": "26.2.dev0",
+    "branch": "debug-request-endpoint",
+    "commit": "8300420556b3b9a26fe633866056287a16890538",
+    "describe": "v26.1.1-1293-g8300420556b",
+    "commitDate": "2026-08-31T12:51:04+01:00",
+    "moduleBlob": "74dd651d67df7eccdba26c07e7dbaadf041f6d1c",
+    "fastmcp": "3.3.1",
+    "capturedOn": "2026-09-26"
+  },
+  "toolCount": 44,
+  "tools": [
+    {
+      "name": "cancel_workflow_invocation",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "invocation_id": {
+            "type": "string",
+            "description": "Galaxy workflow invocation ID."
+          },
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "invocation_id",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "connect",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "create_history",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Human-friendly history name. Examples:\n- \"RNA-seq Sample A\"\n- \"ChIP-seq 2026-05\"\n- \"BWA alignment of patient_001\""
+          },
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "create_page",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "type": "string"
+          },
+          "history_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Encoded history id to attach the page to (notebook)."
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Page title."
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Initial markdown content."
+          },
+          "annotation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional annotation attached to the page."
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "URL slug (required for standalone reports)."
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "create_user_tool",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "representation": {
+            "additionalProperties": true,
+            "type": "object",
+            "description": "The tool definition as a dictionary matching the\nGalaxyUserTool schema. Required fields:\n- class: \"GalaxyUserTool\" (exactly this string)\n- id: tool identifier (lowercase, no spaces, 3-255 chars)\n- version: version string (e.g. \"0.1.0\")\n- name: display name shown in Galaxy tool menu\n- container: container image as a STRING (e.g. \"python:3.12-slim\"),\n  NOT a dict -- this is a common mistake\n- shell_command: the command to execute, with $(inputs.name.path)\n  for data inputs and $(inputs.name) for parameter inputs\n- inputs: list of input dicts, each with \"name\" and \"type\"\n  (type can be: \"data\", \"integer\", \"float\", \"text\", \"boolean\")\n- outputs: list of output dicts, each with \"name\", \"type\": \"data\",\n  \"format\" (e.g. \"tabular\", \"vcf\", \"bed\"), and \"from_work_dir\""
+          },
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "representation",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "delete_user_tool",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "description": "The UUID of the tool to deactivate. Get this from list_user_tools()."
+          },
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "uuid",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "download_dataset",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset_id": {
+            "type": "string",
+            "description": "Galaxy dataset ID (`hda` ID)."
+          },
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_collection_details",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "collection_id": {
+            "type": "string",
+            "description": "Galaxy dataset collection ID (`hdca` ID)."
+          },
+          "api_key": {
+            "type": "string"
+          },
+          "max_elements": {
+            "default": 500,
+            "type": "integer",
+            "description": "Cap on elements returned (default 500). Lower this for\nvery large collections."
+          }
+        },
+        "required": [
+          "collection_id",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_dataset_details",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset_id": {
+            "type": "string",
+            "description": "Galaxy dataset ID (history dataset association / `hda` ID)."
+          },
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_history_contents",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "history_id": {
+            "type": "string",
+            "description": "Galaxy history ID."
+          },
+          "api_key": {
+            "type": "string"
+          },
+          "limit": {
+            "default": 100,
+            "type": "integer",
+            "description": "Max items per page (default 100)."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Number of items to skip (default 0)."
+          },
+          "order": {
+            "default": "hid-asc",
+            "type": "string",
+            "description": "Sort order. Common values:\n- \"hid-asc\" (default, oldest first)\n- \"hid-dsc\" (newest first)\n- \"create_time-dsc\" / \"create_time-asc\"\n- \"update_time-dsc\"\n- \"name-asc\""
+          },
+          "deleted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "True includes deleted items; False excludes them; None uses default."
+          },
+          "visible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "False includes hidden items; True excludes them; None uses default."
+          }
+        },
+        "required": [
+          "history_id",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_history_details",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "history_id": {
+            "type": "string",
+            "description": "Galaxy history ID."
+          },
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "history_id",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_invocation_details",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "invocation_id": {
+            "type": "string",
+            "description": "Galaxy workflow invocation ID."
+          },
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "invocation_id",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_invocations",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "type": "string"
+          },
+          "workflow_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Restrict to invocations of this workflow."
+          },
+          "history_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Restrict to invocations targeting this history."
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "description": "Max invocations returned (default 50)."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Skip this many invocations (default 0)."
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_iwc_workflow_details",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "trs_id": {
+            "type": "string",
+            "description": "The TRS (Tool Registry Service) ID from search results.\nFormat: \"#workflow/github.com/iwc-workflows/<name>/<branch>\"\nExample: \"#workflow/github.com/iwc-workflows/rnaseq-pe/main\""
+          },
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "trs_id",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_job_details",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset_id": {
+            "type": "string",
+            "description": "Galaxy dataset ID (`hda` ID)."
+          },
+          "api_key": {
+            "type": "string"
+          },
+          "history_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional history ID to speed up provenance lookup."
+          }
+        },
+        "required": [
+          "dataset_id",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_job_status",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "description": "Galaxy job ID returned by run_tool() or job listings."
+          },
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_page",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "page_id": {
+            "type": "string",
+            "description": "Encoded id of the page (from list_pages / create_page)."
+          },
+          "api_key": {
+            "type": "string"
+          },
+          "include_rendered": {
+            "default": false,
+            "type": "boolean",
+            "description": "When True, also return `content` -- the\nembed-expanded render form (inlined dataset previews). Can be\nlarge; omit unless you need the rendered output."
+          }
+        },
+        "required": [
+          "page_id",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_page_revision",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "page_id": {
+            "type": "string",
+            "description": "Encoded id of the page."
+          },
+          "revision_id": {
+            "type": "string",
+            "description": "Encoded id of the revision (from list_page_revisions)."
+          },
+          "api_key": {
+            "type": "string"
+          },
+          "include_rendered": {
+            "default": false,
+            "type": "boolean",
+            "description": "When True, also return `content` -- the\nembed-expanded render form. Can be large; omit unless needed."
+          }
+        },
+        "required": [
+          "page_id",
+          "revision_id",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_server_info",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_tool_citations",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "tool_id": {
+            "type": "string",
+            "description": "Tool identifier."
+          },
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool_id",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_tool_details",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "tool_id": {
+            "type": "string",
+            "description": "Tool identifier. Common formats:\n- Built-in: \"fastqc\", \"Cut1\", \"upload1\"\n- Toolshed: \"toolshed.g2.bx.psu.edu/repos/devteam/fastqc/fastqc/0.73\""
+          },
+          "api_key": {
+            "type": "string"
+          },
+          "io_details": {
+            "default": false,
+            "type": "boolean",
+            "description": "Set True to include full input/output parameter schemas.\nRequired to know how to call run_tool()."
+          }
+        },
+        "required": [
+          "tool_id",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_tool_panel",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "type": "string"
+          },
+          "view": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional named tool panel view (admin-configured). Defaults to\nthe standard panel."
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_tool_run_examples",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "tool_id": {
+            "type": "string",
+            "description": "Tool identifier."
+          },
+          "api_key": {
+            "type": "string"
+          },
+          "tool_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional version selector (use \"*\" for all versions)."
+          }
+        },
+        "required": [
+          "tool_id",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_user",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_workflow_details",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "workflow_id": {
+            "type": "string",
+            "description": "Galaxy workflow ID."
+          },
+          "api_key": {
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional specific workflow version (defaults to latest)."
+          }
+        },
+        "required": [
+          "workflow_id",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "import_workflow_from_iwc",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "trs_id": {
+            "type": "string",
+            "description": "TRS ID of the workflow in the IWC manifest.\nFormat: \"#workflow/github.com/iwc-workflows/<name>/<branch>\""
+          },
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "trs_id",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "invoke_workflow",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "workflow_id": {
+            "type": "string",
+            "description": "Galaxy workflow ID."
+          },
+          "api_key": {
+            "type": "string"
+          },
+          "history_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Existing history ID for outputs. Mutually exclusive with\n`history_name` -- if both are given, history_id wins."
+          },
+          "inputs": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Maps workflow input labels/indices to datasets. Common shape:\n{\"<input_label_or_index>\": {\"src\": \"hda\", \"id\": \"<dataset_id>\"}}\nUse \"hdca\" for collections, \"ldda\"/\"ld\" for library datasets."
+          },
+          "parameters": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Per-step parameter overrides keyed by step ID."
+          },
+          "history_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Name to use when creating a new history for this run\n(used only when history_id is None)."
+          }
+        },
+        "required": [
+          "workflow_id",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_file_source_templates",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_histories",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "description": "Maximum histories to return (default 50). Paginate via `offset`."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Number to skip from the beginning (default 0)."
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Substring filter applied to history names (case-insensitive)."
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_history_ids",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "type": "string"
+          },
+          "limit": {
+            "default": 100,
+            "type": "integer",
+            "description": "Max histories to return (default 100)."
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_page_revisions",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "page_id": {
+            "type": "string",
+            "description": "Encoded id of the page."
+          },
+          "api_key": {
+            "type": "string"
+          },
+          "sort_desc": {
+            "default": false,
+            "type": "boolean",
+            "description": "Newest-first when True (default oldest-first)."
+          }
+        },
+        "required": [
+          "page_id",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_pages",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "type": "string"
+          },
+          "history_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Encoded history id. When set, returns only notebooks\nattached to that history."
+          },
+          "search": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Freetext filter over title/content."
+          },
+          "limit": {
+            "default": 100,
+            "type": "integer",
+            "description": "Max pages to return (default 100)."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Pagination offset."
+          },
+          "show_published": {
+            "default": false,
+            "type": "boolean",
+            "description": "Also include pages published by other users (default False)."
+          },
+          "show_shared": {
+            "default": false,
+            "type": "boolean",
+            "description": "Also include pages shared with the user (default False)."
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_user_file_sources",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_user_tools",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "type": "string"
+          },
+          "active": {
+            "default": true,
+            "type": "boolean",
+            "description": "If True (default), only show active tools. Set False to\ninclude deactivated tools."
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_workflows",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "description": "Max workflows to return (default 50)."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Skip this many workflows (default 0)."
+          },
+          "show_published": {
+            "default": false,
+            "type": "boolean",
+            "description": "Include workflows published by other users (default False)."
+          },
+          "show_shared": {
+            "default": true,
+            "type": "boolean",
+            "description": "Include workflows shared with the user (default True)."
+          },
+          "search": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Substring filter applied to workflow name/annotation."
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "recommend_biocontainer",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "packages": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "description": "The conda packages the tool wraps, each as ``\"name\"`` or ``\"name=version\"``\n(e.g. ``[\"samtools=1.17\", \"bwa\"]``). Use the canonical conda package names you\nwould ``conda install`` (e.g. ``pandas``, ``r-ggplot2``, ``samtools``). A single\npackage yields a single-package image; several yield a mulled-v2 image."
+          },
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "packages",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "revert_page_revision",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "page_id": {
+            "type": "string",
+            "description": "Encoded id of the page."
+          },
+          "revision_id": {
+            "type": "string",
+            "description": "Encoded id of the revision to restore."
+          },
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "page_id",
+          "revision_id",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "run_tool",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "history_id": {
+            "type": "string",
+            "description": "Galaxy history ID where outputs will be placed."
+          },
+          "tool_id": {
+            "type": "string",
+            "description": "Tool identifier (e.g. \"fastqc\" or a toolshed-qualified ID)."
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "type": "object",
+            "description": "Tool input parameters. Common shapes:\n- Dataset: {\"input_name\": {\"src\": \"hda\", \"id\": \"<dataset_id>\"}}\n- Collection: {\"input_name\": {\"src\": \"hdca\", \"id\": \"<collection_id>\"}}\n- Scalar: {\"param_name\": value}"
+          },
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "history_id",
+          "tool_id",
+          "inputs",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "run_user_tool",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "history_id": {
+            "type": "string",
+            "description": "Galaxy history ID where outputs will be placed."
+          },
+          "tool_uuid": {
+            "type": "string",
+            "description": "The UUID of the user-defined tool (from create_user_tool\nor list_user_tools)."
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "type": "object",
+            "description": "Tool input parameters keyed by input name.\n- Dataset inputs: {\"input_name\": {\"src\": \"hda\", \"id\": \"<dataset_id>\"}}\n- Collection inputs: {\"input_name\": {\"src\": \"hdca\", \"id\": \"<collection_id>\"}}\n- Scalar parameters: {\"param_name\": value}"
+          },
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "history_id",
+          "tool_uuid",
+          "inputs",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "search_iwc_workflows",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query or analysis intent. Case-insensitive. Matches\nagainst workflow name, description, tags, readme text, and the\nnames of tools the workflow uses. Examples:\n- \"rnaseq\"\n- \"variant calling from whole exome sequencing\"\n- \"assemble a bacterial genome from nanopore reads\""
+          },
+          "api_key": {
+            "type": "string"
+          },
+          "limit": {
+            "default": 10,
+            "type": "integer",
+            "description": "Maximum number of results to return (default 10)."
+          }
+        },
+        "required": [
+          "query",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "search_tools",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query - matches name, ID, or description (case-insensitive).\nExamples: \"fastq\", \"alignment\", \"filter\", \"bwa\"."
+          },
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "query",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "search_tools_by_keywords",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "description": "Keywords or phrases describing what you need. Examples:\n[\"csv\", \"rna\", \"alignment\"], [\"fastq\", \"trim\"], [\"vcf\", \"filter\"]."
+          },
+          "api_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "keywords",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "update_page",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "page_id": {
+            "type": "string",
+            "description": "Encoded id of the page."
+          },
+          "api_key": {
+            "type": "string"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "New markdown content. Omit to leave content unchanged."
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "New title. Omit to leave unchanged."
+          }
+        },
+        "required": [
+          "page_id",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "upload_file_from_url",
+      "tags": [],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "history_id": {
+            "type": "string",
+            "description": "Destination Galaxy history ID."
+          },
+          "url": {
+            "type": "string",
+            "description": "Public URL of the file to fetch (e.g. https://.../data.fasta)."
+          },
+          "api_key": {
+            "type": "string"
+          },
+          "file_type": {
+            "default": "auto",
+            "type": "string",
+            "description": "Galaxy datatype (default \"auto\" detects from extension).\nCommon values: \"fasta\", \"fastq\", \"bam\", \"vcf\", \"bed\", \"tabular\"."
+          },
+          "dbkey": {
+            "default": "?",
+            "type": "string",
+            "description": "Genome build / database key (default \"?\"). Examples:\n\"hg38\", \"mm10\", \"dm6\"."
+          },
+          "file_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional display name; otherwise inferred from the URL."
+          }
+        },
+        "required": [
+          "history_id",
+          "url",
+          "api_key"
+        ],
+        "type": "object"
+      }
+    }
+  ]
+}

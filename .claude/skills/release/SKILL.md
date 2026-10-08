@@ -25,7 +25,7 @@ into one script. Stop, show, and wait for a human "go" before each publish bound
 
 ## Layout / facts (easy to get wrong)
 
-- The Python package lives in **`mcp-server-galaxy-py/`**, not the repo root. Three files
+- The Python package lives in **`python/`**, not the repo root. Three files
   carry the version: `pyproject.toml`, `src/galaxy_mcp/__init__.py`, and `uv.lock`.
 - `main` between releases carries a dev version like `X.Y.0.dev0`. **The release version
   = that minus `.dev0`** (e.g. `1.7.0.dev0` -> `1.7.0`). The dev marker is the intent.
@@ -58,7 +58,7 @@ gh run list --repo galaxyproject/galaxy-mcp --branch main --workflow "Python Tes
   --json conclusion -q '.[0].conclusion'        # expect: success
 # Author from a clean worktree off canonical main (leaves your checkout untouched):
 git worktree add -b rel-tmp ../gmcp-release "$CANON/main"
-cd ../gmcp-release/mcp-server-galaxy-py
+cd ../gmcp-release/python
 ```
 
 ## Phase 1 -- Version + notes

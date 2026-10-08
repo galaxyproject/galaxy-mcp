@@ -4,30 +4,30 @@ on:
   push:
     branches: [main]
     paths:
-      - "galaxy-agent-tools/**"
+      - "typescript/**"
       - ".github/workflows/agent-tools-tests.yml"
       # The TS parity check reads the Python server's generated surface manifest, so a
       # change to it has to run this workflow or a new gap lands unnoticed.
-      - "mcp-server-galaxy-py/tests/testdata/mcp-surface.json"
+      - "python/tests/testdata/mcp-surface.json"
       # And the snapshot of the surface Galaxy itself serves, for the same reason: it is
       # the third column's only source, and refreshing it alone moves the comparator, the
       # registry, the ratchet and the report.
-      - "mcp-server-galaxy-py/tests/testdata/galaxy-builtin-surface.json"
+      - "python/tests/testdata/galaxy-builtin-surface.json"
       # The report is generated from both surfaces, so an edit to it alone is still
       # something the check has to have an opinion about.
       - "PARITY.md"
   pull_request:
     branches: [main]
     paths:
-      - "galaxy-agent-tools/**"
+      - "typescript/**"
       - ".github/workflows/agent-tools-tests.yml"
       # The TS parity check reads the Python server's generated surface manifest, so a
       # change to it has to run this workflow or a new gap lands unnoticed.
-      - "mcp-server-galaxy-py/tests/testdata/mcp-surface.json"
+      - "python/tests/testdata/mcp-surface.json"
       # And the snapshot of the surface Galaxy itself serves, for the same reason: it is
       # the third column's only source, and refreshing it alone moves the comparator, the
       # registry, the ratchet and the report.
-      - "mcp-server-galaxy-py/tests/testdata/galaxy-builtin-surface.json"
+      - "python/tests/testdata/galaxy-builtin-surface.json"
       # The report is generated from both surfaces, so an edit to it alone is still
       # something the check has to have an opinion about.
       - "PARITY.md"
@@ -35,7 +35,7 @@ on:
 
 defaults:
   run:
-    working-directory: galaxy-agent-tools
+    working-directory: typescript
 
 jobs:
   check:
@@ -47,14 +47,14 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
-          package_json_file: galaxy-agent-tools/package.json
+          package_json_file: typescript/package.json
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: pnpm
-          cache-dependency-path: galaxy-agent-tools/pnpm-lock.yaml
+          cache-dependency-path: typescript/pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

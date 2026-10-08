@@ -6,13 +6,13 @@ This project provides a Model Context Protocol (MCP) server for interacting with
 
 The repository holds two independent implementations of the same Galaxy operation set:
 
-- [`mcp-server-galaxy-py/`](mcp-server-galaxy-py/) -- the Python MCP server, published to
+- [`python/`](python/) -- the Python MCP server, published to
   PyPI as `galaxy-mcp`. It reaches Galaxy through BioBlend and carries the larger tool
-  surface. See the [Python README](mcp-server-galaxy-py/README.md).
-- [`galaxy-agent-tools/`](galaxy-agent-tools/) -- a TypeScript pnpm workspace offering the
+  surface. See the [Python README](python/README.md).
+- [`typescript/`](typescript/) -- a TypeScript pnpm workspace offering the
   same operations two ways: a `galaxy-cli` command-line tool and a `galaxy-mcp` (Node) MCP
   server, both built on a shared framework-free core. See the
-  [galaxy-agent-tools README](galaxy-agent-tools/README.md).
+  [typescript README](typescript/README.md).
 
 The two are meant to stay in step: an operation keeps its name and its meaning across
 both. They are still separate codebases with separate release trains, though, so each
@@ -56,7 +56,7 @@ doesn't advertise it.
 ```bash
 uvx --from 'galaxy-mcp[container-recommend]' galaxy-mcp
 # or, for a local checkout:
-cd mcp-server-galaxy-py && uv sync --extra container-recommend
+cd python && uv sync --extra container-recommend
 ```
 
 The same resolver is also available as a standalone CLI once installed:
@@ -74,7 +74,7 @@ rather than a silent downgrade.
 uvx --from 'galaxy-mcp[code-mode]' galaxy-mcp --discovery-mode code
 ```
 
-See [Tool discovery mode](mcp-server-galaxy-py/README.md#tool-discovery-mode-experimental)
+See [Tool discovery mode](python/README.md#tool-discovery-mode-experimental)
 in the Python README for what the trade-off buys you.
 
 ## Quick Start
@@ -111,7 +111,7 @@ session rather than globally, for a URL the operator allowed (`GALAXY_URL` or
 `GALAXY_MCP_EXTRA_ALLOWED_URLS`). That keeps sessions apart but is not authentication: the HTTP
 transports bind to `127.0.0.1` by default, refuse to serve a non-loopback address without OAuth
 unless you pass `--allow-unauthenticated`, and disable the tools that touch the server's
-filesystem. See [Serving over HTTP](mcp-server-galaxy-py/README.md#serving-over-http).
+filesystem. See [Serving over HTTP](python/README.md#serving-over-http).
 
 ### Alternative Installation
 
@@ -123,7 +123,7 @@ pip install galaxy-mcp
 galaxy-mcp
 
 # Or from source using uv
-cd mcp-server-galaxy-py
+cd python
 uv sync
 uv run galaxy-mcp --transport streamable-http --port 8000
 ```
@@ -185,7 +185,7 @@ docker run --rm -it -p 8000:8000 \
 
 ## Development Guidelines
 
-See the [Python implementation README](mcp-server-galaxy-py/README.md) for specific instructions and documentation.
+See the [Python implementation README](python/README.md) for specific instructions and documentation.
 
 ## License
 

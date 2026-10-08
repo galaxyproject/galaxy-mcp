@@ -12,7 +12,7 @@ on:
 
 defaults:
   run:
-    working-directory: mcp-server-galaxy-py
+    working-directory: python
 
 jobs:
   tag-version:
@@ -31,7 +31,7 @@ jobs:
           git config user.email github-actions@github.com
 
       - name: Update version in pyproject.toml
-        working-directory: mcp-server-galaxy-py
+        working-directory: python
         run: |
           sed -i '/^\[project\]/,/^\[/ s/^version = "[^"]*"/version = "${{ inputs.version }}"/' pyproject.toml
           git add pyproject.toml

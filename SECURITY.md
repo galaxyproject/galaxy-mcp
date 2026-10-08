@@ -21,5 +21,5 @@ Fixes go into the latest release of `galaxy-mcp` on PyPI and the matching contai
 ## Deployment model
 
 Galaxy MCP is designed first as a local server for the person running it. If you serve it over
-HTTP, read [Serving over HTTP](mcp-server-galaxy-py/README.md#serving-over-http) for what the
+HTTP, read [Serving over HTTP](python/README.md#serving-over-http) for what the
 server does and does not protect against.

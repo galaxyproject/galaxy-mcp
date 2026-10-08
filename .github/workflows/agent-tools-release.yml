@@ -20,7 +20,7 @@ permissions:
 
 defaults:
   run:
-    working-directory: galaxy-agent-tools
+    working-directory: typescript
 
 jobs:
   publish:
@@ -32,14 +32,14 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
-          package_json_file: galaxy-agent-tools/package.json
+          package_json_file: typescript/package.json
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: pnpm
-          cache-dependency-path: galaxy-agent-tools/pnpm-lock.yaml
+          cache-dependency-path: typescript/pnpm-lock.yaml
           registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies
