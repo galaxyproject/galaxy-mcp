@@ -4,15 +4,18 @@ This project provides a Model Context Protocol (MCP) server for interacting with
 
 ## Project Overview
 
-The repository holds two independent implementations of the same Galaxy operation set:
+The repository holds two independent implementations of the same Galaxy operation set, and
+the contract that keeps them in step:
 
-- [`python/`](python/) -- the Python MCP server, published to
-  PyPI as `galaxy-mcp`. It reaches Galaxy through BioBlend and carries the larger tool
-  surface. See the [Python README](python/README.md).
-- [`typescript/`](typescript/) -- a TypeScript pnpm workspace offering the
-  same operations two ways: a `galaxy-cli` command-line tool and a `galaxy-mcp` (Node) MCP
-  server, both built on a shared framework-free core. See the
-  [typescript README](typescript/README.md).
+- [`python/`](python/) -- the Python MCP server, published to PyPI as `galaxy-mcp`. It
+  reaches Galaxy through BioBlend. See the [Python README](python/README.md).
+- [`typescript/`](typescript/) -- a pnpm workspace published to npm as
+  `@galaxyproject/galaxy-ops`, `galaxy-cli` and `galaxy-mcp`: one framework-free core
+  (`galaxy-ops`) with a command line and a stdio MCP server on top. See the
+  [TypeScript README](typescript/README.md).
+- [`contract/`](contract/) -- what both are held to: the Python surface manifest, golden
+  results replayed through both, the snapshot of Galaxy's built-in server, and the
+  registry of known differences. See the [contract README](contract/README.md).
 
 The two are meant to stay in step: an operation keeps its name and its meaning across
 both. They are still separate codebases with separate release trains, though, so each
