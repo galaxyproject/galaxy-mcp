@@ -61,26 +61,26 @@ class TestGetInvocationsRefusesAnErrorBody:
 
     def test_step_details_reaches_galaxy_for_one_invocation(self, mock_galaxy_instance):
         """show_invocation can't send step_details, and without it every step's jobs are empty."""
-        mock_galaxy_instance.invocations._make_url.return_value = "URL/inv1"
-        mock_galaxy_instance.invocations._get.return_value = {"id": "inv1", "steps": []}
+        mock_galaxy_instance.invocations._make_url.return_value = "URL/1e1d0c0b0a090807"
+        mock_galaxy_instance.invocations._get.return_value = {"id": "1e1d0c0b0a090807", "steps": []}
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
-            result = get_invocations_fn(invocation_id="inv1", step_details=True)
+            result = get_invocations_fn(invocation_id="1e1d0c0b0a090807", step_details=True)
 
-        mock_galaxy_instance.invocations._make_url.assert_called_once_with("inv1")
+        mock_galaxy_instance.invocations._make_url.assert_called_once_with("1e1d0c0b0a090807")
         mock_galaxy_instance.invocations._get.assert_called_once_with(
-            url="URL/inv1", params={"step_details": "true"}
+            url="URL/1e1d0c0b0a090807", params={"step_details": "true"}
         )
         mock_galaxy_instance.invocations.show_invocation.assert_not_called()
-        assert result.data == {"id": "inv1", "steps": []}
+        assert result.data == {"id": "1e1d0c0b0a090807", "steps": []}
 
     def test_one_invocation_without_step_details_is_the_plain_show(self, mock_galaxy_instance):
-        mock_galaxy_instance.invocations.show_invocation.return_value = {"id": "inv1"}
+        mock_galaxy_instance.invocations.show_invocation.return_value = {"id": "1e1d0c0b0a090807"}
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
-            get_invocations_fn(invocation_id="inv1")
+            get_invocations_fn(invocation_id="1e1d0c0b0a090807")
 
-        mock_galaxy_instance.invocations.show_invocation.assert_called_once_with("inv1")
+        mock_galaxy_instance.invocations.show_invocation.assert_called_once_with("1e1d0c0b0a090807")
         mock_galaxy_instance.invocations._get.assert_not_called()
 
     def test_err_msg_on_its_own_is_enough(self, mock_galaxy_instance):
@@ -202,12 +202,51 @@ class TestGetInvocationsListing:
 
     def test_the_cap_does_not_apply_to_a_lookup_by_id(self, mock_galaxy_instance):
         """limit is ignored with an id, so an over-cap value there is not a refusal."""
-        mock_galaxy_instance.invocations.show_invocation.return_value = {"id": "inv1"}
+        mock_galaxy_instance.invocations.show_invocation.return_value = {"id": "1e1d0c0b0a090807"}
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
-            result = get_invocations_fn(invocation_id="inv1", limit=500)
+            result = get_invocations_fn(invocation_id="1e1d0c0b0a090807", limit=500)
 
-        assert result.data == {"id": "inv1"}
+        assert result.data == {"id": "1e1d0c0b0a090807"}
+
+    @pytest.mark.parametrize("value", [".", "../histories", "not-an-id", "inv1"])
+    def test_a_value_that_is_not_an_id_is_refused_before_anything_is_sent(
+        self, mock_galaxy_instance, value
+    ):
+        """An id travels as one path segment, and requests folds "." and ".." into the path.
+
+        Galaxy would answer "not-an-id" with a 400 anyway; "." would never reach it as an
+        id at all, but as GET /api/invocations/, which is the listing.
+        """
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError, match="not a Galaxy id") as exc:
+                get_invocations_fn(invocation_id=value)
+
+        assert str(exc.value).endswith("Nothing was sent to Galaxy.")
+        mock_galaxy_instance.invocations.show_invocation.assert_not_called()
+        mock_galaxy_instance.invocations._get.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "answer",
+        [{"id": "ffffffffffffffff", "state": "ok"}, [{"id": "1e1d0c0b0a090807"}], {"state": "ok"}],
+    )
+    def test_a_200_that_is_not_this_invocations_record_is_refused(
+        self, mock_galaxy_instance, answer
+    ):
+        mock_galaxy_instance.invocations.show_invocation.return_value = answer
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError, match="not that invocation's record"):
+                get_invocations_fn(invocation_id="1e1d0c0b0a090807")
+
+    def test_the_ids_case_is_not_held_against_the_caller(self, mock_galaxy_instance):
+        """Galaxy decodes either case and writes lowercase, so the two spell one record."""
+        mock_galaxy_instance.invocations.show_invocation.return_value = {"id": "1e1d0c0b0a090807"}
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_invocations_fn(invocation_id="1E1D0C0B0A090807")
+
+        assert result.success is True
 
 
 class TestWorkflowOperations:

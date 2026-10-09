@@ -4,6 +4,7 @@ import type { GalaxyContext } from "../context";
 import { httpError, GalaxyConnectionError, GalaxyNotFoundError, GalaxyValidationError } from "../errors";
 import { pyFormatError } from "../python-failure";
 import { pyStr } from "../python-values";
+import { isEncodedId, isThisRecord, notAGalaxyId, notThatRecord } from "./encoded-id";
 import { validatePagination } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
@@ -100,8 +101,37 @@ type In = {
 /** One invocation when an id was given, the filtered listing when it was not. */
 export type GetInvocationsResult = InvocationDetail | InvocationSummary[];
 
+/**
+ * server.py, _refuse_error_body: a 200 whose body is Galaxy reporting a problem -- the
+ * err_msg shape -- is refused rather than read as the thing asked for. Worded here rather
+ * than through the op's failure contract, because it is not a failed request: it is a reply
+ * that succeeded and said no. Python builds it from an exception it made out of err_msg,
+ * which carries no status field, so the hint falls to the text search that exception text
+ * gets.
+ */
+function refuseErrorBody(data: unknown, status: number): void {
+  if (data && typeof data === "object" && "err_msg" in data) {
+    const body = data as { err_msg: unknown; err_code?: unknown };
+    throw new GalaxyConnectionError(
+      pyFormatError(
+        "Get workflow invocations",
+        pyStr(body.err_msg),
+        null,
+        { err_code: "err_code" in body ? body.err_code : undefined },
+        { statusIsKnown: false },
+      ),
+      status,
+    );
+  }
+}
+
 async function run(i: In, ctx: GalaxyContext): Promise<GetInvocationsResult> {
   if (i.invocationId) {
+    // Not an id, not a request: see encoded-id.ts for what a stray "." would turn into.
+    // A refusal of our own, worded whole, so no facts for the failure contract.
+    if (!isEncodedId(i.invocationId)) {
+      throw new GalaxyNotFoundError(notAGalaxyId("Invocation", i.invocationId, "get_invocations()"));
+    }
     // Galaxy answers a single invocation with every step's jobs list empty unless
     // step_details is set. Sent only when asked for, as the other server does, so the
     // default request is unchanged.
@@ -123,6 +153,12 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetInvocationsResult> {
         throw notFound;
       }
       throw failed;
+    }
+    refuseErrorBody(data, response.status);
+    // The same check get_job_details makes: the reply has to be this invocation's record,
+    // not merely a 200 from somewhere under /api/invocations.
+    if (!isThisRecord(data, i.invocationId)) {
+      throw new GalaxyConnectionError(notThatRecord("invocation", i.invocationId), response.status);
     }
     return data as InvocationDetail;
   }
@@ -166,25 +202,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetInvocationsResult> {
     // A 200 whose body is not a list is Galaxy reporting a problem inside the response -- the
     // err_msg shape the other ops surface. Coercing it to [] would hand the caller a failure
     // dressed up as "Retrieved 0 workflow invocations".
-    //
-    // server.py, _refuse_error_body: this one is worded here rather than through the op's
-    // failure contract, because it is not a failed request -- it is a reply that succeeded
-    // and said no. Python builds it from an exception it made out of err_msg, which carries
-    // no status field, so the hint falls to the text search that exception text gets.
-    const said = data && typeof data === "object" && "err_msg" in data;
-    if (said) {
-      const body = data as { err_msg: unknown; err_code?: unknown };
-      throw new GalaxyConnectionError(
-        pyFormatError(
-          "Get workflow invocations",
-          pyStr(body.err_msg),
-          null,
-          { err_code: "err_code" in body ? body.err_code : undefined },
-          { statusIsKnown: false },
-        ),
-        response.status,
-      );
-    }
+    refuseErrorBody(data, response.status);
     throw new GalaxyConnectionError("the invocation index did not return a list", response.status);
   }
 

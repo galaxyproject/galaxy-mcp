@@ -1,7 +1,7 @@
 {
   "data": {
     "job": {
-      "id": "j0000001",
+      "id": "0123456789abcdef",
       "state": "ok",
       "tool_id": "fastqc",
       "exit_code": 0,
@@ -30,10 +30,10 @@
       "job_stdout": ""
     },
     "dataset_id": null,
-    "job_id": "j0000001"
+    "job_id": "0123456789abcdef"
   },
   "success": true,
-  "message": "Retrieved job details for job 'j0000001'",
+  "message": "Retrieved job details for job '0123456789abcdef'",
   "count": null,
   "pagination": null
 }

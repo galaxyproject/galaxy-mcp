@@ -1268,25 +1268,29 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         lambda: get_invocations_fn(limit=5),
         [route("/api/invocations", invocation_rows(3))],
     )
+    # By id, the id has to look like one -- hex, as Galaxy writes them -- and the reply has
+    # to carry it back, so these two name an invocation the way Galaxy would.
+    inv_hex = "1e1d0c0b0a090807"
     add(
         "get_invocations",
         "single",
         "one invocation by id: no count and no pagination",
-        {"invocation_id": "inv0000"},
-        lambda: get_invocations_fn(invocation_id="inv0000"),
-        [route("/api/invocations/inv0000", invocation_rows(1)[0])],
+        {"invocation_id": inv_hex},
+        lambda: get_invocations_fn(invocation_id=inv_hex),
+        [route(f"/api/invocations/{inv_hex}", {**invocation_rows(1)[0], "id": inv_hex})],
     )
     add(
         "get_invocations",
         "single_step_details",
         "one invocation with its steps' jobs: the route answers only when step_details is sent",
-        {"invocation_id": "inv0000", "step_details": True},
-        lambda: get_invocations_fn(invocation_id="inv0000", step_details=True),
+        {"invocation_id": inv_hex, "step_details": True},
+        lambda: get_invocations_fn(invocation_id=inv_hex, step_details=True),
         [
             route(
-                "/api/invocations/inv0000",
+                f"/api/invocations/{inv_hex}",
                 {
                     **invocation_rows(1)[0],
+                    "id": inv_hex,
                     "steps": [{"id": "s0", "jobs": [{"id": "j0", "state": "ok"}]}],
                 },
                 query={"step_details": "true"},
@@ -2643,26 +2647,30 @@ def job_details_cases(add: AddCase) -> None:
             job_route,
         ],
     )
+    # By id, the id has to look like one -- hex, as Galaxy writes them -- and the reply has
+    # to carry it back, so these cases name a job the way Galaxy would.
+    job_hex = "0123456789abcdef"
     add(
         "get_job_details",
         "by_job_id",
         "the job asked for by its own id: no lookup, and no dataset to name in the answer",
-        {"job_id": "j0000001"},
-        lambda: get_job_details_fn(job_id="j0000001"),
-        [job_route],
+        {"job_id": job_hex},
+        lambda: get_job_details_fn(job_id=job_hex),
+        [route(f"/api/jobs/{job_hex}", {**job, "id": job_hex})],
     )
     # Answered only when ?full=true arrives, so a surface that drops the flag gets no reply.
     add(
         "get_job_details",
         "by_job_id_full",
         "full=true is sent to Galaxy, and the answer carries what the full record adds",
-        {"job_id": "j0000001", "full": True},
-        lambda: get_job_details_fn(job_id="j0000001", full=True),
+        {"job_id": job_hex, "full": True},
+        lambda: get_job_details_fn(job_id=job_hex, full=True),
         [
             route(
-                "/api/jobs/j0000001",
+                f"/api/jobs/{job_hex}",
                 {
                     **job,
+                    "id": job_hex,
                     "command_line": "fastqc --outdir . input.fastq",
                     "job_metrics": [],
                     "job_stderr": "",
@@ -3742,10 +3750,6 @@ def biocontainer_cases(add: AddCase) -> None:
 DENIED = '{"err_msg": "History is not accessible by user", "err_code": 403002}'
 MISSING = '{"err_msg": "History not found", "err_code": 404001}'
 BROKEN = '{"err_msg": "Uncaught exception in exposed API method:", "err_code": 0}'
-# What Galaxy says to a path id it cannot decode: a 400, before it looks anything up.
-MALFORMED_ID = (
-    '{"err_msg": "Malformed id ( not-an-id ) specified, unable to decode.", "err_code": 400009}'
-)
 # What GET /api/jobs says, byte for byte, for a history the key cannot read and for an id
 # it cannot decode (the double space is Galaxy's own, from an object_name it was not given).
 JOBS_DENIED = '{"err_msg": "Cannot access the request job objects.", "err_code": 403002}'
@@ -3753,9 +3757,6 @@ MALFORMED = (
     '{"err_msg": "Wrong  id ( not-an-id ) specified, unable to decode.", "err_code": 400009}'
 )
 INVOCATION_MISSING = '{"err_msg": "Workflow invocation not found.", "err_code": 404001}'
-INVOCATION_MALFORMED = (
-    '{"err_msg": "Malformed id ( not-an-id ) specified, unable to decode.", "err_code": 400009}'
-)
 # What StoredWorkflow.get_internal_version raises for an index past the last stored one.
 NO_SUCH_VERSION = '{"err_msg": "Version does not exist", "err_code": 400008}'
 # What GET /api/tools/{id} says about an id the toolbox has at no version (v26.1.1
@@ -3933,15 +3934,29 @@ def http_failure_cases(add: AddFailure) -> None:
         "get_invocations",
         "unknown_id",
         "a lookup by an id Galaxy has no invocation for",
-        {"invocation_id": "inv0404"},
-        [fail("/api/invocations/inv0404", 404, INVOCATION_MISSING)],
+        {"invocation_id": "0000000000000404"},
+        [fail("/api/invocations/0000000000000404", 404, INVOCATION_MISSING)],
     )
     add(
         "get_invocations",
         "malformed_id",
-        "a lookup by an id Galaxy cannot decode, which it answers 400 rather than 404",
+        "a value that is not hex cannot be an id, and is refused before anything is sent: "
+        "Galaxy would answer it 400, and a '.' would not even reach it as an id but as the "
+        "listing",
         {"invocation_id": "not-an-id"},
-        [fail("/api/invocations/not-an-id", 400, INVOCATION_MALFORMED)],
+        [],
+    )
+    add(
+        "get_invocations",
+        "answered_with_another_record",
+        "a 200 whose body is not the invocation asked for is refused rather than handed back",
+        {"invocation_id": "1e1d0c0b0a090807"},
+        [
+            route(
+                "/api/invocations/1e1d0c0b0a090807",
+                {**invocation_rows(1)[0], "id": "ffffffffffffffff"},
+            )
+        ],
     )
     # -- an error body under a 200 -----------------------------------------
     add(
@@ -4169,15 +4184,25 @@ def more_http_failure_cases(add: AddFailure) -> None:
         "get_job_details",
         "job_not_found",
         "a job id nothing answers to -- the tool's own sentence, about the job this time",
-        {"job_id": "j0000404"},
-        [fail("/api/jobs/j0000404", 404, MISSING)],
+        {"job_id": "0000000000000404"},
+        [fail("/api/jobs/0000000000000404", 404, MISSING)],
     )
     add(
         "get_job_details",
         "job_id_malformed",
-        "an id Galaxy cannot decode is a 400, and reads as not found all the same",
+        "a value that is not hex cannot be an id, and is refused before anything is sent: "
+        "Galaxy would answer it 400, and a '.' or '../histories' would not even reach it as "
+        "an id but as another path",
         {"job_id": "not-an-id"},
-        [fail("/api/jobs/not-an-id", 400, MALFORMED_ID)],
+        [],
+    )
+    add(
+        "get_job_details",
+        "answered_with_another_record",
+        "a 200 whose body is not the job asked for -- a redirect's target, a listing -- is "
+        "refused rather than handed back as that job",
+        {"job_id": "0123456789abcdef"},
+        [route("/api/jobs/0123456789abcdef", {"id": "fedcba9876543210", "state": "ok"})],
     )
 
 

@@ -4,11 +4,18 @@
   "routes": [
     {
       "method": "GET",
-      "path": "/api/jobs/not-an-id",
+      "path": "/api/invocations/1e1d0c0b0a090807",
       "query": {},
-      "status": 400,
+      "status": 200,
       "headers": {},
-      "bodyText": "{\"err_msg\": \"Malformed id ( not-an-id ) specified, unable to decode.\", \"err_code\": 400009}"
+      "body": {
+        "id": "ffffffffffffffff",
+        "state": "scheduled",
+        "workflow_id": "w0000",
+        "history_id": "h0000",
+        "create_time": "2026-01-01T00:00:00",
+        "update_time": "2026-01-01T00:10:00"
+      }
     }
   ]
 }

@@ -48,6 +48,25 @@ export function classifyField(schema: ZodTypeAny): FieldKind {
   return isOptional(schema) ? "option" : "positional";
 }
 
+/**
+ * Optional fields that stay a positional argument because they were a required one.
+ *
+ * `galaxy-cli get_job_details <datasetId>` is what every script written against 0.3.0
+ * runs, and 0.3.1 made the field optional so a job can be asked for by `--job-id` instead.
+ * By the rule in `classifyField` an optional field is a flag, which would turn that command
+ * line into a usage error over a patch release. So the field is both: `[datasetId]` as
+ * before, and `--dataset-id` like every other optional; `buildInput` refuses the two
+ * together rather than letting one quietly win.
+ */
+const KEPT_POSITIONALS: Readonly<Record<string, readonly string[]>> = {
+  get_job_details: ["datasetId"],
+};
+
+/** The fields of an op that are taken as an optional positional as well as a flag. */
+export function keptPositionals(opName: string): readonly string[] {
+  return KEPT_POSITIONALS[opName] ?? [];
+}
+
 /** camelCase -> kebab-case for flag names. */
 export function flagName(key: string): string {
   return key.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase());
@@ -87,19 +106,40 @@ function readJsonArg(raw: string): unknown {
  * accept is passed through untouched, so the schema refuses it and says why: `--limit abc`
  * stays "abc" rather than arriving as NaN.
  */
-export function buildInput(shape: ZodRawShape, positionals: string[], options: Record<string, unknown>) {
+export type BuiltInput =
+  | { success: true; data: Record<string, unknown> }
+  | { success: false; error: { message: string } };
+
+export function buildInput(
+  shape: ZodRawShape,
+  positionals: (string | undefined)[],
+  options: Record<string, unknown>,
+  kept: readonly string[] = [],
+): BuiltInput {
   const raw: Record<string, unknown> = {};
   let pi = 0;
   for (const [key, schema] of Object.entries(shape)) {
     const kind = classifyField(schema as ZodTypeAny);
-    if (kind === "positional") {
-      if (pi < positionals.length) raw[key] = positionals[pi++];
-    } else {
-      const flag = flagName(key);
-      const val = options[key] ?? options[flag.replace(/-([a-z])/g, (_, c) => c.toUpperCase())];
-      if (val === undefined) continue;
-      raw[key] = kind === "json" ? readJsonArg(String(val)) : val;
+    const isKept = kept.includes(key);
+    if (kind === "positional" || isKept) {
+      // Commander hands an optional argument that was left out over as undefined.
+      const value = pi < positionals.length ? positionals[pi++] : undefined;
+      if (value !== undefined) raw[key] = value;
+      if (!isKept) continue;
     }
+    const flag = flagName(key);
+    const val = options[key] ?? options[flag.replace(/-([a-z])/g, (_, c) => c.toUpperCase())];
+    if (val === undefined) continue;
+    if (key in raw) {
+      return {
+        success: false,
+        error: { message: `${key} was given twice, as the positional argument and as --${flag}; give it once` },
+      };
+    }
+    raw[key] = kind === "json" ? readJsonArg(String(val)) : val;
   }
-  return z.object(shape).safeParse(laxenLikePydantic(shape, raw));
+  const parsed = z.object(shape).safeParse(laxenLikePydantic(shape, raw));
+  return parsed.success
+    ? { success: true, data: parsed.data as Record<string, unknown> }
+    : { success: false, error: { message: parsed.error.message } };
 }

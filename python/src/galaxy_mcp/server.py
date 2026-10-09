@@ -2854,11 +2854,56 @@ def _job_lookup_failed(job_id: str, error: Exception) -> str:
     return format_error("Get job details", error, {"job_id": job_id})
 
 
+_ENCODED_ID_HEX = re.compile(r"[0-9a-fA-F]+")
+
+
+def _is_encoded_id(value: str) -> bool:
+    """Whether ``value`` has the shape of a Galaxy encoded id: hex digits and nothing else.
+
+    Galaxy refuses anything else with a 400 before it looks anything up, which the reads
+    by id already report as not found -- so the check changes no answer. What it changes
+    is the request. An id travels as one path segment, and requests (like the fetch API
+    on the other surface) renormalizes a value such as ``.`` or ``../histories`` into a
+    different path, ``/api/jobs/`` or ``/api/histories``, which answers 200 with a list
+    that is then not the record asked for. Refused here, nothing of the kind is sent. The
+    TypeScript ops check the same shape, so both surfaces refuse the same strings.
+    """
+    return _ENCODED_ID_HEX.fullmatch(value) is not None
+
+
+def _not_a_galaxy_id(noun: str, value: str, listing: str) -> str:
+    """The refusal for an id that cannot be one. Quoted by the TypeScript ops; change both."""
+    return (
+        f"{noun} ID '{value}' not found: that is not a Galaxy id. Galaxy's ids are hex "
+        f"strings, as {listing} reports them. Nothing was sent to Galaxy."
+    )
+
+
+def _is_this_record(payload: Any, record_id: str) -> bool:
+    """Whether a 200 answered for the record asked for, and not merely with a 200.
+
+    Galaxy writes its ids in lowercase hex and decodes either case, so a caller's uppercase
+    spelling of the same id is the same record.
+    """
+    if not isinstance(payload, dict):
+        return False
+    answered = payload.get("id")
+    return isinstance(answered, str) and answered.lower() == record_id.lower()
+
+
+def _not_that_record(noun: str, value: str) -> str:
+    """The refusal of a 200 whose body is not the record asked for. Quoted by the TypeScript ops."""
+    return (
+        f"Galaxy answered the read of {noun} '{value}' with something that is not that "
+        f"{noun}'s record (no matching id), so it was not returned."
+    )
+
+
 @mcp.tool(tags={"jobs", "read", "core"})
 def get_job_details(
     dataset_id: str | None = None,
-    job_id: str | None = None,
     history_id: str | None = None,
+    job_id: str | None = None,
     full: bool = False,
 ) -> GalaxyResult:
     """
@@ -2869,10 +2914,10 @@ def get_job_details(
     Args:
         dataset_id: Galaxy dataset ID whose creating job to look up - a hexadecimal hash
                    string (a 16-character hex string). Give this or job_id, not both
-        job_id: Galaxy job ID to look up directly (a 16-character hex string). Give this or
-               dataset_id, not both
         history_id: Galaxy history ID containing the dataset - optional for performance optimization
                    (a 16-character hex string); only used with dataset_id
+        job_id: Galaxy job ID to look up directly (a 16-character hex string). Give this or
+               dataset_id, not both
         full: Also read what Galaxy adds with ?full=true: the job's stdout and stderr,
              job messages, dependencies, and job metrics where the server exposes them.
              Params, inputs and outputs are in the plain read already
@@ -2901,6 +2946,8 @@ def get_job_details(
     params = {"full": "true"} if full else None
 
     if job_id:
+        if not _is_encoded_id(job_id):
+            raise ValueError(_not_a_galaxy_id("Job", job_id, "list_jobs()"))
         url = f"{base_url}api/jobs/{job_id}"
         try:
             response = requests.get(
@@ -2910,6 +2957,11 @@ def get_job_details(
             job_info = response.json()
         except Exception as e:
             raise ValueError(_job_lookup_failed(job_id, e)) from e
+        # A 200 is not the answer; a 200 for this job is. The caller holding the id is
+        # asking whether that job exists, and a reply about anything else -- a listing, a
+        # redirect's target -- must not be handed back as it.
+        if not _is_this_record(job_info, job_id):
+            raise ValueError(_not_that_record("job", job_id))
         return GalaxyResult(
             data={"job": job_info, "dataset_id": None, "job_id": job_id},
             success=True,
@@ -3599,7 +3651,11 @@ def get_invocations(
     Returns:
         GalaxyResult with workflow invocation information in data field
     """
-    if not invocation_id:
+    if invocation_id:
+        # Not an id, not a request: see _is_encoded_id for what a stray "." would turn into.
+        if not _is_encoded_id(invocation_id):
+            raise ValueError(_not_a_galaxy_id("Invocation", invocation_id, "get_invocations()"))
+    else:
         # Galaxy answers a limit above 100 with a 400 validation error. Refused here
         # instead, before anything is sent and in the same words the other windowed
         # listings use, which name the cap and the offset to page past it.
@@ -3625,6 +3681,10 @@ def get_invocations(
             else:
                 invocation = gi.invocations.show_invocation(invocation_id)
             _refuse_error_body("Get workflow invocations", invocation)
+            # The same check get_job_details makes: the reply has to be this invocation's
+            # record, not merely a 200 from somewhere under /api/invocations.
+            if not _is_this_record(invocation, invocation_id):
+                raise ValueError(_not_that_record("invocation", invocation_id))
             return GalaxyResult(
                 data=invocation,
                 success=True,

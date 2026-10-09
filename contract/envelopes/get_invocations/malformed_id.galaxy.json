@@ -1,14 +1,5 @@
 {
   "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
   "baseUrl": "https://galaxy.example/",
-  "routes": [
-    {
-      "method": "GET",
-      "path": "/api/invocations/not-an-id",
-      "query": {},
-      "status": 400,
-      "headers": {},
-      "bodyText": "{\"err_msg\": \"Malformed id ( not-an-id ) specified, unable to decode.\", \"err_code\": 400009}"
-    }
-  ]
+  "routes": []
 }

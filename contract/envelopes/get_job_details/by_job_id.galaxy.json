@@ -4,12 +4,12 @@
   "routes": [
     {
       "method": "GET",
-      "path": "/api/jobs/j0000001",
+      "path": "/api/jobs/0123456789abcdef",
       "query": {},
       "status": 200,
       "headers": {},
       "body": {
-        "id": "j0000001",
+        "id": "0123456789abcdef",
         "state": "ok",
         "tool_id": "fastqc",
         "exit_code": 0,

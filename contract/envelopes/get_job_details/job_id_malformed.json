@@ -5,10 +5,10 @@
     "content": [
       {
         "type": "text",
-        "text": "Error calling tool 'get_job_details': Job ID 'not-an-id' not found or not accessible. Make sure the job exists and you have permission to view it."
+        "text": "Error calling tool 'get_job_details': Job ID 'not-an-id' not found: that is not a Galaxy id. Galaxy's ids are hex strings, as list_jobs() reports them. Nothing was sent to Galaxy."
       }
     ],
     "isError": true
   },
-  "sentence": "Job ID 'not-an-id' not found or not accessible. Make sure the job exists and you have permission to view it."
+  "sentence": "Job ID 'not-an-id' not found: that is not a Galaxy id. Galaxy's ids are hex strings, as list_jobs() reports them. Nothing was sent to Galaxy."
 }

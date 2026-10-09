@@ -119,7 +119,7 @@ class TestGetJobDetailsByJobId:
     """The job asked for by its own id, which skips both lookups and reads the job directly."""
 
     BASE = "http://localhost:8080"
-    JOB_ID = "j0000001"
+    JOB_ID = "0123456789abcdef"
 
     def setup_method(self):
         galaxy_state["connected"] = True
@@ -240,6 +240,71 @@ class TestGetJobDetailsByJobId:
     def test_neither_id_is_refused_before_any_request(self):
         with pytest.raises(ValueError, match="neither was given"):
             get_job_details_fn()
+
+    @responses.activate
+    def test_the_old_positional_pair_is_still_dataset_then_history(self):
+        """get_job_details(dataset_id, history_id) predates job_id, so job_id sits after both.
+
+        Ordered the other way, a caller's positional history id would land in job_id and be
+        refused as a second id rather than used for the provenance lookup.
+        """
+        asked: list[tuple[str, str]] = []
+        mock_gi = type("MockGI", (), {})()
+        mock_histories = type("MockHistories", (), {})()
+        mock_histories.show_dataset_provenance = lambda history_id, dataset_id: (
+            asked.append((history_id, dataset_id)) or {"job_id": self.JOB_ID}
+        )
+        mock_gi.histories = mock_histories
+        galaxy_state["gi"] = mock_gi
+        responses.add(
+            responses.GET, f"{self.BASE}/api/jobs/{self.JOB_ID}", json={"id": self.JOB_ID}
+        )
+
+        result = get_job_details_fn("d0001", "h0001")
+
+        assert asked == [("h0001", "d0001")]
+        assert result.data["dataset_id"] == "d0001"
+        assert result.data["job_id"] == self.JOB_ID
+
+    @pytest.mark.parametrize("value", [".", "../histories", "not-an-id", "j0000001"])
+    @responses.activate
+    def test_a_value_that_is_not_an_id_is_refused_before_anything_is_sent(self, value):
+        """An id travels as one path segment, and requests folds "." and ".." into the path.
+
+        Galaxy would answer "not-an-id" with a 400 anyway; "." would never reach it as an
+        id at all, but as GET /api/jobs/, which is the listing.
+        """
+        with pytest.raises(ValueError, match="not a Galaxy id") as exc:
+            get_job_details_fn(job_id=value)
+
+        assert str(exc.value).endswith("Nothing was sent to Galaxy.")
+        assert len(responses.calls) == 0
+
+    def test_both_ids_are_refused_before_the_shape_of_either_is_looked_at(self):
+        with pytest.raises(ValueError, match="not both"):
+            get_job_details_fn("d0001", job_id=".")
+
+    @pytest.mark.parametrize(
+        "answer",
+        [{"id": "fedcba9876543210", "state": "ok"}, [{"id": "0123456789abcdef"}], {"state": "ok"}],
+    )
+    @responses.activate
+    def test_a_200_that_is_not_this_jobs_record_is_refused(self, answer):
+        responses.add(responses.GET, f"{self.BASE}/api/jobs/{self.JOB_ID}", json=answer)
+
+        with pytest.raises(ValueError, match="not that job's record"):
+            get_job_details_fn(job_id=self.JOB_ID)
+
+    @responses.activate
+    def test_the_ids_case_is_not_held_against_the_caller(self):
+        """Galaxy decodes either case and writes lowercase, so the two spell one record."""
+        responses.add(
+            responses.GET, f"{self.BASE}/api/jobs/{self.JOB_ID.upper()}", json={"id": self.JOB_ID}
+        )
+
+        result = get_job_details_fn(job_id=self.JOB_ID.upper())
+
+        assert result.success is True
 
 
 class TestListJobs:

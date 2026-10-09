@@ -5,10 +5,10 @@
     "content": [
       {
         "type": "text",
-        "text": "Error calling tool 'get_invocations': Failed to get workflow invocations: GET: error 400: b'{\"err_msg\": \"Malformed id ( not-an-id ) specified, unable to decode.\", \"err_code\": 400009}', 0 attempts left: {\"err_msg\": \"Malformed id ( not-an-id ) specified, unable to decode.\", \"err_code\": 400009}"
+        "text": "Error calling tool 'get_invocations': Invocation ID 'not-an-id' not found: that is not a Galaxy id. Galaxy's ids are hex strings, as get_invocations() reports them. Nothing was sent to Galaxy."
       }
     ],
     "isError": true
   },
-  "sentence": "Failed to get workflow invocations: GET: error 400: b'{\"err_msg\": \"Malformed id ( not-an-id ) specified, unable to decode.\", \"err_code\": 400009}', 0 attempts left: {\"err_msg\": \"Malformed id ( not-an-id ) specified, unable to decode.\", \"err_code\": 400009}"
+  "sentence": "Invocation ID 'not-an-id' not found: that is not a Galaxy id. Galaxy's ids are hex strings, as get_invocations() reports them. Nothing was sent to Galaxy."
 }

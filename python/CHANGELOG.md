@@ -18,7 +18,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   read already has params, inputs and outputs. A job id Galaxy answers 400 or 404 to -- one it cannot decode, or one it has
   no job for -- reads as not found, because the caller holding the id cannot act on the
   difference. Answers through a dataset are unchanged byte for byte; `dataset_id` is now
-  optional in the tool's schema rather than required.
+  optional in the tool's schema rather than required, and the signature is
+  `dataset_id, history_id, job_id, full`, so a call that passed the history id positionally
+  still does what it did.
+- `get_job_details` by `job_id` and `get_invocations` by `invocation_id` refuse a value that is
+  not hex before anything is sent, and refuse a 200 whose body is not a record carrying the id
+  asked for. Galaxy's encoded ids are hex and it answers anything else with a 400 that both
+  tools already reported as not found, so no answer changes; what changes is that a value such
+  as `.` or `../histories`, which requests folds into `/api/jobs/` or `/api/histories`, is never
+  sent, and the listing those paths answer with can no longer come back as a job or an
+  invocation.
 ### Added
 
 - `list_jobs` lists jobs a page at a time from Galaxy's job index, narrowed to one history,

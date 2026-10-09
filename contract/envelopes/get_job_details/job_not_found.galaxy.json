@@ -4,7 +4,7 @@
   "routes": [
     {
       "method": "GET",
-      "path": "/api/jobs/j0000404",
+      "path": "/api/jobs/0000000000000404",
       "query": {},
       "status": 404,
       "headers": {},

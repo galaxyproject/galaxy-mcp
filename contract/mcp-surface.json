@@ -602,18 +602,6 @@
             "default": null,
             "description": "Galaxy dataset ID whose creating job to look up - a hexadecimal hash\n       string (a 16-character hex string). Give this or job_id, not both"
           },
-          "job_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Galaxy job ID to look up directly (a 16-character hex string). Give this or\n   dataset_id, not both"
-          },
           "history_id": {
             "anyOf": [
               {
@@ -625,6 +613,18 @@
             ],
             "default": null,
             "description": "Galaxy history ID containing the dataset - optional for performance optimization\n       (a 16-character hex string); only used with dataset_id"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Galaxy job ID to look up directly (a 16-character hex string). Give this or\n   dataset_id, not both"
           },
           "full": {
             "default": false,

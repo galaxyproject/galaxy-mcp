@@ -8,7 +8,7 @@ import {
 } from "@galaxyproject/galaxy-ops";
 import { resolveConnection, loadSources, type Connection } from "./config";
 import { applyInputs } from "./flags-apply";
-import { buildInput, inCliNames } from "./flags";
+import { buildInput, inCliNames, keptPositionals } from "./flags";
 import { render, type Format } from "./render";
 import { exitCodeFor, EX_USAGE, EX_SOFTWARE } from "./exit";
 
@@ -35,10 +35,10 @@ export function buildProgram(deps: CliDeps = {}): Command {
       // commander passes positionals..., the command's own options, then the Command.
       const command = args[args.length - 1] as Command;
       const localOpts = args[args.length - 2] as Record<string, unknown>;
-      const positionals = args.slice(0, -2) as string[];
+      const positionals = args.slice(0, -2) as (string | undefined)[];
       const globals = command.optsWithGlobals<{ url?: string; apiKey?: string; profile?: string; format: Format; quiet: boolean; timeout?: string }>();
 
-      const parsed = buildInput(op.input, positionals, localOpts);
+      const parsed = buildInput(op.input, positionals, localOpts, keptPositionals(op.name));
       if (!parsed.success) {
         console.error(parsed.error.message);
         process.exitCode = EX_USAGE;

@@ -4,7 +4,7 @@
   "routes": [
     {
       "method": "GET",
-      "path": "/api/invocations/inv0404",
+      "path": "/api/invocations/0000000000000404",
       "query": {},
       "status": 404,
       "headers": {},

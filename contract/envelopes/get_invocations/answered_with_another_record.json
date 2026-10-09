@@ -5,10 +5,10 @@
     "content": [
       {
         "type": "text",
-        "text": "Error calling tool 'get_job_details': Job ID '0000000000000404' not found or not accessible. Make sure the job exists and you have permission to view it."
+        "text": "Error calling tool 'get_invocations': Galaxy answered the read of invocation '1e1d0c0b0a090807' with something that is not that invocation's record (no matching id), so it was not returned."
       }
     ],
     "isError": true
   },
-  "sentence": "Job ID '0000000000000404' not found or not accessible. Make sure the job exists and you have permission to view it."
+  "sentence": "Galaxy answered the read of invocation '1e1d0c0b0a090807' with something that is not that invocation's record (no matching id), so it was not returned."
 }

@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "python/src/galaxy_mcp/server.py",
-  "caseCount": 256,
-  "failureCaseCount": 81,
+  "caseCount": 258,
+  "failureCaseCount": 83,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -836,7 +836,7 @@
       "note": "one invocation by id: no count and no pagination",
       "outcome": "success",
       "input": {
-        "invocation_id": "inv0000"
+        "invocation_id": "1e1d0c0b0a090807"
       },
       "envelope": "get_invocations/single.json",
       "replies": "get_invocations/single.galaxy.json"
@@ -847,7 +847,7 @@
       "note": "one invocation with its steps' jobs: the route answers only when step_details is sent",
       "outcome": "success",
       "input": {
-        "invocation_id": "inv0000",
+        "invocation_id": "1e1d0c0b0a090807",
         "step_details": true
       },
       "envelope": "get_invocations/single_step_details.json",
@@ -1538,7 +1538,7 @@
       "note": "the job asked for by its own id: no lookup, and no dataset to name in the answer",
       "outcome": "success",
       "input": {
-        "job_id": "j0000001"
+        "job_id": "0123456789abcdef"
       },
       "envelope": "get_job_details/by_job_id.json",
       "replies": "get_job_details/by_job_id.galaxy.json"
@@ -1549,7 +1549,7 @@
       "note": "full=true is sent to Galaxy, and the answer carries what the full record adds",
       "outcome": "success",
       "input": {
-        "job_id": "j0000001",
+        "job_id": "0123456789abcdef",
         "full": true
       },
       "envelope": "get_job_details/by_job_id_full.json",
@@ -2387,7 +2387,7 @@
       "note": "a lookup by an id Galaxy has no invocation for",
       "outcome": "failure",
       "input": {
-        "invocation_id": "inv0404"
+        "invocation_id": "0000000000000404"
       },
       "envelope": "get_invocations/unknown_id.json",
       "replies": "get_invocations/unknown_id.galaxy.json"
@@ -2395,13 +2395,24 @@
     {
       "tool": "get_invocations",
       "case": "malformed_id",
-      "note": "a lookup by an id Galaxy cannot decode, which it answers 400 rather than 404",
+      "note": "a value that is not hex cannot be an id, and is refused before anything is sent: Galaxy would answer it 400, and a '.' would not even reach it as an id but as the listing",
       "outcome": "failure",
       "input": {
         "invocation_id": "not-an-id"
       },
       "envelope": "get_invocations/malformed_id.json",
       "replies": "get_invocations/malformed_id.galaxy.json"
+    },
+    {
+      "tool": "get_invocations",
+      "case": "answered_with_another_record",
+      "note": "a 200 whose body is not the invocation asked for is refused rather than handed back",
+      "outcome": "failure",
+      "input": {
+        "invocation_id": "1e1d0c0b0a090807"
+      },
+      "envelope": "get_invocations/answered_with_another_record.json",
+      "replies": "get_invocations/answered_with_another_record.galaxy.json"
     },
     {
       "tool": "get_invocations",
@@ -2699,7 +2710,7 @@
       "note": "a job id nothing answers to -- the tool's own sentence, about the job this time",
       "outcome": "failure",
       "input": {
-        "job_id": "j0000404"
+        "job_id": "0000000000000404"
       },
       "envelope": "get_job_details/job_not_found.json",
       "replies": "get_job_details/job_not_found.galaxy.json"
@@ -2707,13 +2718,24 @@
     {
       "tool": "get_job_details",
       "case": "job_id_malformed",
-      "note": "an id Galaxy cannot decode is a 400, and reads as not found all the same",
+      "note": "a value that is not hex cannot be an id, and is refused before anything is sent: Galaxy would answer it 400, and a '.' or '../histories' would not even reach it as an id but as another path",
       "outcome": "failure",
       "input": {
         "job_id": "not-an-id"
       },
       "envelope": "get_job_details/job_id_malformed.json",
-      "replies": "get_job_details/job_id_malformed.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "answered_with_another_record",
+      "note": "a 200 whose body is not the job asked for -- a redirect's target, a listing -- is refused rather than handed back as that job",
+      "outcome": "failure",
+      "input": {
+        "job_id": "0123456789abcdef"
+      },
+      "envelope": "get_job_details/answered_with_another_record.json",
+      "replies": "get_job_details/answered_with_another_record.galaxy.json"
     },
     {
       "tool": "run_tool",
@@ -2894,7 +2916,7 @@
         "limit": 5000
       },
       "envelope": "list_workflows/limit_above_the_ceiling.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "get_invocations",
@@ -2905,7 +2927,7 @@
         "limit": 250
       },
       "envelope": "get_invocations/limit_above_galaxys_cap.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "get_history_contents",
@@ -2917,7 +2939,7 @@
         "limit": 0
       },
       "envelope": "get_history_contents/limit_below_one.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "search_tools_by_name",
@@ -2929,7 +2951,7 @@
         "offset": -1
       },
       "envelope": "search_tools_by_name/negative_offset.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "get_history_details",
@@ -2974,7 +2996,7 @@
         "history_id": "h0001"
       },
       "envelope": "update_history/nothing_to_update.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "get_dataset_details",
@@ -2997,7 +3019,7 @@
         "version": -1
       },
       "envelope": "get_workflow_input_template/negative_version.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "get_job_details",
@@ -3009,7 +3031,7 @@
         "job_id": "j0000001"
       },
       "envelope": "get_job_details/both_ids_given.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "get_job_details",
@@ -3018,7 +3040,7 @@
       "outcome": "failure",
       "input": {},
       "envelope": "get_job_details/neither_id_given.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "create_user_tool",
@@ -3032,7 +3054,7 @@
         }
       },
       "envelope": "create_user_tool/representation_missing_a_field.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "create_user_tool",
@@ -3050,7 +3072,7 @@
         }
       },
       "envelope": "create_user_tool/wrong_class.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "create_user_tool",
@@ -3068,7 +3090,7 @@
         }
       },
       "envelope": "create_user_tool/container_is_not_a_string.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "recommend_biocontainer",
@@ -3081,7 +3103,7 @@
         ]
       },
       "envelope": "recommend_biocontainer/package_entry_with_no_name.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "list_jobs",
@@ -3092,7 +3114,7 @@
         "limit": 0
       },
       "envelope": "list_jobs/limit_below_one.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "get_user_tool",
@@ -3103,7 +3125,7 @@
         "uuid": "row_filter"
       },
       "envelope": "get_user_tool/malformed_uuid.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "list_history_ids",
@@ -3128,7 +3150,7 @@
         "published": null
       },
       "envelope": "update_history/every_field_null.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "create_page",

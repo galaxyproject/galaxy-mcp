@@ -1,14 +1,20 @@
 import type { Command } from "commander";
 import type { AnyOperation } from "@galaxyproject/galaxy-ops";
 import { type ZodTypeAny } from "zod";
-import { classifyField, flagName, inCliNames } from "./flags";
+import { classifyField, flagName, inCliNames, keptPositionals } from "./flags";
 
 export function applyInputs(cmd: Command, op: AnyOperation): void {
+  const kept = keptPositionals(op.name);
   for (const [key, schema] of Object.entries(op.input) as [string, ZodTypeAny][]) {
     const kind = classifyField(schema);
     const flag = flagName(key);
     const help = describe(schema, op) ?? key;
     if (kind === "positional") cmd.argument(`<${key}>`, help);
+    // A field kept as a positional is also the flag it would be anyway; see keptPositionals.
+    else if (kept.includes(key)) {
+      cmd.argument(`[${key}]`, `${help} (also --${flag})`);
+      cmd.option(`--${flag} <value>`, help);
+    }
     else if (kind === "boolean") {
       cmd.option(`--${flag}`, help);
       cmd.option(`--no-${flag}`, `Set ${flag} to false.`);

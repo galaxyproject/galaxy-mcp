@@ -15,9 +15,25 @@ stderr, job messages, dependencies and job metrics (the plain read already has p
 and outputs). A job id Galaxy answers 400 or 404 to is reported
 as `not_found` (exit 66) with one sentence, because the agent holding the id is asking whether
 the run still exists and cannot act on which of the two it was. `datasetId` is no longer
-required, so on the CLI it moves from a positional to `--dataset-id`, and `GetJobDetailsResult.dataset_id`
-is `null` when the job was asked for by id. Six golden cases pin it on both surfaces; every
-answer through a dataset is unchanged.
+required, which by the CLI's own rule would make it `--dataset-id` only; it is kept as the
+positional it was as well, so `galaxy-cli get_job_details <id>` still runs and
+`--dataset-id <id>` is the same call (giving it both ways is a usage error, exit 64). The
+input shape is declared in the Python signature's order, `datasetId, historyId, jobId, full`,
+and `GetJobDetailsResult.dataset_id` is `null` when the job was asked for by id. Seven golden
+cases pin it on both surfaces; every answer through a dataset is unchanged.
+### A read by id answers for that id, or not at all (#TBD)
+
+`get_job_details` by `jobId` and `get_invocations` by `invocationId` refuse a value that is not
+hex before sending anything (`not_found`, exit 66), and refuse a 200 whose body is not a record
+carrying the id asked for (`connection`, exit 69). Galaxy's encoded ids are hex and it answers
+anything else with a 400 that both ops already reported as not found, so no answer changes;
+what changes is that a value such as `.` or `../histories`, which the fetch API folds into
+`/api/jobs/` or `/api/histories`, is never sent, and the listing those paths answer with can
+no longer come back as a job or an invocation. That is the check Loom's `verifyGalaxyRun`
+makes on its own, and with it the two ops are the existence check it can route through.
+`get_invocations` by id also refuses an `err_msg` body under a 200, the way the listing
+already did. Golden cases: `get_job_details/job_id_malformed` and `get_invocations/malformed_id`
+are now the pre-send refusal, and `answered_with_another_record` is new on both.
 ### `list_jobs` pages Galaxy's job index
 
 A new op on both surfaces, wrapping `GET /api/jobs`: jobs narrowed to one history, one
