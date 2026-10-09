@@ -295,7 +295,7 @@
         "tool": "get_workflow_input_template",
         "param": null,
         "kind": "missing-builtin-tool",
-        "observed": "python=read (tag) params=[history_id type=string required=false default=none; verbose type=boolean required=false default=false; workflow_id type=string required=true default=none]",
+        "observed": "python=read (tag) params=[history_id type=string required=false default=none; verbose type=boolean required=false default=false; version type=integer required=false default=none; workflow_id type=string required=true default=none]",
         "status": "unreviewed-gap",
         "reason": "Only here. Same gap before invoke_workflow: no template, no run guide, no input validation on that side."
       },

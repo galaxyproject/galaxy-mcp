@@ -238,6 +238,7 @@ const EXIT_CODES: Record<string, number> = {
   // EX_USAGE 64 -- validation: the caller has to change something, and a retry cannot help
   "get_dataset_details/is_a_collection": 64,
   "get_history_contents/limit_below_one": 64,
+  "get_workflow_input_template/negative_version": 64,
   "list_history_ids/history_without_an_id": 64,
   "list_workflows/limit_above_the_ceiling": 64,
   "recommend_biocontainer/package_entry_with_no_name": 64,
@@ -285,6 +286,7 @@ const EXIT_CODES: Record<string, number> = {
   "get_tool_run_examples/refused_without_a_hint": 69,
   "get_workflow_details/server_error": 69,
   "get_workflow_input_template/server_error": 69,
+  "get_workflow_input_template/version_out_of_range": 69,
   "import_workflow_from_iwc/manifest_refused": 69,
   "import_workflow_from_iwc/refused_by_galaxy": 69,
   "invoke_workflow/refused_by_galaxy": 69,

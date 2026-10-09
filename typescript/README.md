@@ -413,7 +413,7 @@ sides under different names.
 | --- | --- |
 | `list_workflows` | List stored workflows; optional name + published filter |
 | `get_workflow_details` | One stored workflow by id (name, steps, inputs) |
-| `get_workflow_input_template` | A ready-to-fill input template + run guide (call before `invoke_workflow`) |
+| `get_workflow_input_template` | A ready-to-fill input template + run guide, at a given stored version (call before `invoke_workflow`) |
 | `invoke_workflow` *(write)* | Invoke a workflow with inputs/parameters (validates inputs first) |
 | `get_invocations` | One invocation by id (state, steps), or the invocations of a workflow or history |
 | `cancel_workflow_invocation` *(write)* | Cancel a running workflow invocation |

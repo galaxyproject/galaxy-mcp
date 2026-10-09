@@ -6,6 +6,19 @@ entry covers all three; where something only affects one surface, it says which.
 
 ## 0.3.1 (unreleased)
 
+### `get_workflow_input_template` reads a stored version
+
+The op takes an optional `version`, counted the way `get_workflow_details` counts stored
+versions (0 is the oldest), and sends it on every read it makes -- the `style=run` model,
+the `.ga` export it falls back to and reads warnings from, and the show the guide is built
+on -- so the run form of a workflow pinned below its latest can be read without one
+version's slots meeting another's docs. Left out, no request changes. A version Galaxy does
+not have is Galaxy's own 400 (`version_out_of_range`, exit 69 on the CLI); a negative one is
+refused before anything is sent (`negative_version`, exit 64), because Galaxy indexes its
+versions with a plain list subscript and would quietly serve some other version for it. The
+`pinned_version_zero` golden case answers the pinned requests with a different workflow than
+the bare ones, so a surface that drops the version from any one read fails the replay.
+
 ### `get_invocations` sends `step_details` for one invocation (#152)
 
 Given an `invocationId`, the op ignored `stepDetails` and Galaxy answered with every step's
