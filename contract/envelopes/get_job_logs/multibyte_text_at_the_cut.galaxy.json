@@ -17,7 +17,10 @@
         "tool_id": "fastqc",
         "tool_stdout": "ünïcödé log line 0 ok\nünïcödé log line 1 ok\nünïcödé log line 2 ok\nünïcödé log line 3 ok\nünïcödé log line 4 ok\nünïcödé log line 5 ok\nünïcödé log line 6 ok\nünïcödé log line 7 ok\nünïcödé log line 8 ok\nünïcödé log line 9 ok\nünïcödé log line 10 ok\nünïcödé log line 11 ok\nünïcödé log line 12 ok\nünïcödé log line 13 ok\nünïcödé log line 14 ok\nünïcödé log line 15 ok\nünïcödé log line 16 ok\nünïcödé log line 17 ok\nünïcödé log line 18 ok\nünïcödé log line 19 ok\nünïcödé log line 20 ok\nünïcödé log line 21 ok\nünïcödé log line 22 ok\nünïcödé log line 23 ok\nünïcödé log line 24 ok\nünïcödé log line 25 ok\nünïcödé log line 26 ok\nünïcödé log line 27 ok\nünïcödé log line 28 ok\nünïcödé log line 29 ok\nünïcödé log line 30 ok\nünïcödé log line 31 ok\nünïcödé log line 32 ok\nünïcödé log line 33 ok\nünïcödé log line 34 ok\nünïcödé log line 35 ok\nünïcödé log line 36 ok\nünïcödé log line 37 ok\nünïcödé log line 38 ok\nünïcödé log line 39 ok",
         "tool_stderr": "€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€",
-        "job_stdout": "🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉"
+        "job_stdout": "🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉",
+        "job_stderr": "",
+        "stdout": "ünïcödé log line 0 ok\nünïcödé log line 1 ok\nünïcödé log line 2 ok\nünïcödé log line 3 ok\nünïcödé log line 4 ok\nünïcödé log line 5 ok\nünïcödé log line 6 ok\nünïcödé log line 7 ok\nünïcödé log line 8 ok\nünïcödé log line 9 ok\nünïcödé log line 10 ok\nünïcödé log line 11 ok\nünïcödé log line 12 ok\nünïcödé log line 13 ok\nünïcödé log line 14 ok\nünïcödé log line 15 ok\nünïcödé log line 16 ok\nünïcödé log line 17 ok\nünïcödé log line 18 ok\nünïcödé log line 19 ok\nünïcödé log line 20 ok\nünïcödé log line 21 ok\nünïcödé log line 22 ok\nünïcödé log line 23 ok\nünïcödé log line 24 ok\nünïcödé log line 25 ok\nünïcödé log line 26 ok\nünïcödé log line 27 ok\nünïcödé log line 28 ok\nünïcödé log line 29 ok\nünïcödé log line 30 ok\nünïcödé log line 31 ok\nünïcödé log line 32 ok\nünïcödé log line 33 ok\nünïcödé log line 34 ok\nünïcödé log line 35 ok\nünïcödé log line 36 ok\nünïcödé log line 37 ok\nünïcödé log line 38 ok\nünïcödé log line 39 ok\n🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉",
+        "stderr": "€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€"
       }
     }
   ]

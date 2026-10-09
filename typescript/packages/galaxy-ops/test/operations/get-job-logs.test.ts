@@ -24,16 +24,20 @@ describe("get_job_logs", () => {
       GET: (path, init) => {
         expect(path).toBe("/api/jobs/{job_id}");
         inits.push(init);
+        // A finished job, as 26.2 answers one: all six fields as strings, the legacy pair
+        // joined from the columns the way Job.stdout and Job.stderr do it. Sent out of
+        // order here, so the order of the answer is seen to be the op's and not the reply's.
         return {
           data: {
             id: J1,
             state: "error",
             exit_code: 1,
-            stderr: "last",
+            stderr: "",
+            stdout: "a\nb\n\nran",
             tool_stdout: "a\nb\n",
             tool_stderr: "",
             job_stdout: "ran",
-            job_stderr: null,
+            job_stderr: "",
             job_metrics: [],
           },
           response: { status: 200 },
@@ -42,8 +46,15 @@ describe("get_job_logs", () => {
     });
     const out = await getJobLogs({ jobId: J1 }, ctxWith(client));
     expect(inits).toEqual([{ params: { path: { job_id: J1 }, query: { full: true } } }]);
-    expect(out).toEqual({ tool_stdout: "a\nb\n", tool_stderr: "", job_stdout: "ran", stderr: "last" });
-    expect(Object.keys(out)).toEqual(["tool_stdout", "tool_stderr", "job_stdout", "stderr"]);
+    expect(out).toEqual({
+      tool_stdout: "a\nb\n",
+      tool_stderr: "",
+      job_stdout: "ran",
+      job_stderr: "",
+      stdout: "a\nb\n\nran",
+      stderr: "",
+    });
+    expect(Object.keys(out)).toEqual(["tool_stdout", "tool_stderr", "job_stdout", "job_stderr", "stdout", "stderr"]);
     expect(JOB_LOG_FIELDS).toEqual(["tool_stdout", "tool_stderr", "job_stdout", "job_stderr", "stdout", "stderr"]);
   });
 

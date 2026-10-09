@@ -1546,7 +1546,7 @@
     {
       "tool": "get_job_logs",
       "case": "short_logs_untouched",
-      "note": "logs within the budget come back as sent; an empty string Galaxy sent is kept, and a field it did not send is absent rather than empty",
+      "note": "logs within the budget come back as sent, all six fields of a finished job: the empty strings Galaxy sent are kept, and stdout and stderr are the combined form the model joins from the tool and job pairs",
       "outcome": "success",
       "input": {
         "job_id": "0123456789abcdef"
@@ -2648,7 +2648,7 @@
     {
       "tool": "list_jobs",
       "case": "malformed_history_id",
-      "note": "a history_id Galaxy cannot decode; no 400 hint in the table, so the tool adds one",
+      "note": "a history_id Galaxy's validation refuses, as the 400008 it answers; no 400 hint in the table, so the tool adds one",
       "outcome": "failure",
       "input": {
         "history_id": "not-an-id"

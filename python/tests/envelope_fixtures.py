@@ -2671,28 +2671,54 @@ def job_logs_cases(add: AddCase) -> None:
     cut is the one thing both surfaces compute rather than relay, so the long and the
     multi-byte cases pin its bytes: the expected strings are whatever this server wrote,
     and the other has to match them.
+
+    The canned jobs are finished ones, and a finished job on a 26.2 Galaxy carries all six
+    fields as strings: the four columns the runner wrote (empty or not), and the two legacy
+    properties the model joins from them. A live run showed the earlier two- and
+    three-field replies modelled a job Galaxy does not send.
     """
     job_hex = "0123456789abcdef"
     plain = {"id": job_hex, "state": "error", "exit_code": 1, "tool_id": "fastqc"}
     long_log = "\n".join(f"line {i:03d} of a long log" for i in range(300))
+
+    def finished(
+        tool_stdout: str = "", tool_stderr: str = "", job_stdout: str = "", job_stderr: str = ""
+    ) -> dict[str, Any]:
+        # Job.stdout and Job.stderr (lib/galaxy/model/__init__.py): the tool's text, then a
+        # newline and the job script's only when the latter is not empty.
+        stdout = tool_stdout + (f"\n{job_stdout}" if job_stdout else "")
+        stderr = tool_stderr + (f"\n{job_stderr}" if job_stderr else "")
+        return {
+            **plain,
+            "tool_stdout": tool_stdout,
+            "tool_stderr": tool_stderr,
+            "job_stdout": job_stdout,
+            "job_stderr": job_stderr,
+            "stdout": stdout,
+            "stderr": stderr,
+        }
+
     add(
         "get_job_logs",
         "short_logs_untouched",
-        "logs within the budget come back as sent; an empty string Galaxy sent is kept, and "
-        "a field it did not send is absent rather than empty",
+        "logs within the budget come back as sent, all six fields of a finished job: the "
+        "empty strings Galaxy sent are kept, and stdout and stderr are the combined form "
+        "the model joins from the tool and job pairs",
         {"job_id": job_hex},
         lambda: get_job_logs_fn(job_hex),
         [
             route(
                 f"/api/jobs/{job_hex}",
-                {**plain, "tool_stdout": "a\nb\n", "tool_stderr": "", "job_stdout": "ran"},
+                finished(tool_stdout="a\nb\n", tool_stderr="", job_stdout="ran"),
                 query={"full": "true"},
             )
         ],
     )
+    # The job script wrote nothing, so the combined stderr is the tool's, and the cut lands
+    # on both names of the same text.
     long_route = route(
         f"/api/jobs/{job_hex}",
-        {**plain, "tool_stderr": long_log, "job_stderr": ""},
+        finished(tool_stderr=long_log),
         query={"full": "true"},
     )
     add(
@@ -2714,7 +2740,9 @@ def job_logs_cases(add: AddCase) -> None:
     )
     # Three widths of character at the cut, at a budget small enough to read: a line path
     # through 2-byte text, and two no-newline fallbacks (3-byte and 4-byte) where the halves
-    # land inside a character and have to back off to its boundary.
+    # land inside a character and have to back off to its boundary. The combined stdout is
+    # the 2-byte lines joined to the 4-byte run, so its head takes the line path and its
+    # tail the character-boundary one in a single field.
     add(
         "get_job_logs",
         "multibyte_text_at_the_cut",
@@ -2725,12 +2753,11 @@ def job_logs_cases(add: AddCase) -> None:
         [
             route(
                 f"/api/jobs/{job_hex}",
-                {
-                    **plain,
-                    "tool_stdout": "\n".join(f"ünïcödé log line {i} ok" for i in range(40)),
-                    "tool_stderr": "€" * 40,
-                    "job_stdout": "🎉" * 50,
-                },
+                finished(
+                    tool_stdout="\n".join(f"ünïcödé log line {i} ok" for i in range(40)),
+                    tool_stderr="€" * 40,
+                    job_stdout="🎉" * 50,
+                ),
                 query={"full": "true"},
             )
         ],
@@ -3831,13 +3858,34 @@ def biocontainer_cases(add: AddCase) -> None:
 DENIED = '{"err_msg": "History is not accessible by user", "err_code": 403002}'
 MISSING = '{"err_msg": "History not found", "err_code": 404001}'
 BROKEN = '{"err_msg": "Uncaught exception in exposed API method:", "err_code": 0}'
-# What GET /api/jobs says, byte for byte, for a history the key cannot read and for an id
-# it cannot decode (the double space is Galaxy's own, from an object_name it was not given).
+# What a read by id of a job that is not there says (managers/jobs.py get_accessible_job
+# raises ObjectNotFound bare, so the code's own default message).
+JOB_MISSING = '{"err_msg": "No such object found.", "err_code": 404001}'
+# What GET /api/jobs says, byte for byte, for a history the key cannot read, and for a
+# history_id that is not one. The filter is a typed query parameter, so a bad id is refused
+# by its validation before anything is decoded or looked up: pydantic's error, which
+# Galaxy's handler (exceptions/utils.py validation_error_to_message_exception) words as the
+# message with its location and carries alongside as validation_errors, one JSON string per
+# error. Not the decoder's 400009, which a bad id never reaches.
 JOBS_DENIED = '{"err_msg": "Cannot access the request job objects.", "err_code": 403002}'
-MALFORMED = (
-    '{"err_msg": "Wrong  id ( not-an-id ) specified, unable to decode.", "err_code": 400009}'
+_BAD_HISTORY_ID = {
+    "type": "value_error",
+    "loc": ["query", "history_id"],
+    "msg": "Value error, Invalid id length, must be multiple of 16",
+    "input": "not-an-id",
+}
+MALFORMED = json.dumps(
+    {
+        "err_msg": f"{_BAD_HISTORY_ID['msg']} in ('query', 'history_id')",
+        "err_code": 400008,
+        "validation_errors": [json.dumps(_BAD_HISTORY_ID)],
+    }
 )
-INVOCATION_MISSING = '{"err_msg": "Workflow invocation not found.", "err_code": 404001}'
+# What GET /api/invocations/{id} says for an id no invocation has (managers/workflows.py
+# get_invocation): the id quoted back, in single quotes.
+INVOCATION_MISSING = (
+    '{"err_msg": "\'0000000000000404\' is not a valid workflow invocation id", "err_code": 404001}'
+)
 # What StoredWorkflow.get_internal_version raises for an index past the last stored one.
 NO_SUCH_VERSION = '{"err_msg": "Version does not exist", "err_code": 400008}'
 # What GET /api/tools/{id} says about an id the toolbox has at no version (v26.1.1
@@ -4192,7 +4240,8 @@ def more_http_failure_cases(add: AddFailure) -> None:
     add(
         "list_jobs",
         "malformed_history_id",
-        "a history_id Galaxy cannot decode; no 400 hint in the table, so the tool adds one",
+        "a history_id Galaxy's validation refuses, as the 400008 it answers; no 400 hint in "
+        "the table, so the tool adds one",
         {"history_id": "not-an-id"},
         [fail("/api/jobs", 400, MALFORMED)],
     )
@@ -4266,7 +4315,7 @@ def more_http_failure_cases(add: AddFailure) -> None:
         "job_not_found",
         "a job id nothing answers to -- the tool's own sentence, about the job this time",
         {"job_id": "0000000000000404"},
-        [fail("/api/jobs/0000000000000404", 404, MISSING)],
+        [fail("/api/jobs/0000000000000404", 404, JOB_MISSING)],
     )
     add(
         "get_job_details",
@@ -4292,7 +4341,7 @@ def more_http_failure_cases(add: AddFailure) -> None:
         "not_found",
         "a job id nothing answers to reads the same as it does from get_job_details",
         {"job_id": "0000000000000404"},
-        [fail("/api/jobs/0000000000000404", 404, MISSING, query={"full": "true"})],
+        [fail("/api/jobs/0000000000000404", 404, JOB_MISSING, query={"full": "true"})],
     )
     add(
         "get_job_logs",

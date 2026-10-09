@@ -8,7 +8,7 @@
       "query": {},
       "status": 404,
       "headers": {},
-      "bodyText": "{\"err_msg\": \"Workflow invocation not found.\", \"err_code\": 404001}"
+      "bodyText": "{\"err_msg\": \"'0000000000000404' is not a valid workflow invocation id\", \"err_code\": 404001}"
     }
   ]
 }

@@ -371,6 +371,8 @@ class TestGetJobLogs:
         responses.add(
             responses.GET,
             f"{self.BASE}/api/jobs/{self.JOB_ID}",
+            # A finished job, as 26.2 answers one: all six fields as strings, the legacy
+            # pair joined from the columns the way Job.stdout and Job.stderr do it.
             json={
                 "id": self.JOB_ID,
                 "state": "error",
@@ -378,7 +380,9 @@ class TestGetJobLogs:
                 "tool_stdout": "a\nb\n",
                 "tool_stderr": "",
                 "job_stdout": "ran",
-                "job_stderr": None,
+                "job_stderr": "",
+                "stdout": "a\nb\n\nran",
+                "stderr": "",
                 "job_metrics": [],
             },
             match=[responses.matchers.query_param_matcher({"full": "true"})],
@@ -387,8 +391,22 @@ class TestGetJobLogs:
         result = get_job_logs_fn(self.JOB_ID)
 
         assert result.success is True
-        assert result.data == {"tool_stdout": "a\nb\n", "tool_stderr": "", "job_stdout": "ran"}
-        assert list(result.data) == ["tool_stdout", "tool_stderr", "job_stdout"]
+        assert result.data == {
+            "tool_stdout": "a\nb\n",
+            "tool_stderr": "",
+            "job_stdout": "ran",
+            "job_stderr": "",
+            "stdout": "a\nb\n\nran",
+            "stderr": "",
+        }
+        assert list(result.data) == [
+            "tool_stdout",
+            "tool_stderr",
+            "job_stdout",
+            "job_stderr",
+            "stdout",
+            "stderr",
+        ]
         assert result.message == f"Retrieved job logs for job '{self.JOB_ID}'"
         assert result.count is None
 
@@ -604,12 +622,15 @@ class TestListJobs:
         assert text.endswith("Context: history_id=h403")
 
     def test_a_malformed_history_id_says_what_the_400_means(self, mock_galaxy_instance):
-        # A history_id Galaxy cannot decode is a 400 MalformedId. The shared hint table has
-        # no 400 row, so the tool adds the one thing a caller needs: this is a filter Galaxy
-        # could not read, not the missing-history answer, which is an empty page.
+        # A history_id that is not one is refused by the parameter's validation as a 400
+        # (400008, on 26.2). The shared hint table has no 400 row, so the tool adds the one
+        # thing a caller needs: this is a filter Galaxy could not read, not the
+        # missing-history answer, which is an empty page.
         with self._connected(mock_galaxy_instance):
             mock_galaxy_instance.jobs._get.side_effect = bioblend.ConnectionError(
-                "400 Client Error", body="Wrong  id ( not-an-id ) specified", status_code=400
+                "400 Client Error",
+                body="Value error, Invalid id length, must be multiple of 16",
+                status_code=400,
             )
             with pytest.raises(ValueError) as excinfo:
                 list_jobs_fn(history_id="not-an-id")

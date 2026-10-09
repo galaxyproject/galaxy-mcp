@@ -10,7 +10,7 @@
       },
       "status": 404,
       "headers": {},
-      "bodyText": "{\"err_msg\": \"History not found\", \"err_code\": 404001}"
+      "bodyText": "{\"err_msg\": \"No such object found.\", \"err_code\": 404001}"
     }
   ]
 }

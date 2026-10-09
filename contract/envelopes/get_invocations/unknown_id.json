@@ -5,10 +5,10 @@
     "content": [
       {
         "type": "text",
-        "text": "Error calling tool 'get_invocations': Failed to get workflow invocations: GET: error 404: b'{\"err_msg\": \"Workflow invocation not found.\", \"err_code\": 404001}', 0 attempts left: {\"err_msg\": \"Workflow invocation not found.\", \"err_code\": 404001}"
+        "text": "Error calling tool 'get_invocations': Failed to get workflow invocations: GET: error 404: b'{\"err_msg\": \"\\'0000000000000404\\' is not a valid workflow invocation id\", \"err_code\": 404001}', 0 attempts left: {\"err_msg\": \"'0000000000000404' is not a valid workflow invocation id\", \"err_code\": 404001}"
       }
     ],
     "isError": true
   },
-  "sentence": "Failed to get workflow invocations: GET: error 404: b'{\"err_msg\": \"Workflow invocation not found.\", \"err_code\": 404001}', 0 attempts left: {\"err_msg\": \"Workflow invocation not found.\", \"err_code\": 404001}"
+  "sentence": "Failed to get workflow invocations: GET: error 404: b'{\"err_msg\": \"\\'0000000000000404\\' is not a valid workflow invocation id\", \"err_code\": 404001}', 0 attempts left: {\"err_msg\": \"'0000000000000404' is not a valid workflow invocation id\", \"err_code\": 404001}"
 }

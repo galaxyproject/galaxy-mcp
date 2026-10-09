@@ -8,7 +8,7 @@
       "query": {},
       "status": 400,
       "headers": {},
-      "bodyText": "{\"err_msg\": \"Wrong  id ( not-an-id ) specified, unable to decode.\", \"err_code\": 400009}"
+      "bodyText": "{\"err_msg\": \"Value error, Invalid id length, must be multiple of 16 in ('query', 'history_id')\", \"err_code\": 400008, \"validation_errors\": [\"{\\\"type\\\": \\\"value_error\\\", \\\"loc\\\": [\\\"query\\\", \\\"history_id\\\"], \\\"msg\\\": \\\"Value error, Invalid id length, must be multiple of 16\\\", \\\"input\\\": \\\"not-an-id\\\"}\"]}"
     }
   ]
 }
