@@ -12,15 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `get_job_details` takes a `job_id` as an alternative to `dataset_id`, so an agent holding
   the id of a job it started can read that job directly instead of going through one of its
   outputs. Exactly one of the two is required, and the tool refuses a call that gives neither
-  or both before it asks Galaxy anything. A new `full` flag sends `?full=true` to
-  `GET /api/jobs/{job_id}` on either path, so the answer also carries the job's stdout and
-  stderr, job messages, dependencies and job metrics where the server exposes them; the plain
-  read already has params, inputs and outputs. A job id Galaxy answers 400 or 404 to -- one it cannot decode, or one it has
-  no job for -- reads as not found, because the caller holding the id cannot act on the
-  difference. Answers through a dataset are unchanged byte for byte; `dataset_id` is now
-  optional in the tool's schema rather than required, and the signature is
-  `dataset_id, history_id, job_id, full`, so a call that passed the history id positionally
-  still does what it did.
+  or both before it asks Galaxy anything. The read is the plain job record on either path --
+  state, exit code, tool id and version, params, inputs and outputs -- and the description
+  now says so and points at `get_job_logs` for a job's stdout and stderr. A job id Galaxy
+  answers 400 or 404 to -- one it cannot decode, or one it has no job for -- reads as not
+  found, because the caller holding the id cannot act on the difference. Answers through a
+  dataset are unchanged byte for byte; `dataset_id` is now optional in the tool's schema
+  rather than required, and the signature is `dataset_id, history_id, job_id`, so a call that
+  passed the history id positionally still does what it did.
 - `get_job_details` by `job_id` and `get_invocations` by `invocation_id` refuse a value that is
   not hex before anything is sent, and refuse a 200 whose body is not a record carrying the id
   asked for. Galaxy's encoded ids are hex and it answers anything else with a 400 that both

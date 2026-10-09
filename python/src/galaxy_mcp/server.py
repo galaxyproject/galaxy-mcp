@@ -2904,12 +2904,14 @@ def get_job_details(
     dataset_id: str | None = None,
     history_id: str | None = None,
     job_id: str | None = None,
-    full: bool = False,
 ) -> GalaxyResult:
     """
-    Get detailed information about a job, by its own id or by a dataset it created
+    Get a job's record, by its own id or by a dataset it created.
 
-    Exactly one of dataset_id and job_id is required.
+    The record carries the job's state, exit code, tool id and version, create and update
+    times, params, inputs and outputs, and job metrics where the plain read has them. It
+    does not carry the job's stdout or stderr: a failed job's logs are one
+    get_job_logs(job_id) call away. Exactly one of dataset_id and job_id is required.
 
     Args:
         dataset_id: Galaxy dataset ID whose creating job to look up - a hexadecimal hash
@@ -2918,9 +2920,6 @@ def get_job_details(
                    (a 16-character hex string); only used with dataset_id
         job_id: Galaxy job ID to look up directly (a 16-character hex string). Give this or
                dataset_id, not both
-        full: Also read what Galaxy adds with ?full=true: the job's stdout and stderr,
-             job messages, dependencies, and job metrics where the server exposes them.
-             Params, inputs and outputs are in the plain read already
 
     Returns:
         GalaxyResult with job metadata, tool information, dataset ID, and job ID in data field
@@ -2942,17 +2941,13 @@ def get_job_details(
         raise ValueError("get_job_details needs a dataset_id or a job_id; neither was given.")
 
     headers = {"x-api-key": api_key}
-    # Sent only when asked for, so a job read without it is the request it always was.
-    params = {"full": "true"} if full else None
 
     if job_id:
         if not _is_encoded_id(job_id):
             raise ValueError(_not_a_galaxy_id("Job", job_id, "list_jobs()"))
         url = f"{base_url}api/jobs/{job_id}"
         try:
-            response = requests.get(
-                url, headers=headers, params=params, timeout=30, allow_redirects=False
-            )
+            response = requests.get(url, headers=headers, timeout=30, allow_redirects=False)
             response.raise_for_status()
             job_info = response.json()
         except Exception as e:
@@ -3017,9 +3012,7 @@ def get_job_details(
     # (Bioblend doesn't have a direct method for this)
     url = f"{base_url}api/jobs/{job_id}"
     try:
-        response = requests.get(
-            url, headers=headers, params=params, timeout=30, allow_redirects=False
-        )
+        response = requests.get(url, headers=headers, timeout=30, allow_redirects=False)
         response.raise_for_status()
         job_info = response.json()
     except Exception as e:

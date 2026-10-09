@@ -124,7 +124,7 @@ describe("get_job_details by job id", () => {
     expect(getJobDetailsOp.name).toBe("get_job_details");
   });
 
-  it("reads the job directly, sends no query, and names no dataset", async () => {
+  it("reads the job directly, plain and without a query, and names no dataset", async () => {
     const paths: string[] = [];
     const inits: any[] = [];
     const client = mockClient({
@@ -136,11 +136,11 @@ describe("get_job_details by job id", () => {
     });
     const out = await getJobDetails({ jobId: J1 }, ctxWith(client));
     expect(paths).toEqual(["/api/jobs/{job_id}"]);
-    expect(inits[0].params).toEqual({ path: { job_id: J1 }, query: undefined });
+    expect(inits[0].params).toEqual({ path: { job_id: J1 } });
     expect(out).toEqual({ job: { id: J1, state: "ok" }, dataset_id: null, job_id: J1 });
   });
 
-  it("sends full=true when asked, on either path", async () => {
+  it("sends no query on either path: the logs are get_job_logs' read, not this one's", async () => {
     const queries: unknown[] = [];
     const client = mockClient({
       GET: (path, init) => {
@@ -151,19 +151,10 @@ describe("get_job_details by job id", () => {
         return { data: { creating_job: J1 }, response: { status: 200 } };
       },
     });
-    await getJobDetails({ jobId: J1, full: true }, ctxWith(client));
-    await getJobDetails({ datasetId: "d1", full: true }, ctxWith(client));
-    expect(queries).toEqual([{ full: true }, { full: true }]);
-  });
-
-  it("describes full by what it adds, not by fields the plain read already has", () => {
-    // EncodedJobDetails (the non-full reply) already requires params, inputs and outputs;
-    // full adds stdout/stderr, job messages, dependencies and metrics.
-    const description = getJobDetailsOp.input.full.description ?? "";
-    for (const added of ["stdout", "stderr", "job messages", "dependencies", "job metrics"]) {
-      expect(description).toContain(added);
-    }
-    expect(description).toContain("params, inputs and outputs are in the plain read already");
+    await getJobDetails({ jobId: J1 }, ctxWith(client));
+    await getJobDetails({ datasetId: "d1" }, ctxWith(client));
+    expect(queries).toEqual([undefined, undefined]);
+    expect(getJobDetailsOp.summary).toContain("get_job_logs");
   });
 
   it("words the message for the thing that was asked about", () => {
@@ -270,19 +261,16 @@ describe("get_job_details by job id", () => {
   it("declares its inputs in the Python signature's order", () => {
     // dataset_id, history_id were the positional pair before job_id existed; job_id after
     // them is what keeps `get_job_details(dataset, history)` meaning what it did.
-    expect(Object.keys(getJobDetailsOp.input)).toEqual(["datasetId", "historyId", "jobId", "full"]);
+    expect(Object.keys(getJobDetailsOp.input)).toEqual(["datasetId", "historyId", "jobId"]);
   });
 
   it("mirrors the Python signature in its schema", () => {
     const schema = z.object(getJobDetailsOp.input);
-    expect(schema.parse({})).toEqual({ full: false });
+    expect(schema.parse({})).toEqual({});
     expect(schema.parse({ datasetId: null, jobId: null, historyId: null })).toEqual({
       datasetId: null,
       jobId: null,
       historyId: null,
-      full: false,
     });
-    expect(schema.safeParse({ full: null }).success).toBe(false);
-    expect(schema.safeParse({ full: "yes" }).success).toBe(false);
   });
 });

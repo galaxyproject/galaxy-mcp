@@ -2658,28 +2658,6 @@ def job_details_cases(add: AddCase) -> None:
         lambda: get_job_details_fn(job_id=job_hex),
         [route(f"/api/jobs/{job_hex}", {**job, "id": job_hex})],
     )
-    # Answered only when ?full=true arrives, so a surface that drops the flag gets no reply.
-    add(
-        "get_job_details",
-        "by_job_id_full",
-        "full=true is sent to Galaxy, and the answer carries what the full record adds",
-        {"job_id": job_hex, "full": True},
-        lambda: get_job_details_fn(job_id=job_hex, full=True),
-        [
-            route(
-                f"/api/jobs/{job_hex}",
-                {
-                    **job,
-                    "id": job_hex,
-                    "command_line": "fastqc --outdir . input.fastq",
-                    "job_metrics": [],
-                    "job_stderr": "",
-                    "job_stdout": "",
-                },
-                query={"full": "true"},
-            )
-        ],
-    )
 
 
 # ---------------------------------------------------------------------------

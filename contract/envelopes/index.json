@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "python/src/galaxy_mcp/server.py",
-  "caseCount": 258,
+  "caseCount": 257,
   "failureCaseCount": 83,
   "cases": [
     {
@@ -1542,18 +1542,6 @@
       },
       "envelope": "get_job_details/by_job_id.json",
       "replies": "get_job_details/by_job_id.galaxy.json"
-    },
-    {
-      "tool": "get_job_details",
-      "case": "by_job_id_full",
-      "note": "full=true is sent to Galaxy, and the answer carries what the full record adds",
-      "outcome": "success",
-      "input": {
-        "job_id": "0123456789abcdef",
-        "full": true
-      },
-      "envelope": "get_job_details/by_job_id_full.json",
-      "replies": "get_job_details/by_job_id_full.galaxy.json"
     },
     {
       "tool": "create_history",

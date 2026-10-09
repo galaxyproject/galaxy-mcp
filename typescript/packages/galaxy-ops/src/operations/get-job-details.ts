@@ -6,7 +6,7 @@ import { httpError, GalaxyConnectionError, GalaxyNotFoundError, GalaxyValidation
 import { legacyGet } from "../legacy";
 import { isEncodedId, isThisRecord, notAGalaxyId, notThatRecord } from "./encoded-id";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, InputOf, Operation } from "./types";
+import type { AnyOperation, Operation } from "./types";
 
 // The provenance endpoint's job_id field is not always typed; hand-type for safety.
 interface ProvenanceResponse {
@@ -33,8 +33,6 @@ export interface GetJobDetailsResult {
   job_id: string;
 }
 
-const DEFAULT_FULL = false;
-
 // In the Python signature's order: dataset_id and history_id were the two positional
 // parameters before job_id existed, and keeping job_id after them is what keeps a caller's
 // positional history id from landing in it.
@@ -51,20 +49,11 @@ const input = {
     .string()
     .nullish()
     .describe("job id to look up directly; give this or datasetId, not both"),
-  full: z
-    .boolean()
-    .default(DEFAULT_FULL)
-    .describe(
-      "also read what Galaxy adds with full=true: stdout and stderr, job messages, dependencies " +
-        "and job metrics where the server exposes them; params, inputs and outputs are in the " +
-        "plain read already",
-    ),
 };
 type In = {
   datasetId?: string | null;
   historyId?: string | null;
   jobId?: string | null;
-  full?: boolean;
 };
 
 /**
@@ -99,9 +88,6 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetJobDetailsResult> {
     );
   }
 
-  // Sent only when asked for, so a job read without it is the request it always was.
-  const query = i.full ? { full: true } : undefined;
-
   if (i.jobId) {
     // Not an id, not a request: see encoded-id.ts for what a stray "." would turn into.
     // A refusal of our own, worded whole, so no facts for the failure contract.
@@ -109,7 +95,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetJobDetailsResult> {
       throw new GalaxyNotFoundError(notAGalaxyId("Job", i.jobId, "list_jobs()"));
     }
     const { data, error, response } = await ctx.client.GET("/api/jobs/{job_id}", {
-      params: { path: { job_id: i.jobId }, query },
+      params: { path: { job_id: i.jobId } },
     });
     if (error || !data) throw jobLookupFailure(response, error);
     // A 200 is not the answer; a 200 for this job is. The caller holding the id is asking
@@ -158,7 +144,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetJobDetailsResult> {
   }
 
   const { data: jobData, error: jobError, response: jobResp } = await ctx.client.GET("/api/jobs/{job_id}", {
-    params: { path: { job_id: jobId }, query },
+    params: { path: { job_id: jobId } },
   });
   if (jobError || !jobData) throw httpError(jobResp, jobError);
 
@@ -172,7 +158,14 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetJobDetailsResult> {
 export const getJobDetailsOp: Operation<typeof input, GetJobDetailsResult> = {
   name: "get_job_details",
   domain: "jobs",
-  summary: "Get job details by job id, or for the job that produced a dataset.",
+  // server.py's docstring, so the two surfaces describe the read in one voice: what the
+  // record carries, and that the logs are get_job_logs' question rather than this one's.
+  summary:
+    "Get a job's record, by its own id or by a dataset it created. The record carries the " +
+    "job's state, exit code, tool id and version, create and update times, params, inputs " +
+    "and outputs, and job metrics where the plain read has them. It does not carry the job's " +
+    "stdout or stderr: a failed job's logs are one get_job_logs(jobId) call away. Exactly " +
+    "one of datasetId and jobId is required.",
   input,
   run,
   // server.py, get_job_details: the thing that was asked about -- the dataset, or the job
@@ -211,12 +204,4 @@ export const getJobDetailsOp: Operation<typeof input, GetJobDetailsResult> = {
 
 register(getJobDetailsOp as AnyOperation);
 
-// The return type is the check: add a .default() above without one here and this stops
-// compiling.
-const withDefaults = (i: In): InputOf<typeof input> => ({
-  ...i,
-  full: i.full ?? DEFAULT_FULL,
-});
-
-export const getJobDetails = (i: In, ctx: GalaxyContext) =>
-  runOperation(getJobDetailsOp, withDefaults(i), ctx);
+export const getJobDetails = (i: In, ctx: GalaxyContext) => runOperation(getJobDetailsOp, i, ctx);

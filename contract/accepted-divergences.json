@@ -261,14 +261,6 @@
       },
       {
         "tool": "get_job_details",
-        "param": "full",
-        "kind": "missing-builtin-param",
-        "observed": "python=type=boolean required=false default=false",
-        "status": "intentional",
-        "reason": "Ours sends ?full=true to GET /api/jobs/{job_id} when asked, so the answer also carries the job's stdout and stderr, job messages, dependencies and job metrics where the server exposes them -- params, inputs and outputs are in the plain read already; Galaxy's always reads the non-full job."
-      },
-      {
-        "tool": "get_job_details",
         "param": "job_id",
         "kind": "missing-builtin-param",
         "observed": "python=type=string required=false default=none",
@@ -281,7 +273,7 @@
         "kind": "missing-py-tool",
         "observed": "builtin=write (mcp default) params=[job_id type=string required=true default=none]",
         "status": "unreviewed-gap",
-        "reason": "Only Galaxy's, and what it adds is an entry point rather than runtime. get_job_status calls jobs_service.show(full=False) (lib/galaxy/agents/operations.py:318), which is view_show_job -> Job.to_dict(\"element\"): id, state, exit_code, create_time, update_time, tool_id, tool_version, galaxy_version, command_version, history_id, plus params and input/output ids. No runtime and no job metrics -- metrics need full=true and an admin -- and update_time minus create_time is not a runtime, because it includes the time the job sat queued. The entry point itself is no longer a gap: get_job_details takes job_id directly, and full=true reads more than this does. What is left is the name, and whether an agent written against Galaxy's server should find get_job_status here under its own."
+        "reason": "Only Galaxy's, and what it adds is an entry point rather than runtime. get_job_status calls jobs_service.show(full=False) (lib/galaxy/agents/operations.py:318), which is view_show_job -> Job.to_dict(\"element\"): id, state, exit_code, create_time, update_time, tool_id, tool_version, galaxy_version, command_version, history_id, plus params and input/output ids. No runtime and no job metrics -- metrics need full=true and an admin -- and update_time minus create_time is not a runtime, because it includes the time the job sat queued. The entry point itself is no longer a gap: get_job_details takes job_id directly and reads the same non-full record, and get_job_logs reads the stdout and stderr this never exposes. What is left is the name, and whether an agent written against Galaxy's server should find get_job_status here under its own."
       },
       {
         "tool": "get_page_revision",
