@@ -292,6 +292,14 @@
         "reason": "Galaxy's can ask for an admin-configured named panel view; ours always reads the standard panel."
       },
       {
+        "tool": "get_user_tool",
+        "param": null,
+        "kind": "missing-builtin-tool",
+        "observed": "python=read (tag) params=[uuid type=string required=true default=none]",
+        "status": "intentional",
+        "reason": "Only here, and it exists because of the list_user_tools rows below: Galaxy's list returns every user-defined tool whole, so there a caller already holds the definition it wants; ours pages that list, so one tool by uuid needs its own call. Galaxy's server has no user-tool lookup by uuid and nothing there is asking for one."
+      },
+      {
         "tool": "get_workflow_input_template",
         "param": null,
         "kind": "missing-builtin-tool",

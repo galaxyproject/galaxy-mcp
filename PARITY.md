@@ -28,11 +28,11 @@ Two differences with that server are recorded once here rather than as a row per
 
 | Status | Differences |
 | --- | --- |
-| `intentional` | `0` |
+| `intentional` | `1` |
 | `pending-port` | `0` |
 | `pending-decision` | `0` |
 | `unreviewed-gap` | `54` |
-| **total** | `54` |
+| **total** | `55` |
 
 These are counted apart and ratcheted apart -- at 54 -- because they are not this repository's to close on its own: each one is a rename, an addition or a removal somebody has to agree with galaxyproject/galaxy. Nothing here has been ruled on yet.
 
@@ -44,7 +44,7 @@ Every tool any surface has, against the surfaces that do not have it. A name her
 
 **Missing from TypeScript** (5): `connect`, `get_invocation_details`, `get_job_status`, `list_file_source_templates`, `list_user_file_sources`
 
-**Missing from Built-in** (6): `get_iwc_workflows`, `get_tool_input_template`, `get_workflow_input_template`, `recommend_iwc_workflows`, `update_history`, `upload_file`
+**Missing from Built-in** (7): `get_iwc_workflows`, `get_tool_input_template`, `get_user_tool`, `get_workflow_input_template`, `recommend_iwc_workflows`, `update_history`, `upload_file`
 
 ## Tools
 
@@ -104,6 +104,7 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `get_tool_panel` | `view` |  | -- | -- | `type=string required=false default=none` | `vs built-in: missing-py-param` | `unreviewed-gap` | Galaxy's can ask for an admin-configured named panel view; ours always reads the standard panel. |
 | `get_tool_run_examples` |  | `4` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_user` |  | `4` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
+| `get_user_tool` |  | `3` | `read (tag)` | `read (hint)` | -- | `vs built-in: missing-builtin-tool` | `intentional` | Only here, and it exists because of the list_user_tools rows below: Galaxy's list returns every user-defined tool whole, so there a caller already holds the definition it wants; ours pages that list, so one tool by uuid needs its own call. Galaxy's server has no user-tool lookup by uuid and nothing there is asking for one. |
 | `get_workflow_details` |  | `5` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_workflow_input_template` |  | `8` | `read (tag)` | `read (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Same gap before invoke_workflow: no template, no run guide, no input validation on that side. |
 | `import_workflow_from_iwc` |  | `4` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |

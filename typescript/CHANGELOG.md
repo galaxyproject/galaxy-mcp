@@ -6,6 +6,17 @@ entry covers all three; where something only affects one surface, it says which.
 
 ## 0.3.1 (unreleased)
 
+### `get_user_tool` reads one user-defined tool by uuid
+
+A new read op on all three surfaces, mirroring the Python tool of the same name: one `GET
+/api/unprivileged_tools/{uuid}` through the typed client, answering the record with its full
+representation. Until now a caller holding a uuid from `list_user_tools` or `create_user_tool`
+had to page the whole list to read one definition back. A 404 is `not_found` (exit 66 on the
+CLI), and so is a value that is not shaped like a uuid -- that one is refused before any request
+goes out, with the same sentence the Python server raises, because Galaxy binds the path value
+to a UUID column and answers a 500 for it. Three golden cases: `found`, `not_found`,
+`malformed_uuid`.
+
 ### `get_invocations` sends `step_details` for one invocation (#152)
 
 Given an `invocationId`, the op ignored `stepDetails` and Galaxy answered with every step's

@@ -256,6 +256,8 @@ const EXIT_CODES: Record<string, number> = {
   "get_collection_details/not_found": 66,
   "get_history_details/not_found": 66,
   "get_iwc_workflow_details/no_such_trs_id": 66,
+  "get_user_tool/malformed_uuid": 66,
+  "get_user_tool/not_found": 66,
   "get_job_details/dataset_not_found": 66,
   "get_job_details/no_job_made_this_dataset": 66,
   "get_page/not_found": 66,
