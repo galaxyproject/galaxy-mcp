@@ -4,18 +4,20 @@ on:
   push:
     branches: [main]
     paths:
-      - "mcp-server-galaxy-py/**"
+      - "python/**"
+      - "contract/**"
       - ".github/workflows/python-tests.yml"
   pull_request:
     branches: [main]
     paths:
-      - "mcp-server-galaxy-py/**"
+      - "python/**"
+      - "contract/**"
       - ".github/workflows/python-tests.yml"
   workflow_dispatch:
 
 defaults:
   run:
-    working-directory: mcp-server-galaxy-py
+    working-directory: python
 
 jobs:
   test:
@@ -95,4 +97,4 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: python-packages
-          path: mcp-server-galaxy-py/dist/
+          path: python/dist/

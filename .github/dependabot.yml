@@ -1,7 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: "pip"
-    directory: "/mcp-server-galaxy-py"
+    directory: "/python"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10

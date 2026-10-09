@@ -6,11 +6,11 @@ on:
   push:
     branches: [main]
     paths:
-      - "mcp-server-galaxy-py/**"
+      - "python/**"
       - ".github/workflows/docker-publish.yml"
   pull_request:
     paths:
-      - "mcp-server-galaxy-py/**"
+      - "python/**"
       - ".github/workflows/docker-publish.yml"
   workflow_dispatch:
 
@@ -59,8 +59,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: mcp-server-galaxy-py
-          file: mcp-server-galaxy-py/Dockerfile
+          context: python
+          file: python/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
