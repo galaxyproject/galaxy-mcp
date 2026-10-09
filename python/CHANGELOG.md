@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `get_workflow_input_template` takes an optional `version`, counted the way `get_workflow_details`
+  counts stored versions (0 is the oldest), and pins every read it makes to it -- the run model,
+  the .ga export and the show the guide is built from -- so the run form of an older version can
+  be read without mixing its slots with the latest version's docs. Left out, nothing changes. A
+  version Galaxy does not have is Galaxy's own 400; a negative one is refused before anything is
+  sent, because Galaxy would quietly serve some other version for it.
+
 ## [1.11.1] - 2026-10-09
 
 ### Security
