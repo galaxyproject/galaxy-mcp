@@ -1,7 +1,7 @@
 {
   "$comment": "Generated snapshot of the Galaxy MCP tool surface -- do not edit by hand. Regenerate with `uv run python -m tests.surface_manifest`.",
   "source": "python/src/galaxy_mcp/server.py",
-  "toolCount": 48,
+  "toolCount": 49,
   "tools": [
     {
       "name": "cancel_workflow_invocation",
@@ -627,6 +627,33 @@
             "description": "Galaxy job ID to look up directly (a 16-character hex string). Give this or\n   dataset_id, not both"
           }
         },
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_job_logs",
+      "tags": [
+        "core",
+        "jobs",
+        "read"
+      ],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "description": "Galaxy job ID (a 16-character hex string), as run_tool, list_jobs or\n   get_job_details report it"
+          },
+          "log_bytes": {
+            "default": 4096,
+            "type": "integer",
+            "description": "Budget per log field in UTF-8 bytes (default 4096). 0 returns every log\n      uncut, however long; a negative value is refused"
+          }
+        },
+        "required": [
+          "job_id"
+        ],
         "type": "object"
       }
     },

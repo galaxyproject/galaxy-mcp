@@ -28,11 +28,11 @@ Two differences with that server are recorded once here rather than as a row per
 
 | Status | Differences |
 | --- | --- |
-| `intentional` | `8` |
+| `intentional` | `9` |
 | `pending-port` | `0` |
 | `pending-decision` | `0` |
 | `unreviewed-gap` | `53` |
-| **total** | `61` |
+| **total** | `62` |
 
 These are counted apart and ratcheted apart -- at 53 -- because they are not this repository's to close on its own: each one is a rename, an addition or a removal somebody has to agree with galaxyproject/galaxy. Nothing here has been ruled on yet.
 
@@ -44,7 +44,7 @@ Every tool any surface has, against the surfaces that do not have it. A name her
 
 **Missing from TypeScript** (5): `connect`, `get_invocation_details`, `get_job_status`, `list_file_source_templates`, `list_user_file_sources`
 
-**Missing from Built-in** (8): `get_iwc_workflows`, `get_tool_input_template`, `get_user_tool`, `get_workflow_input_template`, `list_jobs`, `recommend_iwc_workflows`, `update_history`, `upload_file`
+**Missing from Built-in** (9): `get_iwc_workflows`, `get_job_logs`, `get_tool_input_template`, `get_user_tool`, `get_workflow_input_template`, `list_jobs`, `recommend_iwc_workflows`, `update_history`, `upload_file`
 
 ## Tools
 
@@ -93,6 +93,7 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `get_job_details` |  | `12` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_job_details` | `dataset_id` |  | `type=string required=false default=none` | `type=string required=false default=none` | `type=string required=true default=none` | `vs built-in: required-mismatch` | `intentional` | Ours answers for a job by its own id as well as through a dataset, so dataset_id is one of two ways in and the tool refuses a call that gives neither or both; Galaxy's reaches a job only through a dataset and has to require it. |
 | `get_job_details` | `job_id` |  | `type=string required=false default=none` | `type=string required=false default=none` | -- | `vs built-in: missing-builtin-param` | `intentional` | The job id an agent holds from run_tool or an invocation, as a way in; Galaxy's get_job_details takes only a dataset, and its job-by-id entry point is the separate get_job_status tool. |
+| `get_job_logs` |  | `10` | `read (tag)` | `read (hint)` | -- | `vs built-in: missing-builtin-tool` | `intentional` | Only here: the logs are the second half of the question get_job_details answers, split off so each read stays bounded -- one GET /api/jobs/{job_id}?full=true answered with the six log fields alone, each cut to log_bytes on line boundaries. Galaxy's server reads the non-full job only (get_job_details, get_job_status) and exposes no stdout or stderr. |
 | `get_job_status` |  | `0` | -- | -- | `write (mcp default)` | `vs built-in: missing-py-tool` | `unreviewed-gap` | Only Galaxy's, and what it adds is an entry point rather than runtime. get_job_status calls jobs_service.show(full=False) (lib/galaxy/agents/operations.py:318), which is view_show_job -> Job.to_dict("element"): id, state, exit_code, create_time, update_time, tool_id, tool_version, galaxy_version, command_version, history_id, plus params and input/output ids. No runtime and no job metrics -- metrics need full=true and an admin -- and update_time minus create_time is not a runtime, because it includes the time the job sat queued. The entry point itself is no longer a gap: get_job_details takes job_id directly and reads the same non-full record, and get_job_logs reads the stdout and stderr this never exposes. What is left is the name, and whether an agent written against Galaxy's server should find get_job_status here under its own. |
 | `get_page` |  | `5` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_page_revision` |  | `4` | `read (tag), requires >=26.1` | `read (hint), requires >=26.1` | `write (mcp default)` |  |  |  |

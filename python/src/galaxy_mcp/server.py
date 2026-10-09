@@ -1886,6 +1886,7 @@ def run_tool(
 
     NEXT STEPS:
     - Check job status: get_job_details(output_dataset_id)
+    - A failed job's logs: get_job_logs(job_id)
     - View outputs: get_history_contents(history_id)
     - Download results: download_dataset(output_id)
 
@@ -2832,7 +2833,7 @@ def _job_details_failed(dataset_id: str, error: Exception) -> str:
     return format_error("Get job details", error, {"dataset_id": dataset_id})
 
 
-def _job_lookup_failed(job_id: str, error: Exception) -> str:
+def _job_lookup_failed(job_id: str, error: Exception, action: str = "Get job details") -> str:
     """What to tell the caller when a job asked for by its own id could not be read.
 
     A 400 is answered the same way as a 404. Galaxy refuses an id it cannot decode with a
@@ -2842,7 +2843,8 @@ def _job_lookup_failed(job_id: str, error: Exception) -> str:
     on one kind of failure rather than two.
 
     Everything else reads as `_job_details_failed` does: a status goes through
-    format_error, and a failure carrying no status field never reached HTTP at all.
+    format_error under ``action`` -- the one place the two reads by id word a failure
+    differently -- and a failure carrying no status field never reached HTTP at all.
     """
     if _http_status(error) in (400, 404):
         return (
@@ -2851,7 +2853,61 @@ def _job_lookup_failed(job_id: str, error: Exception) -> str:
         )
     if _http_status(error) is _NO_STATUS_FIELD:
         return f"Failed to get job information for job '{job_id}': {error}"
-    return format_error("Get job details", error, {"job_id": job_id})
+    return format_error(action, error, {"job_id": job_id})
+
+
+# The log fields Galaxy adds to a job read with ?full=true, in the order they are answered.
+_JOB_LOG_FIELDS = ("tool_stdout", "tool_stderr", "job_stdout", "job_stderr", "stdout", "stderr")
+# get_job_logs' default budget per field, in UTF-8 bytes.
+JOB_LOG_BYTES = 4096
+# A lone surrogate, which json.loads lets through from a "\ud800" escape and which str.encode
+# refuses. The other surface's TextEncoder writes U+FFFD for one, so the same is done here.
+_LONE_SURROGATE = re.compile("[\ud800-\udfff]")
+
+
+def _log_ends(text: str, budget: int) -> str:
+    """Both ends of a log, cut on line boundaries, with a line saying what was left out.
+
+    The cause of a failure is usually at the end and the context at the start, and a
+    one-ended read loses one of them. Measured in UTF-8 bytes: ``budget`` is the most of
+    the field's own bytes kept (the omitted line is not charged against it), and 0 means
+    uncut. Each half is cut back to its last (or forward to its first) newline; a half with
+    no newline is cut on a character boundary instead, never inside a multi-byte character,
+    which is what lets both decodes below be strict. The TypeScript op's ``logEnds`` is
+    this function byte for byte, so change both.
+    """
+    if budget == 0:
+        return text
+    data = _LONE_SURROGATE.sub("\ufffd", text).encode("utf-8")
+    if len(data) <= budget:
+        return text
+    half = budget // 2
+    front = data[:half]
+    cut = front.rfind(b"\n")
+    if cut >= 0:
+        head = front[:cut]
+    else:
+        # The byte after the cut is a continuation byte only if the cut is inside a
+        # character; walk back to that character's lead byte and leave it out.
+        end = half
+        while end > 0 and (data[end] & 0xC0) == 0x80:
+            end -= 1
+        head = data[:end]
+    back = data[len(data) - half :]
+    newline = back.find(b"\n")
+    if newline >= 0:
+        tail = back[newline + 1 :]
+    else:
+        start = len(data) - half
+        while start < len(data) and (data[start] & 0xC0) == 0x80:
+            start += 1
+        tail = data[start:]
+    dropped = len(data) - len(head) - len(tail)
+    return (
+        f"{head.decode('utf-8')}\n"
+        f"[... {dropped} of {len(data)} bytes omitted ...]\n"
+        f"{tail.decode('utf-8')}"
+    )
 
 
 _ENCODED_ID_HEX = re.compile(r"[0-9a-fA-F]+")
@@ -3025,6 +3081,74 @@ def get_job_details(
     )
 
 
+@mcp.tool(tags={"jobs", "read", "core"})
+def get_job_logs(job_id: str, log_bytes: int = JOB_LOG_BYTES) -> GalaxyResult:
+    """
+    Read a job's logs: the stdout and stderr Galaxy keeps for it, each cut to a byte budget.
+
+    One GET /api/jobs/{job_id}?full=true, answered with only the six log fields the full
+    record adds -- tool_stdout, tool_stderr, job_stdout, job_stderr, stdout, stderr -- and
+    nothing the plain get_job_details read already has. A field Galaxy has not written yet
+    (a job that has not run) is left out rather than returned empty. A log longer than
+    log_bytes keeps its first and last half, cut on line boundaries, with one line in the
+    middle saying how many of how many bytes were omitted, so a cut field carries at most
+    log_bytes of the log plus that line; the cause of a failure is usually at the end and
+    the context at the start, and a one-ended read loses one of them. Galaxy's stdout and
+    stderr are the older combined form of the tool_* and job_* pairs, so on a current
+    Galaxy the same text can appear under two names.
+
+    Args:
+        job_id: Galaxy job ID (a 16-character hex string), as run_tool, list_jobs or
+               get_job_details report it
+        log_bytes: Budget per log field in UTF-8 bytes (default 4096). 0 returns every log
+                  uncut, however long; a negative value is refused
+    Returns:
+        GalaxyResult with the present log fields in data, keyed by their Galaxy names
+    """
+    state = ensure_connected()
+    base_url = state["url"] or normalized_galaxy_url or ""
+    api_key = state["api_key"]
+    if not base_url or not api_key:
+        raise ValueError("Galaxy connection is missing URL or API key information.")
+
+    # Refused before anything is sent, and worded whole, as the other reads by id do.
+    if log_bytes < 0:
+        raise ValueError(f"log_bytes must be 0 or greater (got {log_bytes})")
+    if not _is_encoded_id(job_id):
+        raise ValueError(_not_a_galaxy_id("Job", job_id, "list_jobs()"))
+
+    url = f"{base_url}api/jobs/{job_id}"
+    try:
+        response = requests.get(
+            url,
+            headers={"x-api-key": api_key},
+            params={"full": "true"},
+            timeout=30,
+            allow_redirects=False,
+        )
+        response.raise_for_status()
+        job_info = response.json()
+    except Exception as e:
+        raise ValueError(_job_lookup_failed(job_id, e, action="Get job logs")) from e
+    # The same check get_job_details makes: a 200 for this job, not merely a 200, and the
+    # clamp never runs over a body that is not this job's.
+    if not _is_this_record(job_info, job_id):
+        raise ValueError(_not_that_record("job", job_id))
+
+    # Only a string is a log. A missing key, a null (what Galaxy serialises before the job
+    # has run) or anything else is left out, never answered as "" -- an empty string is
+    # kept, because that is Galaxy saying the stream was empty.
+    logs = {
+        field: _log_ends(job_info[field], log_bytes)
+        for field in _JOB_LOG_FIELDS
+        if isinstance(job_info.get(field), str)
+    }
+    message = f"Retrieved job logs for job '{job_id}'"
+    if not logs:
+        message += " (none recorded yet)"
+    return GalaxyResult(data=logs, success=True, message=message)
+
+
 # Appended to a 400 from the job index. Quoted by the TypeScript op, so change both.
 _LIST_JOBS_BAD_FILTER = (
     "Galaxy could not read one of the filters: history_id has to be an encoded id, the "
@@ -3086,6 +3210,7 @@ def list_jobs(
 
     NEXT STEPS:
     - One job's parameters and outputs: get_job_details(dataset_id)
+    - A failed job's logs: get_job_logs(job_id)
     - The datasets those jobs made: get_history_contents(history_id)
     """
     conn = ensure_connected()

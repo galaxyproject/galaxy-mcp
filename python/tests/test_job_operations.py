@@ -7,8 +7,8 @@ import bioblend
 import pytest
 import responses
 
-from galaxy_mcp.server import galaxy_state
-from tests.test_helpers import get_job_details_fn, list_jobs_fn
+from galaxy_mcp.server import _log_ends, galaxy_state
+from tests.test_helpers import get_job_details_fn, get_job_logs_fn, list_jobs_fn
 
 
 class TestJobOperations:
@@ -245,6 +245,222 @@ class TestGetJobDetailsByJobId:
         result = get_job_details_fn(job_id=self.JOB_ID.upper())
 
         assert result.success is True
+
+
+# The clamp's vectors, as literal expected strings. The TypeScript log-ends.test.ts holds the
+# same table, and the multibyte golden case pins the two against each other byte for byte.
+EURO_LINES = "\n".join("€" * 7 for _ in range(12))
+LOG_ENDS_VECTORS = [
+    ("short, untouched", "a\nb\n", 4096, "a\nb\n"),
+    ("empty at any budget", "", 5, ""),
+    ("budget 0 is uncut", "x" * 100, 0, "x" * 100),
+    (
+        "ASCII lines at the default budget",
+        "\n".join(f"line {i:03d} of a long log" for i in range(300)),
+        4096,
+        "\n".join(f"line {i:03d} of a long log" for i in range(89))
+        + "\n[... 2807 of 6899 bytes omitted ...]\n"
+        + "\n".join(f"line {i:03d} of a long log" for i in range(211, 300)),
+    ),
+    (
+        "3-byte text with no newline: both cuts land mid-character",
+        "€" * 40,
+        64,
+        "€" * 10 + "\n[... 60 of 120 bytes omitted ...]\n" + "€" * 10,
+    ),
+    (
+        "newline in each half, through multi-byte text",
+        EURO_LINES,
+        64,
+        "€" * 7 + "\n[... 221 of 263 bytes omitted ...]\n" + "€" * 7,
+    ),
+    (
+        "4-byte text with no newline",
+        "🎉" * 50,
+        64,
+        "🎉" * 8 + "\n[... 136 of 200 bytes omitted ...]\n" + "🎉" * 8,
+    ),
+    (
+        "mixed widths, and a tail that is empty because the newline is back's last byte",
+        "a€b🎉c\n" * 30,
+        11,
+        "a€b\n[... 325 of 330 bytes omitted ...]\n",
+    ),
+    (
+        "a BOM at the start of the tail is kept",
+        "x" * 60 + "\ufeff" + "y" * 40,
+        86,
+        "x" * 43 + "\n[... 17 of 103 bytes omitted ...]\n" + "\ufeff" + "y" * 40,
+    ),
+    (
+        "CRLF: the cut is on the newline, so the head ends in a bare CR",
+        "\r\n".join(f"l{i}" for i in range(40)),
+        32,
+        "l0\r\nl1\r\nl2\r\nl3\r" + "\n[... 160 of 188 bytes omitted ...]\n" + "l37\r\nl38\r\nl39",
+    ),
+    ("budget 1: halves of 0, both ends empty", "abc\n", 1, "\n[... 4 of 4 bytes omitted ...]\n"),
+    (
+        "odd budget: one byte unused on each side",
+        "a" * 100,
+        33,
+        "a" * 16 + "\n[... 68 of 100 bytes omitted ...]\n" + "a" * 16,
+    ),
+    (
+        "a newline only at byte 0: the head is empty",
+        "\n" + "b" * 100,
+        20,
+        "\n[... 91 of 101 bytes omitted ...]\n" + "b" * 10,
+    ),
+]
+
+
+class TestLogEnds:
+    @pytest.mark.parametrize(
+        ("text", "budget", "expected"),
+        [(text, budget, expected) for _, text, budget, expected in LOG_ENDS_VECTORS],
+        ids=[name for name, *_ in LOG_ENDS_VECTORS],
+    )
+    def test_vectors(self, text, budget, expected):
+        got = _log_ends(text, budget)
+
+        assert got == expected
+        assert "\ufffd" not in got
+
+    def test_an_untouched_log_is_the_same_object(self):
+        text = "short"
+        assert _log_ends(text, 0) is text
+        assert _log_ends(text, 4096) is text
+
+    def test_a_lone_surrogate_counts_as_the_three_bytes_textencoder_writes(self):
+        # json.loads turns a "\ud800" escape into a lone surrogate that str.encode refuses;
+        # the other surface's TextEncoder writes EF BF BD for it, so the count has to agree.
+        text = "\ud800" * 30
+        assert (
+            _log_ends(text, 12)
+            == "\ufffd" * 2 + "\n[... 78 of 90 bytes omitted ...]\n" + "\ufffd" * 2
+        )
+
+
+class TestGetJobLogs:
+    BASE = "http://localhost:8080"
+    JOB_ID = "0123456789abcdef"
+
+    def setup_method(self):
+        galaxy_state["connected"] = True
+        galaxy_state["gi"] = type("MockGI", (), {})()
+        galaxy_state["url"] = "http://localhost:8080/"
+        galaxy_state["api_key"] = "test_key"
+
+    def teardown_method(self):
+        galaxy_state["connected"] = False
+        galaxy_state["gi"] = None
+
+    @responses.activate
+    def test_reads_the_full_job_and_answers_only_the_log_fields(self):
+        responses.add(
+            responses.GET,
+            f"{self.BASE}/api/jobs/{self.JOB_ID}",
+            json={
+                "id": self.JOB_ID,
+                "state": "error",
+                "exit_code": 1,
+                "tool_stdout": "a\nb\n",
+                "tool_stderr": "",
+                "job_stdout": "ran",
+                "job_stderr": None,
+                "job_metrics": [],
+            },
+            match=[responses.matchers.query_param_matcher({"full": "true"})],
+        )
+
+        result = get_job_logs_fn(self.JOB_ID)
+
+        assert result.success is True
+        assert result.data == {"tool_stdout": "a\nb\n", "tool_stderr": "", "job_stdout": "ran"}
+        assert list(result.data) == ["tool_stdout", "tool_stderr", "job_stdout"]
+        assert result.message == f"Retrieved job logs for job '{self.JOB_ID}'"
+        assert result.count is None
+
+    @responses.activate
+    def test_a_job_with_nothing_written_yet_answers_an_empty_record(self):
+        responses.add(
+            responses.GET,
+            f"{self.BASE}/api/jobs/{self.JOB_ID}",
+            json={"id": self.JOB_ID, "state": "new", "job_stdout": None, "job_stderr": None},
+        )
+
+        result = get_job_logs_fn(self.JOB_ID)
+
+        assert result.data == {}
+        assert result.message == f"Retrieved job logs for job '{self.JOB_ID}' (none recorded yet)"
+
+    @responses.activate
+    def test_a_long_log_is_cut_to_the_budget_and_zero_leaves_it_whole(self):
+        log = "\n".join(f"line {i}" for i in range(500))
+        responses.add(
+            responses.GET,
+            f"{self.BASE}/api/jobs/{self.JOB_ID}",
+            json={"id": self.JOB_ID, "stderr": log},
+        )
+
+        cut = get_job_logs_fn(self.JOB_ID, log_bytes=100).data["stderr"]
+        whole = get_job_logs_fn(self.JOB_ID, log_bytes=0).data["stderr"]
+
+        assert cut == _log_ends(log, 100)
+        assert "bytes omitted ...]" in cut
+        assert whole == log
+
+    @responses.activate
+    def test_a_negative_budget_is_refused_before_anything_is_sent(self):
+        with pytest.raises(ValueError, match=re.escape("log_bytes must be 0 or greater (got -1)")):
+            get_job_logs_fn(self.JOB_ID, log_bytes=-1)
+
+        assert len(responses.calls) == 0
+
+    @pytest.mark.parametrize("value", [".", "../histories", "not-an-id"])
+    @responses.activate
+    def test_a_value_that_is_not_an_id_is_refused_before_anything_is_sent(self, value):
+        with pytest.raises(ValueError, match="not a Galaxy id"):
+            get_job_logs_fn(value)
+
+        assert len(responses.calls) == 0
+
+    @pytest.mark.parametrize("status", [400, 404])
+    @responses.activate
+    def test_an_unknown_or_malformed_id_is_not_found(self, status):
+        responses.add(
+            responses.GET,
+            f"{self.BASE}/api/jobs/{self.JOB_ID}",
+            json={"err_msg": "no such job", "err_code": status * 1000},
+            status=status,
+        )
+
+        with pytest.raises(ValueError, match=f"Job ID '{self.JOB_ID}' not found or not accessible"):
+            get_job_logs_fn(self.JOB_ID)
+
+    @responses.activate
+    def test_any_other_status_names_this_tool(self):
+        responses.add(responses.GET, f"{self.BASE}/api/jobs/{self.JOB_ID}", status=500)
+
+        with pytest.raises(ValueError, match=f"Get job logs.*job_id={self.JOB_ID}"):
+            get_job_logs_fn(self.JOB_ID)
+
+    @responses.activate
+    def test_a_200_that_is_not_this_jobs_record_is_refused(self):
+        responses.add(
+            responses.GET,
+            f"{self.BASE}/api/jobs/{self.JOB_ID}",
+            json={"id": "fedcba9876543210", "tool_stderr": "x" * 10000},
+        )
+
+        with pytest.raises(ValueError, match="not that job's record"):
+            get_job_logs_fn(self.JOB_ID)
+
+    def test_not_connected(self):
+        galaxy_state["connected"] = False
+
+        with pytest.raises(ValueError, match="Not connected"):
+            get_job_logs_fn(self.JOB_ID)
 
 
 class TestListJobs:

@@ -5,6 +5,7 @@ import type { GalaxyContext } from "../context";
 import { httpError, GalaxyConnectionError, GalaxyNotFoundError, GalaxyValidationError } from "../errors";
 import { legacyGet } from "../legacy";
 import { isEncodedId, isThisRecord, notAGalaxyId, notThatRecord } from "./encoded-id";
+import { jobLookupFailure, jobNotFoundSentence } from "./jobs-common";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
@@ -55,23 +56,6 @@ type In = {
   historyId?: string | null;
   jobId?: string | null;
 };
-
-/**
- * server.py, _job_lookup_failed: a job asked for by id that Galaxy answers 400 or 404 to is
- * not found, whichever of the two it was. Galaxy refuses an id it cannot decode with a 400
- * before looking anything up, and the caller holding the id -- an agent asking whether a run
- * it started still exists -- cannot act on the difference. The facts stay on the error so
- * the sentence is still worded from the reply.
- */
-function jobLookupFailure(response: { status: number } | undefined, error: unknown): Error {
-  const failure = httpError(response, error);
-  if (failure.http?.status === 400) {
-    const notFound = new GalaxyNotFoundError(failure.message);
-    notFound.http = failure.http;
-    return notFound;
-  }
-  return failure;
-}
 
 async function run(i: In, ctx: GalaxyContext): Promise<GetJobDetailsResult> {
   // server.py: refused before anything is asked of Galaxy, and worded there, so neither
@@ -189,10 +173,7 @@ export const getJobDetailsOp: Operation<typeof input, GetJobDetailsResult> = {
     context: (i) => (i.jobId ? { job_id: i.jobId } : { dataset_id: i.datasetId }),
     sentence: (_text, status, i) => {
       if (i.jobId) {
-        return status === 400 || status === 404
-          ? `Job ID '${i.jobId}' not found or not accessible. ` +
-              "Make sure the job exists and you have permission to view it."
-          : undefined;
+        return status === 400 || status === 404 ? jobNotFoundSentence(i.jobId) : undefined;
       }
       return status === 404
         ? `Dataset ID '${i.datasetId}' not found or job not accessible. ` +

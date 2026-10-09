@@ -19,6 +19,7 @@ import "./get-tool-citations";
 import "./get-tool-run-examples";
 import "./search-tools-by-keywords";
 import "./get-job-details";
+import "./get-job-logs";
 import "./list-jobs";
 import "./update-history";
 import "./cancel-workflow-invocation";

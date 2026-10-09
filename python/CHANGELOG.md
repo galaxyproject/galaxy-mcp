@@ -29,6 +29,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   invocation.
 ### Added
 
+- `get_job_logs(job_id, log_bytes=4096)` reads a job's stdout and stderr: one
+  `GET /api/jobs/{job_id}?full=true`, answered with only the six log fields the full record
+  adds (`tool_stdout`, `tool_stderr`, `job_stdout`, `job_stderr`, `stdout`, `stderr`) and
+  nothing the plain `get_job_details` read already has. A field Galaxy has not written yet is
+  left out rather than returned empty. A log longer than `log_bytes` keeps its first and last
+  half, cut on line boundaries, with one line in the middle saying how many of how many bytes
+  were omitted; the budget is in UTF-8 bytes and the cut never splits a multi-byte character.
+  `log_bytes=0` returns every log uncut, and a negative value is refused before anything is
+  sent. The same hex guard and the same answered-for-this-id check as `get_job_details` apply,
+  and a 400 or 404 on the id reads as not found the same way. Ten golden cases pin it,
+  including the cut's exact bytes through 2-, 3- and 4-byte text.
 - `list_jobs` lists jobs a page at a time from Galaxy's job index, narrowed to one history,
   one state and a window of update time, sorted by update or create time, in the small
   `collection` view by default. It is the read an agent reconciling its own record of a history

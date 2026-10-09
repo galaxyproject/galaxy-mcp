@@ -27,6 +27,7 @@ from galaxy_mcp.server import (
     get_iwc_workflow_details,
     get_iwc_workflows,
     get_job_details,
+    get_job_logs,
     get_page,
     get_page_revision,
     get_server_info,
@@ -84,6 +85,7 @@ get_invocations_fn = get_function(get_invocations)
 get_iwc_workflow_details_fn = get_function(get_iwc_workflow_details)
 get_iwc_workflows_fn = get_function(get_iwc_workflows)
 get_job_details_fn = get_function(get_job_details)
+get_job_logs_fn = get_function(get_job_logs)
 get_server_info_fn = get_function(get_server_info)
 get_tool_citations_fn = get_function(get_tool_citations)
 get_tool_details_fn = get_function(get_tool_details)
@@ -137,6 +139,7 @@ __all__ = [
     "get_iwc_workflow_details_fn",
     "get_iwc_workflows_fn",
     "get_job_details_fn",
+    "get_job_logs_fn",
     "get_server_info_fn",
     "get_tool_citations_fn",
     "get_tool_details_fn",

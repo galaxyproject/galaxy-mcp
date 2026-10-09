@@ -20,6 +20,22 @@ as the positional it was as well, so `galaxy-cli get_job_details <id>` still run
 input shape is declared in the Python signature's order, `datasetId, historyId, jobId`, and
 `GetJobDetailsResult.dataset_id` is `null` when the job was asked for by id. Six golden cases
 pin it on both surfaces; every answer through a dataset is unchanged.
+### `get_job_logs` reads a job's stdout and stderr (#TBD)
+
+A new op on all three surfaces, and the other half of the question `get_job_details` answers:
+`getJobLogs({ jobId, logBytes })` sends one `GET /api/jobs/{job_id}?full=true` and returns
+only the six log fields the full record adds -- `tool_stdout`, `tool_stderr`, `job_stdout`,
+`job_stderr`, `stdout`, `stderr` -- as `JobLogs`, a partial record where a field Galaxy has
+not written yet is absent rather than empty. A log longer than `logBytes` (default 4096)
+keeps its first and last half, cut on line boundaries, with one line in the middle saying how
+many of how many bytes were omitted; `logEnds(text, budget)` is exported and is the Python
+server's `_log_ends` byte for byte, measured in UTF-8 bytes and never splitting a character.
+`logBytes: 0` returns every log uncut; a negative or non-integer budget is `validation`
+(exit 64) before anything is sent. The id goes through the same hex guard and the same
+answered-for-this-id check as `get_job_details`, so a malformed id or a 400/404 is `not_found`
+(exit 66) and a 200 that is not this job's record is `connection` (exit 69). On the CLI it is
+`galaxy-cli get_job_logs <jobId> [--log-bytes N]`. Ten golden cases pin it, and the multibyte
+one is replayed through `logEnds` directly so the two clamps are held to the same bytes.
 ### A read by id answers for that id, or not at all (#TBD)
 
 `get_job_details` by `jobId` and `get_invocations` by `invocationId` refuse a value that is not

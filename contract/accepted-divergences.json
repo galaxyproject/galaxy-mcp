@@ -268,6 +268,14 @@
         "reason": "The job id an agent holds from run_tool or an invocation, as a way in; Galaxy's get_job_details takes only a dataset, and its job-by-id entry point is the separate get_job_status tool."
       },
       {
+        "tool": "get_job_logs",
+        "param": null,
+        "kind": "missing-builtin-tool",
+        "observed": "python=read (tag) params=[job_id type=string required=true default=none; log_bytes type=integer required=false default=4096]",
+        "status": "intentional",
+        "reason": "Only here: the logs are the second half of the question get_job_details answers, split off so each read stays bounded -- one GET /api/jobs/{job_id}?full=true answered with the six log fields alone, each cut to log_bytes on line boundaries. Galaxy's server reads the non-full job only (get_job_details, get_job_status) and exposes no stdout or stderr."
+      },
+      {
         "tool": "get_job_status",
         "param": null,
         "kind": "missing-py-tool",

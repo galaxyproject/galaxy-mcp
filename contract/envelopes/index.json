@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "python/src/galaxy_mcp/server.py",
-  "caseCount": 257,
-  "failureCaseCount": 83,
+  "caseCount": 267,
+  "failureCaseCount": 88,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -1544,6 +1544,63 @@
       "replies": "get_job_details/by_job_id.galaxy.json"
     },
     {
+      "tool": "get_job_logs",
+      "case": "short_logs_untouched",
+      "note": "logs within the budget come back as sent; an empty string Galaxy sent is kept, and a field it did not send is absent rather than empty",
+      "outcome": "success",
+      "input": {
+        "job_id": "0123456789abcdef"
+      },
+      "envelope": "get_job_logs/short_logs_untouched.json",
+      "replies": "get_job_logs/short_logs_untouched.galaxy.json"
+    },
+    {
+      "tool": "get_job_logs",
+      "case": "long_log_cut",
+      "note": "a log over the default budget keeps both ends on line boundaries, with a line in the middle saying how much was left out",
+      "outcome": "success",
+      "input": {
+        "job_id": "0123456789abcdef"
+      },
+      "envelope": "get_job_logs/long_log_cut.json",
+      "replies": "get_job_logs/long_log_cut.galaxy.json"
+    },
+    {
+      "tool": "get_job_logs",
+      "case": "log_bytes_zero_uncut",
+      "note": "a budget of 0 is the caller asking for the whole log, however long",
+      "outcome": "success",
+      "input": {
+        "job_id": "0123456789abcdef",
+        "log_bytes": 0
+      },
+      "envelope": "get_job_logs/log_bytes_zero_uncut.json",
+      "replies": "get_job_logs/long_log_cut.galaxy.json"
+    },
+    {
+      "tool": "get_job_logs",
+      "case": "multibyte_text_at_the_cut",
+      "note": "the budget is in bytes and the cut never splits a character: lines of 2-byte text, and unbroken 3-byte and 4-byte text where both halves land mid-character",
+      "outcome": "success",
+      "input": {
+        "job_id": "0123456789abcdef",
+        "log_bytes": 64
+      },
+      "envelope": "get_job_logs/multibyte_text_at_the_cut.json",
+      "replies": "get_job_logs/multibyte_text_at_the_cut.galaxy.json"
+    },
+    {
+      "tool": "get_job_logs",
+      "case": "no_logs_yet",
+      "note": "a job that has not run: null fields and missing fields are both absent, and the message says nothing was recorded",
+      "outcome": "success",
+      "input": {
+        "job_id": "0123456789abcdef"
+      },
+      "envelope": "get_job_logs/no_logs_yet.json",
+      "replies": "get_job_logs/no_logs_yet.galaxy.json"
+    },
+    {
       "tool": "create_history",
       "case": "named",
       "note": "a new history, which is one POST and the record Galaxy answers with",
@@ -2726,6 +2783,50 @@
       "replies": "get_job_details/answered_with_another_record.galaxy.json"
     },
     {
+      "tool": "get_job_logs",
+      "case": "not_found",
+      "note": "a job id nothing answers to reads the same as it does from get_job_details",
+      "outcome": "failure",
+      "input": {
+        "job_id": "0000000000000404"
+      },
+      "envelope": "get_job_logs/not_found.json",
+      "replies": "get_job_logs/not_found.galaxy.json"
+    },
+    {
+      "tool": "get_job_logs",
+      "case": "read_refused",
+      "note": "any other status names this tool in format_error's sentence",
+      "outcome": "failure",
+      "input": {
+        "job_id": "0000000000000500"
+      },
+      "envelope": "get_job_logs/read_refused.json",
+      "replies": "get_job_logs/read_refused.galaxy.json"
+    },
+    {
+      "tool": "get_job_logs",
+      "case": "job_id_malformed",
+      "note": "a value that is not hex is refused before anything is sent",
+      "outcome": "failure",
+      "input": {
+        "job_id": "not-an-id"
+      },
+      "envelope": "get_job_logs/job_id_malformed.json",
+      "replies": "get_invocations/malformed_id.galaxy.json"
+    },
+    {
+      "tool": "get_job_logs",
+      "case": "answered_with_another_record",
+      "note": "a 200 whose body is not this job's is refused, and the cut never runs over it",
+      "outcome": "failure",
+      "input": {
+        "job_id": "0123456789abcdef"
+      },
+      "envelope": "get_job_logs/answered_with_another_record.json",
+      "replies": "get_job_logs/answered_with_another_record.galaxy.json"
+    },
+    {
       "tool": "run_tool",
       "case": "refused_over_the_inputs",
       "note": "a 400, with the parameter list and a tool test's example read back for the caller",
@@ -3028,6 +3129,18 @@
       "outcome": "failure",
       "input": {},
       "envelope": "get_job_details/neither_id_given.json",
+      "replies": "get_invocations/malformed_id.galaxy.json"
+    },
+    {
+      "tool": "get_job_logs",
+      "case": "negative_log_bytes",
+      "note": "a budget below zero means nothing; 0 is the spelling for uncut",
+      "outcome": "failure",
+      "input": {
+        "job_id": "0123456789abcdef",
+        "log_bytes": -1
+      },
+      "envelope": "get_job_logs/negative_log_bytes.json",
       "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {

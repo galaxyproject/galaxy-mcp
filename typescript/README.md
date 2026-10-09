@@ -361,6 +361,7 @@ exit code comes from (see [Output and exit codes](#output-and-exit-codes)). A Ty
 | `get_dataset_details` | Dataset metadata by id (state, extension, name), with an optional content preview from Galaxy's bounded text route |
 | `get_collection_details` | A dataset collection by id, with its elements |
 | `get_job_details` | A job's record by `--job-id`, or the job that produced a dataset, given as `<datasetId>` or `--dataset-id` (one of the two): state, exit code, tool, params, inputs and outputs; no logs |
+| `get_job_logs` | A job's stdout and stderr by `<jobId>`, each cut to `--log-bytes` (default 4096) on line boundaries with a line saying how much was omitted; `--log-bytes 0` returns them uncut |
 | `list_jobs` | A page of jobs from Galaxy's job index, filtered by history, state and update time, newest first; no total, so a short page is the last one. An unknown history is an empty page, not a 404 |
 | `download_dataset` *(write)* | Download a dataset's content; with `--file-path` it writes the bytes to that local path, overwriting what is there -- the caller's disk, not the server, which is why the write marker is here while Python's tag says read. Without `--file-path` you get the metadata and the byte count and no content, so `--file-path` is the only way to the bytes |
 | `upload_file` *(write)* | Upload a local file via the tus resumable-upload protocol |

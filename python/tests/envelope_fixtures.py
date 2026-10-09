@@ -63,6 +63,7 @@ from .test_helpers import (
     get_iwc_workflow_details_fn,
     get_iwc_workflows_fn,
     get_job_details_fn,
+    get_job_logs_fn,
     get_page_fn,
     get_page_revision_fn,
     get_server_info_fn,
@@ -1998,6 +1999,7 @@ def single_record_cases(add: AddCase) -> None:
     tool_input_template_cases(add)
     workflow_details_cases(add)
     job_details_cases(add)
+    job_logs_cases(add)
 
 
 def server_info_cases(add: AddCase) -> None:
@@ -2657,6 +2659,98 @@ def job_details_cases(add: AddCase) -> None:
         {"job_id": job_hex},
         lambda: get_job_details_fn(job_id=job_hex),
         [route(f"/api/jobs/{job_hex}", {**job, "id": job_hex})],
+    )
+
+
+def job_logs_cases(add: AddCase) -> None:
+    """A job's logs, read in full and cut to a budget.
+
+    One GET /api/jobs/{id}?full=true, and only the six log fields of the answer come back.
+    Every route here declares the query, so a surface that drops the flag gets the replay's
+    404 and a mismatched envelope rather than a plain job it could pass off as logs. The
+    cut is the one thing both surfaces compute rather than relay, so the long and the
+    multi-byte cases pin its bytes: the expected strings are whatever this server wrote,
+    and the other has to match them.
+    """
+    job_hex = "0123456789abcdef"
+    plain = {"id": job_hex, "state": "error", "exit_code": 1, "tool_id": "fastqc"}
+    long_log = "\n".join(f"line {i:03d} of a long log" for i in range(300))
+    add(
+        "get_job_logs",
+        "short_logs_untouched",
+        "logs within the budget come back as sent; an empty string Galaxy sent is kept, and "
+        "a field it did not send is absent rather than empty",
+        {"job_id": job_hex},
+        lambda: get_job_logs_fn(job_hex),
+        [
+            route(
+                f"/api/jobs/{job_hex}",
+                {**plain, "tool_stdout": "a\nb\n", "tool_stderr": "", "job_stdout": "ran"},
+                query={"full": "true"},
+            )
+        ],
+    )
+    long_route = route(
+        f"/api/jobs/{job_hex}",
+        {**plain, "tool_stderr": long_log, "job_stderr": ""},
+        query={"full": "true"},
+    )
+    add(
+        "get_job_logs",
+        "long_log_cut",
+        "a log over the default budget keeps both ends on line boundaries, with a line in "
+        "the middle saying how much was left out",
+        {"job_id": job_hex},
+        lambda: get_job_logs_fn(job_hex),
+        [long_route],
+    )
+    add(
+        "get_job_logs",
+        "log_bytes_zero_uncut",
+        "a budget of 0 is the caller asking for the whole log, however long",
+        {"job_id": job_hex, "log_bytes": 0},
+        lambda: get_job_logs_fn(job_hex, log_bytes=0),
+        [long_route],
+    )
+    # Three widths of character at the cut, at a budget small enough to read: a line path
+    # through 2-byte text, and two no-newline fallbacks (3-byte and 4-byte) where the halves
+    # land inside a character and have to back off to its boundary.
+    add(
+        "get_job_logs",
+        "multibyte_text_at_the_cut",
+        "the budget is in bytes and the cut never splits a character: lines of 2-byte text, "
+        "and unbroken 3-byte and 4-byte text where both halves land mid-character",
+        {"job_id": job_hex, "log_bytes": 64},
+        lambda: get_job_logs_fn(job_hex, log_bytes=64),
+        [
+            route(
+                f"/api/jobs/{job_hex}",
+                {
+                    **plain,
+                    "tool_stdout": "\n".join(f"ünïcödé log line {i} ok" for i in range(40)),
+                    "tool_stderr": "€" * 40,
+                    "job_stdout": "🎉" * 50,
+                },
+                query={"full": "true"},
+            )
+        ],
+    )
+    # Galaxy serialises a job that has not run with its log fields null, and an older or
+    # narrower reply may leave them out; both are absence, and one case pins both forms.
+    add(
+        "get_job_logs",
+        "no_logs_yet",
+        "a job that has not run: null fields and missing fields are both absent, and the "
+        "message says nothing was recorded",
+        {"job_id": job_hex},
+        lambda: get_job_logs_fn(job_hex),
+        [
+            route(
+                f"/api/jobs/{job_hex}",
+                {"id": job_hex, "state": "new", "job_stdout": None, "job_stderr": None},
+                query={"full": "true"},
+            )
+        ],
     )
 
 
@@ -4182,6 +4276,42 @@ def more_http_failure_cases(add: AddFailure) -> None:
         {"job_id": "0123456789abcdef"},
         [route("/api/jobs/0123456789abcdef", {"id": "fedcba9876543210", "state": "ok"})],
     )
+    # get_job_logs shares get_job_details' read by id -- the same guard before the request
+    # and the same check on the reply -- and only its action string is its own.
+    add(
+        "get_job_logs",
+        "not_found",
+        "a job id nothing answers to reads the same as it does from get_job_details",
+        {"job_id": "0000000000000404"},
+        [fail("/api/jobs/0000000000000404", 404, MISSING, query={"full": "true"})],
+    )
+    add(
+        "get_job_logs",
+        "read_refused",
+        "any other status names this tool in format_error's sentence",
+        {"job_id": "0000000000000500"},
+        [fail("/api/jobs/0000000000000500", 500, BROKEN, query={"full": "true"})],
+    )
+    add(
+        "get_job_logs",
+        "job_id_malformed",
+        "a value that is not hex is refused before anything is sent",
+        {"job_id": "not-an-id"},
+        [],
+    )
+    add(
+        "get_job_logs",
+        "answered_with_another_record",
+        "a 200 whose body is not this job's is refused, and the cut never runs over it",
+        {"job_id": "0123456789abcdef"},
+        [
+            route(
+                "/api/jobs/0123456789abcdef",
+                {"id": "fedcba9876543210", "tool_stderr": "not this job's log\n" * 500},
+                query={"full": "true"},
+            )
+        ],
+    )
 
 
 def run_failure_cases(add: AddFailure) -> None:
@@ -4501,6 +4631,13 @@ def argument_refusal_cases(add: AddFailure) -> None:
         "neither_id_given",
         "nothing to look up",
         {},
+        [],
+    )
+    add(
+        "get_job_logs",
+        "negative_log_bytes",
+        "a budget below zero means nothing; 0 is the spelling for uncut",
+        {"job_id": "0123456789abcdef", "log_bytes": -1},
         [],
     )
     add(

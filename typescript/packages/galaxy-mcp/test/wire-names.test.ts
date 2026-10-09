@@ -201,7 +201,7 @@ describe("the parameter names this surface advertises", () => {
         allOperations.flatMap((op) => Object.keys(op.input).filter((k) => toSnakeCase(k) !== k)),
       ),
     ];
-    expect(renamed.length).toBe(35);
+    expect(renamed.length).toBe(36);
     await withClient(async (client) => {
       const { tools } = await client.listTools();
       // The whole advertisement, not only the descriptions: a title, an enum or a default

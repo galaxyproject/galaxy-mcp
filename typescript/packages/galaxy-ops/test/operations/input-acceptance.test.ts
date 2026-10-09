@@ -3,6 +3,7 @@ import { getHistoriesOp, getHistories } from "../../src/operations/get-histories
 import { getHistoryContentsOp } from "../../src/operations/get-history-contents";
 import { listHistoryIdsOp } from "../../src/operations/list-history-ids";
 import { listJobsOp } from "../../src/operations/list-jobs";
+import { getJobLogsOp } from "../../src/operations/get-job-logs";
 import { listUserToolsOp } from "../../src/operations/list-user-tools";
 import { listWorkflowsOp, listWorkflows } from "../../src/operations/list-workflows";
 import { searchToolsByNameOp } from "../../src/operations/search-tools-by-name";
@@ -54,6 +55,7 @@ const integerInputs: Array<[string, { safeParse(v: unknown): { success: boolean 
   ["list_history_ids.offset", listHistoryIdsOp.input.offset],
   ["list_jobs.limit", listJobsOp.input.limit],
   ["list_jobs.offset", listJobsOp.input.offset],
+  ["get_job_logs.log_bytes", getJobLogsOp.input.logBytes],
   ["list_user_tools.limit", listUserToolsOp.input.limit],
   ["list_workflows.limit", listWorkflowsOp.input.limit],
   ["search_tools_by_name.limit", searchToolsByNameOp.input.limit],

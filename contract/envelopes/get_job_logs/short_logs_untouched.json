@@ -1,0 +1,11 @@
+{
+  "data": {
+    "tool_stdout": "a\nb\n",
+    "tool_stderr": "",
+    "job_stdout": "ran"
+  },
+  "success": true,
+  "message": "Retrieved job logs for job '0123456789abcdef'",
+  "count": null,
+  "pagination": null
+}
