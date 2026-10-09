@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "python/src/galaxy_mcp/server.py",
-  "caseCount": 224,
-  "failureCaseCount": 65,
+  "caseCount": 228,
+  "failureCaseCount": 67,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -1293,6 +1293,31 @@
       "replies": "get_tool_details/with_io_details.galaxy.json"
     },
     {
+      "tool": "get_tool_details",
+      "case": "pinned_version",
+      "note": "tool_version names an installed version, and the record that comes back is it",
+      "outcome": "success",
+      "input": {
+        "tool_id": "Cut1",
+        "tool_version": "1.0.2"
+      },
+      "envelope": "get_tool_details/pinned_version.json",
+      "replies": "get_tool_details/pinned_version.galaxy.json"
+    },
+    {
+      "tool": "get_tool_details",
+      "case": "pinned_version_with_io_details",
+      "note": "io_details=True and tool_version together: that version's parameter list",
+      "outcome": "success",
+      "input": {
+        "tool_id": "fastqc",
+        "io_details": true,
+        "tool_version": "0.73+galaxy0"
+      },
+      "envelope": "get_tool_details/pinned_version_with_io_details.json",
+      "replies": "get_tool_details/pinned_version_with_io_details.galaxy.json"
+    },
+    {
       "tool": "get_tool_input_template",
       "case": "every_nesting",
       "note": "a data param, a repeat, a conditional, a section and a select in one schema",
@@ -2036,6 +2061,18 @@
       "replies": "get_tool_details/unauthorized.galaxy.json"
     },
     {
+      "tool": "get_tool_details",
+      "case": "unknown_tool_at_a_version",
+      "note": "Galaxy's own 404 for an id it has at no version, with the version in the context",
+      "outcome": "failure",
+      "input": {
+        "tool_id": "nope",
+        "tool_version": "1.0.0"
+      },
+      "envelope": "get_tool_details/unknown_tool_at_a_version.json",
+      "replies": "get_tool_details/unknown_tool_at_a_version.galaxy.json"
+    },
+    {
       "tool": "get_history_contents",
       "case": "permission_denied",
       "note": "a 403, whose hint is about the account",
@@ -2646,6 +2683,18 @@
       },
       "envelope": "get_tool_panel/no_such_section.json",
       "replies": "get_tool_panel/no_such_section.galaxy.json"
+    },
+    {
+      "tool": "get_tool_details",
+      "case": "version_not_installed",
+      "note": "Galaxy served its newest version for one it lacks, which the tool refuses by name",
+      "outcome": "failure",
+      "input": {
+        "tool_id": "cat1",
+        "tool_version": "9.9.9"
+      },
+      "envelope": "get_tool_details/version_not_installed.json",
+      "replies": "get_tool_details/version_not_installed.galaxy.json"
     },
     {
       "tool": "update_history",

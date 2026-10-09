@@ -1,0 +1,15 @@
+{
+  "data": {
+    "id": "Cut1",
+    "name": "Cut",
+    "version": "1.0.2",
+    "description": "columns from a table",
+    "model_class": "Tool",
+    "panel_section_id": "text_manipulation",
+    "panel_section_name": "Text Manipulation"
+  },
+  "success": true,
+  "message": "Retrieved details for tool 'Cut1' at version 1.0.2",
+  "count": null,
+  "pagination": null
+}

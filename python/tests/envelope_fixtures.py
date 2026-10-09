@@ -2155,6 +2155,70 @@ def tool_details_cases(add: AddCase) -> None:
             )
         ],
     )
+    # The versioned cases narrow their route on tool_version: the value is a string on
+    # both sides, so there is no spelling to fall out over, and a surface that dropped
+    # the parameter would be answered with the 404 for an unmatched request rather
+    # than with the record it was meant to pin.
+    add(
+        "get_tool_details",
+        "pinned_version",
+        "tool_version names an installed version, and the record that comes back is it",
+        {"tool_id": "Cut1", "tool_version": "1.0.2"},
+        lambda: get_tool_details_fn("Cut1", tool_version="1.0.2"),
+        [
+            route(
+                "/api/tools/Cut1",
+                {
+                    "id": "Cut1",
+                    "name": "Cut",
+                    "version": "1.0.2",
+                    "description": "columns from a table",
+                    "model_class": "Tool",
+                    "panel_section_id": "text_manipulation",
+                    "panel_section_name": "Text Manipulation",
+                },
+                query={"tool_version": "1.0.2"},
+            )
+        ],
+    )
+    add(
+        "get_tool_details",
+        "pinned_version_with_io_details",
+        "io_details=True and tool_version together: that version's parameter list",
+        {"tool_id": "fastqc", "io_details": True, "tool_version": "0.73+galaxy0"},
+        lambda: get_tool_details_fn("fastqc", io_details=True, tool_version="0.73+galaxy0"),
+        [
+            route(
+                "/api/tools/fastqc",
+                {
+                    "id": "fastqc",
+                    "name": "FastQC",
+                    "version": "0.73+galaxy0",
+                    "description": "Read Quality reports",
+                    "model_class": "Tool",
+                    "inputs": [
+                        {
+                            "name": "input_file",
+                            "label": "Short read data from your current history",
+                            "type": "data",
+                            "optional": False,
+                            "multiple": False,
+                            "extensions": ["fastqsanger", "bam"],
+                            "value": None,
+                        },
+                    ],
+                    "outputs": [
+                        {
+                            "name": "html_file",
+                            "format": "html",
+                            "label": "${tool.name} on ${on_string}: Webpage",
+                        },
+                    ],
+                },
+                query={"tool_version": "0.73+galaxy0"},
+            )
+        ],
+    )
 
 
 def tool_input_template_cases(add: AddCase) -> None:
@@ -3468,6 +3532,10 @@ def biocontainer_cases(add: AddCase) -> None:
 DENIED = '{"err_msg": "History is not accessible by user", "err_code": 403002}'
 MISSING = '{"err_msg": "History not found", "err_code": 404001}'
 BROKEN = '{"err_msg": "Uncaught exception in exposed API method:", "err_code": 0}'
+# What GET /api/tools/{id} says about an id the toolbox has at no version (v26.1.1
+# services/tools.py _get_tool). A version it lacks for an id it has is not an error
+# there: the newest installed version is served instead, and the refusal is ours.
+NO_SUCH_TOOL = '{"err_msg": "Could not find tool with id \'nope\'.", "err_code": 404001}'
 
 
 def fail(
@@ -3528,6 +3596,13 @@ def http_failure_cases(add: AddFailure) -> None:
         "a 401, whose hint is about the API key",
         {"tool_id": "cat1"},
         [fail("/api/tools/cat1", 401, DENIED)],
+    )
+    add(
+        "get_tool_details",
+        "unknown_tool_at_a_version",
+        "Galaxy's own 404 for an id it has at no version, with the version in the context",
+        {"tool_id": "nope", "tool_version": "1.0.0"},
+        [fail("/api/tools/nope", 404, NO_SUCH_TOOL, query={"tool_version": "1.0.0"})],
     )
     add(
         "get_history_contents",
@@ -4025,6 +4100,19 @@ def refusal_cases(add: AddFailure) -> None:
         "a refusal after a request that succeeded",
         {"section_id": "not-a-section"},
         [route("/api/tools", panel_sections(2, 2))],
+    )
+    add(
+        "get_tool_details",
+        "version_not_installed",
+        "Galaxy served its newest version for one it lacks, which the tool refuses by name",
+        {"tool_id": "cat1", "tool_version": "9.9.9"},
+        [
+            route(
+                "/api/tools/cat1",
+                {"id": "cat1", "name": "Concatenate datasets", "version": "1.0.0"},
+                query={"tool_version": "9.9.9"},
+            )
+        ],
     )
     add(
         "update_history",

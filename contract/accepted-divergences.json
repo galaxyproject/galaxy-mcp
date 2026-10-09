@@ -252,6 +252,14 @@
         "reason": "Galaxy's can return the rendered revision beside the editable one; ours returns the editable text and says which source it came from."
       },
       {
+        "tool": "get_tool_details",
+        "param": "tool_version",
+        "kind": "missing-builtin-param",
+        "observed": "python=type=string required=false default=none",
+        "status": "intentional",
+        "reason": "Ours can describe a tool at the version a template was frozen at, which is what GET /api/tools/{id}?tool_version= is for; Galaxy's describes whichever version the toolbox picks for the id. Kept: a caller pinning a version needs the answer to be about that version, and ours refuses when it is not."
+      },
+      {
         "tool": "get_tool_input_template",
         "param": null,
         "kind": "missing-builtin-tool",

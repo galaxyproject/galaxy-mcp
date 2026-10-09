@@ -28,11 +28,11 @@ Two differences with that server are recorded once here rather than as a row per
 
 | Status | Differences |
 | --- | --- |
-| `intentional` | `0` |
+| `intentional` | `1` |
 | `pending-port` | `0` |
 | `pending-decision` | `0` |
 | `unreviewed-gap` | `54` |
-| **total** | `54` |
+| **total** | `55` |
 
 These are counted apart and ratcheted apart -- at 54 -- because they are not this repository's to close on its own: each one is a rename, an addition or a removal somebody has to agree with galaxyproject/galaxy. Nothing here has been ruled on yet.
 
@@ -95,7 +95,8 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `get_page_revision` | `include_rendered` |  | -- | -- | `type=boolean required=false default=false` | `vs built-in: missing-py-param` | `unreviewed-gap` | Galaxy's can return the rendered revision beside the editable one; ours returns the editable text and says which source it came from. |
 | `get_server_info` |  | `5` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_tool_citations` |  | `3` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
-| `get_tool_details` |  | `3` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
+| `get_tool_details` |  | `7` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
+| `get_tool_details` | `tool_version` |  | `type=string required=false default=none` | `type=string required=false default=none` | -- | `vs built-in: missing-builtin-param` | `intentional` | Ours can describe a tool at the version a template was frozen at, which is what GET /api/tools/{id}?tool_version= is for; Galaxy's describes whichever version the toolbox picks for the id. Kept: a caller pinning a version needs the answer to be about that version, and ours refuses when it is not. |
 | `get_tool_input_template` |  | `3` | `read (tag)` | `read (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Galaxy's server has no pre-flight skeleton for run_tool, so an agent there shapes `inputs` from get_tool_details(io_details=True) by hand. |
 | `get_tool_panel` |  | `8` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_tool_panel` | `limit` |  | `type=integer required=false default=100` | `type=integer required=false default=100` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours pages the panel, because the whole tree is far more than a model can read; Galaxy's returns the whole thing. |
