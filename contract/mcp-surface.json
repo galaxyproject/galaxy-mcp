@@ -1,7 +1,7 @@
 {
   "$comment": "Generated snapshot of the Galaxy MCP tool surface -- do not edit by hand. Regenerate with `uv run python -m tests.surface_manifest`.",
   "source": "python/src/galaxy_mcp/server.py",
-  "toolCount": 46,
+  "toolCount": 47,
   "tools": [
     {
       "name": "cancel_workflow_invocation",
@@ -802,6 +802,28 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {},
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_user_tool",
+      "tags": [
+        "extended",
+        "read",
+        "tools"
+      ],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "description": "The tool's UUID as list_user_tools() reports it: 32 hex digits in\n8-4-4-4-12 groups."
+          }
+        },
+        "required": [
+          "uuid"
+        ],
         "type": "object"
       }
     },

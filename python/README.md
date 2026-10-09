@@ -283,6 +283,7 @@ submitting the run, so they need their own run tool even though the run itself g
 the same Galaxy tools API as a catalog tool.
 
 - `list_user_tools`: The current user's user-defined tools; 25 per page, because each entry carries the tool's full representation
+- `get_user_tool`: One tool by UUID, with its full representation, without paging the list for it
 - `create_user_tool`: Create one from a tool representation
 - `delete_user_tool`: Deactivate one, so it stops loading into the toolbox
 - `run_user_tool`: Run one in a history

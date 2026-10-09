@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `get_user_tool(uuid)` reads one user-defined tool back by its UUID, with its full
+  representation, through Galaxy's single-tool endpoint. Before this a caller holding a UUID from
+  `list_user_tools` or `create_user_tool` had to page the whole list to find the one definition.
+  A 404 and a value that is not shaped like a UUID both read as not found; the malformed one is
+  refused before anything is sent, because Galaxy binds the path value to a UUID column and would
+  answer a 500 for it.
+
 ## [1.11.1] - 2026-10-09
 
 ### Security

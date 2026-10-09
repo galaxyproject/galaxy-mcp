@@ -7,6 +7,7 @@ import inspect
 import json
 import logging
 import os
+import re
 import threading
 import time
 import types
@@ -4680,6 +4681,56 @@ def list_user_tools(active: bool = True, limit: int = 25, offset: int = 0) -> Ga
         )
     except Exception as e:
         raise ValueError(format_error("List user tools", e)) from e
+
+
+# The shape Galaxy reports a user tool's uuid in: 32 hex digits in 8-4-4-4-12 groups. Galaxy
+# binds the path value to a UUID column, so anything else is a 500 from the database driver
+# rather than a 404 -- the shape is checked here so a caller reads "not found" either way.
+_USER_TOOL_UUID = re.compile(r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}")
+
+
+@mcp.tool(tags={"tools", "read", "extended"})
+def get_user_tool(uuid: str) -> GalaxyResult:
+    """Get one user-defined tool by its UUID, with its full representation.
+
+    One request to Galaxy's single-tool endpoint, so a caller holding a UUID from
+    list_user_tools() or create_user_tool() reads that tool's definition back without
+    paging through the whole list. A UUID that is not shaped like one is refused as
+    not found before anything is sent.
+
+    Args:
+        uuid: The tool's UUID as list_user_tools() reports it: 32 hex digits in
+            8-4-4-4-12 groups.
+
+    Returns:
+        GalaxyResult with the tool record (id, uuid, tool_id, active status,
+        representation) in data.
+    """
+    if not _USER_TOOL_UUID.fullmatch(uuid):
+        raise ValueError(
+            f"No user-defined tool found with UUID '{uuid}': that is not a UUID. A user tool's "
+            "UUID is 32 hex digits in 8-4-4-4-12 groups, as list_user_tools() reports it. "
+            "Nothing was sent to Galaxy."
+        )
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+
+    try:
+        url = f"{gi.url}/unprivileged_tools/{uuid}"
+        response = gi.make_get_request(url)
+        # A raw request, like the rest of this API: the status is checked here, so a 404 is
+        # reported as one rather than read as a tool record.
+        response.raise_for_status()
+        tool_info = response.json()
+        return GalaxyResult(
+            data=tool_info,
+            success=True,
+            message=(
+                f"Retrieved user-defined tool '{tool_info.get('tool_id') or uuid}' (UUID: {uuid})"
+            ),
+        )
+    except Exception as e:
+        raise ValueError(format_error("Get user tool", e, {"uuid": uuid})) from e
 
 
 @mcp.tool(tags={"tools", "write", "extended"})
