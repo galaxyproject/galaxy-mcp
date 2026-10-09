@@ -58,6 +58,16 @@ refused before anything is sent (`negative_version`, exit 64), because Galaxy in
 versions with a plain list subscript and would quietly serve some other version for it. The
 `pinned_version_zero` golden case answers the pinned requests with a different workflow than
 the bare ones, so a surface that drops the version from any one read fails the replay.
+### `get_tool_details` describes a tool at a pinned version
+
+`toolVersion` (`--tool-version`, `tool_version` on the wire) goes to `GET /api/tools/{id}`
+as the query parameter Galaxy reads it from, which is still the classic controller the
+26.0 bindings do not type, so it rides the same untyped call as before. Galaxy answers a
+version it lacks with its newest installed one and a 200, so the op refuses that reply
+as not found -- the Python server's own sentence, exit 66 on the CLI -- rather than hand
+back another version's parameters as the pinned one. Three golden cases cover a pinned
+version, one with `ioDetails`, and the refusal; a fourth pins Galaxy's 404 for an id it
+has at no version, with the version in the context.
 
 ### `get_invocations` sends `step_details` for one invocation (#152)
 

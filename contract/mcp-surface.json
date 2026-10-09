@@ -747,6 +747,18 @@
             "default": false,
             "type": "boolean",
             "description": "Set True to include detailed input/output parameter schemas.\n        Essential for understanding how to call run_tool()."
+          },
+          "tool_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Describe this installed version of the tool rather than the one\n        Galaxy picks for the id. Refused when Galaxy answers with a\n        different version, so the answer is never about another one."
           }
         },
         "required": [

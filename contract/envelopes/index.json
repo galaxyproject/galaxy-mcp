@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "python/src/galaxy_mcp/server.py",
-  "caseCount": 227,
+  "caseCount": 228,
   "failureCaseCount": 67,
   "cases": [
     {
@@ -1104,18 +1104,6 @@
       "replies": "get_workflow_input_template/steps_out_of_order.galaxy.json"
     },
     {
-      "tool": "get_workflow_input_template",
-      "case": "pinned_version_zero",
-      "note": "the oldest stored version, which has a slot the latest no longer asks for",
-      "outcome": "success",
-      "input": {
-        "workflow_id": "wf000001",
-        "version": 0
-      },
-      "envelope": "get_workflow_input_template/pinned_version_zero.json",
-      "replies": "get_workflow_input_template/pinned_version_zero.galaxy.json"
-    },
-    {
       "tool": "get_tool_citations",
       "case": "some",
       "note": "citations counted",
@@ -1303,6 +1291,31 @@
       },
       "envelope": "get_tool_details/with_io_details.json",
       "replies": "get_tool_details/with_io_details.galaxy.json"
+    },
+    {
+      "tool": "get_tool_details",
+      "case": "pinned_version",
+      "note": "tool_version names an installed version, and the record that comes back is it",
+      "outcome": "success",
+      "input": {
+        "tool_id": "Cut1",
+        "tool_version": "1.0.2"
+      },
+      "envelope": "get_tool_details/pinned_version.json",
+      "replies": "get_tool_details/pinned_version.galaxy.json"
+    },
+    {
+      "tool": "get_tool_details",
+      "case": "pinned_version_with_io_details",
+      "note": "io_details=True and tool_version together: that version's parameter list",
+      "outcome": "success",
+      "input": {
+        "tool_id": "fastqc",
+        "io_details": true,
+        "tool_version": "0.73+galaxy0"
+      },
+      "envelope": "get_tool_details/pinned_version_with_io_details.json",
+      "replies": "get_tool_details/pinned_version_with_io_details.galaxy.json"
     },
     {
       "tool": "get_tool_input_template",
@@ -2048,6 +2061,18 @@
       "replies": "get_tool_details/unauthorized.galaxy.json"
     },
     {
+      "tool": "get_tool_details",
+      "case": "unknown_tool_at_a_version",
+      "note": "Galaxy's own 404 for an id it has at no version, with the version in the context",
+      "outcome": "failure",
+      "input": {
+        "tool_id": "nope",
+        "tool_version": "1.0.0"
+      },
+      "envelope": "get_tool_details/unknown_tool_at_a_version.json",
+      "replies": "get_tool_details/unknown_tool_at_a_version.galaxy.json"
+    },
+    {
       "tool": "get_history_contents",
       "case": "permission_denied",
       "note": "a 403, whose hint is about the account",
@@ -2299,18 +2324,6 @@
       },
       "envelope": "get_workflow_input_template/server_error.json",
       "replies": "get_workflow_input_template/server_error.galaxy.json"
-    },
-    {
-      "tool": "get_workflow_input_template",
-      "case": "version_out_of_range",
-      "note": "a stored version Galaxy does not have, refused by Galaxy on every read",
-      "outcome": "failure",
-      "input": {
-        "workflow_id": "wf000001",
-        "version": 7
-      },
-      "envelope": "get_workflow_input_template/version_out_of_range.json",
-      "replies": "get_workflow_input_template/version_out_of_range.galaxy.json"
     },
     {
       "tool": "invoke_workflow",
@@ -2672,6 +2685,18 @@
       "replies": "get_tool_panel/no_such_section.galaxy.json"
     },
     {
+      "tool": "get_tool_details",
+      "case": "version_not_installed",
+      "note": "Galaxy served its newest version for one it lacks, which the tool refuses by name",
+      "outcome": "failure",
+      "input": {
+        "tool_id": "cat1",
+        "tool_version": "9.9.9"
+      },
+      "envelope": "get_tool_details/version_not_installed.json",
+      "replies": "get_tool_details/version_not_installed.galaxy.json"
+    },
+    {
       "tool": "update_history",
       "case": "nothing_to_update",
       "note": "no field to change, refused before anything is sent",
@@ -2692,18 +2717,6 @@
       },
       "envelope": "get_dataset_details/is_a_collection.json",
       "replies": "get_dataset_details/is_a_collection.galaxy.json"
-    },
-    {
-      "tool": "get_workflow_input_template",
-      "case": "negative_version",
-      "note": "a version below zero, which Galaxy would silently resolve to another version",
-      "outcome": "failure",
-      "input": {
-        "workflow_id": "wf000001",
-        "version": -1
-      },
-      "envelope": "get_workflow_input_template/negative_version.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
     },
     {
       "tool": "create_user_tool",

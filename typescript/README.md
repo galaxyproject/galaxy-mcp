@@ -371,7 +371,7 @@ exit code comes from (see [Output and exit codes](#output-and-exit-codes)). A Ty
 | --- | --- |
 | `search_tools_by_name` | Search tools by name, id, or description substring |
 | `search_tools_by_keywords` | Search tools by keywords (name, description, input extensions) |
-| `get_tool_details` | A tool's metadata by id (name, version, description) |
+| `get_tool_details` | A tool's metadata by id (name, version, description); `--tool-version` describes one installed version and is refused if Galaxy answers with another |
 | `get_tool_panel` | The tool panel's sections with their tool counts; name one with `--section-id` to list its tools |
 | `get_tool_citations` | Citations for a tool by id |
 | `get_tool_run_examples` | Test-data examples (inputs/outputs) for a tool |

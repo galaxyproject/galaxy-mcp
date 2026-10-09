@@ -268,7 +268,7 @@ editable markdown, which is what it is for.
 
 - `search_tools_by_name`: Substring search over tool name, id, and description; 25 per page
 - `search_tools_by_keywords`: Match keywords against tool names, descriptions, and the file extensions a tool accepts as input; 50 per page
-- `get_tool_details`: A tool's metadata, optionally including its full input schema
+- `get_tool_details`: A tool's metadata, optionally including its full input schema; pass `tool_version` to describe one installed version, refused if Galaxy answers with another
 - `get_tool_panel`: Browse the tool panel one level at a time -- the sections and their sizes, or one section's tools with `section_id`. The whole panel is megabytes on a production server, so it is never returned whole; 100 entries per page
 - `get_tool_citations`: How to cite a tool
 - `get_tool_run_examples`: The tool's own XML test definitions, as written -- good for seeing how inputs are shaped, but some expect failure and their input files are test fixtures

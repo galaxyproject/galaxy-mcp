@@ -13,6 +13,7 @@ from galaxy_mcp.tool_inputs import check_tool_inputs
 
 from .test_helpers import (
     galaxy_state,
+    get_tool_details_fn,
     get_tool_input_template_fn,
     get_tool_run_examples_fn,
     run_tool_fn,
@@ -192,6 +193,72 @@ class TestToolOperations:
 
             with pytest.raises(Exception):
                 get_tool_run_examples_fn("tool1")
+
+    def test_get_tool_details_without_a_version_asks_show_tool(self, mock_galaxy_instance):
+        """The request is show_tool's own when no version is pinned, as it always was."""
+        mock_galaxy_instance.tools.show_tool.return_value = {"id": "cat1", "version": "1.0.0"}
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_tool_details_fn("cat1", io_details=True)
+
+        assert result.success is True
+        assert result.message == "Retrieved details for tool 'cat1'"
+        assert result.data == {"id": "cat1", "version": "1.0.0"}
+        mock_galaxy_instance.tools.show_tool.assert_called_once_with("cat1", io_details=True)
+        mock_galaxy_instance.tools._get.assert_not_called()
+
+    def test_get_tool_details_at_a_version_sends_tool_version(self, mock_galaxy_instance):
+        """A pinned version goes to Galaxy in the query, with show_tool's other parameters."""
+        mock_galaxy_instance.tools._get.return_value = {"id": "cat1", "version": "1.0.0"}
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_tool_details_fn("cat1", io_details=True, tool_version="1.0.0")
+
+        assert result.success is True
+        assert result.message == "Retrieved details for tool 'cat1' at version 1.0.0"
+        assert result.data["version"] == "1.0.0"
+        mock_galaxy_instance.tools._get.assert_called_once_with(
+            id="cat1",
+            params={"io_details": True, "link_details": False, "tool_version": "1.0.0"},
+        )
+        mock_galaxy_instance.tools.show_tool.assert_not_called()
+
+    def test_get_tool_details_refuses_another_version_than_the_one_asked_for(
+        self, mock_galaxy_instance
+    ):
+        """Galaxy answers with its newest version when the pinned one is missing; refuse it."""
+        mock_galaxy_instance.tools._get.return_value = {"id": "cat1", "version": "1.0.0"}
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError, match="described version 1.0.0") as excinfo:
+                get_tool_details_fn("cat1", tool_version="9.9.9")
+
+        msg = str(excinfo.value)
+        assert "rather than the 9.9.9 asked for" in msg
+        assert "without tool_version" in msg
+        assert "Get tool details failed" not in msg
+
+    def test_get_tool_details_cannot_check_a_reply_without_a_version(self, mock_galaxy_instance):
+        """A record that names no version cannot be refused on one, so it is passed through."""
+        mock_galaxy_instance.tools._get.return_value = {"id": "cat1"}
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_tool_details_fn("cat1", tool_version="1.0.0")
+
+        assert result.success is True
+        assert result.message == "Retrieved details for tool 'cat1' at version 1.0.0"
+
+    def test_get_tool_details_error_names_the_version_asked_for(self, mock_galaxy_instance):
+        """A failed versioned request reports the version in its context."""
+        mock_galaxy_instance.tools._get.side_effect = Exception("Boom")
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError, match="Get tool details failed") as excinfo:
+                get_tool_details_fn("cat1", tool_version="1.0.0")
+
+        assert str(excinfo.value).endswith(
+            "Context: tool_id=cat1, io_details=False, tool_version=1.0.0"
+        )
 
     def test_get_tool_run_examples(self, mock_galaxy_instance):
         """Test retrieving tool usage lessons"""

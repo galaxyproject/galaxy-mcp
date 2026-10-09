@@ -270,6 +270,8 @@ const EXIT_CODES: Record<string, number> = {
   "get_page/not_found": 66,
   "get_page_revision/not_found": 66,
   "get_tool_citations/not_found": 66,
+  "get_tool_details/unknown_tool_at_a_version": 66,
+  "get_tool_details/version_not_installed": 66,
   "get_tool_input_template/not_found": 66,
   "get_tool_panel/no_such_section": 66,
   "get_workflow_details/not_found": 66,

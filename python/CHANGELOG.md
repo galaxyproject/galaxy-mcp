@@ -47,6 +47,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   be read without mixing its slots with the latest version's docs. Left out, nothing changes. A
   version Galaxy does not have is Galaxy's own 400; a negative one is refused before anything is
   sent, because Galaxy would quietly serve some other version for it.
+### Added
+
+- `get_tool_details` takes an optional `tool_version`, so a tool can be described at the
+  version a template was pinned to rather than at whichever version Galaxy picks for the id.
+  Galaxy serves its newest installed version when the one asked for is missing, as a 200 with
+  no word about it, so the tool refuses that answer by name instead of passing another
+  version's parameters off as the pinned one. Without `tool_version` nothing changes.
 
 ## [1.11.1] - 2026-10-09
 

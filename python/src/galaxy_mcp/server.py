@@ -1590,7 +1590,9 @@ def search_tools_by_name(query: str, limit: int = 25, offset: int = 0) -> Galaxy
 
 
 @mcp.tool(tags={"tools", "read", "extended"})
-def get_tool_details(tool_id: str, io_details: bool = False) -> GalaxyResult:
+def get_tool_details(
+    tool_id: str, io_details: bool = False, tool_version: str | None = None
+) -> GalaxyResult:
     """
     Get detailed information about a specific tool including its input parameters.
 
@@ -1605,6 +1607,9 @@ def get_tool_details(tool_id: str, io_details: bool = False) -> GalaxyResult:
                  - Toolshed: "toolshed.g2.bx.psu.edu/repos/devteam/fastqc/fastqc/0.73"
         io_details: Set True to include detailed input/output parameter schemas.
                     Essential for understanding how to call run_tool().
+        tool_version: Describe this installed version of the tool rather than the one
+                    Galaxy picks for the id. Refused when Galaxy answers with a
+                    different version, so the answer is never about another one.
 
     Returns:
         GalaxyResult with tool info including:
@@ -1638,18 +1643,53 @@ def get_tool_details(tool_id: str, io_details: bool = False) -> GalaxyResult:
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
+    context: dict[str, Any] = {"tool_id": tool_id, "io_details": io_details}
+    if tool_version is not None:
+        context["tool_version"] = tool_version
     try:
-        # Get detailed information about the tool
-        tool_info = gi.tools.show_tool(tool_id, io_details=io_details)
+        if tool_version is None:
+            tool_info = gi.tools.show_tool(tool_id, io_details=io_details)
+        else:
+            # show_tool sends io_details and link_details and nothing else, and GET
+            # /api/tools/{id} reads tool_version out of the query string (v26.1.1
+            # api/tools.py show). Same client call underneath, so the request, the
+            # retries and the failure wording match show_tool's.
+            tool_info = gi.tools._get(
+                id=tool_id,
+                params={
+                    "io_details": io_details,
+                    "link_details": False,
+                    "tool_version": tool_version,
+                },
+            )
+    except Exception as e:
+        raise ValueError(format_error("Get tool details", e, context)) from e
+
+    if tool_version is None:
         return GalaxyResult(
             data=tool_info,
             success=True,
             message=f"Retrieved details for tool '{tool_id}'",
         )
-    except Exception as e:
+
+    # Asking for a version is not the same as getting it: the toolbox answers with the
+    # newest installed version when the one asked for is missing (v26.1.1
+    # tool_util/toolbox/base.py get_tool), as a 200 with no word about it. A caller
+    # pinning a version must not be handed another version's parameters as if they
+    # were its own, so the mismatch is a refusal rather than a footnote.
+    served = tool_info.get("version") if isinstance(tool_info, dict) else None
+    if isinstance(served, str) and served != tool_version:
         raise ValueError(
-            format_error("Get tool details", e, {"tool_id": tool_id, "io_details": io_details})
-        ) from e
+            f"Galaxy described version {served} of tool '{tool_id}' rather than the "
+            f"{tool_version} asked for, so that version is not installed on this server. "
+            f"Call get_tool_details('{tool_id}') without tool_version to see the version "
+            "Galaxy serves for this id."
+        )
+    return GalaxyResult(
+        data=tool_info,
+        success=True,
+        message=f"Retrieved details for tool '{tool_id}' at version {tool_version}",
+    )
 
 
 @mcp.tool(tags={"tools", "read", "extended"})
