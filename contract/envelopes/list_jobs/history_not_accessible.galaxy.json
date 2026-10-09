@@ -6,9 +6,9 @@
       "method": "GET",
       "path": "/api/jobs",
       "query": {},
-      "status": 404,
+      "status": 403,
       "headers": {},
-      "bodyText": "{\"err_msg\": \"History not found\", \"err_code\": 404001}"
+      "bodyText": "{\"err_msg\": \"Cannot access the request job objects.\", \"err_code\": 403002}"
     }
   ]
 }

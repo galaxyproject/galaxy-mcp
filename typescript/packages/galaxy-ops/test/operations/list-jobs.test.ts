@@ -149,11 +149,26 @@ describe("list_jobs", () => {
     expect(await listJobs({ historyId: "hist1" }, ctxWith(client))).toEqual([]);
   });
 
-  it("classifies a 404 and a 403 the way the exit codes need", async () => {
-    const missing = mockClient({ GET: () => ({ error: {}, response: { status: 404 } }) });
-    await expect(listJobs({ historyId: "nope" }, ctxWith(missing))).rejects.toBeInstanceOf(GalaxyNotFoundError);
+  it("reads an unknown history as an empty page, which is what Galaxy answers", async () => {
+    // Galaxy filters the index by history_id without looking the history up: a well-formed
+    // id nothing answers to is 200 [], the same bytes as a history with no jobs, never a 404.
+    const client = mockClient({ GET: () => ({ data: [], response: { status: 200 } }) });
+    expect(await listJobs({ historyId: "nothing" }, ctxWith(client))).toEqual([]);
+    expect(listJobsOp.summary).toContain("get_history_details");
+  });
+
+  it("classifies the statuses the index does emit the way the exit codes need", async () => {
+    // 403: a history the key cannot read (ItemAccessibilityException). 400: a filter Galaxy
+    // could not read, a history_id that is not an encoded id among them (MalformedId).
     const forbidden = mockClient({ GET: () => ({ error: {}, response: { status: 403 } }) });
-    await expect(listJobs({}, ctxWith(forbidden))).rejects.toBeInstanceOf(GalaxyAuthError);
+    await expect(listJobs({ historyId: "nope" }, ctxWith(forbidden))).rejects.toBeInstanceOf(GalaxyAuthError);
+    const malformed = mockClient({ GET: () => ({ error: {}, response: { status: 400 } }) });
+    await expect(listJobs({ historyId: "not-an-id" }, ctxWith(malformed))).rejects.toBeInstanceOf(
+      GalaxyConnectionError,
+    );
+    // A 404 is not something this index says about a history, but the classifier still holds.
+    const missing = mockClient({ GET: () => ({ error: {}, response: { status: 404 } }) });
+    await expect(listJobs({}, ctxWith(missing))).rejects.toBeInstanceOf(GalaxyNotFoundError);
   });
 
   it("raises the index's own error rather than reporting it as an empty list", async () => {
@@ -189,8 +204,23 @@ describe("list_jobs", () => {
       shape: "bioblend-get",
       action: "List jobs",
       context: expect.any(Function),
+      sentence: expect.any(Function),
     });
     expect(listJobsOp.failure!.context!({ historyId: "hist1" } as any)).toEqual({ history_id: "hist1" });
+  });
+
+  it("follows a 400 with what it means, and leaves every other status to format_error", () => {
+    const sentence = listJobsOp.failure!.sentence!;
+    const text = "GET: error 400: b'...', 0 attempts left: ...";
+    expect(sentence(text, 400, { historyId: "not-an-id" } as any)).toBe(
+      `List jobs failed: ${text}. Context: history_id=not-an-id. Galaxy could not read one of the filters: ` +
+        "history_id has to be an encoded id, the dates ISO 8601, and state, order_by and view values Galaxy " +
+        "knows. A well-formed id of a history that does not exist is not refused this way -- it answers with " +
+        "an empty page",
+    );
+    expect(sentence(text, 403, { historyId: "h" } as any)).toBeUndefined();
+    expect(sentence(text, 500, {} as any)).toBeUndefined();
+    expect(sentence(text, null, {} as any)).toBeUndefined();
   });
 
   it("advertises the defaults it applies", () => {

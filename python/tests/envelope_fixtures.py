@@ -1336,6 +1336,17 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         lambda: list_jobs_fn(history_id="h0000", limit=5),
         [route("/api/jobs", [])],
     )
+    # Galaxy filters the index by history_id without looking the history up, so a
+    # well-formed id nothing answers to is 200 [] -- the same bytes as empty_history, and
+    # not a 404. Pinned as its own case so the ambiguity is in the contract.
+    add(
+        "list_jobs",
+        "unknown_history",
+        "a well-formed id of a history that does not exist: an empty page, not a 404",
+        {"history_id": "h0404", "limit": 5},
+        lambda: list_jobs_fn(history_id="h0404", limit=5),
+        [route("/api/jobs", [])],
+    )
     add(
         "list_jobs",
         "next_page",
@@ -3529,6 +3540,12 @@ def biocontainer_cases(add: AddCase) -> None:
 DENIED = '{"err_msg": "History is not accessible by user", "err_code": 403002}'
 MISSING = '{"err_msg": "History not found", "err_code": 404001}'
 BROKEN = '{"err_msg": "Uncaught exception in exposed API method:", "err_code": 0}'
+# What GET /api/jobs says, byte for byte, for a history the key cannot read and for an id
+# it cannot decode (the double space is Galaxy's own, from an object_name it was not given).
+JOBS_DENIED = '{"err_msg": "Cannot access the request job objects.", "err_code": 403002}'
+MALFORMED = (
+    '{"err_msg": "Wrong  id ( not-an-id ) specified, unable to decode.", "err_code": 400009}'
+)
 
 
 def fail(
@@ -3807,12 +3824,22 @@ def more_http_failure_cases(add: AddFailure) -> None:
         {},
         [fail("/api/pages", 403, DENIED)],
     )
+    # The job index never 404s over a history_id: an unknown id is an empty page (a
+    # success case), a history the key cannot read is a 403 and an id Galaxy cannot
+    # decode is a 400, which the tool follows with a hint of its own.
     add(
         "list_jobs",
-        "history_not_found",
-        "a bioblend GET of the job index for a history that is not there",
-        {"history_id": "h0404"},
-        [fail("/api/jobs", 404, MISSING)],
+        "history_not_accessible",
+        "a bioblend GET of the job index for a history the user cannot read",
+        {"history_id": "h0403"},
+        [fail("/api/jobs", 403, JOBS_DENIED)],
+    )
+    add(
+        "list_jobs",
+        "malformed_history_id",
+        "a history_id Galaxy cannot decode; no 400 hint in the table, so the tool adds one",
+        {"history_id": "not-an-id"},
+        [fail("/api/jobs", 400, MALFORMED)],
     )
     add(
         "create_page",

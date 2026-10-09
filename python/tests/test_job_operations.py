@@ -203,14 +203,55 @@ class TestListJobs:
             with pytest.raises(ValueError, match="List jobs failed: History is not accessible"):
                 list_jobs_fn(history_id="h1")
 
-    def test_wraps_a_client_failure_with_the_status_hint_and_context(self, mock_galaxy_instance):
+    def test_an_unknown_history_is_an_empty_page_not_an_error(self, mock_galaxy_instance):
+        # Galaxy filters the index by history_id without looking the history up, so a
+        # well-formed id nothing answers to comes back 200 [] -- the same bytes as a history
+        # with no jobs. The tool passes that through as success and says so in its
+        # description, which is where a reconcile loop learns to confirm the history first.
+        with self._connected(mock_galaxy_instance):
+            mock_galaxy_instance.jobs._get.return_value = []
+            result = list_jobs_fn(history_id="h404")
+        assert result.success is True
+        assert result.data == []
+        assert result.count == 0
+        assert result.message == "Retrieved 0 jobs"
+        assert "get_history_details" in (list_jobs_fn.__doc__ or "")
+
+    def test_a_history_the_user_cannot_read_carries_the_permission_hint(self, mock_galaxy_instance):
+        # Galaxy's answer for a history the key cannot see: ItemAccessibilityException, 403.
         with self._connected(mock_galaxy_instance):
             mock_galaxy_instance.jobs._get.side_effect = bioblend.ConnectionError(
-                "404 Client Error", body="History not found", status_code=404
+                "403 Client Error", body="Cannot access the request job objects.", status_code=403
             )
             with pytest.raises(ValueError) as excinfo:
-                list_jobs_fn(history_id="h404")
+                list_jobs_fn(history_id="h403")
         text = str(excinfo.value)
-        assert text.startswith("List jobs failed: 404 Client Error")
-        assert "(Resource not found - check IDs and URLs)" in text
-        assert text.endswith("Context: history_id=h404")
+        assert text.startswith("List jobs failed: 403 Client Error")
+        assert "(Permission denied - check your account permissions)" in text
+        assert text.endswith("Context: history_id=h403")
+
+    def test_a_malformed_history_id_says_what_the_400_means(self, mock_galaxy_instance):
+        # A history_id Galaxy cannot decode is a 400 MalformedId. The shared hint table has
+        # no 400 row, so the tool adds the one thing a caller needs: this is a filter Galaxy
+        # could not read, not the missing-history answer, which is an empty page.
+        with self._connected(mock_galaxy_instance):
+            mock_galaxy_instance.jobs._get.side_effect = bioblend.ConnectionError(
+                "400 Client Error", body="Wrong  id ( not-an-id ) specified", status_code=400
+            )
+            with pytest.raises(ValueError) as excinfo:
+                list_jobs_fn(history_id="not-an-id")
+        text = str(excinfo.value)
+        assert text.startswith("List jobs failed: 400 Client Error")
+        assert "Context: history_id=not-an-id. Galaxy could not read one of the filters" in text
+        assert text.endswith("it answers with an empty page")
+
+    def test_other_statuses_are_wrapped_without_the_filter_hint(self, mock_galaxy_instance):
+        with self._connected(mock_galaxy_instance):
+            mock_galaxy_instance.jobs._get.side_effect = bioblend.ConnectionError(
+                "500 Server Error", body="boom", status_code=500
+            )
+            with pytest.raises(ValueError) as excinfo:
+                list_jobs_fn(history_id="h1")
+        text = str(excinfo.value)
+        assert "(Server error - try again later or contact admin)" in text
+        assert text.endswith("Context: history_id=h1")

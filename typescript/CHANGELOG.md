@@ -14,9 +14,14 @@ state and a window of update time, sorted by update or create time, in the small
 reconciling its own record of a history needs -- the jobs updated since a time, in that
 history, a page at a time. Galaxy puts no upper cap on `limit` and reports no total, so
 the envelope carries a count and no pagination block, and a page shorter than `limit` is
-the last one. Seven golden cases under `contract/envelopes/list_jobs` hold the two
-surfaces to the Python server's answer, the 404 for a history that is not there and the
-refusal of `limit` 0 among them.
+the last one. Galaxy filters the index by `history_id` without looking the history up, so
+the id of a history that does not exist is not a 404 but an empty page, the same answer as
+a history with no jobs; the description says so and points at `get_history_details` for a
+reconcile that has to tell the two apart. A history the key cannot read is a 403 (exit 77 on
+the CLI) and an id Galaxy cannot decode a 400 (exit 69), which both surfaces follow with a
+sentence saying it is a filter Galaxy could not read. Nine golden cases under
+`contract/envelopes/list_jobs` hold the two surfaces to the Python server's answer, the
+empty page for an unknown history, those two refusals and the refusal of `limit` 0 among them.
 
 ### `get_invocations` sends `step_details` for one invocation (#152)
 

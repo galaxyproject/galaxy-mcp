@@ -1031,7 +1031,7 @@
               }
             ],
             "default": null,
-            "description": "Only jobs in this history (an encoded history id). Leave it unset\n       for jobs from any history the user can see."
+            "description": "Only jobs in this history (an encoded history id). Leave it unset\n       for jobs from any history the user can see. The id of a history\n       that does not exist is not an error here: it answers with an empty\n       page."
           },
           "state": {
             "anyOf": [

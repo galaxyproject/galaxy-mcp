@@ -2872,6 +2872,14 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> GalaxyRes
     )
 
 
+# Appended to a 400 from the job index. Quoted by the TypeScript op, so change both.
+_LIST_JOBS_BAD_FILTER = (
+    "Galaxy could not read one of the filters: history_id has to be an encoded id, the "
+    "dates ISO 8601, and state, order_by and view values Galaxy knows. A well-formed id of "
+    "a history that does not exist is not refused this way -- it answers with an empty page"
+)
+
+
 @mcp.tool(tags={"jobs", "read", "extended"})
 def list_jobs(
     history_id: str | None = None,
@@ -2891,9 +2899,17 @@ def list_jobs(
     no pagination block: a page shorter than limit is the last one, and the next page
     starts at offset + limit.
 
+    Galaxy filters this index by history_id without looking the history up, so a
+    well-formed id of a history that does not exist answers with an empty page -- the
+    same answer as a history with no jobs, not a 404. A reconcile that has to tell the
+    two apart confirms the history with get_history_details first. A history the user
+    cannot read is refused with a 403, and an id Galaxy cannot decode with a 400.
+
     Args:
         history_id: Only jobs in this history (an encoded history id). Leave it unset
-                   for jobs from any history the user can see.
+                   for jobs from any history the user can see. The id of a history
+                   that does not exist is not an error here: it answers with an empty
+                   page.
         state: Only jobs in this state -- 'new', 'queued', 'running', 'ok', 'error',
               'paused', 'deleted' and the rest of Galaxy's job states. A
               comma-separated list matches any of them.
@@ -2953,7 +2969,13 @@ def list_jobs(
         # Already the refusal above, which says more than the wrapper below would.
         raise
     except Exception as e:
-        raise ValueError(format_error("List jobs", e, {"history_id": history_id})) from e
+        base = format_error("List jobs", e, {"history_id": history_id})
+        # The hint table has no 400 row, and this index's 400 is one of the filters Galaxy
+        # could not read -- most often a history_id that is not an encoded id. Said here so
+        # a caller does not take it for the missing-history answer, which is an empty page.
+        if _http_status(e) == 400:
+            raise ValueError(f"{base}. {_LIST_JOBS_BAD_FILTER}") from e
+        raise ValueError(base) from e
 
 
 @mcp.tool(tags={"datasets", "read", "core"})

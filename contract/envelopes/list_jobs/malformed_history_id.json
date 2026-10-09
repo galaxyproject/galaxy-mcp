@@ -1,0 +1,14 @@
+{
+  "$comment": "A failed tool call from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `result` is the CallToolResult the MCP wire carries, dumped the way the SDK dumps it (by alias, JSON mode, None-valued fields left out). `sentence` is the same text with FastMCP's own wrapper removed, which is what the tool itself said.",
+  "outcome": "failure",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Error calling tool 'list_jobs': List jobs failed: GET: error 400: b'{\"err_msg\": \"Wrong  id ( not-an-id ) specified, unable to decode.\", \"err_code\": 400009}', 0 attempts left: {\"err_msg\": \"Wrong  id ( not-an-id ) specified, unable to decode.\", \"err_code\": 400009}. Context: history_id=not-an-id. Galaxy could not read one of the filters: history_id has to be an encoded id, the dates ISO 8601, and state, order_by and view values Galaxy knows. A well-formed id of a history that does not exist is not refused this way -- it answers with an empty page"
+      }
+    ],
+    "isError": true
+  },
+  "sentence": "List jobs failed: GET: error 400: b'{\"err_msg\": \"Wrong  id ( not-an-id ) specified, unable to decode.\", \"err_code\": 400009}', 0 attempts left: {\"err_msg\": \"Wrong  id ( not-an-id ) specified, unable to decode.\", \"err_code\": 400009}. Context: history_id=not-an-id. Galaxy could not read one of the filters: history_id has to be an encoded id, the dates ISO 8601, and state, order_by and view values Galaxy knows. A well-formed id of a history that does not exist is not refused this way -- it answers with an empty page"
+}

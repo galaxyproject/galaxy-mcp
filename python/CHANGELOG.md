@@ -14,7 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `collection` view by default. It is the read an agent reconciling its own record of a history
   needs: the jobs updated since a time, in that history, by `limit` and `offset`. Galaxy puts no
   upper cap on `limit` and reports no total, so the result carries a count and no pagination
-  block; a page shorter than `limit` is the last one.
+  block; a page shorter than `limit` is the last one. Galaxy filters the index by `history_id`
+  without looking the history up, so the id of a history that does not exist answers with an
+  empty page rather than a 404 -- the description says so and points at `get_history_details`
+  for a reconcile that has to tell the two apart. A history the key cannot read is a 403, and
+  an id Galaxy cannot decode a 400, which the tool follows with a hint of its own since the
+  shared hint table has no 400 row.
 
 ## [1.11.1] - 2026-10-09
 

@@ -18,6 +18,12 @@ const DEFAULT_VIEW = "collection";
 const DEFAULT_LIMIT = 100;
 const DEFAULT_OFFSET = 0;
 
+// server.py, _LIST_JOBS_BAD_FILTER: appended to a 400 from the job index, byte for byte.
+const BAD_FILTER =
+  "Galaxy could not read one of the filters: history_id has to be an encoded id, the " +
+  "dates ISO 8601, and state, order_by and view values Galaxy knows. A well-formed id of " +
+  "a history that does not exist is not refused this way -- it answers with an empty page";
+
 // Python spells the four filters `T | None = None` and treats the null as "not supplied", so
 // null is accepted here and means the same thing. The four it declares with a value -- order_by,
 // view, limit, offset -- reject null on both surfaces and default the same way.
@@ -25,7 +31,10 @@ const input = {
   historyId: z
     .string()
     .nullish()
-    .describe("Only jobs in this history (an encoded history id). Leave it unset for jobs from any history the user can see"),
+    .describe(
+      "Only jobs in this history (an encoded history id). Leave it unset for jobs from any history the user can " +
+        "see. The id of a history that does not exist is not an error here: it answers with an empty page",
+    ),
   state: z
     .string()
     .nullish()
@@ -141,7 +150,9 @@ export const listJobsOp: Operation<typeof input, JobSummary[]> = {
   domain: "jobs",
   summary:
     "List jobs, optionally narrowed to one history, one state and a time window, a page at a time by limit and " +
-    "offset. Galaxy reports no total for this index, so a page shorter than limit is the last one.",
+    "offset. Galaxy reports no total for this index, so a page shorter than limit is the last one. An unknown " +
+    "history is not a 404 but an empty page, the same answer as a history with no jobs; confirm the history with " +
+    "get_history_details when that matters.",
   input,
   run,
   // server.py, list_jobs: a count of what came back, and no pagination -- the index reports
@@ -152,11 +163,18 @@ export const listJobsOp: Operation<typeof input, JobSummary[]> = {
   }),
   // server.py, list_jobs: bioblend's own GET, wrapped by format_error with the history in the
   // context. An error body under a 200 is refused at the throw site instead, because that one
-  // carries a context of its own.
+  // carries a context of its own. A 400 -- a filter Galaxy could not read, most often a
+  // history_id that is not an encoded id -- gets the tool's own sentence after the wrapped
+  // one, because the shared hint table has no 400 row and the missing-history answer is an
+  // empty page, which a caller must not take this for.
   failure: {
     shape: "bioblend-get",
     action: "List jobs",
     context: (i) => ({ history_id: i.historyId }),
+    sentence: (text, status, i) =>
+      status === 400
+        ? `${pyFormatError("List jobs", text, status, { history_id: i.historyId })}. ${BAD_FILTER}`
+        : undefined,
   },
 };
 
