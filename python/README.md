@@ -293,7 +293,7 @@ the same Galaxy tools API as a catalog tool.
 - `get_workflow_details`: One workflow's steps and inputs, at a given version
 - `get_workflow_input_template`: A ready-to-fill input template plus a run guide; call this before `invoke_workflow`
 - `invoke_workflow`: Run a workflow, validating the inputs against its steps first
-- `get_invocations`: Invocations, by invocation, workflow, or history
+- `get_invocations`: Invocations, by invocation, workflow, or history; pages with `limit` (at most 100, Galaxy's cap) and `offset`, sorts by `create_time` or `update_time`, and `include_terminal=False` keeps only the ones still running
 - `cancel_workflow_invocation`: Cancel a running invocation
 
 ### IWC catalog

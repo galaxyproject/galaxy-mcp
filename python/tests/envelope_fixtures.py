@@ -1283,6 +1283,30 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         lambda: get_invocations_fn(limit=5),
         [route("/api/invocations", [])],
     )
+    add(
+        "get_invocations",
+        "second_page",
+        "the page after the first: the route answers only when offset is sent",
+        {"limit": 5, "offset": 5},
+        lambda: get_invocations_fn(limit=5, offset=5),
+        [route("/api/invocations", invocation_rows(7)[5:], query={"offset": "5"})],
+    )
+    add(
+        "get_invocations",
+        "sorted_by_create_time_ascending",
+        "oldest first: the route answers only when sort_by is sent (sort_desc goes with it)",
+        {"limit": 5, "sort_by": "create_time", "sort_desc": False},
+        lambda: get_invocations_fn(limit=5, sort_by="create_time", sort_desc=False),
+        [route("/api/invocations", invocation_rows(3), query={"sort_by": "create_time"})],
+    )
+    add(
+        "get_invocations",
+        "in_flight_only",
+        "include_terminal false: the finished ones are left out, the envelope is a plain list",
+        {"limit": 5, "include_terminal": False},
+        lambda: get_invocations_fn(limit=5, include_terminal=False),
+        [route("/api/invocations", [{**invocation_rows(1)[0], "state": "ready"}])],
+    )
 
     # -- list_pages ----------------------------------------------------------
     add(
@@ -3468,6 +3492,10 @@ def biocontainer_cases(add: AddCase) -> None:
 DENIED = '{"err_msg": "History is not accessible by user", "err_code": 403002}'
 MISSING = '{"err_msg": "History not found", "err_code": 404001}'
 BROKEN = '{"err_msg": "Uncaught exception in exposed API method:", "err_code": 0}'
+INVOCATION_MISSING = '{"err_msg": "Workflow invocation not found.", "err_code": 404001}'
+INVOCATION_MALFORMED = (
+    '{"err_msg": "Malformed id ( not-an-id ) specified, unable to decode.", "err_code": 400009}'
+)
 
 
 def fail(
@@ -3619,6 +3647,21 @@ def http_failure_cases(add: AddFailure) -> None:
         "the uuid lookup refused, before anything is submitted",
         {"history_id": "h0001", "tool_uuid": "u0000403", "inputs": {}},
         [fail("/api/unprivileged_tools/u0000403", 403, DENIED)],
+    )
+    # -- one invocation that is not there ----------------------------------
+    add(
+        "get_invocations",
+        "unknown_id",
+        "a lookup by an id Galaxy has no invocation for",
+        {"invocation_id": "inv0404"},
+        [fail("/api/invocations/inv0404", 404, INVOCATION_MISSING)],
+    )
+    add(
+        "get_invocations",
+        "malformed_id",
+        "a lookup by an id Galaxy cannot decode, which it answers 400 rather than 404",
+        {"invocation_id": "not-an-id"},
+        [fail("/api/invocations/not-an-id", 400, INVOCATION_MALFORMED)],
     )
     # -- an error body under a 200 -----------------------------------------
     add(
@@ -3996,6 +4039,13 @@ def refusal_cases(add: AddFailure) -> None:
         "limit_above_the_ceiling",
         "the page ceiling, with the advice to use offset that a pageable tool gets",
         {"limit": 5000},
+        [],
+    )
+    add(
+        "get_invocations",
+        "limit_above_galaxys_cap",
+        "Galaxy's own ceiling on /api/invocations, named here instead of as a 400 from there",
+        {"limit": 250},
         [],
     )
     add(

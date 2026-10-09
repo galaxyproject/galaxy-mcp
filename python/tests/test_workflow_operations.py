@@ -42,7 +42,7 @@ class TestGetInvocationsRefusesAnErrorBody:
     ERROR_BODY = {"err_msg": "Invocation not accessible", "err_code": 403002}
 
     def test_a_200_error_body_is_refused_not_counted(self, mock_galaxy_instance):
-        mock_galaxy_instance.invocations.get_invocations.return_value = self.ERROR_BODY
+        mock_galaxy_instance.invocations._get.return_value = self.ERROR_BODY
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             with pytest.raises(ValueError) as exc:
@@ -85,7 +85,7 @@ class TestGetInvocationsRefusesAnErrorBody:
 
     def test_err_msg_on_its_own_is_enough(self, mock_galaxy_instance):
         """err_code is not always there, and the message is the part worth raising."""
-        mock_galaxy_instance.invocations.get_invocations.return_value = {
+        mock_galaxy_instance.invocations._get.return_value = {
             "err_msg": "History is not accessible"
         }
 
@@ -95,7 +95,7 @@ class TestGetInvocationsRefusesAnErrorBody:
 
     def test_an_ordinary_list_is_untouched(self, mock_galaxy_instance):
         invocations = [{"id": "inv1", "state": "scheduled"}, {"id": "inv2", "state": "new"}]
-        mock_galaxy_instance.invocations.get_invocations.return_value = invocations
+        mock_galaxy_instance.invocations._get.return_value = invocations
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             result = get_invocations_fn()
@@ -119,13 +119,95 @@ class TestGetInvocationsRefusesAnErrorBody:
 
     def test_the_limit_default_is_galaxys_not_unlimited(self, mock_galaxy_instance):
         """No limit is sent, so Galaxy's index applies its own default of 20."""
-        mock_galaxy_instance.invocations.get_invocations.return_value = []
+        mock_galaxy_instance.invocations._get.return_value = []
 
         with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
             get_invocations_fn()
 
-        assert mock_galaxy_instance.invocations.get_invocations.call_args.kwargs["limit"] is None
+        assert "limit" not in mock_galaxy_instance.invocations._get.call_args.kwargs["params"]
         assert "default of 20" in (get_invocations_fn.__doc__ or "")
+
+
+class TestGetInvocationsListing:
+    """The listing window: the request bioblend would build, plus the parameters it lacks."""
+
+    def _list(self, mock_galaxy_instance, **kwargs):
+        mock_galaxy_instance.invocations._get.return_value = []
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_invocations_fn(**kwargs)
+        return result, mock_galaxy_instance.invocations._get.call_args.kwargs["params"]
+
+    def test_the_default_request_is_bioblends(self, mock_galaxy_instance):
+        """Nothing new is sent until it is asked for, so the default listing is unchanged."""
+        _, params = self._list(mock_galaxy_instance)
+
+        assert params == {"include_terminal": True, "view": "collection", "step_details": False}
+
+    def test_blank_filters_are_no_filters(self, mock_galaxy_instance):
+        _, params = self._list(mock_galaxy_instance, workflow_id="", history_id="")
+
+        assert "workflow_id" not in params
+        assert "history_id" not in params
+
+    def test_offset_pages_past_the_first_window(self, mock_galaxy_instance):
+        _, params = self._list(mock_galaxy_instance, limit=100, offset=100)
+
+        assert params["limit"] == 100
+        assert params["offset"] == 100
+
+    def test_a_zero_offset_is_not_sent(self, mock_galaxy_instance):
+        _, params = self._list(mock_galaxy_instance, limit=5, offset=0)
+
+        assert "offset" not in params
+
+    def test_sort_reaches_galaxy_only_when_asked(self, mock_galaxy_instance):
+        _, params = self._list(mock_galaxy_instance, sort_by="create_time", sort_desc=False)
+
+        assert params["sort_by"] == "create_time"
+        assert params["sort_desc"] is False
+
+        _, params = self._list(mock_galaxy_instance)
+        assert "sort_by" not in params
+        assert "sort_desc" not in params
+
+    def test_include_terminal_false_keeps_the_in_flight_ones(self, mock_galaxy_instance):
+        _, params = self._list(mock_galaxy_instance, include_terminal=False)
+
+        assert params["include_terminal"] is False
+
+    def test_a_limit_above_galaxys_cap_is_refused_before_anything_is_sent(
+        self, mock_galaxy_instance
+    ):
+        """Galaxy answers 400 above 100; the refusal names the cap and the way past it."""
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError, match=r"limit must be at most 100 \(got 101\)") as exc:
+                get_invocations_fn(limit=101)
+
+        assert "use offset" in str(exc.value)
+        mock_galaxy_instance.invocations._get.assert_not_called()
+
+    def test_the_cap_itself_is_allowed(self, mock_galaxy_instance):
+        _, params = self._list(mock_galaxy_instance, limit=100)
+
+        assert params["limit"] == 100
+
+    def test_a_negative_offset_is_refused_with_or_without_a_limit(self, mock_galaxy_instance):
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError, match="offset must be 0 or greater"):
+                get_invocations_fn(offset=-1)
+            with pytest.raises(ValueError, match="offset must be 0 or greater"):
+                get_invocations_fn(limit=5, offset=-1)
+
+        mock_galaxy_instance.invocations._get.assert_not_called()
+
+    def test_the_cap_does_not_apply_to_a_lookup_by_id(self, mock_galaxy_instance):
+        """limit is ignored with an id, so an over-cap value there is not a refusal."""
+        mock_galaxy_instance.invocations.show_invocation.return_value = {"id": "inv1"}
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = get_invocations_fn(invocation_id="inv1", limit=500)
+
+        assert result.data == {"id": "inv1"}
 
 
 class TestWorkflowOperations:
@@ -214,7 +296,7 @@ class TestWorkflowOperations:
 
     def test_get_invocations_fn(self, mock_galaxy_instance):
         """Test getting workflow invocations"""
-        mock_galaxy_instance.invocations.get_invocations.return_value = [
+        mock_galaxy_instance.invocations._get.return_value = [
             {"id": "invocation_1", "state": "scheduled"},
             {"id": "invocation_2", "state": "running"},
         ]

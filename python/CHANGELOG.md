@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `get_invocations` can now walk a listing longer than one page. It takes `offset`, `sort_by`
+  (`create_time` or `update_time`), `sort_desc` and `include_terminal`, all passed through to
+  `/api/invocations`; the default request is unchanged. A `limit` above 100 is refused before
+  anything is sent, with a sentence that names Galaxy's cap and the offset to page with, rather
+  than letting Galaxy answer 400.
+
 ## [1.11.1] - 2026-10-09
 
 ### Security

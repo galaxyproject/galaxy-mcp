@@ -482,7 +482,7 @@
               }
             ],
             "default": null,
-            "description": "Maximum number of invocations to return. Leave it unset and none is\n   sent, so Galaxy applies its own default of 20 -- not \"no limit\". Raise\n   it to see more."
+            "description": "Maximum number of invocations to return, at most 100 -- Galaxy's\n   invocation index serves no larger page, so page with offset to see\n   more. Leave it unset and none is sent, so Galaxy applies its own\n   default of 20 -- not \"no limit\"."
           },
           "view": {
             "default": "collection",
@@ -493,6 +493,40 @@
             "default": false,
             "type": "boolean",
             "description": "Include details on individual workflow steps -- each step's\n         jobs. Applies to one invocation by id, and to a listing when\n         view is 'element' (default: False)"
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Number of invocations to skip before the page starts, for walking a\n    listing longer than one page of limit (default: 0)"
+          },
+          "sort_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Order the listing by 'create_time' or 'update_time'. Left unset,\n     Galaxy's own order applies, which is newest first (optional)"
+          },
+          "sort_desc": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "With sort_by, True orders newest first and False oldest first.\n       Left unset, Galaxy's own direction applies (optional)"
+          },
+          "include_terminal": {
+            "default": true,
+            "type": "boolean",
+            "description": "Whether invocations that have finished -- scheduled,\n              failed or cancelled -- are listed. False keeps only the\n              ones still in flight (default: True)"
           }
         },
         "type": "object"

@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "python/src/galaxy_mcp/server.py",
-  "caseCount": 224,
-  "failureCaseCount": 65,
+  "caseCount": 230,
+  "failureCaseCount": 68,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -863,6 +863,43 @@
       },
       "envelope": "get_invocations/empty.json",
       "replies": "get_invocations/empty.galaxy.json"
+    },
+    {
+      "tool": "get_invocations",
+      "case": "second_page",
+      "note": "the page after the first: the route answers only when offset is sent",
+      "outcome": "success",
+      "input": {
+        "limit": 5,
+        "offset": 5
+      },
+      "envelope": "get_invocations/second_page.json",
+      "replies": "get_invocations/second_page.galaxy.json"
+    },
+    {
+      "tool": "get_invocations",
+      "case": "sorted_by_create_time_ascending",
+      "note": "oldest first: the route answers only when sort_by is sent (sort_desc goes with it)",
+      "outcome": "success",
+      "input": {
+        "limit": 5,
+        "sort_by": "create_time",
+        "sort_desc": false
+      },
+      "envelope": "get_invocations/sorted_by_create_time_ascending.json",
+      "replies": "get_invocations/sorted_by_create_time_ascending.galaxy.json"
+    },
+    {
+      "tool": "get_invocations",
+      "case": "in_flight_only",
+      "note": "include_terminal false: the finished ones are left out, the envelope is a plain list",
+      "outcome": "success",
+      "input": {
+        "limit": 5,
+        "include_terminal": false
+      },
+      "envelope": "get_invocations/in_flight_only.json",
+      "replies": "get_invocations/in_flight_only.galaxy.json"
     },
     {
       "tool": "list_pages",
@@ -2166,6 +2203,28 @@
     },
     {
       "tool": "get_invocations",
+      "case": "unknown_id",
+      "note": "a lookup by an id Galaxy has no invocation for",
+      "outcome": "failure",
+      "input": {
+        "invocation_id": "inv0404"
+      },
+      "envelope": "get_invocations/unknown_id.json",
+      "replies": "get_invocations/unknown_id.galaxy.json"
+    },
+    {
+      "tool": "get_invocations",
+      "case": "malformed_id",
+      "note": "a lookup by an id Galaxy cannot decode, which it answers 400 rather than 404",
+      "outcome": "failure",
+      "input": {
+        "invocation_id": "not-an-id"
+      },
+      "envelope": "get_invocations/malformed_id.json",
+      "replies": "get_invocations/malformed_id.galaxy.json"
+    },
+    {
+      "tool": "get_invocations",
       "case": "error_body_under_a_200",
       "note": "Galaxy answers 200 with a MessageExceptionModel, which is refused as an error",
       "outcome": "failure",
@@ -2599,6 +2658,17 @@
         "limit": 5000
       },
       "envelope": "list_workflows/limit_above_the_ceiling.json",
+      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+    },
+    {
+      "tool": "get_invocations",
+      "case": "limit_above_galaxys_cap",
+      "note": "Galaxy's own ceiling on /api/invocations, named here instead of as a 400 from there",
+      "outcome": "failure",
+      "input": {
+        "limit": 250
+      },
+      "envelope": "get_invocations/limit_above_galaxys_cap.json",
       "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
     },
     {
