@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `get_job_details` takes a `job_id` as an alternative to `dataset_id`, so an agent holding
+  the id of a job it started can read that job directly instead of going through one of its
+  outputs. Exactly one of the two is required, and the tool refuses a call that gives neither
+  or both before it asks Galaxy anything. A new `full` flag sends `?full=true` to
+  `GET /api/jobs/{job_id}` on either path, so the answer also carries the job's stdout and
+  stderr, job messages, dependencies and job metrics where the server exposes them; the plain
+  read already has params, inputs and outputs. A job id Galaxy answers 400 or 404 to -- one it cannot decode, or one it has
+  no job for -- reads as not found, because the caller holding the id cannot act on the
+  difference. Answers through a dataset are unchanged byte for byte; `dataset_id` is now
+  optional in the tool's schema rather than required.
+
 ## [1.11.1] - 2026-10-09
 
 ### Security

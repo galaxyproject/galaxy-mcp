@@ -238,6 +238,8 @@ const EXIT_CODES: Record<string, number> = {
   // EX_USAGE 64 -- validation: the caller has to change something, and a retry cannot help
   "get_dataset_details/is_a_collection": 64,
   "get_history_contents/limit_below_one": 64,
+  "get_job_details/both_ids_given": 64,
+  "get_job_details/neither_id_given": 64,
   "list_history_ids/history_without_an_id": 64,
   "list_workflows/limit_above_the_ceiling": 64,
   "recommend_biocontainer/package_entry_with_no_name": 64,
@@ -257,6 +259,8 @@ const EXIT_CODES: Record<string, number> = {
   "get_history_details/not_found": 66,
   "get_iwc_workflow_details/no_such_trs_id": 66,
   "get_job_details/dataset_not_found": 66,
+  "get_job_details/job_id_malformed": 66,
+  "get_job_details/job_not_found": 66,
   "get_job_details/no_job_made_this_dataset": 66,
   "get_page/not_found": 66,
   "get_page_revision/not_found": 66,

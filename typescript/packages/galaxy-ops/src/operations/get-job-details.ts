@@ -2,10 +2,10 @@
 // We route it through legacyGet, which handles the any-cast internally and throws typed errors.
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
-import { httpError, GalaxyNotFoundError } from "../errors";
+import { httpError, GalaxyNotFoundError, GalaxyValidationError } from "../errors";
 import { legacyGet } from "../legacy";
 import { register, runOperation } from "./registry";
-import type { AnyOperation, Operation } from "./types";
+import type { AnyOperation, InputOf, Operation } from "./types";
 
 // The provenance endpoint's job_id field is not always typed; hand-type for safety.
 interface ProvenanceResponse {
@@ -27,17 +27,86 @@ export interface JobDetail {
 
 export interface GetJobDetailsResult {
   job: JobDetail;
-  dataset_id: string;
+  /** The dataset the job was found through, or null when the job was asked for by id. */
+  dataset_id: string | null;
   job_id: string;
 }
 
+const DEFAULT_FULL = false;
+
 const input = {
-  datasetId: z.string().describe("dataset (HDA) id"),
-  historyId: z.string().nullish().describe("history id; speeds provenance lookup"),
+  datasetId: z
+    .string()
+    .nullish()
+    .describe("dataset (HDA) id whose creating job to look up; give this or jobId, not both"),
+  jobId: z
+    .string()
+    .nullish()
+    .describe("job id to look up directly; give this or datasetId, not both"),
+  historyId: z
+    .string()
+    .nullish()
+    .describe("history id; speeds provenance lookup, only used with datasetId"),
+  full: z
+    .boolean()
+    .default(DEFAULT_FULL)
+    .describe(
+      "also read what Galaxy adds with full=true: stdout and stderr, job messages, dependencies " +
+        "and job metrics where the server exposes them; params, inputs and outputs are in the " +
+        "plain read already",
+    ),
 };
-type In = { datasetId: string; historyId?: string };
+type In = {
+  datasetId?: string | null;
+  jobId?: string | null;
+  historyId?: string | null;
+  full?: boolean;
+};
+
+/**
+ * server.py, _job_lookup_failed: a job asked for by id that Galaxy answers 400 or 404 to is
+ * not found, whichever of the two it was. Galaxy refuses an id it cannot decode with a 400
+ * before looking anything up, and the caller holding the id -- an agent asking whether a run
+ * it started still exists -- cannot act on the difference. The facts stay on the error so
+ * the sentence is still worded from the reply.
+ */
+function jobLookupFailure(response: { status: number } | undefined, error: unknown): Error {
+  const failure = httpError(response, error);
+  if (failure.http?.status === 400) {
+    const notFound = new GalaxyNotFoundError(failure.message);
+    notFound.http = failure.http;
+    return notFound;
+  }
+  return failure;
+}
 
 async function run(i: In, ctx: GalaxyContext): Promise<GetJobDetailsResult> {
+  // server.py: refused before anything is asked of Galaxy, and worded there, so neither
+  // sentence carries a status. Truthiness, as over there: an empty id is no id.
+  if (i.datasetId && i.jobId) {
+    throw new GalaxyValidationError(
+      "get_job_details takes a dataset_id or a job_id, not both " +
+        `(got dataset_id '${i.datasetId}' and job_id '${i.jobId}').`,
+    );
+  }
+  if (!i.datasetId && !i.jobId) {
+    throw new GalaxyValidationError(
+      "get_job_details needs a dataset_id or a job_id; neither was given.",
+    );
+  }
+
+  // Sent only when asked for, so a job read without it is the request it always was.
+  const query = i.full ? { full: true } : undefined;
+
+  if (i.jobId) {
+    const { data, error, response } = await ctx.client.GET("/api/jobs/{job_id}", {
+      params: { path: { job_id: i.jobId }, query },
+    });
+    if (error || !data) throw jobLookupFailure(response, error);
+    return { job: data as JobDetail, dataset_id: null, job_id: i.jobId };
+  }
+
+  const datasetId = i.datasetId as string;
   let jobId: string | undefined;
   // What provenance said, kept rather than thrown. The other server holds this failure back
   // and only reports it if the fallback ALSO fails or finds no job: a dataset whose
@@ -48,7 +117,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetJobDetailsResult> {
   if (i.historyId) {
     try {
       const prov = await legacyGet<ProvenanceResponse>(ctx, "/api/histories/{history_id}/contents/{dataset_id}/provenance", {
-        params: { path: { history_id: i.historyId, dataset_id: i.datasetId } },
+        params: { path: { history_id: i.historyId, dataset_id: datasetId } },
       });
       jobId = prov.job_id;
     } catch (err) {
@@ -60,27 +129,27 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetJobDetailsResult> {
   // Fallback: read creating_job from dataset metadata
   if (!jobId) {
     const { data, error, response } = await ctx.client.GET("/api/datasets/{dataset_id}", {
-      params: { path: { dataset_id: i.datasetId } },
+      params: { path: { dataset_id: datasetId } },
     });
     if (error || !data) throw provenanceError ?? httpError(response, error);
     jobId = (data as DatasetMeta).creating_job;
     if (!jobId) {
       if (provenanceError) throw provenanceError;
       throw new GalaxyNotFoundError(
-        `No job information found for dataset '${i.datasetId}'. ` +
+        `No job information found for dataset '${datasetId}'. ` +
           "The dataset may not have been created by a job.",
       );
     }
   }
 
   const { data: jobData, error: jobError, response: jobResp } = await ctx.client.GET("/api/jobs/{job_id}", {
-    params: { path: { job_id: jobId } },
+    params: { path: { job_id: jobId }, query },
   });
   if (jobError || !jobData) throw httpError(jobResp, jobError);
 
   return {
     job: jobData as JobDetail,
-    dataset_id: i.datasetId,
+    dataset_id: datasetId,
     job_id: jobId,
   };
 }
@@ -88,29 +157,51 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetJobDetailsResult> {
 export const getJobDetailsOp: Operation<typeof input, GetJobDetailsResult> = {
   name: "get_job_details",
   domain: "jobs",
-  summary: "Get job details for the job that produced a dataset.",
+  summary: "Get job details by job id, or for the job that produced a dataset.",
   input,
   run,
-  // server.py, get_job_details: the dataset that was asked about, not the job that
-  // was found for it -- the job's id is in `data`.
-  project: (out) => ({ message: `Retrieved job details for dataset '${out.dataset_id}'` }),
-  // server.py, _job_details_failed: every failure here is described from the exception that
-  // actually failed, and a 404 keeps the tool's own sentence because a 404 from the jobs API
-  // is as likely to be a permission problem as a missing dataset. The two routes are asked
-  // through two different clients over there -- bioblend for the dataset and provenance,
-  // requests itself for the job -- so they do not word a failure the same way.
+  // server.py, get_job_details: the thing that was asked about -- the dataset, or the job
+  // when it was asked for by id -- not what was found for it; the job's id is in `data`.
+  project: (out) => ({
+    message:
+      out.dataset_id === null
+        ? `Retrieved job details for job '${out.job_id}'`
+        : `Retrieved job details for dataset '${out.dataset_id}'`,
+  }),
+  // server.py, _job_details_failed and _job_lookup_failed: every failure here is described
+  // from the exception that actually failed. Through a dataset, a 404 keeps the tool's own
+  // sentence because a 404 from the jobs API is as likely to be a permission problem as a
+  // missing dataset. By job id, a 400 and a 404 share one sentence about the job -- see
+  // jobLookupFailure -- and the context names the id the caller gave. The two routes are
+  // asked through two different clients over there -- bioblend for the dataset and
+  // provenance, requests itself for the job -- so they do not word a failure the same way.
   failure: {
     shape: (facts) => (facts.url.includes("/api/jobs/") ? "raise-for-status" : "bioblend-get"),
     action: "Get job details",
-    context: (i) => ({ dataset_id: i.datasetId }),
-    sentence: (_text, status, i) =>
-      status === 404
+    context: (i) => (i.jobId ? { job_id: i.jobId } : { dataset_id: i.datasetId }),
+    sentence: (_text, status, i) => {
+      if (i.jobId) {
+        return status === 400 || status === 404
+          ? `Job ID '${i.jobId}' not found or not accessible. ` +
+              "Make sure the job exists and you have permission to view it."
+          : undefined;
+      }
+      return status === 404
         ? `Dataset ID '${i.datasetId}' not found or job not accessible. ` +
-          "Make sure the dataset exists and you have permission to view it."
-        : undefined,
+            "Make sure the dataset exists and you have permission to view it."
+        : undefined;
+    },
   },
 };
 
 register(getJobDetailsOp as AnyOperation);
 
-export const getJobDetails = (i: In, ctx: GalaxyContext) => runOperation(getJobDetailsOp, i, ctx);
+// The return type is the check: add a .default() above without one here and this stops
+// compiling.
+const withDefaults = (i: In): InputOf<typeof input> => ({
+  ...i,
+  full: i.full ?? DEFAULT_FULL,
+});
+
+export const getJobDetails = (i: In, ctx: GalaxyContext) =>
+  runOperation(getJobDetailsOp, withDefaults(i), ctx);

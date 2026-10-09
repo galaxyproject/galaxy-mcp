@@ -557,8 +557,28 @@
         "additionalProperties": false,
         "properties": {
           "dataset_id": {
-            "type": "string",
-            "description": "Galaxy dataset ID - a hexadecimal hash string identifying the dataset\n       (a 16-character hex string)"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Galaxy dataset ID whose creating job to look up - a hexadecimal hash\n       string (a 16-character hex string). Give this or job_id, not both"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Galaxy job ID to look up directly (a 16-character hex string). Give this or\n   dataset_id, not both"
           },
           "history_id": {
             "anyOf": [
@@ -570,12 +590,14 @@
               }
             ],
             "default": null,
-            "description": "Galaxy history ID containing the dataset - optional for performance optimization\n       (a 16-character hex string)"
+            "description": "Galaxy history ID containing the dataset - optional for performance optimization\n       (a 16-character hex string); only used with dataset_id"
+          },
+          "full": {
+            "default": false,
+            "type": "boolean",
+            "description": "Also read what Galaxy adds with ?full=true: the job's stdout and stderr,\n job messages, dependencies, and job metrics where the server exposes them.\n Params, inputs and outputs are in the plain read already"
           }
         },
-        "required": [
-          "dataset_id"
-        ],
         "type": "object"
       }
     },
