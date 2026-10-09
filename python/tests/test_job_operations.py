@@ -1,10 +1,14 @@
 """Tests for job operations"""
 
+import re
+from unittest.mock import Mock, patch
+
+import bioblend
 import pytest
 import responses
 
 from galaxy_mcp.server import galaxy_state
-from tests.test_helpers import get_job_details_fn
+from tests.test_helpers import get_job_details_fn, list_jobs_fn
 
 
 class TestJobOperations:
@@ -236,3 +240,145 @@ class TestGetJobDetailsByJobId:
     def test_neither_id_is_refused_before_any_request(self):
         with pytest.raises(ValueError, match="neither was given"):
             get_job_details_fn()
+
+
+class TestListJobs:
+    """list_jobs: one GET on the job index, filters sent only when they say something."""
+
+    @staticmethod
+    def _connected(mock_galaxy_instance):
+        # Mock(spec=GalaxyInstance) knows the class, and a real instance only grows a
+        # jobs client in __init__, so the attribute is put there by hand.
+        mock_galaxy_instance.jobs = Mock()
+        return patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance})
+
+    def test_sends_the_window_and_every_filter_that_is_set(self, mock_galaxy_instance):
+        rows = [
+            {"id": "job1", "state": "ok", "tool_id": "cat1"},
+            {"id": "job2", "state": "ok", "tool_id": "cat1"},
+        ]
+        with self._connected(mock_galaxy_instance):
+            mock_galaxy_instance.jobs._get.return_value = rows
+            result = list_jobs_fn(
+                history_id="h1",
+                state="ok",
+                date_range_min="2026-01-01T00:00:00",
+                date_range_max="2026-02-01",
+                order_by="create_time",
+                limit=5,
+                offset=10,
+            )
+
+        mock_galaxy_instance.jobs._get.assert_called_once_with(
+            params={
+                "limit": 5,
+                "offset": 10,
+                "history_id": "h1",
+                "state": "ok",
+                "date_range_min": "2026-01-01T00:00:00",
+                "date_range_max": "2026-02-01",
+                "order_by": "create_time",
+                "view": "collection",
+            }
+        )
+        assert result.success is True
+        assert result.data == rows
+        assert result.count == 2
+        assert result.message == "Retrieved 2 jobs"
+        # Galaxy reports no total for this index, so there is no window to describe.
+        assert result.pagination is None
+
+    def test_a_blank_filter_is_not_sent(self, mock_galaxy_instance):
+        with self._connected(mock_galaxy_instance):
+            mock_galaxy_instance.jobs._get.return_value = []
+            result = list_jobs_fn(history_id="", state=None, date_range_min="")
+
+        mock_galaxy_instance.jobs._get.assert_called_once_with(
+            params={"limit": 100, "offset": 0, "order_by": "update_time", "view": "collection"}
+        )
+        assert result.data == []
+        assert result.count == 0
+        assert result.message == "Retrieved 0 jobs"
+
+    @pytest.mark.parametrize(
+        ("kwargs", "message"),
+        [
+            ({"limit": 0}, "limit must be at least 1 (got 0)"),
+            ({"offset": -1}, "offset must be 0 or greater (got -1)"),
+        ],
+    )
+    def test_refuses_a_bad_window_before_asking_galaxy(self, mock_galaxy_instance, kwargs, message):
+        with self._connected(mock_galaxy_instance):
+            with pytest.raises(ValueError, match=re.escape(message)):
+                list_jobs_fn(**kwargs)
+        mock_galaxy_instance.jobs._get.assert_not_called()
+
+    def test_has_no_upper_cap_on_limit(self, mock_galaxy_instance):
+        # Galaxy's job index takes any limit, and so does this tool; the sentence the
+        # capped listings refuse with must not appear here.
+        with self._connected(mock_galaxy_instance):
+            mock_galaxy_instance.jobs._get.return_value = []
+            list_jobs_fn(limit=5000)
+        assert mock_galaxy_instance.jobs._get.call_args.kwargs["params"]["limit"] == 5000
+
+    def test_refuses_an_error_body_under_a_200(self, mock_galaxy_instance):
+        with self._connected(mock_galaxy_instance):
+            mock_galaxy_instance.jobs._get.return_value = {
+                "err_msg": "History is not accessible by user",
+                "err_code": 403002,
+            }
+            with pytest.raises(ValueError, match="List jobs failed: History is not accessible"):
+                list_jobs_fn(history_id="h1")
+
+    def test_an_unknown_history_is_an_empty_page_not_an_error(self, mock_galaxy_instance):
+        # Galaxy filters the index by history_id without looking the history up, so a
+        # well-formed id nothing answers to comes back 200 [] -- the same bytes as a history
+        # with no jobs. The tool passes that through as success and says so in its
+        # description, which is where a reconcile loop learns to confirm the history first.
+        with self._connected(mock_galaxy_instance):
+            mock_galaxy_instance.jobs._get.return_value = []
+            result = list_jobs_fn(history_id="h404")
+        assert result.success is True
+        assert result.data == []
+        assert result.count == 0
+        assert result.message == "Retrieved 0 jobs"
+        assert "get_history_details" in (list_jobs_fn.__doc__ or "")
+
+    def test_a_history_the_user_cannot_read_carries_the_permission_hint(self, mock_galaxy_instance):
+        # Galaxy's answer for a history the key cannot see: ItemAccessibilityException, 403.
+        with self._connected(mock_galaxy_instance):
+            mock_galaxy_instance.jobs._get.side_effect = bioblend.ConnectionError(
+                "403 Client Error", body="Cannot access the request job objects.", status_code=403
+            )
+            with pytest.raises(ValueError) as excinfo:
+                list_jobs_fn(history_id="h403")
+        text = str(excinfo.value)
+        assert text.startswith("List jobs failed: 403 Client Error")
+        assert "(Permission denied - check your account permissions)" in text
+        assert text.endswith("Context: history_id=h403")
+
+    def test_a_malformed_history_id_says_what_the_400_means(self, mock_galaxy_instance):
+        # A history_id Galaxy cannot decode is a 400 MalformedId. The shared hint table has
+        # no 400 row, so the tool adds the one thing a caller needs: this is a filter Galaxy
+        # could not read, not the missing-history answer, which is an empty page.
+        with self._connected(mock_galaxy_instance):
+            mock_galaxy_instance.jobs._get.side_effect = bioblend.ConnectionError(
+                "400 Client Error", body="Wrong  id ( not-an-id ) specified", status_code=400
+            )
+            with pytest.raises(ValueError) as excinfo:
+                list_jobs_fn(history_id="not-an-id")
+        text = str(excinfo.value)
+        assert text.startswith("List jobs failed: 400 Client Error")
+        assert "Context: history_id=not-an-id. Galaxy could not read one of the filters" in text
+        assert text.endswith("it answers with an empty page")
+
+    def test_other_statuses_are_wrapped_without_the_filter_hint(self, mock_galaxy_instance):
+        with self._connected(mock_galaxy_instance):
+            mock_galaxy_instance.jobs._get.side_effect = bioblend.ConnectionError(
+                "500 Server Error", body="boom", status_code=500
+            )
+            with pytest.raises(ValueError) as excinfo:
+                list_jobs_fn(history_id="h1")
+        text = str(excinfo.value)
+        assert "(Server error - try again later or contact admin)" in text
+        assert text.endswith("Context: history_id=h1")

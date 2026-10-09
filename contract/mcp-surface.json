@@ -1,7 +1,7 @@
 {
   "$comment": "Generated snapshot of the Galaxy MCP tool surface -- do not edit by hand. Regenerate with `uv run python -m tests.surface_manifest`.",
   "source": "python/src/galaxy_mcp/server.py",
-  "toolCount": 46,
+  "toolCount": 47,
   "tools": [
     {
       "name": "cancel_workflow_invocation",
@@ -1027,6 +1027,89 @@
             "default": 0,
             "type": "integer",
             "description": "Skip this many histories (default 0). Pass pagination.next_offset\n    to walk to the following page."
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_jobs",
+      "tags": [
+        "extended",
+        "jobs",
+        "read"
+      ],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "history_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Only jobs in this history (an encoded history id). Leave it unset\n       for jobs from any history the user can see. The id of a history\n       that does not exist is not an error here: it answers with an empty\n       page."
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Only jobs in this state -- 'new', 'queued', 'running', 'ok', 'error',\n  'paused', 'deleted' and the rest of Galaxy's job states. A\n  comma-separated list matches any of them."
+          },
+          "date_range_min": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Only jobs updated at or after this time, as an ISO 8601 date or\n           datetime such as '2026-01-01' or '2026-01-01T12:00:00'."
+          },
+          "date_range_max": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Only jobs updated at or before this time, in the same format."
+          },
+          "order_by": {
+            "default": "update_time",
+            "type": "string",
+            "description": "Sort by 'update_time' (default) or 'create_time', newest first."
+          },
+          "view": {
+            "default": "collection",
+            "type": "string",
+            "description": "'collection' (default) returns one small summary per job -- id, state,\n tool_id, exit_code, create_time, update_time -- which is what a listing\n wants. 'admin_job_list' adds runner and handler detail and needs an\n admin key."
+          },
+          "limit": {
+            "default": 100,
+            "type": "integer",
+            "description": "Most jobs to return in one page (default 100). Galaxy puts no upper\n  cap on this, so this tool does not either; keep it to what fits the\n  output budget."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Skip this many jobs (default 0). Page by raising it by limit until a\n   page comes back shorter than limit."
           }
         },
         "type": "object"

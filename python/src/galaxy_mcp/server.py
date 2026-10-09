@@ -2937,6 +2937,112 @@ def get_job_details(
     )
 
 
+# Appended to a 400 from the job index. Quoted by the TypeScript op, so change both.
+_LIST_JOBS_BAD_FILTER = (
+    "Galaxy could not read one of the filters: history_id has to be an encoded id, the "
+    "dates ISO 8601, and state, order_by and view values Galaxy knows. A well-formed id of "
+    "a history that does not exist is not refused this way -- it answers with an empty page"
+)
+
+
+@mcp.tool(tags={"jobs", "read", "extended"})
+def list_jobs(
+    history_id: str | None = None,
+    state: str | None = None,
+    date_range_min: str | None = None,
+    date_range_max: str | None = None,
+    order_by: str = "update_time",
+    view: str = "collection",
+    limit: int = 100,
+    offset: int = 0,
+) -> GalaxyResult:
+    """List jobs, optionally narrowed to one history, one state and a time window.
+
+    What an agent reconciling its own record of a history against Galaxy reads: the
+    jobs updated since a time, in one history, newest first, a page at a time. Galaxy
+    windows this index itself and reports no total, so the answer carries a count and
+    no pagination block: a page shorter than limit is the last one, and the next page
+    starts at offset + limit.
+
+    Galaxy filters this index by history_id without looking the history up, so a
+    well-formed id of a history that does not exist answers with an empty page -- the
+    same answer as a history with no jobs, not a 404. A reconcile that has to tell the
+    two apart confirms the history with get_history_details first. A history the user
+    cannot read is refused with a 403, and an id Galaxy cannot decode with a 400.
+
+    Args:
+        history_id: Only jobs in this history (an encoded history id). Leave it unset
+                   for jobs from any history the user can see. The id of a history
+                   that does not exist is not an error here: it answers with an empty
+                   page.
+        state: Only jobs in this state -- 'new', 'queued', 'running', 'ok', 'error',
+              'paused', 'deleted' and the rest of Galaxy's job states. A
+              comma-separated list matches any of them.
+        date_range_min: Only jobs updated at or after this time, as an ISO 8601 date or
+                       datetime such as '2026-01-01' or '2026-01-01T12:00:00'.
+        date_range_max: Only jobs updated at or before this time, in the same format.
+        order_by: Sort by 'update_time' (default) or 'create_time', newest first.
+        view: 'collection' (default) returns one small summary per job -- id, state,
+             tool_id, exit_code, create_time, update_time -- which is what a listing
+             wants. 'admin_job_list' adds runner and handler detail and needs an
+             admin key.
+        limit: Most jobs to return in one page (default 100). Galaxy puts no upper
+              cap on this, so this tool does not either; keep it to what fits the
+              output budget.
+        offset: Skip this many jobs (default 0). Page by raising it by limit until a
+               page comes back shorter than limit.
+
+    Returns:
+        GalaxyResult with the job summaries in data and their number in count.
+        pagination is None because the index reports no total.
+
+    NEXT STEPS:
+    - One job's parameters and outputs: get_job_details(dataset_id)
+    - The datasets those jobs made: get_history_contents(history_id)
+    """
+    conn = ensure_connected()
+    gi: GalaxyInstance = conn["gi"]
+    _validate_pagination(limit, offset)
+
+    # The window is always sent; a filter only when it says something, which is how
+    # bioblend's get_jobs builds the same request -- a blank history_id sent as "" would
+    # reach Galaxy's encoded-id validator and fail the listing over a value nobody meant.
+    # Same client call as get_jobs underneath, so the request, retries and failure
+    # wording are bioblend's; this takes the direct route because get_jobs has no view.
+    params: dict[str, Any] = {"limit": limit, "offset": offset}
+    if history_id:
+        params["history_id"] = history_id
+    if state:
+        params["state"] = state
+    if date_range_min:
+        params["date_range_min"] = date_range_min
+    if date_range_max:
+        params["date_range_max"] = date_range_max
+    params["order_by"] = order_by
+    params["view"] = view
+
+    try:
+        jobs = gi.jobs._get(params=params)
+        _refuse_error_body("List jobs", jobs)
+        return GalaxyResult(
+            data=jobs,
+            success=True,
+            message=f"Retrieved {len(jobs)} jobs",
+            count=len(jobs),
+        )
+    except ValueError:
+        # Already the refusal above, which says more than the wrapper below would.
+        raise
+    except Exception as e:
+        base = format_error("List jobs", e, {"history_id": history_id})
+        # The hint table has no 400 row, and this index's 400 is one of the filters Galaxy
+        # could not read -- most often a history_id that is not an encoded id. Said here so
+        # a caller does not take it for the missing-history answer, which is an empty page.
+        if _http_status(e) == 400:
+            raise ValueError(f"{base}. {_LIST_JOBS_BAD_FILTER}") from e
+        raise ValueError(base) from e
+
+
 @mcp.tool(tags={"datasets", "read", "core"})
 def get_dataset_details(
     dataset_id: str, include_preview: bool = True, preview_lines: int = 10

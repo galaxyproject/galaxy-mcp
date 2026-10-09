@@ -1,0 +1,17 @@
+{
+  "data": [
+    {
+      "id": "job0000",
+      "model_class": "Job",
+      "state": "error",
+      "tool_id": "cat1",
+      "exit_code": 0,
+      "create_time": "2026-01-01T00:00:00",
+      "update_time": "2026-01-01T00:00:00"
+    }
+  ],
+  "success": true,
+  "message": "Retrieved 1 jobs",
+  "count": 1,
+  "pagination": null
+}

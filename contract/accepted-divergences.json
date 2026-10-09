@@ -380,6 +380,14 @@
         "reason": "Ours pages with limit+offset; Galaxy's takes limit only."
       },
       {
+        "tool": "list_jobs",
+        "param": null,
+        "kind": "missing-builtin-tool",
+        "observed": "python=read (tag) params=[date_range_max type=string required=false default=none; date_range_min type=string required=false default=none; history_id type=string required=false default=none; limit type=integer required=false default=100; offset type=integer required=false default=0; order_by type=string required=false default=\"update_time\"; state type=string required=false default=none; view type=string required=false default=\"collection\"]",
+        "status": "intentional",
+        "reason": "Only here, and on purpose: a paged listing of GET /api/jobs filtered by history, state and update time, which is what an agent reconciling its own record of a history against Galaxy needs (Loom's reconcile asks for the jobs updated since a time, in one history, a page at a time). Galaxy's server reads one job at a time -- get_job_details by dataset, get_job_status by job -- and has no index; an agent there would have to walk the history's datasets and ask about each one."
+      },
+      {
         "tool": "list_user_file_sources",
         "param": null,
         "kind": "missing-py-tool",

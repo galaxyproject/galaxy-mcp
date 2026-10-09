@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { getHistoriesOp, getHistories } from "../../src/operations/get-histories";
 import { getHistoryContentsOp } from "../../src/operations/get-history-contents";
 import { listHistoryIdsOp } from "../../src/operations/list-history-ids";
+import { listJobsOp } from "../../src/operations/list-jobs";
 import { listUserToolsOp } from "../../src/operations/list-user-tools";
 import { listWorkflowsOp, listWorkflows } from "../../src/operations/list-workflows";
 import { searchToolsByNameOp } from "../../src/operations/search-tools-by-name";
@@ -48,6 +49,8 @@ const integerInputs: Array<[string, { safeParse(v: unknown): { success: boolean 
   ["get_history_contents.offset", getHistoryContentsOp.input.offset],
   ["list_history_ids.limit", listHistoryIdsOp.input.limit],
   ["list_history_ids.offset", listHistoryIdsOp.input.offset],
+  ["list_jobs.limit", listJobsOp.input.limit],
+  ["list_jobs.offset", listJobsOp.input.offset],
   ["list_user_tools.limit", listUserToolsOp.input.limit],
   ["list_workflows.limit", listWorkflowsOp.input.limit],
   ["search_tools_by_name.limit", searchToolsByNameOp.input.limit],
@@ -96,6 +99,8 @@ describe("input acceptance matches the Python manifest", () => {
     expect(searchToolsByNameOp.input.limit.safeParse(null).success).toBe(false);
     expect(getToolPanelOp.input.limit.safeParse(null).success).toBe(false);
     expect(listPagesOp.input.limit.safeParse(null).success).toBe(false);
+    expect(listJobsOp.input.limit.safeParse(null).success).toBe(false);
+    expect(listJobsOp.input.orderBy.safeParse(null).success).toBe(false);
     expect(getCollectionDetailsOp.input.maxElements.safeParse(null).success).toBe(false);
     expect(recommendIwcWorkflowsOp.input.intent.safeParse(null).success).toBe(false);
   });
