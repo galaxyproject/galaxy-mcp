@@ -46,9 +46,10 @@ async function run(i: In, ctx: GalaxyContext): Promise<JobLogs> {
   if (!isThisRecord(data, i.jobId)) {
     throw new GalaxyConnectionError(notThatRecord("job", i.jobId), response.status);
   }
-  // Only a string is a log. A missing key, a null (what Galaxy serialises before the job
-  // has run) or anything else is left out, never answered as "" -- an empty string is
-  // kept, because that is Galaxy saying the stream was empty.
+  // Only a string is a log. A missing key, a null (what Galaxy serialises for the tool_*
+  // and job_* fields before the job has run) or anything else is left out, never answered
+  // as "" -- an empty string is kept, because that is Galaxy saying the stream was empty,
+  // and stdout and stderr are always a string over there, empty before the job has run.
   const record = data as Record<string, unknown>;
   const logs: JobLogs = {};
   for (const field of JOB_LOG_FIELDS) {
@@ -65,21 +66,20 @@ export const getJobLogsOp: Operation<typeof input, JobLogs> = {
     "Read a job's logs: the stdout and stderr Galaxy keeps for it, each cut to a byte budget. " +
     "One read of the job in full, answered with only the six log fields that adds -- " +
     "tool_stdout, tool_stderr, job_stdout, job_stderr, stdout, stderr -- and nothing the " +
-    "plain get_job_details read already has; a field Galaxy has not written yet is left out " +
-    "rather than returned empty. A log longer than logBytes keeps its first and last half, " +
-    "cut on line boundaries, with one line in the middle saying how many of how many bytes " +
-    "were omitted, so a cut field carries at most logBytes of the log plus that line. " +
-    "Galaxy's stdout and stderr are the older combined form of the tool_* and job_* pairs, " +
-    "so on a current Galaxy the same text can appear under two names.",
+    "plain get_job_details read already has. The four tool_* and job_* fields are null until " +
+    "the job has written them, and are then left out rather than returned empty; stdout and " +
+    "stderr are the older combined form of those pairs, which Galaxy always answers as a " +
+    "string, so a job that has not run reads as an empty stdout and stderr, and on a current " +
+    "Galaxy the same text can appear under two names. A log longer than logBytes keeps its " +
+    "first and last half, cut on line boundaries, with one line in the middle saying how " +
+    "many of how many bytes were omitted, so a cut field carries at most logBytes of the log " +
+    "plus that line.",
   input,
   run,
-  // server.py, get_job_logs: the job that was asked about, and whether anything was there.
-  project: (out, i) => ({
-    message:
-      Object.keys(out).length === 0
-        ? `Retrieved job logs for job '${i.jobId}' (none recorded yet)`
-        : `Retrieved job logs for job '${i.jobId}'`,
-  }),
+  // server.py, get_job_logs: the job that was asked about. Nothing is said about how much
+  // was there -- data carries exactly the present fields, and Galaxy always answers stdout
+  // and stderr, so a record with no logs at all is not an answer it gives.
+  project: (_out, i) => ({ message: `Retrieved job logs for job '${i.jobId}'` }),
   // server.py, _job_lookup_failed with action "Get job logs": a 400 and a 404 share one
   // sentence about the job (see jobLookupFailure), and any other status goes through
   // format_error under this tool's own action. The read is a raw requests call over there.

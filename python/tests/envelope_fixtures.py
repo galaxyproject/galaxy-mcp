@@ -2735,19 +2735,28 @@ def job_logs_cases(add: AddCase) -> None:
             )
         ],
     )
-    # Galaxy serialises a job that has not run with its log fields null, and an older or
-    # narrower reply may leave them out; both are absence, and one case pins both forms.
+    # Before the job has run, Galaxy answers the four tool_* and job_* columns as null (an
+    # older or narrower reply may leave some out), while stdout and stderr are properties
+    # of the model that always answer a string -- the empty streams come back as "". One
+    # case pins all three forms: null is absent, missing is absent, "" is kept.
     add(
         "get_job_logs",
-        "no_logs_yet",
-        "a job that has not run: null fields and missing fields are both absent, and the "
-        "message says nothing was recorded",
+        "not_run_yet",
+        "a job that has not run: the tool_* and job_* fields are null or missing and left "
+        "out, while stdout and stderr are the empty strings Galaxy always answers",
         {"job_id": job_hex},
         lambda: get_job_logs_fn(job_hex),
         [
             route(
                 f"/api/jobs/{job_hex}",
-                {"id": job_hex, "state": "new", "job_stdout": None, "job_stderr": None},
+                {
+                    "id": job_hex,
+                    "state": "new",
+                    "tool_stdout": None,
+                    "tool_stderr": None,
+                    "stdout": "",
+                    "stderr": "",
+                },
                 query={"full": "true"},
             )
         ],

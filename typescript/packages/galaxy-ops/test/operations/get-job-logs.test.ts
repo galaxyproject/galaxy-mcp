@@ -71,13 +71,28 @@ describe("get_job_logs", () => {
     expect(byDefault.tool_stderr).toBe(logEnds(log, 4096));
   });
 
-  it("words the message for the job, and says when nothing was recorded", () => {
+  it("answers a job that has not run with the empty streams Galaxy always sends", async () => {
+    // view_show_job copies the four tool_*/job_* columns as they are (null before the job
+    // has run) while Job.stdout and Job.stderr are properties that always answer a string,
+    // so the emptiest answer a Galaxy gives is the two legacy fields as "", never {}.
+    const client = mockClient({
+      GET: () => ({
+        data: { id: J1, state: "new", tool_stdout: null, tool_stderr: null, stdout: "", stderr: "" },
+        response: { status: 200 },
+      }),
+    });
+    expect(await getJobLogs({ jobId: J1 }, ctxWith(client))).toEqual({ stdout: "", stderr: "" });
+    expect(getJobLogsOp.summary).toContain("always answers as a string");
+    expect(getJobLogsOp.summary).not.toContain("has not written yet");
+  });
+
+  it("words the message for the job, whatever was there", () => {
     const project = getJobLogsOp.project!;
     expect(project({ tool_stdout: "x" }, { jobId: J1, logBytes: 4096 })).toEqual({
       message: `Retrieved job logs for job '${J1}'`,
     });
     expect(project({}, { jobId: J1, logBytes: 4096 })).toEqual({
-      message: `Retrieved job logs for job '${J1}' (none recorded yet)`,
+      message: `Retrieved job logs for job '${J1}'`,
     });
   });
 

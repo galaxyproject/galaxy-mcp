@@ -32,10 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `get_job_logs(job_id, log_bytes=4096)` reads a job's stdout and stderr: one
   `GET /api/jobs/{job_id}?full=true`, answered with only the six log fields the full record
   adds (`tool_stdout`, `tool_stderr`, `job_stdout`, `job_stderr`, `stdout`, `stderr`) and
-  nothing the plain `get_job_details` read already has. A field Galaxy has not written yet is
-  left out rather than returned empty. A log longer than `log_bytes` keeps its first and last
-  half, cut on line boundaries, with one line in the middle saying how many of how many bytes
-  were omitted; the budget is in UTF-8 bytes and the cut never splits a multi-byte character.
+  nothing the plain `get_job_details` read already has. The four `tool_*` and `job_*` fields
+  are null until the job has written them and are then left out rather than returned empty;
+  `stdout` and `stderr` are the older combined form Galaxy always answers as a string, so a
+  job that has not run reads as those two, empty. A log longer than `log_bytes` keeps its
+  first and last half, cut on line boundaries, with one line in the middle saying how many of
+  how many bytes were omitted; the budget is in UTF-8 bytes and the cut never splits a
+  multi-byte character.
   `log_bytes=0` returns every log uncut, and a negative value is refused before anything is
   sent. The same hex guard and the same answered-for-this-id check as `get_job_details` apply,
   and a 400 or 404 on the id reads as not found the same way. Ten golden cases pin it,

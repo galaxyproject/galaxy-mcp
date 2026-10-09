@@ -25,8 +25,10 @@ pin it on both surfaces; every answer through a dataset is unchanged.
 A new op on all three surfaces, and the other half of the question `get_job_details` answers:
 `getJobLogs({ jobId, logBytes })` sends one `GET /api/jobs/{job_id}?full=true` and returns
 only the six log fields the full record adds -- `tool_stdout`, `tool_stderr`, `job_stdout`,
-`job_stderr`, `stdout`, `stderr` -- as `JobLogs`, a partial record where a field Galaxy has
-not written yet is absent rather than empty. A log longer than `logBytes` (default 4096)
+`job_stderr`, `stdout`, `stderr` -- as `JobLogs`, a partial record: the four `tool_*` and
+`job_*` fields are null until the job has written them and are then absent rather than empty,
+while `stdout` and `stderr` are the older combined form Galaxy always answers as a string, so
+a job that has not run reads as those two, empty. A log longer than `logBytes` (default 4096)
 keeps its first and last half, cut on line boundaries, with one line in the middle saying how
 many of how many bytes were omitted; `logEnds(text, budget)` is exported and is the Python
 server's `_log_ends` byte for byte, measured in UTF-8 bytes and never splitting a character.

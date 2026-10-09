@@ -144,12 +144,13 @@ export const getJobDetailsOp: Operation<typeof input, GetJobDetailsResult> = {
   domain: "jobs",
   // server.py's docstring, so the two surfaces describe the read in one voice: what the
   // record carries, and that the logs are get_job_logs' question rather than this one's.
+  // That pointer names no parameter on purpose: spellParamNames respells every key of THIS
+  // op's input in the surface's own spelling, and the CLI has no --job-id on get_job_logs.
   summary:
     "Get a job's record, by its own id or by a dataset it created. The record carries the " +
     "job's state, exit code, tool id and version, create and update times, params, inputs " +
-    "and outputs, and job metrics where the plain read has them. It does not carry the job's " +
-    "stdout or stderr: a failed job's logs are one get_job_logs(jobId) call away. Exactly " +
-    "one of datasetId and jobId is required.",
+    "and outputs. It does not carry the job's stdout or stderr: a failed job's logs are one " +
+    "get_job_logs call away. Exactly one of datasetId and jobId is required.",
   input,
   run,
   // server.py, get_job_details: the thing that was asked about -- the dataset, or the job

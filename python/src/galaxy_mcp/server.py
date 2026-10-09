@@ -2965,9 +2965,9 @@ def get_job_details(
     Get a job's record, by its own id or by a dataset it created.
 
     The record carries the job's state, exit code, tool id and version, create and update
-    times, params, inputs and outputs, and job metrics where the plain read has them. It
-    does not carry the job's stdout or stderr: a failed job's logs are one
-    get_job_logs(job_id) call away. Exactly one of dataset_id and job_id is required.
+    times, params, inputs and outputs. It does not carry the job's stdout or stderr: a
+    failed job's logs are one get_job_logs call away. Exactly one of dataset_id and job_id
+    is required.
 
     Args:
         dataset_id: Galaxy dataset ID whose creating job to look up - a hexadecimal hash
@@ -3088,14 +3088,15 @@ def get_job_logs(job_id: str, log_bytes: int = JOB_LOG_BYTES) -> GalaxyResult:
 
     One GET /api/jobs/{job_id}?full=true, answered with only the six log fields the full
     record adds -- tool_stdout, tool_stderr, job_stdout, job_stderr, stdout, stderr -- and
-    nothing the plain get_job_details read already has. A field Galaxy has not written yet
-    (a job that has not run) is left out rather than returned empty. A log longer than
-    log_bytes keeps its first and last half, cut on line boundaries, with one line in the
-    middle saying how many of how many bytes were omitted, so a cut field carries at most
-    log_bytes of the log plus that line; the cause of a failure is usually at the end and
-    the context at the start, and a one-ended read loses one of them. Galaxy's stdout and
-    stderr are the older combined form of the tool_* and job_* pairs, so on a current
-    Galaxy the same text can appear under two names.
+    nothing the plain get_job_details read already has. The four tool_* and job_* fields are
+    null until the job has written them, and are then left out rather than returned empty;
+    stdout and stderr are the older combined form of those pairs, which Galaxy always answers
+    as a string, so a job that has not run reads as an empty stdout and stderr, and on a
+    current Galaxy the same text can appear under two names. A log longer than log_bytes
+    keeps its first and last half, cut on line boundaries, with one line in the middle saying
+    how many of how many bytes were omitted, so a cut field carries at most log_bytes of the
+    log plus that line; the cause of a failure is usually at the end and the context at the
+    start, and a one-ended read loses one of them.
 
     Args:
         job_id: Galaxy job ID (a 16-character hex string), as run_tool, list_jobs or
@@ -3135,18 +3136,16 @@ def get_job_logs(job_id: str, log_bytes: int = JOB_LOG_BYTES) -> GalaxyResult:
     if not _is_this_record(job_info, job_id):
         raise ValueError(_not_that_record("job", job_id))
 
-    # Only a string is a log. A missing key, a null (what Galaxy serialises before the job
-    # has run) or anything else is left out, never answered as "" -- an empty string is
-    # kept, because that is Galaxy saying the stream was empty.
+    # Only a string is a log. A missing key, a null (what Galaxy serialises for the tool_*
+    # and job_* fields before the job has run) or anything else is left out, never answered
+    # as "" -- an empty string is kept, because that is Galaxy saying the stream was empty,
+    # and stdout and stderr are always a string over there, empty before the job has run.
     logs = {
         field: _log_ends(job_info[field], log_bytes)
         for field in _JOB_LOG_FIELDS
         if isinstance(job_info.get(field), str)
     }
-    message = f"Retrieved job logs for job '{job_id}'"
-    if not logs:
-        message += " (none recorded yet)"
-    return GalaxyResult(data=logs, success=True, message=message)
+    return GalaxyResult(data=logs, success=True, message=f"Retrieved job logs for job '{job_id}'")
 
 
 # Appended to a 400 from the job index. Quoted by the TypeScript op, so change both.

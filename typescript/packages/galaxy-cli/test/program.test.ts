@@ -431,6 +431,18 @@ describe("the names the CLI gives an op's inputs", () => {
     expect(help("invoke_workflow")).toContain("ignored if --history-id is provided");
   });
 
+  it("never respells another op's call into a flag this op does not take", () => {
+    // spellParamNames respells every key of THIS op's input wherever it appears, so a
+    // summary that wrote `get_job_logs(jobId)` would read `get_job_logs(--job-id)` here,
+    // and `galaxy-cli get_job_logs --job-id <id>` is a usage error (jobId is its positional).
+    // A pointer at another op names it bare, with no parameter token to respell.
+    const help = (name: string) => commands.get(name)!.helpInformation().replace(/\s+/g, " ");
+    expect(help("get_job_details")).toContain("one get_job_logs call away");
+    for (const op of allOperations) {
+      expect(help(op.name), op.name).not.toMatch(/\w\(--/);
+    }
+  });
+
   it("spells a few of them out, so the whole set cannot drift together", () => {
     const flags = (name: string) => (commands.get(name)?.options ?? []).map((o) => o.flags);
     expect(flags("get_tool_panel")).toContain("--section-id <value>");

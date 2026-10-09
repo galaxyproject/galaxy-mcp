@@ -13,8 +13,10 @@
       "body": {
         "id": "0123456789abcdef",
         "state": "new",
-        "job_stdout": null,
-        "job_stderr": null
+        "tool_stdout": null,
+        "tool_stderr": null,
+        "stdout": "",
+        "stderr": ""
       }
     }
   ]

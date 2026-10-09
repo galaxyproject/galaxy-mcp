@@ -154,7 +154,13 @@ describe("get_job_details by job id", () => {
     await getJobDetails({ jobId: J1 }, ctxWith(client));
     await getJobDetails({ datasetId: "d1" }, ctxWith(client));
     expect(queries).toEqual([undefined, undefined]);
-    expect(getJobDetailsOp.summary).toContain("get_job_logs");
+    expect(getJobDetailsOp.summary).toContain("one get_job_logs call away");
+    // Not "get_job_logs(jobId)": the CLI would respell that to get_job_logs(--job-id), a
+    // flag get_job_logs does not have (jobId is its positional).
+    expect(getJobDetailsOp.summary).not.toContain("get_job_logs(");
+    // Galaxy adds job_metrics only to a full read, and only for an admin: the plain read
+    // this op makes never carries them, so the summary must not promise them.
+    expect(getJobDetailsOp.summary).not.toContain("metrics");
   });
 
   it("words the message for the thing that was asked about", () => {

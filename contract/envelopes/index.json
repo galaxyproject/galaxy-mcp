@@ -1591,14 +1591,14 @@
     },
     {
       "tool": "get_job_logs",
-      "case": "no_logs_yet",
-      "note": "a job that has not run: null fields and missing fields are both absent, and the message says nothing was recorded",
+      "case": "not_run_yet",
+      "note": "a job that has not run: the tool_* and job_* fields are null or missing and left out, while stdout and stderr are the empty strings Galaxy always answers",
       "outcome": "success",
       "input": {
         "job_id": "0123456789abcdef"
       },
-      "envelope": "get_job_logs/no_logs_yet.json",
-      "replies": "get_job_logs/no_logs_yet.galaxy.json"
+      "envelope": "get_job_logs/not_run_yet.json",
+      "replies": "get_job_logs/not_run_yet.galaxy.json"
     },
     {
       "tool": "create_history",

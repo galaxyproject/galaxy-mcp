@@ -151,6 +151,17 @@ class TestGetJobDetailsByJobId:
         assert result.message == f"Retrieved job details for job '{self.JOB_ID}'"
         assert "full" not in responses.calls[0].request.url
 
+    def test_describes_only_what_the_plain_read_carries(self):
+        # view_show_job adds job_metrics inside `if full:` and only for an admin, so the
+        # plain read never has them; the description must not send a caller looking for a
+        # field no call to this tool can return. The logs are named as get_job_logs' question
+        # without naming its parameter, because the TypeScript surfaces respell a parameter
+        # token in their own spelling and a command line has no --job-id on get_job_logs.
+        doc = get_job_details_fn.__doc__ or ""
+        assert "metrics" not in doc
+        assert "one get_job_logs call away" in doc
+        assert "get_job_logs(" not in doc
+
     @pytest.mark.parametrize("status", [400, 404])
     @responses.activate
     def test_an_unknown_or_malformed_id_is_not_found(self, status):
@@ -382,17 +393,31 @@ class TestGetJobLogs:
         assert result.count is None
 
     @responses.activate
-    def test_a_job_with_nothing_written_yet_answers_an_empty_record(self):
+    def test_a_job_that_has_not_run_answers_the_empty_streams_galaxy_always_sends(self):
+        # view_show_job (lib/galaxy/managers/jobs.py) copies the four tool_*/job_* columns as
+        # they are, null before the job has run, while Job.stdout and Job.stderr are
+        # properties that always answer a string. So the only empty answer a Galaxy gives is
+        # this one -- the two legacy fields as "" -- and never a record with no logs at all.
         responses.add(
             responses.GET,
             f"{self.BASE}/api/jobs/{self.JOB_ID}",
-            json={"id": self.JOB_ID, "state": "new", "job_stdout": None, "job_stderr": None},
+            json={
+                "id": self.JOB_ID,
+                "state": "new",
+                "tool_stdout": None,
+                "tool_stderr": None,
+                "stdout": "",
+                "stderr": "",
+            },
         )
 
         result = get_job_logs_fn(self.JOB_ID)
 
-        assert result.data == {}
-        assert result.message == f"Retrieved job logs for job '{self.JOB_ID}' (none recorded yet)"
+        assert result.data == {"stdout": "", "stderr": ""}
+        assert result.message == f"Retrieved job logs for job '{self.JOB_ID}'"
+        doc = get_job_logs_fn.__doc__ or ""
+        assert "always answers" in doc
+        assert "has not written yet" not in doc
 
     @responses.activate
     def test_a_long_log_is_cut_to_the_budget_and_zero_leaves_it_whole(self):
