@@ -4351,12 +4351,16 @@ def get_workflow_details(workflow_id: str, version: int | None = None) -> Galaxy
 
 
 def _resolve_workflow_slots(
-    gi: GalaxyInstance, workflow_id: str, history_id: str | None = None
+    gi: GalaxyInstance,
+    workflow_id: str,
+    history_id: str | None = None,
+    version: int | None = None,
 ) -> tuple[list[dict[str, Any]], str, dict[str, Any] | None]:
     """Resolve a workflow's input slots. Primary: style=run (webapp's source),
     behind our normalizer. Fallback: the .ga export. Returns
     (slots, provenance, run_model) -- run_model is the parsed style=run dict when
-    that path was used, else None.
+    that path was used, else None. ``version`` pins both reads to one stored
+    version (0 is the oldest); None is the latest.
     """
     # instance=false: workflow_id here is a StoredWorkflow id (what show_workflow /
     # list_workflows hand back). instance=true reinterprets it as a Workflow-version
@@ -4365,6 +4369,8 @@ def _resolve_workflow_slots(
     params = "style=run&instance=false"
     if history_id:
         params += f"&history_id={history_id}"
+    if version is not None:
+        params += f"&version={version}"
     try:
         resp = gi.make_get_request(f"{gi.url}/workflows/{workflow_id}/download?{params}")
         if resp.status_code == 200:
@@ -4374,13 +4380,16 @@ def _resolve_workflow_slots(
                 return slots, "style=run", run_model
     except Exception as e:  # noqa: BLE001 -- fall back on any style=run failure
         logger.info("style=run unavailable for %s (%s); falling back to .ga", workflow_id, e)
-    definition = gi.workflows.export_workflow_dict(workflow_id)
+    definition = gi.workflows.export_workflow_dict(workflow_id, version=version)
     return normalize_ga_steps(definition), "ga-fallback", None
 
 
 @mcp.tool(tags={"workflows", "read", "extended"})
 def get_workflow_input_template(
-    workflow_id: str, history_id: str | None = None, verbose: bool = False
+    workflow_id: str,
+    history_id: str | None = None,
+    verbose: bool = False,
+    version: int | None = None,
 ) -> GalaxyResult:
     """Return a ready-to-fill template plus a run guide for a workflow.
 
@@ -4394,22 +4403,34 @@ def get_workflow_input_template(
     values -- see `guide.notes`. `guide` carries a short description and provenance.
     Fill `inputs_template` (keyed by step_index) and invoke with
     `inputs_by="step_index|step_uuid"`. Pass `verbose=True` for the full readme
-    and uncapped option lists. `warnings` flags legacy patterns.
+    and uncapped option lists. `warnings` flags legacy patterns. `version` pins
+    every read to one stored version, counted the way get_workflow_details counts
+    them (0 is the oldest); left out, the latest is templated. A version Galaxy
+    does not have is Galaxy's own 400. A negative one is refused before anything
+    is sent, because Galaxy would quietly serve some other version for it.
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
+    if version is not None and version < 0:
+        raise ValueError(
+            f"version must be 0 or greater (got {version}); 0 is the oldest stored "
+            "version and get_workflow_details counts up from there"
+        )
     try:
         # Three independent best-effort reads of the same workflow: the run model
         # (_resolve_workflow_slots), the .ga export (legacy warnings), and
-        # show_workflow (guide docs).
-        slots, provenance, run_model = _resolve_workflow_slots(gi, workflow_id, history_id)
+        # show_workflow (guide docs). All three are pinned to `version` when one is
+        # given, so the slots of one version never meet the docs of another.
+        slots, provenance, run_model = _resolve_workflow_slots(
+            gi, workflow_id, history_id, version=version
+        )
         try:
-            definition = gi.workflows.export_workflow_dict(workflow_id)
+            definition = gi.workflows.export_workflow_dict(workflow_id, version=version)
             warnings = find_legacy_warnings(definition)
         except Exception:  # noqa: BLE001 -- warnings are best-effort
             warnings = []
         try:
-            workflow_show = gi.workflows.show_workflow(workflow_id=workflow_id)
+            workflow_show = gi.workflows.show_workflow(workflow_id=workflow_id, version=version)
         except Exception:  # noqa: BLE001 -- guide docs are best-effort
             workflow_show = {}
         guide = build_guide(workflow_show, run_model, verbose)
@@ -4427,9 +4448,12 @@ def get_workflow_input_template(
             count=len(slots),
         )
     except Exception as e:
-        raise ValueError(
-            format_error("Get workflow input template", e, {"workflow_id": workflow_id})
-        ) from e
+        # The version joins the context only when one was asked for, so a call that
+        # never named one fails in exactly the words it did before the parameter existed.
+        context: dict[str, Any] = {"workflow_id": workflow_id}
+        if version is not None:
+            context["version"] = version
+        raise ValueError(format_error("Get workflow input template", e, context)) from e
 
 
 def _enrich_supplied_inputs(gi: GalaxyInstance, inputs: dict[str, Any]) -> dict[str, Any]:

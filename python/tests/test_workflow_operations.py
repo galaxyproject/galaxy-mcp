@@ -975,6 +975,105 @@ def test_template_returns_when_show_workflow_fails(mock_galaxy_instance):
     assert strand["options"]
 
 
+# ---------------------------------------------------------------------------
+# get_workflow_input_template at a stored version
+# ---------------------------------------------------------------------------
+
+
+def test_template_version_reaches_every_read(mock_galaxy_instance):
+    # One version for all three reads: the run model's query, the .ga export the
+    # warnings come from, and the show_workflow the guide is built on.
+    mock_galaxy_instance.url = "https://g/api"
+    mock_galaxy_instance.make_get_request.return_value = _run_resp_with_param()
+    mock_galaxy_instance.workflows.export_workflow_dict.return_value = {"steps": {}}
+    mock_galaxy_instance.workflows.show_workflow.return_value = {**_wf_show(), "version": 0}
+    with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        result = get_workflow_input_template_fn("wfid", version=0)
+    assert result.success is True
+    url = mock_galaxy_instance.make_get_request.call_args[0][0]
+    assert "version=0" in url
+    assert "style=run" in url
+    mock_galaxy_instance.workflows.export_workflow_dict.assert_called_once_with("wfid", version=0)
+    mock_galaxy_instance.workflows.show_workflow.assert_called_once_with(
+        workflow_id="wfid", version=0
+    )
+    assert result.data["guide"]["provenance"]["version"] == 0
+
+
+def test_template_without_version_sends_none(mock_galaxy_instance):
+    # Left out, nothing about a version reaches Galaxy: the run-model URL has no
+    # version key and the two bioblend reads are asked for the latest.
+    mock_galaxy_instance.url = "https://g/api"
+    mock_galaxy_instance.make_get_request.return_value = _run_resp_with_param()
+    mock_galaxy_instance.workflows.export_workflow_dict.return_value = {"steps": {}}
+    mock_galaxy_instance.workflows.show_workflow.return_value = _wf_show()
+    with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        get_workflow_input_template_fn("wfid")
+    url = mock_galaxy_instance.make_get_request.call_args[0][0]
+    assert "version" not in url
+    mock_galaxy_instance.workflows.export_workflow_dict.assert_called_once_with(
+        "wfid", version=None
+    )
+    mock_galaxy_instance.workflows.show_workflow.assert_called_once_with(
+        workflow_id="wfid", version=None
+    )
+
+
+def test_template_version_fallback_export_is_pinned_too(mock_galaxy_instance):
+    # When style=run yields nothing, the .ga fallback is the same version -- a
+    # template must never be the old version's docs over the latest version's slots.
+    mock_galaxy_instance.url = "https://g/api"
+    empty = Mock()
+    empty.status_code = 200
+    empty.json.return_value = {"steps": {}}
+    mock_galaxy_instance.make_get_request.return_value = empty
+    mock_galaxy_instance.workflows.export_workflow_dict.return_value = {
+        "steps": {"0": {"type": "data_input", "label": "Old input", "tool_state": "{}"}}
+    }
+    mock_galaxy_instance.workflows.show_workflow.return_value = _wf_show()
+    with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        result = get_workflow_input_template_fn("wfid", version=2)
+    assert "source: ga-fallback" in result.message
+    assert result.data["slots"][0]["label"] == "Old input"
+    for call in mock_galaxy_instance.workflows.export_workflow_dict.call_args_list:
+        assert call == (("wfid",), {"version": 2})
+
+
+def test_template_negative_version_is_refused_before_any_request(mock_galaxy_instance):
+    mock_galaxy_instance.url = "https://g/api"
+    with (
+        patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+        pytest.raises(ValueError, match=r"version must be 0 or greater \(got -1\)"),
+    ):
+        get_workflow_input_template_fn("wfid", version=-1)
+    mock_galaxy_instance.make_get_request.assert_not_called()
+    mock_galaxy_instance.workflows.export_workflow_dict.assert_not_called()
+    mock_galaxy_instance.workflows.show_workflow.assert_not_called()
+
+
+def test_template_version_is_named_in_the_failure_context(mock_galaxy_instance):
+    # Galaxy's answer to a version it does not have is a 400 on both reads, and the
+    # context names the version that was asked for -- but only then, so an unpinned
+    # call fails in exactly the words it always did.
+    mock_galaxy_instance.url = "https://g/api"
+    bad = Mock()
+    bad.status_code = 400
+    mock_galaxy_instance.make_get_request.return_value = bad
+    mock_galaxy_instance.workflows.export_workflow_dict.side_effect = Exception(
+        "GET: error 400: Version does not exist"
+    )
+    with (
+        patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+        pytest.raises(ValueError, match=r"Context: workflow_id=wfid, version=9$"),
+    ):
+        get_workflow_input_template_fn("wfid", version=9)
+    with (
+        patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}),
+        pytest.raises(ValueError, match=r"Context: workflow_id=wfid$"),
+    ):
+        get_workflow_input_template_fn("wfid")
+
+
 class TestCoerceOptionalJsonDict:
     """invoke_workflow accepts JSON-string inputs/params; coercion guards the edges."""
 

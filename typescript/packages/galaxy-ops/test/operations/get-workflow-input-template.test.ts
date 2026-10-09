@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { z } from "zod";
 import {
   getWorkflowInputTemplateOp,
   getWorkflowInputTemplate,
@@ -6,7 +7,7 @@ import {
 } from "../../src/operations/get-workflow-input-template";
 import { mockClient } from "../util/mock-client";
 import { DEFAULT_POLL } from "../../src/context";
-import { GalaxyNotFoundError } from "../../src/errors";
+import { GalaxyNotFoundError, GalaxyValidationError } from "../../src/errors";
 import type { GalaxyContext } from "../../src/context";
 
 const ctxWith = (client: any): GalaxyContext => ({ client, poll: DEFAULT_POLL });
@@ -317,5 +318,87 @@ describe("get_workflow_input_template", () => {
     expect("options_note" in slot).toBe(false);
     // summary should be full readme (not cleaned)
     expect((out.guide as any).summary).toContain("# Reads aligner");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// version: one stored version for every read
+// ---------------------------------------------------------------------------
+
+describe("get_workflow_input_template at a stored version", () => {
+  /** Every request this op makes, with the query it carried, in order. */
+  function recordingClient(opts: { runModel?: unknown } = {}) {
+    const seen: Array<{ path: string; query: Record<string, unknown> }> = [];
+    const client = mockClient({
+      GET: (path, init) => {
+        const query = (init?.params?.query ?? {}) as Record<string, unknown>;
+        seen.push({ path, query });
+        if (path === "/api/workflows/{workflow_id}/download") {
+          if (query.style === "run") {
+            return { data: opts.runModel ?? RUN_MODEL, response: { status: 200 } };
+          }
+          return { data: GA_DEFINITION, response: { status: 200 } };
+        }
+        return { data: { ...SHOW_WF, version: 0 }, response: { status: 200 } };
+      },
+    });
+    return { client, seen };
+  }
+
+  it("sends the version on the run model, the .ga export and the show", async () => {
+    const { client, seen } = recordingClient();
+    const out = await getWorkflowInputTemplate({ workflowId: "wf1", version: 0 }, ctxWith(client));
+    expect(seen.map((r) => r.query.version)).toEqual([0, 0, 0]);
+    expect(seen[0]!.query).toEqual({ style: "run", instance: false, version: 0 });
+    expect((out.guide as any).provenance.version).toBe(0);
+  });
+
+  it("sends no version key at all when none was asked for", async () => {
+    const { client, seen } = recordingClient();
+    await getWorkflowInputTemplate({ workflowId: "wf1" }, ctxWith(client));
+    for (const r of seen) expect("version" in r.query).toBe(false);
+  });
+
+  it("treats an explicit null as left out", async () => {
+    const { client, seen } = recordingClient();
+    await getWorkflowInputTemplate({ workflowId: "wf1", version: null }, ctxWith(client));
+    for (const r of seen) expect("version" in r.query).toBe(false);
+  });
+
+  it("pins the .ga fallback to the same version", async () => {
+    const { client, seen } = recordingClient({ runModel: { steps: {} } });
+    const out = await getWorkflowInputTemplate({ workflowId: "wf1", version: 2 }, ctxWith(client));
+    expect(out.slots).toHaveLength(1);
+    // run model, fallback export, warnings export, show -- all four at version 2
+    expect(seen).toHaveLength(4);
+    for (const r of seen) expect(r.query.version).toBe(2);
+  });
+
+  it("refuses a negative version before sending anything", async () => {
+    const { client, seen } = recordingClient();
+    await expect(
+      getWorkflowInputTemplate({ workflowId: "wf1", version: -1 }, ctxWith(client)),
+    ).rejects.toThrow(
+      new GalaxyValidationError(
+        "version must be 0 or greater (got -1); 0 is the oldest stored version and get_workflow_details counts up from there",
+      ),
+    );
+    expect(seen).toHaveLength(0);
+  });
+
+  it("names the version in the failure context only when one was asked for", () => {
+    const context = getWorkflowInputTemplateOp.failure!.context!;
+    expect(context({ workflowId: "wf1", version: 7 } as any)).toEqual({ workflow_id: "wf1", version: 7 });
+    expect(context({ workflowId: "wf1" } as any)).toEqual({ workflow_id: "wf1" });
+    expect(context({ workflowId: "wf1", version: null } as any)).toEqual({ workflow_id: "wf1" });
+  });
+
+  it("schema: version is an optional integer that accepts null and refuses fractions", () => {
+    const schema = z.object(getWorkflowInputTemplateOp.input);
+    expect(schema.parse({ workflowId: "wf1" }).version).toBeUndefined();
+    expect(schema.parse({ workflowId: "wf1", version: null }).version).toBeNull();
+    expect(schema.parse({ workflowId: "wf1", version: 3 }).version).toBe(3);
+    expect(() => schema.parse({ workflowId: "wf1", version: 1.5 })).toThrow();
+    expect(() => schema.parse({ workflowId: "wf1", version: "0" })).toThrow();
   });
 });

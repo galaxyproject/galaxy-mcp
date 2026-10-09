@@ -1857,6 +1857,72 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
             {**wf_show, "readme": "", "help": "", "annotation": "out of order"},
         ),
     )
+    # The same workflow at its oldest stored version. Every read is narrowed on
+    # `version=0` -- the run model, the .ga export under both spellings, and the show
+    # the guide is built from -- and the unpinned answers sit beside them under the
+    # bare routes, so a surface that drops the version from any one request gets the
+    # latest answer there and the envelope says so. Version 0 has one more input than
+    # the latest (a reference the later versions resolve themselves), a different
+    # annotation, and no legacy warning yet.
+    old_data_step = {**data_step, "step_label": "Raw reads"}
+    old_ref_step = {
+        "step_type": "data_input",
+        "step_index": 1,
+        "step_label": "Reference FASTA",
+        "uuid": "55555555-5555-5555-5555-555555555555",
+        "inputs": [{"extensions": ["fasta"], "optional": False}],
+    }
+    add(
+        "get_workflow_input_template",
+        "pinned_version_zero",
+        "the oldest stored version, which has a slot the latest no longer asks for",
+        {"workflow_id": "wf000001", "version": 0},
+        lambda: get_workflow_input_template_fn("wf000001", version=0),
+        [
+            route(
+                "/api/workflows/wf000001/download",
+                run_model({"0": old_data_step, "1": old_ref_step}, version=0),
+                query={"style": "run", "version": "0"},
+            ),
+            route(
+                "/api/workflows/wf000001/download",
+                {
+                    "a_galaxy_workflow": "true",
+                    "name": "Reads QC",
+                    "steps": {
+                        "0": {"type": "data_input", "label": "Raw reads"},
+                        "1": {"type": "data_input", "label": "Reference FASTA"},
+                    },
+                },
+                query={"version": "0"},
+            ),
+            route(
+                "/api/workflows/download/wf000001",
+                {
+                    "a_galaxy_workflow": "true",
+                    "name": "Reads QC",
+                    "steps": {
+                        "0": {"type": "data_input", "label": "Raw reads"},
+                        "1": {"type": "data_input", "label": "Reference FASTA"},
+                    },
+                },
+                query={"version": "0"},
+            ),
+            route(
+                "/api/workflows/wf000001",
+                {**wf_show, "version": 0, "annotation": "first cut of the reads QC"},
+                query={"version": "0"},
+            ),
+            *wf_routes(
+                "wf000001",
+                run_model(
+                    {"0": data_step, "1": {"step_type": "tool", "step_index": 1, "inputs": []}}
+                ),
+                ga_definition({"0": {"type": "data_input", "label": "Input FASTQ"}}),
+                wf_show,
+            ),
+        ],
+    )
 
     # -- get_tool_citations --------------------------------------------------
     citations = [
@@ -3607,6 +3673,8 @@ INVOCATION_MISSING = '{"err_msg": "Workflow invocation not found.", "err_code": 
 INVOCATION_MALFORMED = (
     '{"err_msg": "Malformed id ( not-an-id ) specified, unable to decode.", "err_code": 400009}'
 )
+# What StoredWorkflow.get_internal_version raises for an index past the last stored one.
+NO_SUCH_VERSION = '{"err_msg": "Version does not exist", "err_code": 400008}'
 
 
 def fail(
@@ -3868,6 +3936,20 @@ def more_http_failure_cases(add: AddFailure) -> None:
         [
             fail("/api/workflows/download/w0000500", 500, BROKEN),
             fail("/api/workflows/w0000500/download", 500, BROKEN),
+        ],
+    )
+    # A version the workflow does not have is Galaxy's 400 on the run model first, which
+    # both sides swallow on the way to the export, and then on the export, which is the
+    # one that gets reported -- with the version in the context, which it joins only when
+    # one was asked for. No hint, because format_error has none for a 400.
+    add(
+        "get_workflow_input_template",
+        "version_out_of_range",
+        "a stored version Galaxy does not have, refused by Galaxy on every read",
+        {"workflow_id": "wf000001", "version": 7},
+        [
+            fail("/api/workflows/download/wf000001", 400, NO_SUCH_VERSION),
+            fail("/api/workflows/wf000001/download", 400, NO_SUCH_VERSION),
         ],
     )
     add(
@@ -4281,6 +4363,15 @@ def order_of_refusal_cases(add: AddFailure) -> None:
 
 def argument_refusal_cases(add: AddFailure) -> None:
     """Arguments this server refuses on its own terms, before it asks Galaxy anything."""
+    # Galaxy indexes its stored versions with a plain list subscript, so a negative one
+    # is not a 400 there but some other version, served quietly. Refused here instead.
+    add(
+        "get_workflow_input_template",
+        "negative_version",
+        "a version below zero, which Galaxy would silently resolve to another version",
+        {"workflow_id": "wf000001", "version": -1},
+        [],
+    )
     add(
         "get_job_details",
         "both_ids_given",

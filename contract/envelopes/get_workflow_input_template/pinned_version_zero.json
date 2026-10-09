@@ -1,0 +1,63 @@
+{
+  "data": {
+    "inputs_template": {
+      "0": {
+        "src": "hda",
+        "id": "<dataset_id>"
+      },
+      "1": {
+        "src": "hda",
+        "id": "<dataset_id>"
+      }
+    },
+    "slots": [
+      {
+        "step_index": 0,
+        "step_uuid": "11111111-1111-1111-1111-111111111111",
+        "label": "Raw reads",
+        "input_type": "data",
+        "src": "hda",
+        "accepted_formats": [
+          "fastqsanger"
+        ],
+        "collection_type": null,
+        "parameter_type": null,
+        "optional": false
+      },
+      {
+        "step_index": 1,
+        "step_uuid": "55555555-5555-5555-5555-555555555555",
+        "label": "Reference FASTA",
+        "input_type": "data",
+        "src": "hda",
+        "accepted_formats": [
+          "fasta"
+        ],
+        "collection_type": null,
+        "parameter_type": null,
+        "optional": false
+      }
+    ],
+    "inputs_by": "step_index|step_uuid",
+    "warnings": [],
+    "guide": {
+      "summary": "Runs quality control over reads and reports on them.",
+      "annotation": "first cut of the reads QC",
+      "provenance": {
+        "version": 0,
+        "source": {
+          "trs_id": "#workflow/github.com/iwc-workflows/reads-qc/main",
+          "trs_url": "https://dockstore.org/api/ga4gh/trs/v2/tools/reads-qc"
+        },
+        "freshness": {
+          "has_upgrade_messages": false,
+          "step_version_changes": []
+        }
+      }
+    }
+  },
+  "success": true,
+  "message": "Built an input template for workflow 'wf000001' (2 slot(s), source: style=run). Fill inputs_template and invoke with inputs_by='step_index|step_uuid'.",
+  "count": 2,
+  "pagination": null
+}
