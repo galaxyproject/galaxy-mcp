@@ -6,6 +6,17 @@ entry covers all three; where something only affects one surface, it says which.
 
 ## 0.3.1 (unreleased)
 
+### `get_job_details` by job id, with the full record (#TBD)
+
+The op takes `jobId` as an alternative to `datasetId` -- exactly one of the two, refused as
+`validation` (exit 64) when neither or both arrive -- and a `full` flag that sends `?full=true`
+to `GET /api/jobs/{job_id}` on either path. A job id Galaxy answers 400 or 404 to is reported
+as `not_found` (exit 66) with one sentence, because the agent holding the id is asking whether
+the run still exists and cannot act on which of the two it was. `datasetId` is no longer
+required, so on the CLI it moves from a positional to `--dataset-id`, and `GetJobDetailsResult.dataset_id`
+is `null` when the job was asked for by id. Six golden cases pin it on both surfaces; every
+answer through a dataset is unchanged.
+
 ### `get_invocations` sends `step_details` for one invocation (#152)
 
 Given an `invocationId`, the op ignored `stepDetails` and Galaxy answered with every step's

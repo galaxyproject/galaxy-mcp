@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "python/src/galaxy_mcp/server.py",
-  "caseCount": 224,
-  "failureCaseCount": 65,
+  "caseCount": 230,
+  "failureCaseCount": 69,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -1384,6 +1384,29 @@
       "replies": "get_job_details/provenance_without_a_job_id.galaxy.json"
     },
     {
+      "tool": "get_job_details",
+      "case": "by_job_id",
+      "note": "the job asked for by its own id: no lookup, and no dataset to name in the answer",
+      "outcome": "success",
+      "input": {
+        "job_id": "j0000001"
+      },
+      "envelope": "get_job_details/by_job_id.json",
+      "replies": "get_job_details/by_job_id.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "by_job_id_full",
+      "note": "full=true is sent to Galaxy, and the answer carries what the full record adds",
+      "outcome": "success",
+      "input": {
+        "job_id": "j0000001",
+        "full": true
+      },
+      "envelope": "get_job_details/by_job_id_full.json",
+      "replies": "get_job_details/by_job_id_full.galaxy.json"
+    },
+    {
       "tool": "create_history",
       "case": "named",
       "note": "a new history, which is one POST and the record Galaxy answers with",
@@ -2421,6 +2444,28 @@
       "replies": "get_job_details/the_job_read_refused.galaxy.json"
     },
     {
+      "tool": "get_job_details",
+      "case": "job_not_found",
+      "note": "a job id nothing answers to -- the tool's own sentence, about the job this time",
+      "outcome": "failure",
+      "input": {
+        "job_id": "j0000404"
+      },
+      "envelope": "get_job_details/job_not_found.json",
+      "replies": "get_job_details/job_not_found.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "job_id_malformed",
+      "note": "an id Galaxy cannot decode is a 400, and reads as not found all the same",
+      "outcome": "failure",
+      "input": {
+        "job_id": "not-an-id"
+      },
+      "envelope": "get_job_details/job_id_malformed.json",
+      "replies": "get_job_details/job_id_malformed.galaxy.json"
+    },
+    {
       "tool": "run_tool",
       "case": "refused_over_the_inputs",
       "note": "a 400, with the parameter list and a tool test's example read back for the caller",
@@ -2668,6 +2713,27 @@
       },
       "envelope": "get_dataset_details/is_a_collection.json",
       "replies": "get_dataset_details/is_a_collection.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "both_ids_given",
+      "note": "a dataset and a job: two questions, and the tool answers one",
+      "outcome": "failure",
+      "input": {
+        "dataset_id": "d0000002",
+        "job_id": "j0000001"
+      },
+      "envelope": "get_job_details/both_ids_given.json",
+      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "neither_id_given",
+      "note": "nothing to look up",
+      "outcome": "failure",
+      "input": {},
+      "envelope": "get_job_details/neither_id_given.json",
+      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
     },
     {
       "tool": "create_user_tool",

@@ -258,7 +258,7 @@ editable markdown, which is what it is for.
 
 - `get_dataset_details`: Dataset metadata, optionally with a short content preview
 - `get_collection_details`: A dataset collection and its elements
-- `get_job_details`: The job that produced a dataset, with its state and parameters
+- `get_job_details`: A job by its `job_id`, or the job that produced a `dataset_id`; `full` adds its parameters, inputs and outputs
 - `upload_file`: Upload a local file into a history
 - `upload_file_from_url`: Have Galaxy fetch a file from a URL into a history
 - `download_dataset`: Download a dataset to a `file_path` on disk

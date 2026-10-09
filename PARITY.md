@@ -28,11 +28,11 @@ Two differences with that server are recorded once here rather than as a row per
 
 | Status | Differences |
 | --- | --- |
-| `intentional` | `0` |
+| `intentional` | `3` |
 | `pending-port` | `0` |
 | `pending-decision` | `0` |
 | `unreviewed-gap` | `54` |
-| **total** | `54` |
+| **total** | `57` |
 
 These are counted apart and ratcheted apart -- at 54 -- because they are not this repository's to close on its own: each one is a rename, an addition or a removal somebody has to agree with galaxyproject/galaxy. Nothing here has been ruled on yet.
 
@@ -88,8 +88,11 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `get_invocations` | `view` |  | `type=string required=false default="collection"` | `type=string required=false default="collection"` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours chooses how much of each invocation to return; Galaxy's has one shape. |
 | `get_iwc_workflow_details` |  | `4` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_iwc_workflows` |  | `6` | `read (tag)` | `read (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here, and it is a browse listing rather than a dump: limit/offset over projected summaries, cut short again when a page would not fit the output budget. Galaxy's server can rank the manifest against a query (search_iwc_workflows) and fetch one entry whole (get_iwc_workflow_details), but nothing there pages the catalogue without a query. |
-| `get_job_details` |  | `6` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
-| `get_job_status` |  | `0` | -- | -- | `write (mcp default)` | `vs built-in: missing-py-tool` | `unreviewed-gap` | Only Galaxy's, and what it adds is an entry point rather than runtime. get_job_status calls jobs_service.show(full=False) (lib/galaxy/agents/operations.py:318), which is view_show_job -> Job.to_dict("element"): id, state, exit_code, create_time, update_time, tool_id, tool_version, galaxy_version, command_version, history_id, plus params and input/output ids. No runtime and no job metrics -- metrics need full=true and an admin -- and update_time minus create_time is not a runtime, because it includes the time the job sat queued. The gap is the id: a job is reachable here only through get_job_details(dataset_id), which resolves the job from the dataset's provenance and then reads the same non-full job, so an agent holding a job id from run_tool has nowhere to take it. |
+| `get_job_details` |  | `12` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
+| `get_job_details` | `dataset_id` |  | `type=string required=false default=none` | `type=string required=false default=none` | `type=string required=true default=none` | `vs built-in: required-mismatch` | `intentional` | Ours answers for a job by its own id as well as through a dataset, so dataset_id is one of two ways in and the tool refuses a call that gives neither or both; Galaxy's reaches a job only through a dataset and has to require it. |
+| `get_job_details` | `full` |  | `type=boolean required=false default=false` | `type=boolean required=false default=false` | -- | `vs built-in: missing-builtin-param` | `intentional` | Ours sends ?full=true to GET /api/jobs/{job_id} when asked, so the answer carries the job's params, inputs and outputs; Galaxy's always reads the non-full job. |
+| `get_job_details` | `job_id` |  | `type=string required=false default=none` | `type=string required=false default=none` | -- | `vs built-in: missing-builtin-param` | `intentional` | The job id an agent holds from run_tool or an invocation, as a way in; Galaxy's get_job_details takes only a dataset, and its job-by-id entry point is the separate get_job_status tool. |
+| `get_job_status` |  | `0` | -- | -- | `write (mcp default)` | `vs built-in: missing-py-tool` | `unreviewed-gap` | Only Galaxy's, and what it adds is an entry point rather than runtime. get_job_status calls jobs_service.show(full=False) (lib/galaxy/agents/operations.py:318), which is view_show_job -> Job.to_dict("element"): id, state, exit_code, create_time, update_time, tool_id, tool_version, galaxy_version, command_version, history_id, plus params and input/output ids. No runtime and no job metrics -- metrics need full=true and an admin -- and update_time minus create_time is not a runtime, because it includes the time the job sat queued. The entry point itself is no longer a gap: get_job_details takes job_id directly, and full=true reads more than this does. What is left is the name, and whether an agent written against Galaxy's server should find get_job_status here under its own. |
 | `get_page` |  | `5` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_page_revision` |  | `4` | `read (tag), requires >=26.1` | `read (hint), requires >=26.1` | `write (mcp default)` |  |  |  |
 | `get_page_revision` | `include_rendered` |  | -- | -- | `type=boolean required=false default=false` | `vs built-in: missing-py-param` | `unreviewed-gap` | Galaxy's can return the rendered revision beside the editable one; ours returns the editable text and says which source it came from. |

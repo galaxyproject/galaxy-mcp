@@ -2416,6 +2416,35 @@ def job_details_cases(add: AddCase) -> None:
             job_route,
         ],
     )
+    add(
+        "get_job_details",
+        "by_job_id",
+        "the job asked for by its own id: no lookup, and no dataset to name in the answer",
+        {"job_id": "j0000001"},
+        lambda: get_job_details_fn(job_id="j0000001"),
+        [job_route],
+    )
+    # Answered only when ?full=true arrives, so a surface that drops the flag gets no reply.
+    add(
+        "get_job_details",
+        "by_job_id_full",
+        "full=true is sent to Galaxy, and the answer carries what the full record adds",
+        {"job_id": "j0000001", "full": True},
+        lambda: get_job_details_fn(job_id="j0000001", full=True),
+        [
+            route(
+                "/api/jobs/j0000001",
+                {
+                    **job,
+                    "command_line": "fastqc --outdir . input.fastq",
+                    "job_metrics": [],
+                    "job_stderr": "",
+                    "job_stdout": "",
+                },
+                query={"full": "true"},
+            )
+        ],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -3468,6 +3497,10 @@ def biocontainer_cases(add: AddCase) -> None:
 DENIED = '{"err_msg": "History is not accessible by user", "err_code": 403002}'
 MISSING = '{"err_msg": "History not found", "err_code": 404001}'
 BROKEN = '{"err_msg": "Uncaught exception in exposed API method:", "err_code": 0}'
+# What Galaxy says to an id it cannot decode: a 400, before it looks anything up.
+MALFORMED = (
+    '{"err_msg": "Malformed id ( not-an-id ) specified, unable to decode.", "err_code": 400009}'
+)
 
 
 def fail(
@@ -3811,6 +3844,20 @@ def more_http_failure_cases(add: AddFailure) -> None:
             fail("/api/jobs/j0000500", 500, BROKEN),
         ],
     )
+    add(
+        "get_job_details",
+        "job_not_found",
+        "a job id nothing answers to -- the tool's own sentence, about the job this time",
+        {"job_id": "j0000404"},
+        [fail("/api/jobs/j0000404", 404, MISSING)],
+    )
+    add(
+        "get_job_details",
+        "job_id_malformed",
+        "an id Galaxy cannot decode is a 400, and reads as not found all the same",
+        {"job_id": "not-an-id"},
+        [fail("/api/jobs/not-an-id", 400, MALFORMED)],
+    )
 
 
 def run_failure_cases(add: AddFailure) -> None:
@@ -4089,6 +4136,20 @@ def order_of_refusal_cases(add: AddFailure) -> None:
 
 def argument_refusal_cases(add: AddFailure) -> None:
     """Arguments this server refuses on its own terms, before it asks Galaxy anything."""
+    add(
+        "get_job_details",
+        "both_ids_given",
+        "a dataset and a job: two questions, and the tool answers one",
+        {"dataset_id": "d0000002", "job_id": "j0000001"},
+        [],
+    )
+    add(
+        "get_job_details",
+        "neither_id_given",
+        "nothing to look up",
+        {},
+        [],
+    )
     add(
         "create_user_tool",
         "representation_missing_a_field",

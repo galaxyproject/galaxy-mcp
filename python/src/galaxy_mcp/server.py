@@ -2789,16 +2789,49 @@ def _job_details_failed(dataset_id: str, error: Exception) -> str:
     return format_error("Get job details", error, {"dataset_id": dataset_id})
 
 
-@mcp.tool(tags={"jobs", "read", "core"})
-def get_job_details(dataset_id: str, history_id: str | None = None) -> GalaxyResult:
+def _job_lookup_failed(job_id: str, error: Exception) -> str:
+    """What to tell the caller when a job asked for by its own id could not be read.
+
+    A 400 is answered the same way as a 404. Galaxy refuses an id it cannot decode with a
+    400 rather than looking anything up, and a caller holding a job id -- an agent asking
+    whether a run it started still exists -- gets the same answer either way: there is no
+    job by that id to read. Both surfaces report it as not found so that caller can act
+    on one kind of failure rather than two.
+
+    Everything else reads as `_job_details_failed` does: a status goes through
+    format_error, and a failure carrying no status field never reached HTTP at all.
     """
-    Get detailed information about the job that created a specific dataset
+    if _http_status(error) in (400, 404):
+        return (
+            f"Job ID '{job_id}' not found or not accessible. "
+            "Make sure the job exists and you have permission to view it."
+        )
+    if _http_status(error) is _NO_STATUS_FIELD:
+        return f"Failed to get job information for job '{job_id}': {error}"
+    return format_error("Get job details", error, {"job_id": job_id})
+
+
+@mcp.tool(tags={"jobs", "read", "core"})
+def get_job_details(
+    dataset_id: str | None = None,
+    job_id: str | None = None,
+    history_id: str | None = None,
+    full: bool = False,
+) -> GalaxyResult:
+    """
+    Get detailed information about a job, by its own id or by a dataset it created
+
+    Exactly one of dataset_id and job_id is required.
 
     Args:
-        dataset_id: Galaxy dataset ID - a hexadecimal hash string identifying the dataset
-                   (a 16-character hex string)
+        dataset_id: Galaxy dataset ID whose creating job to look up - a hexadecimal hash
+                   string (a 16-character hex string). Give this or job_id, not both
+        job_id: Galaxy job ID to look up directly (a 16-character hex string). Give this or
+               dataset_id, not both
         history_id: Galaxy history ID containing the dataset - optional for performance optimization
-                   (a 16-character hex string)
+                   (a 16-character hex string); only used with dataset_id
+        full: Ask Galaxy for the full job record, which also carries the job's parameters,
+             inputs and outputs
 
     Returns:
         GalaxyResult with job metadata, tool information, dataset ID, and job ID in data field
@@ -2810,10 +2843,40 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> GalaxyRes
     if not base_url or not api_key:
         raise ValueError("Galaxy connection is missing URL or API key information.")
 
+    # Refused before anything is asked of Galaxy, so neither sentence carries a status.
+    if dataset_id and job_id:
+        raise ValueError(
+            "get_job_details takes a dataset_id or a job_id, not both "
+            f"(got dataset_id '{dataset_id}' and job_id '{job_id}')."
+        )
+    if not dataset_id and not job_id:
+        raise ValueError("get_job_details needs a dataset_id or a job_id; neither was given.")
+
+    headers = {"x-api-key": api_key}
+    # Sent only when asked for, so a job read without it is the request it always was.
+    params = {"full": "true"} if full else None
+
+    if job_id:
+        url = f"{base_url}api/jobs/{job_id}"
+        try:
+            response = requests.get(
+                url, headers=headers, params=params, timeout=30, allow_redirects=False
+            )
+            response.raise_for_status()
+            job_info = response.json()
+        except Exception as e:
+            raise ValueError(_job_lookup_failed(job_id, e)) from e
+        return GalaxyResult(
+            data={"job": job_info, "dataset_id": None, "job_id": job_id},
+            success=True,
+            message=f"Retrieved job details for job '{job_id}'",
+        )
+
+    assert dataset_id is not None  # one of the two, as refused above
+
     # Two lookups and a read, each answering for its own failure while that failure is
     # still in hand. One handler around all three could only see whatever the first one
     # wrapped, and a wrapper carries no status.
-    job_id: str | None = None
     provenance_error: Exception | None = None
     if history_id:
         try:
@@ -2857,9 +2920,10 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> GalaxyRes
     # Get job details using the Galaxy API directly
     # (Bioblend doesn't have a direct method for this)
     url = f"{base_url}api/jobs/{job_id}"
-    headers = {"x-api-key": api_key}
     try:
-        response = requests.get(url, headers=headers, timeout=30, allow_redirects=False)
+        response = requests.get(
+            url, headers=headers, params=params, timeout=30, allow_redirects=False
+        )
         response.raise_for_status()
         job_info = response.json()
     except Exception as e:
