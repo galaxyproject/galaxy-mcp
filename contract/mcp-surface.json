@@ -595,7 +595,7 @@
           "full": {
             "default": false,
             "type": "boolean",
-            "description": "Ask Galaxy for the full job record, which also carries the job's parameters,\n inputs and outputs"
+            "description": "Also read what Galaxy adds with ?full=true: the job's stdout and stderr,\n job messages, dependencies, and job metrics where the server exposes them.\n Params, inputs and outputs are in the plain read already"
           }
         },
         "type": "object"

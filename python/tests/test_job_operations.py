@@ -149,10 +149,22 @@ class TestGetJobDetailsByJobId:
 
     @responses.activate
     def test_full_sends_the_flag_to_galaxy(self):
+        # What full adds on top of the plain read, which already carries params/inputs/outputs.
+        full_job = {
+            "id": self.JOB_ID,
+            "params": {},
+            "inputs": {},
+            "outputs": {},
+            "job_stdout": "done",
+            "job_stderr": "",
+            "job_messages": [],
+            "dependencies": [],
+            "job_metrics": [],
+        }
         responses.add(
             responses.GET,
             f"{self.BASE}/api/jobs/{self.JOB_ID}",
-            json={"id": self.JOB_ID, "params": {}, "inputs": {}, "outputs": {}},
+            json=full_job,
             status=200,
             match=[responses.matchers.query_param_matcher({"full": "true"})],
         )
@@ -160,7 +172,20 @@ class TestGetJobDetailsByJobId:
         result = get_job_details_fn(job_id=self.JOB_ID, full=True)
 
         assert result.success is True
-        assert result.data["job"]["params"] == {}
+        assert result.data["job"] == full_job
+
+    def test_full_is_described_by_what_it_adds(self):
+        # The non-full job already carries params, inputs and outputs (EncodedJobDetails in
+        # Galaxy's schema requires all three), so the description must not send an agent to
+        # full=true for them; it names the extra, heavier fields the flag actually brings.
+        from tests.surface_manifest import build_manifest
+
+        tools = {tool["name"]: tool for tool in build_manifest()["tools"]}
+        served = tools["get_job_details"]["inputSchema"]["properties"]["full"]["description"]
+        description = " ".join(served.split())  # the docstring's line breaks travel with it
+        for added in ("stdout", "stderr", "job messages", "dependencies", "job metrics"):
+            assert added in description
+        assert "Params, inputs and outputs are in the plain read already" in description
 
     @responses.activate
     def test_full_also_applies_when_the_job_is_found_through_a_dataset(self):

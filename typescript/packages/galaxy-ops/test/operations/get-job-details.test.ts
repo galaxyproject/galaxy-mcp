@@ -154,6 +154,16 @@ describe("get_job_details by job id", () => {
     expect(queries).toEqual([{ full: true }, { full: true }]);
   });
 
+  it("describes full by what it adds, not by fields the plain read already has", () => {
+    // EncodedJobDetails (the non-full reply) already requires params, inputs and outputs;
+    // full adds stdout/stderr, job messages, dependencies and metrics.
+    const description = getJobDetailsOp.input.full.description ?? "";
+    for (const added of ["stdout", "stderr", "job messages", "dependencies", "job metrics"]) {
+      expect(description).toContain(added);
+    }
+    expect(description).toContain("params, inputs and outputs are in the plain read already");
+  });
+
   it("words the message for the thing that was asked about", () => {
     const project = getJobDetailsOp.project!;
     expect(project({ job: {}, dataset_id: null, job_id: "j1" }, {} as any)).toEqual({

@@ -2830,8 +2830,9 @@ def get_job_details(
                dataset_id, not both
         history_id: Galaxy history ID containing the dataset - optional for performance optimization
                    (a 16-character hex string); only used with dataset_id
-        full: Ask Galaxy for the full job record, which also carries the job's parameters,
-             inputs and outputs
+        full: Also read what Galaxy adds with ?full=true: the job's stdout and stderr,
+             job messages, dependencies, and job metrics where the server exposes them.
+             Params, inputs and outputs are in the plain read already
 
     Returns:
         GalaxyResult with job metadata, tool information, dataset ID, and job ID in data field

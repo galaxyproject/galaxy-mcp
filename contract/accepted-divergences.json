@@ -249,7 +249,7 @@
         "kind": "missing-builtin-param",
         "observed": "python=type=boolean required=false default=false",
         "status": "intentional",
-        "reason": "Ours sends ?full=true to GET /api/jobs/{job_id} when asked, so the answer carries the job's params, inputs and outputs; Galaxy's always reads the non-full job."
+        "reason": "Ours sends ?full=true to GET /api/jobs/{job_id} when asked, so the answer also carries the job's stdout and stderr, job messages, dependencies and job metrics where the server exposes them -- params, inputs and outputs are in the plain read already; Galaxy's always reads the non-full job."
       },
       {
         "tool": "get_job_details",

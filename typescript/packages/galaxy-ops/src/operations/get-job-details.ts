@@ -50,7 +50,11 @@ const input = {
   full: z
     .boolean()
     .default(DEFAULT_FULL)
-    .describe("ask Galaxy for the full job record, which also carries params, inputs and outputs"),
+    .describe(
+      "also read what Galaxy adds with full=true: stdout and stderr, job messages, dependencies " +
+        "and job metrics where the server exposes them; params, inputs and outputs are in the " +
+        "plain read already",
+    ),
 };
 type In = {
   datasetId?: string | null;
