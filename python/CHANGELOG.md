@@ -32,6 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for a reconcile that has to tell the two apart. A history the key cannot read is a 403, and
   an id Galaxy cannot decode a 400, which the tool follows with a hint of its own since the
   shared hint table has no 400 row.
+### Added
+
+- `get_invocations` can now walk a listing longer than one page. It takes `offset`, `sort_by`
+  (`create_time` or `update_time`), `sort_desc` and `include_terminal`, all passed through to
+  `/api/invocations`; the default request is unchanged. A `limit` above 100 is refused before
+  anything is sent, with a sentence that names Galaxy's cap and the offset to page with, rather
+  than letting Galaxy answer 400.
 
 ## [1.11.1] - 2026-10-09
 

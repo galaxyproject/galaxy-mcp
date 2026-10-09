@@ -416,7 +416,7 @@ sides under different names.
 | `get_workflow_details` | One stored workflow by id (name, steps, inputs) |
 | `get_workflow_input_template` | A ready-to-fill input template + run guide (call before `invoke_workflow`) |
 | `invoke_workflow` *(write)* | Invoke a workflow with inputs/parameters (validates inputs first) |
-| `get_invocations` | One invocation by id (state, steps), or the invocations of a workflow or history |
+| `get_invocations` | One invocation by id (state, steps), or the invocations of a workflow or history; pages with `limit` (at most 100, Galaxy's cap) + `offset`, sorts by `create_time` or `update_time`, and `includeTerminal: false` keeps only the ones still running |
 | `cancel_workflow_invocation` *(write)* | Cancel a running workflow invocation |
 
 ### IWC (Intergalactic Workflow Commission) catalog

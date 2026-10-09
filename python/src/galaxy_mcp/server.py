@@ -211,6 +211,8 @@ OUTPUT_BUDGET_BYTES = 50_000
 # page looks like for the kind of item the tool returns, so an agent asking for a
 # thousand tool records gets told no rather than getting a page cut to a fifth of it.
 MAX_PAGE_SIZE = {
+    # Galaxy's own ceiling: /api/invocations declares limit le=100 and answers 400 above it.
+    "get_invocations": 100,
     "get_iwc_workflows": 100,
     "get_tool_panel": 500,
     "list_history_ids": 500,
@@ -3519,6 +3521,10 @@ def get_invocations(
     limit: int | None = None,
     view: str = "collection",
     step_details: bool = False,
+    offset: int = 0,
+    sort_by: str | None = None,
+    sort_desc: bool | None = None,
+    include_terminal: bool = True,
 ) -> GalaxyResult:
     """
     View workflow invocations in Galaxy
@@ -3530,18 +3536,37 @@ def get_invocations(
                     (a 16-character hex string, optional)
         history_id: Filter invocations by history ID - a hexadecimal hash string
                    (a 16-character hex string, optional)
-        limit: Maximum number of invocations to return. Leave it unset and none is
-               sent, so Galaxy applies its own default of 20 -- not "no limit". Raise
-               it to see more.
+        limit: Maximum number of invocations to return, at most 100 -- Galaxy's
+               invocation index serves no larger page, so page with offset to see
+               more. Leave it unset and none is sent, so Galaxy applies its own
+               default of 20 -- not "no limit".
         view: Level of detail to return - 'element' for detailed or 'collection' for summary
              (default: 'collection')
         step_details: Include details on individual workflow steps -- each step's
                      jobs. Applies to one invocation by id, and to a listing when
                      view is 'element' (default: False)
+        offset: Number of invocations to skip before the page starts, for walking a
+                listing longer than one page of limit (default: 0)
+        sort_by: Order the listing by 'create_time' or 'update_time'. Left unset,
+                 Galaxy's own order applies, which is newest first (optional)
+        sort_desc: With sort_by, True orders newest first and False oldest first.
+                   Left unset, Galaxy's own direction applies (optional)
+        include_terminal: Whether invocations that have finished -- scheduled,
+                          failed or cancelled -- are listed. False keeps only the
+                          ones still in flight (default: True)
 
     Returns:
         GalaxyResult with workflow invocation information in data field
     """
+    if not invocation_id:
+        # Galaxy answers a limit above 100 with a 400 validation error. Refused here
+        # instead, before anything is sent and in the same words the other windowed
+        # listings use, which name the cap and the offset to page past it.
+        if limit is not None:
+            _validate_pagination(limit, offset, max_limit=MAX_PAGE_SIZE["get_invocations"])
+        elif offset < 0:
+            raise ValueError(f"offset must be 0 or greater (got {offset})")
+
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
@@ -3565,14 +3590,29 @@ def get_invocations(
                 message=f"Retrieved invocation '{invocation_id}'",
             )
 
-        # Otherwise get a list of invocations with optional filters
-        invocations = gi.invocations.get_invocations(
-            workflow_id=workflow_id,
-            history_id=history_id,
-            limit=limit,
-            view=view,
-            step_details=step_details,
-        )
+        # Otherwise get a list of invocations with optional filters. bioblend's
+        # get_invocations builds this same request but takes no sort parameters, so
+        # the params are assembled here the way it assembles them -- a blank filter is
+        # no filter, limit and offset only when asked for -- and sent through the same
+        # client call, so retries and failure wording are unchanged.
+        params: dict[str, Any] = {
+            "include_terminal": include_terminal,
+            "view": view,
+            "step_details": step_details,
+        }
+        if workflow_id:
+            params["workflow_id"] = workflow_id
+        if history_id:
+            params["history_id"] = history_id
+        if limit is not None:
+            params["limit"] = limit
+        if offset:
+            params["offset"] = offset
+        if sort_by:
+            params["sort_by"] = sort_by
+        if sort_desc is not None:
+            params["sort_desc"] = sort_desc
+        invocations = gi.invocations._get(params=params)
         _refuse_error_body("Get workflow invocations", invocations)
         return GalaxyResult(
             data=invocations,

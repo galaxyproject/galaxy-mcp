@@ -1,0 +1,16 @@
+{
+  "data": [
+    {
+      "id": "inv0000",
+      "state": "ready",
+      "workflow_id": "w0000",
+      "history_id": "h0000",
+      "create_time": "2026-01-01T00:00:00",
+      "update_time": "2026-01-01T00:10:00"
+    }
+  ],
+  "success": true,
+  "message": "Retrieved 1 workflow invocations",
+  "count": 1,
+  "pagination": null
+}

@@ -72,7 +72,7 @@
     },
     "ratchet": {
       "$comment": "The same down-only counter as above, counted over this section's rows alone. It starts at the number the first run found, because nobody had compared the two surfaces before this one: every row is a difference somebody now has to rule on, and the way the number comes down is a tool changing on one side or somebody reading a row and giving it a reviewed status.",
-      "unreviewedGaps": 54
+      "unreviewedGaps": 53
     },
     "divergences": [
       {
@@ -205,11 +205,27 @@
       },
       {
         "tool": "get_invocations",
-        "param": "offset",
-        "kind": "missing-py-param",
-        "observed": "builtin=type=integer required=false default=0",
-        "status": "unreviewed-gap",
-        "reason": "Galaxy's pages with limit+offset; ours takes limit only."
+        "param": "include_terminal",
+        "kind": "missing-builtin-param",
+        "observed": "python=type=boolean required=false default=true",
+        "status": "intentional",
+        "reason": "Ours passes the index's own include_terminal through, so a caller reconciling what is still running can leave the finished invocations out; Galaxy's lists everything."
+      },
+      {
+        "tool": "get_invocations",
+        "param": "sort_by",
+        "kind": "missing-builtin-param",
+        "observed": "python=type=string required=false default=none",
+        "status": "intentional",
+        "reason": "Ours passes the index's sort_by through (create_time or update_time), so a listing longer than one page can be walked in a stable order; Galaxy's takes the index's default order only."
+      },
+      {
+        "tool": "get_invocations",
+        "param": "sort_desc",
+        "kind": "missing-builtin-param",
+        "observed": "python=type=boolean required=false default=none",
+        "status": "intentional",
+        "reason": "The direction that goes with sort_by; Galaxy's has no sort to give a direction to."
       },
       {
         "tool": "get_invocations",
