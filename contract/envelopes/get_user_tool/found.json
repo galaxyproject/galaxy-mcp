@@ -1,0 +1,41 @@
+{
+  "data": {
+    "id": "ut000001",
+    "uuid": "61d15277-a911-45ef-aa66-5385146578cc",
+    "tool_id": "row_filter",
+    "active": true,
+    "create_time": "2026-01-02T03:04:05.000000",
+    "representation": {
+      "class": "GalaxyUserTool",
+      "id": "row_filter",
+      "version": "0.1.0",
+      "name": "Row filter",
+      "description": "Keep rows above a threshold",
+      "container": "quay.io/biocontainers/python:3.12",
+      "shell_command": "python3 -c 'pass'",
+      "inputs": [
+        {
+          "name": "table",
+          "type": "data",
+          "format": "tabular"
+        },
+        {
+          "name": "threshold",
+          "type": "integer"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "kept",
+          "type": "data",
+          "format": "tabular",
+          "from_work_dir": "out.tsv"
+        }
+      ]
+    }
+  },
+  "success": true,
+  "message": "Retrieved user-defined tool 'row_filter' (UUID: 61d15277-a911-45ef-aa66-5385146578cc)",
+  "count": null,
+  "pagination": null
+}

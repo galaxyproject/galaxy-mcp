@@ -72,6 +72,7 @@ from .test_helpers import (
     get_tool_panel_fn,
     get_tool_run_examples_fn,
     get_user_fn,
+    get_user_tool_fn,
     get_workflow_details_fn,
     get_workflow_input_template_fn,
     import_workflow_from_iwc_fn,
@@ -3061,6 +3062,24 @@ def user_tool_mutation_cases(add: AddCase) -> None:
         ],
     )
     add(
+        "get_user_tool",
+        "found",
+        "one tool read back by uuid, the record create_user_tool answered with",
+        {"uuid": "61d15277-a911-45ef-aa66-5385146578cc"},
+        lambda: get_user_tool_fn("61d15277-a911-45ef-aa66-5385146578cc"),
+        [route("/api/unprivileged_tools/61d15277-a911-45ef-aa66-5385146578cc", created_tool)],
+    )
+    # Galaxy compares on the 32 hex digits, so the bare spelling names the same tool and goes
+    # through unchanged, as it does for delete_user_tool and run_user_tool.
+    add(
+        "get_user_tool",
+        "found_without_hyphens",
+        "the same tool by its bare 32-digit uuid, sent through as given",
+        {"uuid": "61d15277a91145efaa665385146578cc"},
+        lambda: get_user_tool_fn("61d15277a91145efaa665385146578cc"),
+        [route("/api/unprivileged_tools/61d15277a91145efaa665385146578cc", created_tool)],
+    )
+    add(
         "delete_user_tool",
         "deactivated",
         "a soft delete, where the answer is built here rather than read from Galaxy",
@@ -3896,6 +3915,13 @@ def http_failure_cases(add: AddFailure) -> None:
         [fail("/api/unprivileged_tools/u0000405", 404, "", method="DELETE")],
     )
     add(
+        "get_user_tool",
+        "not_found",
+        "a well-formed uuid no tool of this user's carries",
+        {"uuid": "61d15277-a911-45ef-aa66-538514657404"},
+        [fail("/api/unprivileged_tools/61d15277-a911-45ef-aa66-538514657404", 404, MISSING)],
+    )
+    add(
         "run_user_tool",
         "lookup_refused",
         "the uuid lookup refused, before anything is submitted",
@@ -4525,6 +4551,16 @@ def argument_refusal_cases(add: AddFailure) -> None:
         "limit_below_one",
         "the floor every listing has, on the one listing with no ceiling",
         {"limit": 0},
+        [],
+    )
+    # Galaxy 26.0+ answers a value uuid.UUID() refuses with a 400 "Invalid UUID format" (older
+    # Galaxies a 500 from the database driver), neither of which is a 404; the tool refuses it
+    # as not found itself.
+    add(
+        "get_user_tool",
+        "malformed_uuid",
+        "a tool id where a uuid should be, refused before anything is sent",
+        {"uuid": "row_filter"},
         [],
     )
 

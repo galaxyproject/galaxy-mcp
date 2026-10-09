@@ -28,13 +28,13 @@ Two differences with that server are recorded once here rather than as a row per
 
 | Status | Differences |
 | --- | --- |
-| `intentional` | `3` |
+| `intentional` | `1` |
 | `pending-port` | `0` |
 | `pending-decision` | `0` |
-| `unreviewed-gap` | `53` |
-| **total** | `56` |
+| `unreviewed-gap` | `54` |
+| **total** | `55` |
 
-These are counted apart and ratcheted apart -- at 53 -- because they are not this repository's to close on its own: each one is a rename, an addition or a removal somebody has to agree with galaxyproject/galaxy. Nothing here has been ruled on yet.
+These are counted apart and ratcheted apart -- at 54 -- because they are not this repository's to close on its own: each one is a rename, an addition or a removal somebody has to agree with galaxyproject/galaxy. Nothing here has been ruled on yet.
 
 ## What each surface is missing
 
@@ -44,7 +44,7 @@ Every tool any surface has, against the surfaces that do not have it. A name her
 
 **Missing from TypeScript** (5): `connect`, `get_invocation_details`, `get_job_status`, `list_file_source_templates`, `list_user_file_sources`
 
-**Missing from Built-in** (6): `get_iwc_workflows`, `get_tool_input_template`, `get_workflow_input_template`, `recommend_iwc_workflows`, `update_history`, `upload_file`
+**Missing from Built-in** (7): `get_iwc_workflows`, `get_tool_input_template`, `get_user_tool`, `get_workflow_input_template`, `recommend_iwc_workflows`, `update_history`, `upload_file`
 
 ## Tools
 
@@ -80,12 +80,10 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `get_history_contents` | `visible` |  | `type=boolean required=false default=true` | `type=boolean required=false default=true` | `type=boolean required=false default=none` | `vs built-in: default-mismatch` | `unreviewed-gap` | Ours defaults to visible items only; Galaxy's passes None through and lets the API decide. |
 | `get_history_details` |  | `4` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_invocation_details` |  | `0` | -- | -- | `write (mcp default)` | `vs built-in: missing-py-tool` | `unreviewed-gap` | Only Galaxy's. The same reading exists here inside get_invocations, which returns one invocation's detail when it is given invocation_id. |
-| `get_invocations` |  | `11` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
-| `get_invocations` | `include_terminal` |  | `type=boolean required=false default=true` | `type=boolean required=false default=true` | -- | `vs built-in: missing-builtin-param` | `intentional` | Ours passes the index's own include_terminal through, so a caller reconciling what is still running can leave the finished invocations out; Galaxy's lists everything. |
+| `get_invocations` |  | `5` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_invocations` | `invocation_id` |  | `type=string required=false default=none` | `type=string required=false default=none` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours takes an invocation id and returns that one invocation's detail; Galaxy's splits that into get_invocation_details. |
 | `get_invocations` | `limit` |  | `type=integer required=false default=none` | `type=integer required=false default=none` | `type=integer required=false default=50` | `vs built-in: default-mismatch` | `unreviewed-gap` | Ours declares no default; Galaxy's pages at 50. |
-| `get_invocations` | `sort_by` |  | `type=string required=false default=none` | `type=string required=false default=none` | -- | `vs built-in: missing-builtin-param` | `intentional` | Ours passes the index's sort_by through (create_time or update_time), so a listing longer than one page can be walked in a stable order; Galaxy's takes the index's default order only. |
-| `get_invocations` | `sort_desc` |  | `type=boolean required=false default=none` | `type=boolean required=false default=none` | -- | `vs built-in: missing-builtin-param` | `intentional` | The direction that goes with sort_by; Galaxy's has no sort to give a direction to. |
+| `get_invocations` | `offset` |  | -- | -- | `type=integer required=false default=0` | `vs built-in: missing-py-param` | `unreviewed-gap` | Galaxy's pages with limit+offset; ours takes limit only. |
 | `get_invocations` | `step_details` |  | `type=boolean required=false default=false` | `type=boolean required=false default=false` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours can ask for per-step detail on the listing, and Galaxy's server cannot get it at all. get_invocation_details is not the substitute: it builds InvocationSerializationParams(view="element") and leaves step_details at its False default (lib/galaxy/agents/operations.py:617), and a step's jobs, outputs and output_collections are only filled in when the step itself is serialised with view="element" (WorkflowInvocationStep.to_dict, lib/galaxy/model/__init__.py:10917). So what it returns is the invocation's own element view -- state, inputs, input_step_parameters, the invocation's labelled outputs, and a list of steps carrying state, order_index and a bare job_id or implicit_collection_jobs_id -- but no per-step outputs, output_collections or job detail. Ours passes the flag through to the same index endpoint, which serialises the listing with it, so get_invocations(view="element", step_details=True) does return each step's jobs and outputs; and for one invocation by id it sends step_details to GET /api/invocations/{id}, so get_invocations(invocation_id=..., step_details=True) returns each step's jobs too. |
 | `get_invocations` | `view` |  | `type=string required=false default="collection"` | `type=string required=false default="collection"` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours chooses how much of each invocation to return; Galaxy's has one shape. |
 | `get_iwc_workflow_details` |  | `4` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
@@ -97,8 +95,7 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `get_page_revision` | `include_rendered` |  | -- | -- | `type=boolean required=false default=false` | `vs built-in: missing-py-param` | `unreviewed-gap` | Galaxy's can return the rendered revision beside the editable one; ours returns the editable text and says which source it came from. |
 | `get_server_info` |  | `5` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_tool_citations` |  | `3` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
-| `get_tool_details` |  | `7` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
-| `get_tool_details` | `tool_version` |  | `type=string required=false default=none` | `type=string required=false default=none` | -- | `vs built-in: missing-builtin-param` | `intentional` | Ours can describe a tool at the version a template was frozen at, which is what GET /api/tools/{id}?tool_version= is for; Galaxy's describes whichever version the toolbox picks for the id. Kept: a caller pinning a version needs the answer to be about that version, and ours refuses when it is not. |
+| `get_tool_details` |  | `3` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_tool_input_template` |  | `3` | `read (tag)` | `read (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Galaxy's server has no pre-flight skeleton for run_tool, so an agent there shapes `inputs` from get_tool_details(io_details=True) by hand. |
 | `get_tool_panel` |  | `8` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_tool_panel` | `limit` |  | `type=integer required=false default=100` | `type=integer required=false default=100` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours pages the panel, because the whole tree is far more than a model can read; Galaxy's returns the whole thing. |
@@ -107,8 +104,9 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `get_tool_panel` | `view` |  | -- | -- | `type=string required=false default=none` | `vs built-in: missing-py-param` | `unreviewed-gap` | Galaxy's can ask for an admin-configured named panel view; ours always reads the standard panel. |
 | `get_tool_run_examples` |  | `4` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_user` |  | `4` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
+| `get_user_tool` |  | `4` | `read (tag)` | `read (hint)` | -- | `vs built-in: missing-builtin-tool` | `intentional` | Only here, and it exists because of the list_user_tools rows below: Galaxy's list returns every user-defined tool whole, so there a caller already holds the definition it wants; ours pages that list, so one tool by uuid needs its own call. Galaxy's server has no user-tool lookup by uuid and nothing there is asking for one. |
 | `get_workflow_details` |  | `5` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
-| `get_workflow_input_template` |  | `11` | `read (tag)` | `read (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Same gap before invoke_workflow: no template, no run guide, no input validation on that side. |
+| `get_workflow_input_template` |  | `8` | `read (tag)` | `read (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Same gap before invoke_workflow: no template, no run guide, no input validation on that side. |
 | `import_workflow_from_iwc` |  | `4` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
 | `invoke_workflow` |  | `4` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
 | `invoke_workflow` | `inputs` |  | `type=anyOf<object\|string> required=false default=none` | `type=anyOf<object\|string> required=false default=none` | `type=object required=false default=none` | `vs built-in: type-mismatch` | `unreviewed-gap` | Ours also accepts the JSON text of the object, because that is what a CLI flag and some clients send; Galaxy's takes the object only. |

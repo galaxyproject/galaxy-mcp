@@ -1836,6 +1836,28 @@
       "replies": "create_user_tool/name_stated_as_null.galaxy.json"
     },
     {
+      "tool": "get_user_tool",
+      "case": "found",
+      "note": "one tool read back by uuid, the record create_user_tool answered with",
+      "outcome": "success",
+      "input": {
+        "uuid": "61d15277-a911-45ef-aa66-5385146578cc"
+      },
+      "envelope": "get_user_tool/found.json",
+      "replies": "get_user_tool/found.galaxy.json"
+    },
+    {
+      "tool": "get_user_tool",
+      "case": "found_without_hyphens",
+      "note": "the same tool by its bare 32-digit uuid, sent through as given",
+      "outcome": "success",
+      "input": {
+        "uuid": "61d15277a91145efaa665385146578cc"
+      },
+      "envelope": "get_user_tool/found_without_hyphens.json",
+      "replies": "get_user_tool/found_without_hyphens.galaxy.json"
+    },
+    {
       "tool": "delete_user_tool",
       "case": "deactivated",
       "note": "a soft delete, where the answer is built here rather than read from Galaxy",
@@ -2187,6 +2209,17 @@
       },
       "envelope": "delete_user_tool/not_found_with_an_empty_body.json",
       "replies": "delete_user_tool/not_found_with_an_empty_body.galaxy.json"
+    },
+    {
+      "tool": "get_user_tool",
+      "case": "not_found",
+      "note": "a well-formed uuid no tool of this user's carries",
+      "outcome": "failure",
+      "input": {
+        "uuid": "61d15277-a911-45ef-aa66-538514657404"
+      },
+      "envelope": "get_user_tool/not_found.json",
+      "replies": "get_user_tool/not_found.galaxy.json"
     },
     {
       "tool": "run_user_tool",
@@ -2779,6 +2812,17 @@
         ]
       },
       "envelope": "recommend_biocontainer/package_entry_with_no_name.json",
+      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+    },
+    {
+      "tool": "get_user_tool",
+      "case": "malformed_uuid",
+      "note": "a tool id where a uuid should be, refused before anything is sent",
+      "outcome": "failure",
+      "input": {
+        "uuid": "row_filter"
+      },
+      "envelope": "get_user_tool/malformed_uuid.json",
       "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
     },
     {

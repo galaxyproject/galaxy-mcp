@@ -89,6 +89,7 @@ export { searchIwcWorkflowsOp, searchIwcWorkflows } from "./operations/search-iw
 export { recommendIwcWorkflowsOp, recommendIwcWorkflows, type Recommendations } from "./operations/recommend-iwc-workflows";
 export { importWorkflowFromIwcOp, importWorkflowFromIwc, type ImportedWorkflow } from "./operations/import-workflow-from-iwc";
 export { listUserToolsOp, listUserTools, type UserTool } from "./operations/list-user-tools";
+export { getUserToolOp, getUserTool, type UserToolRecord } from "./operations/get-user-tool";
 export { createUserToolOp, createUserTool, type CreatedUserTool } from "./operations/create-user-tool";
 export { deleteUserToolOp, deleteUserTool, type DeletedUserTool } from "./operations/delete-user-tool";
 export { runUserToolOp, runUserTool, type UserToolRun } from "./operations/run-user-tool";

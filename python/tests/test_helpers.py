@@ -36,6 +36,7 @@ from galaxy_mcp.server import (
     get_tool_panel,
     get_tool_run_examples,
     get_user,
+    get_user_tool,
     get_workflow_details,
     get_workflow_input_template,
     import_workflow_from_iwc,
@@ -108,6 +109,7 @@ run_tool_fn = get_function(run_tool)
 create_user_tool_fn = get_function(create_user_tool)
 recommend_biocontainer_fn = get_function(recommend_biocontainer)
 delete_user_tool_fn = get_function(delete_user_tool)
+get_user_tool_fn = get_function(get_user_tool)
 list_user_tools_fn = get_function(list_user_tools)
 run_user_tool_fn = get_function(run_user_tool)
 search_iwc_workflows_fn = get_function(search_iwc_workflows)
@@ -160,6 +162,7 @@ __all__ = [
     "create_user_tool_fn",
     "recommend_biocontainer_fn",
     "delete_user_tool_fn",
+    "get_user_tool_fn",
     "list_user_tools_fn",
     "run_user_tool_fn",
     "search_iwc_workflows_fn",

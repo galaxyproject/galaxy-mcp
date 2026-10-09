@@ -263,6 +263,8 @@ const EXIT_CODES: Record<string, number> = {
   "get_invocations/malformed_id": 66,
   "get_invocations/unknown_id": 66,
   "get_iwc_workflow_details/no_such_trs_id": 66,
+  "get_user_tool/malformed_uuid": 66,
+  "get_user_tool/not_found": 66,
   "get_job_details/dataset_not_found": 66,
   "get_job_details/job_id_malformed": 66,
   "get_job_details/job_not_found": 66,

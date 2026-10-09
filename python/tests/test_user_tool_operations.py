@@ -14,6 +14,7 @@ from galaxy_mcp.server import _shape_biocontainer_recommendation
 from .test_helpers import (
     delete_user_tool_fn,
     galaxy_state,
+    get_user_tool_fn,
     list_user_tools_fn,
     recommend_biocontainer_fn,
     run_user_tool_fn,
@@ -160,6 +161,114 @@ class TestUserToolStatusChecks:
 
         assert result.success is True
         assert result.data == {"uuid": "abc", "deactivated": True}
+
+
+class TestGetUserTool:
+    """get_user_tool reads one tool by uuid instead of paging the whole list for it."""
+
+    UUID = "61d15277-a911-45ef-aa66-5385146578cc"
+
+    def _gi(self, mock_galaxy_instance):
+        gi = mock_galaxy_instance
+        gi.url = "http://localhost:8080/api"
+        gi.make_get_request.return_value.json.return_value = {
+            "id": "ut000001",
+            "uuid": self.UUID,
+            "tool_id": "row_filter",
+            "active": True,
+            "representation": {"version": "0.1.0"},
+        }
+        return gi
+
+    def test_get_user_tool_reads_the_single_tool_endpoint(self, mock_galaxy_instance):
+        gi = self._gi(mock_galaxy_instance)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": gi}):
+            result = get_user_tool_fn(self.UUID)
+
+        gi.make_get_request.assert_called_once_with(
+            f"http://localhost:8080/api/unprivileged_tools/{self.UUID}"
+        )
+        assert result.success is True
+        assert result.data["tool_id"] == "row_filter"
+        assert result.count is None
+        assert result.pagination is None
+        assert result.message == f"Retrieved user-defined tool 'row_filter' (UUID: {self.UUID})"
+
+    def test_get_user_tool_names_the_uuid_when_the_record_has_no_tool_id(
+        self, mock_galaxy_instance
+    ):
+        gi = self._gi(mock_galaxy_instance)
+        gi.make_get_request.return_value.json.return_value = {"uuid": self.UUID}
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": gi}):
+            result = get_user_tool_fn(self.UUID)
+
+        assert result.message == f"Retrieved user-defined tool '{self.UUID}' (UUID: {self.UUID})"
+
+    def test_get_user_tool_reports_a_missing_tool(self, mock_galaxy_instance):
+        """A 404 is a failure, not a tool record."""
+        gi = self._gi(mock_galaxy_instance)
+        gi.make_get_request.return_value.raise_for_status.side_effect = requests.HTTPError(
+            f"404 Client Error: Not Found for url: http://localhost:8080/api/unprivileged_tools/{self.UUID}"
+        )
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": gi}):
+            with pytest.raises(ValueError, match="Get user tool failed: 404 Client Error") as exc:
+                get_user_tool_fn(self.UUID)
+        assert f"uuid={self.UUID}" in str(exc.value)
+
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            "row_filter",
+            "61d15277-a911-45ef-aa66-5385146578c",
+            "61d15277-a911-45ef-aa66-5385146578cg",
+            "urn:uuid:row_filter",
+            "{61d15277-a911-45ef-aa66-5385146578c}",
+            "",
+        ],
+    )
+    def test_get_user_tool_refuses_a_malformed_uuid_before_asking(self, mock_galaxy_instance, bad):
+        """Galaxy 26.0+ answers 400 "Invalid UUID format" for these (older ones a 500), neither of
+        which is a 404 -- so anything uuid.UUID() would refuse is refused here as not found."""
+        gi = self._gi(mock_galaxy_instance)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": gi}):
+            with pytest.raises(ValueError, match="No user-defined tool found with UUID"):
+                get_user_tool_fn(bad)
+        gi.make_get_request.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "spelling",
+        [
+            "61d15277a91145efaa665385146578cc",
+            "{61d15277-a911-45ef-aa66-5385146578cc}",
+            "urn:uuid:61d15277-a911-45ef-aa66-5385146578cc",
+            "61D15277-A911-45EF-AA66-5385146578CC",
+        ],
+    )
+    def test_get_user_tool_sends_every_spelling_uuid_module_accepts(
+        self, mock_galaxy_instance, spelling
+    ):
+        """Galaxy validates with uuid.UUID() and compares on the 32 hex digits, so the bare,
+        braced, urn: and upper-case forms all find the tool -- and delete_user_tool and
+        run_user_tool already send them through, so this must read back what they touch."""
+        gi = self._gi(mock_galaxy_instance)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": gi}):
+            result = get_user_tool_fn(spelling)
+
+        gi.make_get_request.assert_called_once_with(
+            f"http://localhost:8080/api/unprivileged_tools/{spelling}"
+        )
+        assert result.success is True
+        assert result.message == f"Retrieved user-defined tool 'row_filter' (UUID: {spelling})"
+
+    def test_get_user_tool_not_connected(self):
+        with patch.dict(galaxy_state, {"connected": False, "gi": None}):
+            with pytest.raises(ValueError, match="Not connected"):
+                get_user_tool_fn(self.UUID)
 
 
 def _fake_recommend_tree(recommend, verify):
