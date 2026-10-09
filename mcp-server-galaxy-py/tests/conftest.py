@@ -105,6 +105,7 @@ def mock_galaxy_instance():
 @pytest.fixture(autouse=True)
 def _reset_galaxy_state():
     """Reset galaxy state for each test"""
+    from galaxy_mcp import http_security
     from galaxy_mcp.server import (
         _DATATYPES_MAPPING_CACHE,
         _TOOL_SCHEMA_CACHE,
@@ -116,6 +117,9 @@ def _reset_galaxy_state():
 
     # Clear lru_cache to prevent test pollution
     get_manifest_json.cache_clear()
+    # run_http_server marks the process as serving HTTP for good; tests that call it
+    # must not leave every later test looking like an HTTP caller.
+    http_security._serving_http = False
 
     # Clear schema caches to prevent cross-test pollution
     _TOOL_SCHEMA_CACHE.clear()

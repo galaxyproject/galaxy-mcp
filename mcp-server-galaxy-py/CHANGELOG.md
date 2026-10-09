@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Over the HTTP transports, `connect` only reaches the Galaxy in `GALAXY_URL` and any base URLs
+  the operator lists in the new `GALAXY_MCP_EXTRA_ALLOWED_URLS`, matched exactly. Before this, an
+  authenticated HTTP caller could pass any URL and a junk key, have the server request it, and read
+  the reply back out of the connection error. `GALAXY_URL` is now required for HTTP use. stdio is
+  unchanged: its caller is the operator.
+- A failed connection over HTTP reports the HTTP status, not the body the remote host sent.
+- Galaxy GET requests no longer follow redirects (bioblend already refused them on writes).
+- A `.env` reloaded after startup can no longer send its `GALAXY_API_KEY` to a `GALAXY_URL` it
+  replaced.
+- A process serving HTTP never treats a tool call as the operator's, even when the call can't
+  see its HTTP request. This applies to the `connect` allowlist, the local-file guard from 1.11.0
+  and the OAuth rule against falling back to the operator's connection.
+
 ## [1.11.0] - 2026-10-05
 
 ### Security

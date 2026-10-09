@@ -60,9 +60,28 @@ def in_http_request() -> bool:
     return True
 
 
+_serving_http = False
+
+
+def mark_serving_http() -> None:
+    """Record that this process serves an HTTP transport.
+
+    in_http_request() can only see a request whose context reached the current call, and a
+    call that runs somewhere the context did not follow would otherwise pass for the
+    operator's. Once a process serves HTTP, no call is treated as the operator's.
+    """
+    global _serving_http
+    _serving_http = True
+
+
+def remote_caller_possible() -> bool:
+    """False only when this call can come from nobody but the operator, over stdio."""
+    return _serving_http or in_http_request()
+
+
 def local_files_allowed() -> bool:
     """Whether tools may read or write paths on the server's filesystem."""
-    return env_flag(ALLOW_LOCAL_FILES_ENV) or not in_http_request()
+    return env_flag(ALLOW_LOCAL_FILES_ENV) or not remote_caller_possible()
 
 
 def require_local_files(action: str, alternative: str) -> None:

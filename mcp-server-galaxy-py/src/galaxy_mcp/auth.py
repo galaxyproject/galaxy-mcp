@@ -18,7 +18,6 @@ from urllib.parse import urlparse
 
 import anyio
 import requests
-from bioblend.galaxy import GalaxyInstance
 from cryptography.fernet import Fernet, InvalidToken
 from fastmcp.server.auth.auth import (
     AccessToken as FastMCPAccessToken,
@@ -46,6 +45,8 @@ from starlette.responses import (
 )
 from starlette.routing import Route
 from typing_extensions import override
+
+from galaxy_mcp.client import GalaxyInstance
 
 logger = logging.getLogger(__name__)
 
@@ -645,7 +646,9 @@ class GalaxyOAuthProvider(OAuthProvider):
         url = f"{self._galaxy_url}api/authenticate/baseauth"
 
         def _request_api_key() -> str:
-            response = requests.get(url, auth=(username, password), timeout=15)
+            response = requests.get(
+                url, auth=(username, password), timeout=15, allow_redirects=False
+            )
             if response.status_code == 401:
                 raise GalaxyAuthenticationError("Invalid Galaxy credentials.")
             response.raise_for_status()
