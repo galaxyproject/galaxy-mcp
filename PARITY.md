@@ -28,11 +28,11 @@ Two differences with that server are recorded once here rather than as a row per
 
 | Status | Differences |
 | --- | --- |
-| `intentional` | `0` |
+| `intentional` | `1` |
 | `pending-port` | `0` |
 | `pending-decision` | `0` |
 | `unreviewed-gap` | `54` |
-| **total** | `54` |
+| **total** | `55` |
 
 These are counted apart and ratcheted apart -- at 54 -- because they are not this repository's to close on its own: each one is a rename, an addition or a removal somebody has to agree with galaxyproject/galaxy. Nothing here has been ruled on yet.
 
@@ -44,7 +44,7 @@ Every tool any surface has, against the surfaces that do not have it. A name her
 
 **Missing from TypeScript** (5): `connect`, `get_invocation_details`, `get_job_status`, `list_file_source_templates`, `list_user_file_sources`
 
-**Missing from Built-in** (6): `get_iwc_workflows`, `get_tool_input_template`, `get_workflow_input_template`, `recommend_iwc_workflows`, `update_history`, `upload_file`
+**Missing from Built-in** (7): `get_iwc_workflows`, `get_tool_input_template`, `get_workflow_input_template`, `list_jobs`, `recommend_iwc_workflows`, `update_history`, `upload_file`
 
 ## Tools
 
@@ -116,6 +116,7 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `list_file_source_templates` |  | `0` | -- | -- | `write (mcp default)` | `vs built-in: missing-py-tool` | `unreviewed-gap` | Only Galaxy's: the catalog of remote file-source plugin templates (Dropbox, S3, Zenodo, ...). Nothing here exposes file sources at all. |
 | `list_history_ids` |  | `8` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `list_history_ids` | `offset` |  | `type=integer required=false default=0` | `type=integer required=false default=0` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours pages with limit+offset; Galaxy's takes limit only. |
+| `list_jobs` |  | `7` | `read (tag)` | `read (hint)` | -- | `vs built-in: missing-builtin-tool` | `intentional` | Only here, and on purpose: a paged listing of GET /api/jobs filtered by history, state and update time, which is what an agent reconciling its own record of a history against Galaxy needs (Loom's reconcile asks for the jobs updated since a time, in one history, a page at a time). Galaxy's server reads one job at a time -- get_job_details by dataset, get_job_status by job -- and has no index; an agent there would have to walk the history's datasets and ask about each one. |
 | `list_page_revisions` |  | `3` | `read (tag), requires >=26.1` | `read (hint), requires >=26.1` | `write (mcp default)` |  |  |  |
 | `list_pages` |  | `6` | `read (tag), requires >=26.1` | `read (hint), requires >=26.1` | `write (mcp default)` |  |  |  |
 | `list_user_file_sources` |  | `0` | -- | -- | `write (mcp default)` | `vs built-in: missing-py-tool` | `unreviewed-gap` | Only Galaxy's: the user's own configured file-source instances. Nothing here exposes file sources at all. |

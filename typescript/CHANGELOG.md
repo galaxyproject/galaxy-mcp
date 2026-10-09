@@ -6,6 +6,18 @@ entry covers all three; where something only affects one surface, it says which.
 
 ## 0.3.1 (unreleased)
 
+### `list_jobs` pages Galaxy's job index
+
+A new op on both surfaces, wrapping `GET /api/jobs`: jobs narrowed to one history, one
+state and a window of update time, sorted by update or create time, in the small
+`collection` view by default, and paged by `limit` and `offset`. It is the read an agent
+reconciling its own record of a history needs -- the jobs updated since a time, in that
+history, a page at a time. Galaxy puts no upper cap on `limit` and reports no total, so
+the envelope carries a count and no pagination block, and a page shorter than `limit` is
+the last one. Seven golden cases under `contract/envelopes/list_jobs` hold the two
+surfaces to the Python server's answer, the 404 for a history that is not there and the
+refusal of `limit` 0 among them.
+
 ### `get_invocations` sends `step_details` for one invocation (#152)
 
 Given an `invocationId`, the op ignored `stepDetails` and Galaxy answered with every step's

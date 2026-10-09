@@ -80,6 +80,7 @@ export { getToolCitationsOp, getToolCitations, type ToolCitationsResult } from "
 export { getToolRunExamplesOp, getToolRunExamples, type ToolRunExamples } from "./operations/get-tool-run-examples";
 export { searchToolsByKeywordsOp, searchToolsByKeywords, type ToolKeywordMatch } from "./operations/search-tools-by-keywords";
 export { getJobDetailsOp, getJobDetails, type GetJobDetailsResult, type JobDetail } from "./operations/get-job-details";
+export { listJobsOp, listJobs, type JobSummary } from "./operations/list-jobs";
 export { updateHistoryOp, updateHistory, type UpdatedHistory } from "./operations/update-history";
 export { cancelWorkflowInvocationOp, cancelWorkflowInvocation, type CancelledInvocation } from "./operations/cancel-workflow-invocation";
 export { getIwcWorkflowsOp, getIwcWorkflows } from "./operations/get-iwc-workflows";
