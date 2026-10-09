@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `list_jobs` lists jobs a page at a time from Galaxy's job index, narrowed to one history,
+  one state and a window of update time, sorted by update or create time, in the small
+  `collection` view by default. It is the read an agent reconciling its own record of a history
+  needs: the jobs updated since a time, in that history, by `limit` and `offset`. Galaxy puts no
+  upper cap on `limit` and reports no total, so the result carries a count and no pagination
+  block; a page shorter than `limit` is the last one.
+
 ## [1.11.1] - 2026-10-09
 
 ### Security

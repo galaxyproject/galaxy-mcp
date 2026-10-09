@@ -77,6 +77,7 @@ from .test_helpers import (
     import_workflow_from_iwc_fn,
     invoke_workflow_fn,
     list_history_ids_fn,
+    list_jobs_fn,
     list_page_revisions_fn,
     list_pages_fn,
     list_user_tools_fn,
@@ -320,6 +321,22 @@ def invocation_rows(count: int) -> list[dict[str, Any]]:
             "history_id": "h0000",
             "create_time": "2026-01-01T00:00:00",
             "update_time": "2026-01-01T00:10:00",
+        }
+        for i in range(count)
+    ]
+
+
+def job_rows(count: int, *, state: str = "ok") -> list[dict[str, Any]]:
+    """What /api/jobs answers per job in the default 'collection' view."""
+    return [
+        {
+            "id": f"job{i:04d}",
+            "model_class": "Job",
+            "state": state,
+            "tool_id": "cat1",
+            "exit_code": 0,
+            "create_time": "2026-01-01T00:00:00",
+            "update_time": f"2026-01-01T00:{i:02d}:00",
         }
         for i in range(count)
     ]
@@ -1282,6 +1299,50 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         {"limit": 5},
         lambda: get_invocations_fn(limit=5),
         [route("/api/invocations", [])],
+    )
+
+    # -- list_jobs -----------------------------------------------------------
+    # Galaxy windows this index itself and reports no total, so every case carries a
+    # count and no pagination block, as get_invocations does.
+    add(
+        "list_jobs",
+        "in_a_history",
+        "a page of one history's jobs",
+        {"history_id": "h0000", "limit": 5},
+        lambda: list_jobs_fn(history_id="h0000", limit=5),
+        [route("/api/jobs", job_rows(3))],
+    )
+    add(
+        "list_jobs",
+        "since_a_time",
+        "the jobs updated since a time, which is what a reconcile asks for",
+        {"history_id": "h0000", "date_range_min": "2026-01-01T00:01:00", "limit": 5},
+        lambda: list_jobs_fn(history_id="h0000", date_range_min="2026-01-01T00:01:00", limit=5),
+        [route("/api/jobs", job_rows(2))],
+    )
+    add(
+        "list_jobs",
+        "in_a_state",
+        "one history's jobs in one state",
+        {"history_id": "h0000", "state": "error", "limit": 5},
+        lambda: list_jobs_fn(history_id="h0000", state="error", limit=5),
+        [route("/api/jobs", job_rows(1, state="error"))],
+    )
+    add(
+        "list_jobs",
+        "empty_history",
+        "a history with no jobs",
+        {"history_id": "h0000", "limit": 5},
+        lambda: list_jobs_fn(history_id="h0000", limit=5),
+        [route("/api/jobs", [])],
+    )
+    add(
+        "list_jobs",
+        "next_page",
+        "the page after the first, by offset; a short page is the last one",
+        {"history_id": "h0000", "limit": 5, "offset": 5},
+        lambda: list_jobs_fn(history_id="h0000", limit=5, offset=5),
+        [route("/api/jobs", job_rows(2))],
     )
 
     # -- list_pages ----------------------------------------------------------
@@ -3747,6 +3808,13 @@ def more_http_failure_cases(add: AddFailure) -> None:
         [fail("/api/pages", 403, DENIED)],
     )
     add(
+        "list_jobs",
+        "history_not_found",
+        "a bioblend GET of the job index for a history that is not there",
+        {"history_id": "h0404"},
+        [fail("/api/jobs", 404, MISSING)],
+    )
+    add(
         "create_page",
         "refused_by_galaxy",
         "a write, so the sentence is the status and the body",
@@ -4133,6 +4201,13 @@ def argument_refusal_cases(add: AddFailure) -> None:
         "package_entry_with_no_name",
         "the entry is quoted with repr, so the sentence shows what arrived",
         {"packages": ["=1.17"]},
+        [],
+    )
+    add(
+        "list_jobs",
+        "limit_below_one",
+        "the floor every listing has, on the one listing with no ceiling",
+        {"limit": 0},
         [],
     )
 

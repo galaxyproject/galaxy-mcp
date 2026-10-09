@@ -1,0 +1,35 @@
+{
+  "data": [
+    {
+      "id": "job0000",
+      "model_class": "Job",
+      "state": "ok",
+      "tool_id": "cat1",
+      "exit_code": 0,
+      "create_time": "2026-01-01T00:00:00",
+      "update_time": "2026-01-01T00:00:00"
+    },
+    {
+      "id": "job0001",
+      "model_class": "Job",
+      "state": "ok",
+      "tool_id": "cat1",
+      "exit_code": 0,
+      "create_time": "2026-01-01T00:00:00",
+      "update_time": "2026-01-01T00:01:00"
+    },
+    {
+      "id": "job0002",
+      "model_class": "Job",
+      "state": "ok",
+      "tool_id": "cat1",
+      "exit_code": 0,
+      "create_time": "2026-01-01T00:00:00",
+      "update_time": "2026-01-01T00:02:00"
+    }
+  ],
+  "success": true,
+  "message": "Retrieved 3 jobs",
+  "count": 3,
+  "pagination": null
+}

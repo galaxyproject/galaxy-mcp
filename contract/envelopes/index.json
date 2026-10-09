@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "python/src/galaxy_mcp/server.py",
-  "caseCount": 224,
-  "failureCaseCount": 65,
+  "caseCount": 231,
+  "failureCaseCount": 67,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -863,6 +863,69 @@
       },
       "envelope": "get_invocations/empty.json",
       "replies": "get_invocations/empty.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "in_a_history",
+      "note": "a page of one history's jobs",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0000",
+        "limit": 5
+      },
+      "envelope": "list_jobs/in_a_history.json",
+      "replies": "list_jobs/in_a_history.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "since_a_time",
+      "note": "the jobs updated since a time, which is what a reconcile asks for",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0000",
+        "date_range_min": "2026-01-01T00:01:00",
+        "limit": 5
+      },
+      "envelope": "list_jobs/since_a_time.json",
+      "replies": "list_jobs/since_a_time.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "in_a_state",
+      "note": "one history's jobs in one state",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0000",
+        "state": "error",
+        "limit": 5
+      },
+      "envelope": "list_jobs/in_a_state.json",
+      "replies": "list_jobs/in_a_state.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "empty_history",
+      "note": "a history with no jobs",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0000",
+        "limit": 5
+      },
+      "envelope": "list_jobs/empty_history.json",
+      "replies": "list_jobs/empty_history.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "next_page",
+      "note": "the page after the first, by offset; a short page is the last one",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0000",
+        "limit": 5,
+        "offset": 5
+      },
+      "envelope": "list_jobs/next_page.json",
+      "replies": "list_jobs/since_a_time.galaxy.json"
     },
     {
       "tool": "list_pages",
@@ -2328,6 +2391,17 @@
       "replies": "list_pages/permission_denied.galaxy.json"
     },
     {
+      "tool": "list_jobs",
+      "case": "history_not_found",
+      "note": "a bioblend GET of the job index for a history that is not there",
+      "outcome": "failure",
+      "input": {
+        "history_id": "h0404"
+      },
+      "envelope": "list_jobs/history_not_found.json",
+      "replies": "list_jobs/history_not_found.galaxy.json"
+    },
+    {
       "tool": "create_page",
       "case": "refused_by_galaxy",
       "note": "a write, so the sentence is the status and the body",
@@ -2730,6 +2804,17 @@
         ]
       },
       "envelope": "recommend_biocontainer/package_entry_with_no_name.json",
+      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "limit_below_one",
+      "note": "the floor every listing has, on the one listing with no ceiling",
+      "outcome": "failure",
+      "input": {
+        "limit": 0
+      },
+      "envelope": "list_jobs/limit_below_one.json",
       "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
     },
     {
