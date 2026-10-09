@@ -4,14 +4,15 @@ This repo holds two implementations of one agent-facing surface for Galaxy: a Py
 (`python/`, on PyPI as `galaxy-mcp`) and a TypeScript workspace
 (`typescript/`, on npm as `@galaxyproject/galaxy-ops`, `galaxy-cli` and `galaxy-mcp`).
 Galaxy itself ships a third, built-in MCP server. This page explains why each exists, how they
-relate, where things stand, and what the work ahead is. `PARITY.md` next to it is the generated,
-CI-checked record of where the implementations disagree.
+relate, where things stand, and what the work ahead is. `contract/` holds what both
+implementations are checked against, and `PARITY.md` is the generated, CI-checked record of where
+they disagree.
 
 ## Where things stand (October 2026)
 
 | | Version | Status |
 | --- | --- | --- |
-| Python MCP server | `galaxy-mcp` 1.11.0 on PyPI | 46 tools; stdio and HTTP with OAuth; hardened HTTP transports (1.11.0) |
+| Python MCP server | `galaxy-mcp` 1.11.1 on PyPI | 46 tools; stdio and HTTP with OAuth; hardened HTTP transports (1.11.0, 1.11.1) |
 | TypeScript workspace | `@galaxyproject/*` 0.3.1 on npm | 45 tools (all but `connect`); MCP server, CLI and library from one registry |
 | Galaxy built-in server | Galaxy 26.1+ | 44 tools at `/api/mcp`, behind `enable_mcp_server` |
 
@@ -248,8 +249,11 @@ should ever become primary is a question for after the live suite exists and Loo
 - Galaxy's built-in server as the third parity column (#135).
 - Result parity: the envelope (#140), what is inside it (#142), a golden case for every open tool
   (#143), messages (#144) and failures (#145).
-- Releases: galaxy-mcp 1.11.0 with hardened HTTP transports; TypeScript 0.3.0 and 0.3.1 published
-  through staged, maintainer-approved npm releases with provenance (#151).
+- Releases: galaxy-mcp 1.11.0 with hardened HTTP transports, and 1.11.1, which limits `connect`
+  over HTTP to the Galaxies the operator allows (#158, building on #156); TypeScript 0.3.0 and
+  0.3.1 published through staged, maintainer-approved npm releases with provenance (#151).
+- Repository layout: `python/`, `typescript/`, and a shared `contract/` that neither
+  implementation owns (#159).
 - Loom reads invocations through galaxy-ops (galaxyproject/loom#202).
 
 ### In review
@@ -258,7 +262,6 @@ should ever become primary is a question for after the live suite exists and Loo
 - #155 -- aligns the two surfaces further: one set of tool descriptions, history contents fetched
   as a filtered, sorted window, section-level page edits with a content hash, and job outcomes on
   a single invocation.
-- #156 -- restricts which Galaxy destinations a connection may reach, against SSRF.
 
 ### Next: behaviour against a real Galaxy
 
@@ -267,9 +270,10 @@ should ever become primary is a question for after the live suite exists and Loo
    refreshes the built-in snapshot, so recorded parity cannot quietly go stale.
 2. **Make the ratchet mechanically one-way** (compare against the merge base) instead of
    reviewer-enforced.
-3. **#118 -- restate the scope.** The envelope replay covers what every tool answers; what is left
-   is whether pure helpers (template generation, workflow-input normalisation, search ranking)
-   need their own shared vectors.
+3. **More golden cases where coverage is thin**, starting with `get_tool_input_template` (3
+   cases). The envelope replay already does what #118 proposed one level up: every tool that uses
+   a ported helper (templates, workflow-input normalisation, search ranking, paging) is replayed
+   through both surfaces.
 
 ### Convergence with Galaxy's built-in server
 
