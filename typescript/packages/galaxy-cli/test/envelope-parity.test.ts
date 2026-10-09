@@ -238,6 +238,7 @@ const EXIT_CODES: Record<string, number> = {
   // EX_USAGE 64 -- validation: the caller has to change something, and a retry cannot help
   "get_dataset_details/is_a_collection": 64,
   "get_history_contents/limit_below_one": 64,
+  "get_invocations/limit_above_galaxys_cap": 64,
   "list_history_ids/history_without_an_id": 64,
   "list_workflows/limit_above_the_ceiling": 64,
   "recommend_biocontainer/package_entry_with_no_name": 64,
@@ -255,6 +256,8 @@ const EXIT_CODES: Record<string, number> = {
   "delete_user_tool/not_found_with_an_empty_body": 66,
   "get_collection_details/not_found": 66,
   "get_history_details/not_found": 66,
+  "get_invocations/malformed_id": 66,
+  "get_invocations/unknown_id": 66,
   "get_iwc_workflow_details/no_such_trs_id": 66,
   "get_job_details/dataset_not_found": 66,
   "get_job_details/no_job_made_this_dataset": 66,

@@ -11,6 +11,7 @@ import { getCollectionDetailsOp } from "../../src/operations/get-collection-deta
 import { getWorkflowDetailsOp } from "../../src/operations/get-workflow-details";
 import { listPagesOp } from "../../src/operations/list-pages";
 import { getIwcWorkflowsOp } from "../../src/operations/get-iwc-workflows";
+import { getInvocationsOp } from "../../src/operations/get-invocations";
 import { searchIwcWorkflowsOp } from "../../src/operations/search-iwc-workflows";
 import { recommendIwcWorkflowsOp } from "../../src/operations/recommend-iwc-workflows";
 import { mockClient } from "../util/mock-client";
@@ -44,6 +45,8 @@ const integerInputs: Array<[string, { safeParse(v: unknown): { success: boolean 
   ["list_pages.offset", listPagesOp.input.offset],
   ["get_histories.limit", getHistoriesOp.input.limit],
   ["get_histories.offset", getHistoriesOp.input.offset],
+  ["get_invocations.limit", getInvocationsOp.input.limit],
+  ["get_invocations.offset", getInvocationsOp.input.offset],
   ["get_history_contents.limit", getHistoryContentsOp.input.limit],
   ["get_history_contents.offset", getHistoryContentsOp.input.offset],
   ["list_history_ids.limit", listHistoryIdsOp.input.limit],

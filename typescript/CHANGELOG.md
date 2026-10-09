@@ -6,6 +6,19 @@ entry covers all three; where something only affects one surface, it says which.
 
 ## 0.3.1 (unreleased)
 
+### `get_invocations` pages, sorts and filters the listing (#TBD)
+
+The op could only ever see the newest page: Galaxy caps `/api/invocations` at 100 rows, and
+there was no way to ask for the next 100. It now takes `offset`, `sortBy` (`create_time` or
+`update_time`), `sortDesc` and `includeTerminal`, passed through to the index the way the
+Python tool passes them -- a zero offset and an unset sort are not sent, so the default
+request is unchanged. A `limit` above 100 is refused before anything is sent, with the same
+sentence the other windowed listings use, which names the cap and the offset to page with. On
+a lookup by id, a 400 (an id Galaxy cannot decode) is classified `not_found` alongside the
+404, so the CLI exits 66 for both. Six new golden cases: `second_page`,
+`sorted_by_create_time_ascending`, `in_flight_only`, `limit_above_galaxys_cap`, `unknown_id`
+and `malformed_id`.
+
 ### `get_invocations` sends `step_details` for one invocation (#152)
 
 Given an `invocationId`, the op ignored `stepDetails` and Galaxy answered with every step's

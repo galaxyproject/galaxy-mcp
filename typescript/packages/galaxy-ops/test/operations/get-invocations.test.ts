@@ -7,7 +7,7 @@ import {
 } from "../../src/operations/get-invocations";
 import { mockClient } from "../util/mock-client";
 import { DEFAULT_POLL } from "../../src/context";
-import { GalaxyAuthError, GalaxyNotFoundError } from "../../src/errors";
+import { GalaxyAuthError, GalaxyNotFoundError, GalaxyValidationError } from "../../src/errors";
 import type { GalaxyContext } from "../../src/context";
 
 const ctxWith = (client: any): GalaxyContext => ({ client, poll: DEFAULT_POLL });
@@ -116,6 +116,9 @@ describe("get_invocations", () => {
       view: "collection",
       step_details: false,
       include_terminal: true,
+      offset: null,
+      sort_by: null,
+      sort_desc: undefined,
     });
     expect(result.map((i: any) => i.id)).toEqual(["inv1", "inv2", "inv3"]);
   });
@@ -154,8 +157,115 @@ describe("get_invocations", () => {
 
   it("advertises the defaults it applies, and declares no limit of its own", () => {
     const schema = z.object(getInvocationsOp.input);
-    expect(schema.parse({})).toEqual({ view: "collection", stepDetails: false });
+    expect(schema.parse({})).toEqual({
+      view: "collection",
+      stepDetails: false,
+      offset: 0,
+      includeTerminal: true,
+    });
     expect(() => schema.parse({ limit: 2.5 })).toThrow();
+    expect(() => schema.parse({ offset: 2.5 })).toThrow();
+    expect(() => schema.parse({ offset: "5" })).toThrow();
+  });
+
+  it("pages past the first window with offset, sent only when it is not zero", async () => {
+    const queries: any[] = [];
+    const client = mockClient({
+      GET: (_path, init) => {
+        queries.push(init.params.query);
+        return { data: page(2, 5), response: { status: 200 } };
+      },
+    });
+    const second = asList(await getInvocations({ limit: 5, offset: 5 }, ctxWith(client)));
+    await getInvocations({ limit: 5, offset: 0 }, ctxWith(client));
+    expect(queries[0]).toMatchObject({ limit: 5, offset: 5 });
+    expect(queries[1].offset).toBeNull();
+    expect(second.map((i: any) => i.id)).toEqual(["inv6", "inv7"]);
+  });
+
+  it("sends the sort only when asked, and the direction only alongside it", async () => {
+    const queries: any[] = [];
+    const client = mockClient({
+      GET: (_path, init) => {
+        queries.push(init.params.query);
+        return { data: page(1), response: { status: 200 } };
+      },
+    });
+    await getInvocations({ sortBy: "create_time", sortDesc: false }, ctxWith(client));
+    await getInvocations({ sortBy: "update_time" }, ctxWith(client));
+    await getInvocations({ sortBy: null, sortDesc: null }, ctxWith(client));
+    expect(queries[0]).toMatchObject({ sort_by: "create_time", sort_desc: false });
+    expect(queries[1]).toMatchObject({ sort_by: "update_time", sort_desc: undefined });
+    expect(queries[2]).toMatchObject({ sort_by: null, sort_desc: undefined });
+  });
+
+  it("lets a caller leave the finished ones out", async () => {
+    let query: any;
+    const client = mockClient({
+      GET: (_path, init) => {
+        query = init.params.query;
+        return { data: page(1), response: { status: 200 } };
+      },
+    });
+    await getInvocations({ includeTerminal: false }, ctxWith(client));
+    expect(query.include_terminal).toBe(false);
+  });
+
+  it("refuses a limit above Galaxy's cap before sending anything, naming the cap", async () => {
+    let sent = 0;
+    const client = mockClient({
+      GET: () => {
+        sent += 1;
+        return { data: page(1), response: { status: 200 } };
+      },
+    });
+    await expect(getInvocations({ limit: 101 }, ctxWith(client))).rejects.toThrow(
+      "limit must be at most 100 (got 101); request 100 or fewer and use offset to page through the rest",
+    );
+    await expect(getInvocations({ limit: 101 }, ctxWith(client))).rejects.toBeInstanceOf(GalaxyValidationError);
+    await expect(getInvocations({ limit: 0 }, ctxWith(client))).rejects.toThrow(/at least 1/);
+    await expect(getInvocations({ offset: -1 }, ctxWith(client))).rejects.toThrow(/offset must be 0 or greater/);
+    await expect(getInvocations({ limit: 5, offset: -1 }, ctxWith(client))).rejects.toThrow(
+      /offset must be 0 or greater/,
+    );
+    expect(sent).toBe(0);
+    // The cap itself is a page Galaxy serves.
+    expect(asList(await getInvocations({ limit: 100 }, ctxWith(client)))).toHaveLength(1);
+  });
+
+  it("ignores the cap on a lookup by id, where limit means nothing", async () => {
+    const client = mockClient({
+      GET: () => ({ data: { id: "inv1", state: "ok" }, response: { status: 200 } }),
+    });
+    const inv = await getInvocations({ invocationId: "inv1", limit: 500 }, ctxWith(client));
+    expect((inv as any).id).toBe("inv1");
+  });
+
+  it("reads a 400 on a lookup by id as not-found, the way a 404 is", async () => {
+    const client = mockClient({
+      GET: () => ({
+        error: { err_msg: "Malformed id ( x ) specified, unable to decode.", err_code: 400009 },
+        response: { status: 400 },
+      }),
+    });
+    const failure = await getInvocations({ invocationId: "x" }, ctxWith(client)).catch((e) => e);
+    expect(failure).toBeInstanceOf(GalaxyNotFoundError);
+    expect(failure.kind).toBe("not_found");
+    // The reply's facts still travel with it, so the sentence is worded from them.
+    expect(failure.http?.status).toBe(400);
+
+    // On the listing a 400 stays what it is: a rejected request, not a missing record.
+    await expect(getInvocations({ workflowId: "x" }, ctxWith(client))).rejects.not.toBeInstanceOf(
+      GalaxyNotFoundError,
+    );
+  });
+
+  it("still refuses null where the other surface refuses it, for the new parameters too", () => {
+    const schema = z.object(getInvocationsOp.input);
+    expect(() => schema.parse({ offset: null })).toThrow();
+    expect(() => schema.parse({ includeTerminal: null })).toThrow();
+    expect(schema.parse({ sortBy: null }).sortBy).toBeNull();
+    expect(schema.parse({ sortDesc: null }).sortDesc).toBeNull();
   });
 
   it("wants a real number for limit, like every other listing", () => {
@@ -190,6 +300,9 @@ describe("get_invocations", () => {
       view: "collection",
       step_details: false,
       include_terminal: true,
+      offset: null,
+      sort_by: null,
+      sort_desc: undefined,
     });
   });
 
