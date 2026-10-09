@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.1] - 2026-10-09
+
 ### Security
 
 - Over the HTTP transports, `connect` only reaches the Galaxy in `GALAXY_URL` and any base URLs

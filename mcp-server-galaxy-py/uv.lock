@@ -1222,7 +1222,7 @@ wheels = [
 
 [[package]]
 name = "galaxy-mcp"
-version = "1.12.0.dev0"
+version = "1.11.1"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
