@@ -404,7 +404,7 @@ sides under different names.
 | Operation | What it does |
 | --- | --- |
 | `list_user_tools` | List the current user's user-defined tools |
-| `get_user_tool` | One user-defined tool by uuid, with its full representation; a value not shaped like a uuid is refused as not found before anything is sent |
+| `get_user_tool` | One user-defined tool by uuid, with its full representation; a value that is not a uuid is refused as not found before anything is sent |
 | `create_user_tool` *(write)* | Create a user-defined tool from a tool representation |
 | `delete_user_tool` *(write)* | Deactivate a user-defined tool by uuid (soft delete) |
 | `run_user_tool` *(write)* | Run a user-defined tool (lookup, then POST to the tools API) |

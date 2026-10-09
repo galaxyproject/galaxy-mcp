@@ -64,11 +64,14 @@ describe("get_user_tool", () => {
     expect(schema.parse({ uuid: UUID })).toEqual({ uuid: UUID });
   });
 
+  // Galaxy 26.0+ answers these with a 400 "Invalid UUID format" (older ones a 500), neither of
+  // which is a 404 -- so anything Python's uuid.UUID() would refuse is refused here as not found.
   it.each([
     "row_filter",
-    "61d15277a91145efaa665385146578cc",
     "61d15277-a911-45ef-aa66-5385146578c",
-    `{${UUID}}`,
+    "61d15277-a911-45ef-aa66-5385146578cg",
+    "urn:uuid:row_filter",
+    "{61d15277-a911-45ef-aa66-5385146578c}",
     "",
   ])("refuses %j as not found before sending anything", async (bad) => {
     let calls = 0;
@@ -82,22 +85,36 @@ describe("get_user_tool", () => {
     expect(err).toBeInstanceOf(GalaxyNotFoundError);
     expect(err.message).toBe(
       `No user-defined tool found with UUID '${bad}': that is not a UUID. A user tool's UUID ` +
-        "is 32 hex digits in 8-4-4-4-12 groups, as list_user_tools() reports it. " +
-        "Nothing was sent to Galaxy.",
+        "is 32 hex digits, as list_user_tools() reports it (hyphenated, bare, braced " +
+        "or urn:uuid: spellings all name the same tool). Nothing was sent to Galaxy.",
     );
     expect(err.http).toBeUndefined();
     expect(calls).toBe(0);
   });
 
-  it("accepts upper-case hex, which is still the same uuid", async () => {
-    const upper = UUID.toUpperCase();
+  // Galaxy validates with uuid.UUID() and compares on the 32 hex digits, so every spelling it
+  // accepts finds the tool -- and delete_user_tool / run_user_tool already send them through,
+  // so this has to read back what they touch. Sent as given, like those two.
+  it.each([
+    "61d15277a91145efaa665385146578cc",
+    `{${UUID}}`,
+    `urn:uuid:${UUID}`,
+    UUID.toUpperCase(),
+  ])("sends %j through unchanged, as uuid.UUID() accepts it", async (spelling) => {
+    let calls = 0;
     const client = mockClient({
       GET: (_path, init) => {
-        expect(init.params.path.uuid).toBe(upper);
+        calls++;
+        expect(init.params.path.uuid).toBe(spelling);
         return { data: RECORD, response: { status: 200 } };
       },
     });
-    await expect(getUserTool({ uuid: upper }, ctxWith(client))).resolves.toBeDefined();
+    const out = await getUserTool({ uuid: spelling }, ctxWith(client));
+    expect(calls).toBe(1);
+    expect(out.tool_id).toBe("row_filter");
+    expect(getUserToolOp.project!(out, { uuid: spelling }, {} as any)).toEqual({
+      message: `Retrieved user-defined tool 'row_filter' (UUID: ${spelling})`,
+    });
   });
 
   it("throws GalaxyNotFoundError on 404", async () => {

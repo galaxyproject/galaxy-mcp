@@ -12,10 +12,13 @@ A new read op on all three surfaces, mirroring the Python tool of the same name:
 /api/unprivileged_tools/{uuid}` through the typed client, answering the record with its full
 representation. Until now a caller holding a uuid from `list_user_tools` or `create_user_tool`
 had to page the whole list to read one definition back. A 404 is `not_found` (exit 66 on the
-CLI), and so is a value that is not shaped like a uuid -- that one is refused before any request
-goes out, with the same sentence the Python server raises, because Galaxy binds the path value
-to a UUID column and answers a 500 for it. Three golden cases: `found`, `not_found`,
-`malformed_uuid`.
+CLI), and so is a value that is not a uuid -- that one is refused before any request goes out,
+with the same sentence the Python server raises, because Galaxy 26.0+ answers it with a 400
+"Invalid UUID format" (older Galaxies with a 500 from the database driver) and neither would
+read as not found. The check accepts what Galaxy's own `uuid.UUID()` does, so the bare
+32-digit, braced and `urn:uuid:` spellings find the tool as they already do for
+`delete_user_tool` and `run_user_tool`. Four golden cases: `found`, `found_without_hyphens`,
+`not_found`, `malformed_uuid`.
 
 ### `get_invocations` sends `step_details` for one invocation (#152)
 

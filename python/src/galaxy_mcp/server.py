@@ -4683,10 +4683,22 @@ def list_user_tools(active: bool = True, limit: int = 25, offset: int = 0) -> Ga
         raise ValueError(format_error("List user tools", e)) from e
 
 
-# The shape Galaxy reports a user tool's uuid in: 32 hex digits in 8-4-4-4-12 groups. Galaxy
-# binds the path value to a UUID column, so anything else is a 500 from the database driver
-# rather than a 404 -- the shape is checked here so a caller reads "not found" either way.
-_USER_TOOL_UUID = re.compile(r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}")
+_USER_TOOL_UUID_HEX = re.compile(r"[0-9a-fA-F]{32}")
+
+
+def _is_user_tool_uuid(value: str) -> bool:
+    """Whether Galaxy's own uuid check (``uuid.UUID(value)``) would accept ``value``.
+
+    Galaxy 26.0+ validates the path value with ``uuid.UUID`` and answers a 400 "Invalid UUID
+    format" for anything it refuses (older Galaxies bound it straight to the UUID column and
+    answered a 500 from the database driver). Neither is a 404, so the check is repeated here
+    and a malformed value reads as not found. The spellings ``uuid.UUID`` accepts all compare
+    on the same 32 hex digits, so the hyphenated form list_user_tools() reports, the bare
+    32-digit form, the braced form and ``urn:uuid:`` all find the same tool. The TypeScript op
+    normalizes the same way, so both surfaces refuse the same strings.
+    """
+    hex_digits = value.replace("urn:", "").replace("uuid:", "").strip("{}").replace("-", "")
+    return _USER_TOOL_UUID_HEX.fullmatch(hex_digits) is not None
 
 
 @mcp.tool(tags={"tools", "read", "extended"})
@@ -4695,22 +4707,23 @@ def get_user_tool(uuid: str) -> GalaxyResult:
 
     One request to Galaxy's single-tool endpoint, so a caller holding a UUID from
     list_user_tools() or create_user_tool() reads that tool's definition back without
-    paging through the whole list. A UUID that is not shaped like one is refused as
-    not found before anything is sent.
+    paging through the whole list. A value that is not a UUID is refused as not found
+    before anything is sent.
 
     Args:
-        uuid: The tool's UUID as list_user_tools() reports it: 32 hex digits in
-            8-4-4-4-12 groups.
+        uuid: The tool's UUID as list_user_tools() reports it (32 hex digits in
+            8-4-4-4-12 groups). The bare 32-digit, braced and urn:uuid: spellings
+            name the same tool and are accepted too.
 
     Returns:
         GalaxyResult with the tool record (id, uuid, tool_id, active status,
         representation) in data.
     """
-    if not _USER_TOOL_UUID.fullmatch(uuid):
+    if not _is_user_tool_uuid(uuid):
         raise ValueError(
             f"No user-defined tool found with UUID '{uuid}': that is not a UUID. A user tool's "
-            "UUID is 32 hex digits in 8-4-4-4-12 groups, as list_user_tools() reports it. "
-            "Nothing was sent to Galaxy."
+            "UUID is 32 hex digits, as list_user_tools() reports it (hyphenated, bare, braced "
+            "or urn:uuid: spellings all name the same tool). Nothing was sent to Galaxy."
         )
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]

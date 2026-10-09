@@ -222,20 +222,48 @@ class TestGetUserTool:
         "bad",
         [
             "row_filter",
-            "61d15277a91145efaa665385146578cc",
             "61d15277-a911-45ef-aa66-5385146578c",
-            "{61d15277-a911-45ef-aa66-5385146578cc}",
+            "61d15277-a911-45ef-aa66-5385146578cg",
+            "urn:uuid:row_filter",
+            "{61d15277-a911-45ef-aa66-5385146578c}",
             "",
         ],
     )
     def test_get_user_tool_refuses_a_malformed_uuid_before_asking(self, mock_galaxy_instance, bad):
-        """Galaxy binds the value to a UUID column, so a bad shape would be a 500 there."""
+        """Galaxy 26.0+ answers 400 "Invalid UUID format" for these (older ones a 500), neither of
+        which is a 404 -- so anything uuid.UUID() would refuse is refused here as not found."""
         gi = self._gi(mock_galaxy_instance)
 
         with patch.dict(galaxy_state, {"connected": True, "gi": gi}):
             with pytest.raises(ValueError, match="No user-defined tool found with UUID"):
                 get_user_tool_fn(bad)
         gi.make_get_request.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "spelling",
+        [
+            "61d15277a91145efaa665385146578cc",
+            "{61d15277-a911-45ef-aa66-5385146578cc}",
+            "urn:uuid:61d15277-a911-45ef-aa66-5385146578cc",
+            "61D15277-A911-45EF-AA66-5385146578CC",
+        ],
+    )
+    def test_get_user_tool_sends_every_spelling_uuid_module_accepts(
+        self, mock_galaxy_instance, spelling
+    ):
+        """Galaxy validates with uuid.UUID() and compares on the 32 hex digits, so the bare,
+        braced, urn: and upper-case forms all find the tool -- and delete_user_tool and
+        run_user_tool already send them through, so this must read back what they touch."""
+        gi = self._gi(mock_galaxy_instance)
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": gi}):
+            result = get_user_tool_fn(spelling)
+
+        gi.make_get_request.assert_called_once_with(
+            f"http://localhost:8080/api/unprivileged_tools/{spelling}"
+        )
+        assert result.success is True
+        assert result.message == f"Retrieved user-defined tool 'row_filter' (UUID: {spelling})"
 
     def test_get_user_tool_not_connected(self):
         with patch.dict(galaxy_state, {"connected": False, "gi": None}):

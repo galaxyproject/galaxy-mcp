@@ -818,7 +818,7 @@
         "properties": {
           "uuid": {
             "type": "string",
-            "description": "The tool's UUID as list_user_tools() reports it: 32 hex digits in\n8-4-4-4-12 groups."
+            "description": "The tool's UUID as list_user_tools() reports it (32 hex digits in\n8-4-4-4-12 groups). The bare 32-digit, braced and urn:uuid: spellings\nname the same tool and are accepted too."
           }
         },
         "required": [
