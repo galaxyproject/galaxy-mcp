@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "python/src/galaxy_mcp/server.py",
-  "caseCount": 228,
-  "failureCaseCount": 67,
+  "caseCount": 256,
+  "failureCaseCount": 81,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -865,6 +865,118 @@
       "replies": "get_invocations/empty.galaxy.json"
     },
     {
+      "tool": "get_invocations",
+      "case": "second_page",
+      "note": "the page after the first: the route answers only when offset is sent",
+      "outcome": "success",
+      "input": {
+        "limit": 5,
+        "offset": 5
+      },
+      "envelope": "get_invocations/second_page.json",
+      "replies": "get_invocations/second_page.galaxy.json"
+    },
+    {
+      "tool": "get_invocations",
+      "case": "sorted_by_create_time_ascending",
+      "note": "oldest first: the route answers only when sort_by is sent (sort_desc goes with it)",
+      "outcome": "success",
+      "input": {
+        "limit": 5,
+        "sort_by": "create_time",
+        "sort_desc": false
+      },
+      "envelope": "get_invocations/sorted_by_create_time_ascending.json",
+      "replies": "get_invocations/sorted_by_create_time_ascending.galaxy.json"
+    },
+    {
+      "tool": "get_invocations",
+      "case": "in_flight_only",
+      "note": "include_terminal false: the finished ones are left out, the envelope is a plain list",
+      "outcome": "success",
+      "input": {
+        "limit": 5,
+        "include_terminal": false
+      },
+      "envelope": "get_invocations/in_flight_only.json",
+      "replies": "get_invocations/in_flight_only.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "in_a_history",
+      "note": "a page of one history's jobs",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0000",
+        "limit": 5
+      },
+      "envelope": "list_jobs/in_a_history.json",
+      "replies": "list_jobs/in_a_history.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "since_a_time",
+      "note": "the jobs updated since a time, which is what a reconcile asks for",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0000",
+        "date_range_min": "2026-01-01T00:01:00",
+        "limit": 5
+      },
+      "envelope": "list_jobs/since_a_time.json",
+      "replies": "list_jobs/since_a_time.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "in_a_state",
+      "note": "one history's jobs in one state",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0000",
+        "state": "error",
+        "limit": 5
+      },
+      "envelope": "list_jobs/in_a_state.json",
+      "replies": "list_jobs/in_a_state.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "empty_history",
+      "note": "a history with no jobs",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0000",
+        "limit": 5
+      },
+      "envelope": "list_jobs/empty_history.json",
+      "replies": "list_jobs/empty_history.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "unknown_history",
+      "note": "a well-formed id of a history that does not exist: an empty page, not a 404",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0404",
+        "limit": 5
+      },
+      "envelope": "list_jobs/unknown_history.json",
+      "replies": "list_jobs/empty_history.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "next_page",
+      "note": "the page after the first, by offset; a short page is the last one",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0000",
+        "limit": 5,
+        "offset": 5
+      },
+      "envelope": "list_jobs/next_page.json",
+      "replies": "list_jobs/since_a_time.galaxy.json"
+    },
+    {
       "tool": "list_pages",
       "case": "full_page",
       "note": "a page of pages, whose total comes from the total_matches header",
@@ -1102,6 +1214,18 @@
       },
       "envelope": "get_workflow_input_template/steps_out_of_order.json",
       "replies": "get_workflow_input_template/steps_out_of_order.galaxy.json"
+    },
+    {
+      "tool": "get_workflow_input_template",
+      "case": "pinned_version_zero",
+      "note": "the oldest stored version, which has a slot the latest no longer asks for",
+      "outcome": "success",
+      "input": {
+        "workflow_id": "wf000001",
+        "version": 0
+      },
+      "envelope": "get_workflow_input_template/pinned_version_zero.json",
+      "replies": "get_workflow_input_template/pinned_version_zero.galaxy.json"
     },
     {
       "tool": "get_tool_citations",
@@ -1407,6 +1531,29 @@
       },
       "envelope": "get_job_details/provenance_without_a_job_id.json",
       "replies": "get_job_details/provenance_without_a_job_id.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "by_job_id",
+      "note": "the job asked for by its own id: no lookup, and no dataset to name in the answer",
+      "outcome": "success",
+      "input": {
+        "job_id": "j0000001"
+      },
+      "envelope": "get_job_details/by_job_id.json",
+      "replies": "get_job_details/by_job_id.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "by_job_id_full",
+      "note": "full=true is sent to Galaxy, and the answer carries what the full record adds",
+      "outcome": "success",
+      "input": {
+        "job_id": "j0000001",
+        "full": true
+      },
+      "envelope": "get_job_details/by_job_id_full.json",
+      "replies": "get_job_details/by_job_id_full.galaxy.json"
     },
     {
       "tool": "create_history",
@@ -2236,6 +2383,28 @@
     },
     {
       "tool": "get_invocations",
+      "case": "unknown_id",
+      "note": "a lookup by an id Galaxy has no invocation for",
+      "outcome": "failure",
+      "input": {
+        "invocation_id": "inv0404"
+      },
+      "envelope": "get_invocations/unknown_id.json",
+      "replies": "get_invocations/unknown_id.galaxy.json"
+    },
+    {
+      "tool": "get_invocations",
+      "case": "malformed_id",
+      "note": "a lookup by an id Galaxy cannot decode, which it answers 400 rather than 404",
+      "outcome": "failure",
+      "input": {
+        "invocation_id": "not-an-id"
+      },
+      "envelope": "get_invocations/malformed_id.json",
+      "replies": "get_invocations/malformed_id.galaxy.json"
+    },
+    {
+      "tool": "get_invocations",
       "case": "error_body_under_a_200",
       "note": "Galaxy answers 200 with a MessageExceptionModel, which is refused as an error",
       "outcome": "failure",
@@ -2359,6 +2528,18 @@
       "replies": "get_workflow_input_template/server_error.galaxy.json"
     },
     {
+      "tool": "get_workflow_input_template",
+      "case": "version_out_of_range",
+      "note": "a stored version Galaxy does not have, refused by Galaxy on every read",
+      "outcome": "failure",
+      "input": {
+        "workflow_id": "wf000001",
+        "version": 7
+      },
+      "envelope": "get_workflow_input_template/version_out_of_range.json",
+      "replies": "get_workflow_input_template/version_out_of_range.galaxy.json"
+    },
+    {
       "tool": "invoke_workflow",
       "case": "refused_by_galaxy",
       "note": "every argument that decides where the run went is in the context",
@@ -2396,6 +2577,28 @@
       "input": {},
       "envelope": "list_pages/permission_denied.json",
       "replies": "list_pages/permission_denied.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "history_not_accessible",
+      "note": "a bioblend GET of the job index for a history the user cannot read",
+      "outcome": "failure",
+      "input": {
+        "history_id": "h0403"
+      },
+      "envelope": "list_jobs/history_not_accessible.json",
+      "replies": "list_jobs/history_not_accessible.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "malformed_history_id",
+      "note": "a history_id Galaxy cannot decode; no 400 hint in the table, so the tool adds one",
+      "outcome": "failure",
+      "input": {
+        "history_id": "not-an-id"
+      },
+      "envelope": "list_jobs/malformed_history_id.json",
+      "replies": "list_jobs/malformed_history_id.galaxy.json"
     },
     {
       "tool": "create_page",
@@ -2489,6 +2692,28 @@
       },
       "envelope": "get_job_details/the_job_read_refused.json",
       "replies": "get_job_details/the_job_read_refused.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "job_not_found",
+      "note": "a job id nothing answers to -- the tool's own sentence, about the job this time",
+      "outcome": "failure",
+      "input": {
+        "job_id": "j0000404"
+      },
+      "envelope": "get_job_details/job_not_found.json",
+      "replies": "get_job_details/job_not_found.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "job_id_malformed",
+      "note": "an id Galaxy cannot decode is a 400, and reads as not found all the same",
+      "outcome": "failure",
+      "input": {
+        "job_id": "not-an-id"
+      },
+      "envelope": "get_job_details/job_id_malformed.json",
+      "replies": "get_job_details/job_id_malformed.galaxy.json"
     },
     {
       "tool": "run_tool",
@@ -2672,6 +2897,17 @@
       "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
     },
     {
+      "tool": "get_invocations",
+      "case": "limit_above_galaxys_cap",
+      "note": "Galaxy's own ceiling on /api/invocations, named here instead of as a 400 from there",
+      "outcome": "failure",
+      "input": {
+        "limit": 250
+      },
+      "envelope": "get_invocations/limit_above_galaxys_cap.json",
+      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+    },
+    {
       "tool": "get_history_contents",
       "case": "limit_below_one",
       "note": "the floor, on a listing with no ceiling",
@@ -2752,6 +2988,39 @@
       "replies": "get_dataset_details/is_a_collection.galaxy.json"
     },
     {
+      "tool": "get_workflow_input_template",
+      "case": "negative_version",
+      "note": "a version below zero, which Galaxy would silently resolve to another version",
+      "outcome": "failure",
+      "input": {
+        "workflow_id": "wf000001",
+        "version": -1
+      },
+      "envelope": "get_workflow_input_template/negative_version.json",
+      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "both_ids_given",
+      "note": "a dataset and a job: two questions, and the tool answers one",
+      "outcome": "failure",
+      "input": {
+        "dataset_id": "d0000002",
+        "job_id": "j0000001"
+      },
+      "envelope": "get_job_details/both_ids_given.json",
+      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "neither_id_given",
+      "note": "nothing to look up",
+      "outcome": "failure",
+      "input": {},
+      "envelope": "get_job_details/neither_id_given.json",
+      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+    },
+    {
       "tool": "create_user_tool",
       "case": "representation_missing_a_field",
       "note": "the first of six required fields that is not there",
@@ -2812,6 +3081,17 @@
         ]
       },
       "envelope": "recommend_biocontainer/package_entry_with_no_name.json",
+      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "limit_below_one",
+      "note": "the floor every listing has, on the one listing with no ceiling",
+      "outcome": "failure",
+      "input": {
+        "limit": 0
+      },
+      "envelope": "list_jobs/limit_below_one.json",
       "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
     },
     {
