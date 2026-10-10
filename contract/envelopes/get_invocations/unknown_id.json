@@ -1,0 +1,14 @@
+{
+  "$comment": "A failed tool call from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `result` is the CallToolResult the MCP wire carries, dumped the way the SDK dumps it (by alias, JSON mode, None-valued fields left out). `sentence` is the same text with FastMCP's own wrapper removed, which is what the tool itself said.",
+  "outcome": "failure",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Error calling tool 'get_invocations': Failed to get workflow invocations: GET: error 404: b'{\"err_msg\": \"\\'0000000000000404\\' is not a valid workflow invocation id\", \"err_code\": 404001}', 0 attempts left: {\"err_msg\": \"'0000000000000404' is not a valid workflow invocation id\", \"err_code\": 404001}"
+      }
+    ],
+    "isError": true
+  },
+  "sentence": "Failed to get workflow invocations: GET: error 404: b'{\"err_msg\": \"\\'0000000000000404\\' is not a valid workflow invocation id\", \"err_code\": 404001}', 0 attempts left: {\"err_msg\": \"'0000000000000404' is not a valid workflow invocation id\", \"err_code\": 404001}"
+}

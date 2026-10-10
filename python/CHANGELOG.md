@@ -7,6 +7,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `get_job_details` takes a `job_id` as an alternative to `dataset_id`, so an agent holding
+  the id of a job it started can read that job directly instead of going through one of its
+  outputs. Exactly one of the two is required, and the tool refuses a call that gives neither
+  or both before it asks Galaxy anything. The read is the plain job record on either path --
+  state, exit code, tool id and version, params, inputs and outputs -- and the description
+  now says so and points at `get_job_logs` for a job's stdout and stderr. A job id Galaxy
+  answers 400 or 404 to -- one it cannot decode, or one it has no job for -- reads as not
+  found, because the caller holding the id cannot act on the difference. Answers through a
+  dataset are unchanged byte for byte; `dataset_id` is now optional in the tool's schema
+  rather than required, and the signature is `dataset_id, history_id, job_id`, so a call that
+  passed the history id positionally still does what it did.
+- `get_job_details` by `job_id` and `get_invocations` by `invocation_id` refuse a value that is
+  not hex before anything is sent, and refuse a 200 whose body is not a record carrying the id
+  asked for. Galaxy's encoded ids are hex and it answers anything else with a 400 that both
+  tools already reported as not found, so no answer changes; what changes is that a value such
+  as `.` or `../histories`, which requests folds into `/api/jobs/` or `/api/histories`, is never
+  sent, and the listing those paths answer with can no longer come back as a job or an
+  invocation.
+### Added
+
+- `get_job_logs(job_id, log_bytes=4096)` reads a job's stdout and stderr: one
+  `GET /api/jobs/{job_id}?full=true`, answered with only the six log fields the full record
+  adds (`tool_stdout`, `tool_stderr`, `job_stdout`, `job_stderr`, `stdout`, `stderr`) and
+  nothing the plain `get_job_details` read already has. The four `tool_*` and `job_*` fields
+  are null until the job has written them and are then left out rather than returned empty;
+  `stdout` and `stderr` are the older combined form Galaxy always answers as a string, so a
+  job that has not run reads as those two, empty. A log longer than `log_bytes` keeps its
+  first and last half, cut on line boundaries, with one line in the middle saying how many of
+  how many bytes were omitted; the budget is in UTF-8 bytes and the cut never splits a
+  multi-byte character.
+  `log_bytes=0` returns every log uncut, and a negative value is refused before anything is
+  sent. The same hex guard and the same answered-for-this-id check as `get_job_details` apply,
+  and a 400 or 404 on the id reads as not found the same way. Ten golden cases pin it,
+  including the cut's exact bytes through 2-, 3- and 4-byte text.
+- `list_jobs` lists jobs a page at a time from Galaxy's job index, narrowed to one history,
+  one state and a window of update time, sorted by update or create time, in the small
+  `collection` view by default. It is the read an agent reconciling its own record of a history
+  needs: the jobs updated since a time, in that history, by `limit` and `offset`. Galaxy puts no
+  upper cap on `limit` and reports no total, so the result carries a count and no pagination
+  block; a page shorter than `limit` is the last one. Galaxy filters the index by `history_id`
+  without looking the history up, so the id of a history that does not exist answers with an
+  empty page rather than a 404 -- the description says so and points at `get_history_details`
+  for a reconcile that has to tell the two apart. A history the key cannot read is a 403, and
+  an id Galaxy cannot decode a 400, which the tool follows with a hint of its own since the
+  shared hint table has no 400 row.
+### Added
+
+- `get_invocations` can now walk a listing longer than one page. It takes `offset`, `sort_by`
+  (`create_time` or `update_time`), `sort_desc` and `include_terminal`, all passed through to
+  `/api/invocations`; the default request is unchanged. A `limit` above 100 is refused before
+  anything is sent, with a sentence that names Galaxy's cap and the offset to page with, rather
+  than letting Galaxy answer 400.
+### Added
+
+- `get_workflow_input_template` takes an optional `version`, counted the way `get_workflow_details`
+  counts stored versions (0 is the oldest), and pins every read it makes to it -- the run model,
+  the .ga export and the show the guide is built from -- so the run form of an older version can
+  be read without mixing its slots with the latest version's docs. Left out, nothing changes. A
+  version Galaxy does not have is Galaxy's own 400; a negative one is refused before anything is
+  sent, because Galaxy would quietly serve some other version for it.
+### Added
+
+- `get_tool_details` takes an optional `tool_version`, so a tool can be described at the
+  version a template was pinned to rather than at whichever version Galaxy picks for the id.
+  Galaxy serves its newest installed version when the one asked for is missing, as a 200 with
+  no word about it, so the tool refuses that answer by name instead of passing another
+  version's parameters off as the pinned one. Without `tool_version` nothing changes.
+### Added
+
+- `get_user_tool(uuid)` reads one user-defined tool back by its UUID, with its full
+  representation, through Galaxy's single-tool endpoint. Before this a caller holding a UUID from
+  `list_user_tools` or `create_user_tool` had to page the whole list to find the one definition.
+  A 404 and a value that is not a UUID both read as not found; the malformed one is refused
+  before anything is sent, because Galaxy 26.0+ answers it with a 400 "Invalid UUID format"
+  (older Galaxies with a 500 from the database driver), neither of which is a 404. The check
+  accepts what Galaxy's own `uuid.UUID()` does, so the bare 32-digit, braced and `urn:uuid:`
+  spellings find the tool as they already do for `delete_user_tool` and `run_user_tool`.
+
 ## [1.11.1] - 2026-10-09
 
 ### Security

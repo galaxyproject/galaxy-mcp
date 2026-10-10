@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
-import { httpError } from "../errors";
+import { GalaxyValidationError, httpError } from "../errors";
 import { legacyGet } from "../legacy";
 import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import {
@@ -69,11 +69,13 @@ export async function resolveWorkflowSlots(
   ctx: GalaxyContext,
   workflowId: string,
   historyId?: string | null,
+  version?: number | null,
 ): Promise<ResolvedSlots> {
   // Primary: style=run -- off-schema endpoint, use legacyGet
   try {
     const query: Record<string, unknown> = { style: "run", instance: false };
     if (historyId) query["history_id"] = historyId;
+    if (version != null) query["version"] = version;
 
     const runModel = await legacyGet<RunModelDict>(
       ctx,
@@ -88,14 +90,23 @@ export async function resolveWorkflowSlots(
     // style=run unavailable or returned an error -- fall through to .ga fallback
   }
 
-  // Fallback: .ga export (no style param)
+  // Fallback: .ga export (no style param), pinned to the same version so the slots
+  // never come from a different version than the run model was asked for.
   const definition = await legacyGet<WorkflowDict>(
     ctx,
     "/api/workflows/{workflow_id}/download",
-    { params: { path: { workflow_id: workflowId } } },
+    { params: { path: { workflow_id: workflowId }, query: versionQuery(version) } },
   );
   const slots = normalizeGaSteps(definition as Record<string, unknown>);
   return { slots, provenance: "ga-fallback", runModel: null };
+}
+
+/**
+ * `{ version }` when one was asked for, nothing at all otherwise -- bioblend adds the key
+ * only when it is not None, and the request has to read the same way on both sides.
+ */
+function versionQuery(version: number | null | undefined): { version: number } | undefined {
+  return version == null ? undefined : { version };
 }
 
 // ---------------------------------------------------------------------------
@@ -114,14 +125,43 @@ const input = {
     .boolean()
     .default(false)
     .describe("Return the full readme and uncapped option lists (default false)"),
+  version: z
+    .number()
+    .int()
+    .nullish()
+    .describe(
+      "Stored version to template, counted as get_workflow_details counts them (0 is the oldest); the latest when left out",
+    ),
 };
-type In = { workflowId: string; historyId?: string | null; verbose?: boolean };
+type In = {
+  workflowId: string;
+  historyId?: string | null;
+  verbose?: boolean;
+  version?: number | null;
+};
 
 async function run(i: In, ctx: GalaxyContext): Promise<WorkflowInputTemplate> {
   const verbose = i.verbose ?? false;
+  const version = i.version ?? null;
 
-  // Three independent best-effort reads of the same workflow (mirrors Python).
-  const { slots, provenance, runModel } = await resolveWorkflowSlots(ctx, i.workflowId, i.historyId);
+  // server.py, get_workflow_input_template: refused before anything is sent. Galaxy
+  // picks a stored version with a plain list subscript, so a negative index is not a 400
+  // there but some other version, served quietly.
+  if (version !== null && version < 0) {
+    throw new GalaxyValidationError(
+      `version must be 0 or greater (got ${version}); 0 is the oldest stored ` +
+        "version and get_workflow_details counts up from there",
+    );
+  }
+
+  // Three independent best-effort reads of the same workflow (mirrors Python), every
+  // one pinned to `version` when there is one.
+  const { slots, provenance, runModel } = await resolveWorkflowSlots(
+    ctx,
+    i.workflowId,
+    i.historyId,
+    version,
+  );
   recordFact(ctx, slotProvenance, provenance);
 
   // .ga export for legacy warnings (best-effort)
@@ -130,7 +170,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<WorkflowInputTemplate> {
     const definition = await legacyGet<WorkflowDict>(
       ctx,
       "/api/workflows/{workflow_id}/download",
-      { params: { path: { workflow_id: i.workflowId } } },
+      { params: { path: { workflow_id: i.workflowId }, query: versionQuery(version) } },
     );
     warnings = findLegacyWarnings(definition as Record<string, unknown>);
   } catch {
@@ -141,7 +181,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<WorkflowInputTemplate> {
   let workflowShow: Record<string, unknown> = {};
   try {
     const { data, error, response } = await ctx.client.GET("/api/workflows/{workflow_id}", {
-      params: { path: { workflow_id: i.workflowId } },
+      params: { path: { workflow_id: i.workflowId }, query: versionQuery(version) },
     });
     if (!error && data) workflowShow = data as Record<string, unknown>;
     else if (error) throw httpError(response, error);
@@ -181,10 +221,15 @@ export const getWorkflowInputTemplateOp: Operation<typeof input, WorkflowInputTe
   },
   // server.py, get_workflow_input_template: only the export fallback can fail there -- the
   // run-model fetch and the two best-effort reads are swallowed on both sides.
+  // The version joins the context only when one was asked for, so an unpinned call fails
+  // in exactly the words it did before the parameter existed.
   failure: {
     shape: "bioblend-get",
     action: "Get workflow input template",
-    context: (i) => ({ workflow_id: i.workflowId }),
+    context: (i) =>
+      i.version == null
+        ? { workflow_id: i.workflowId }
+        : { workflow_id: i.workflowId, version: i.version },
   },
 };
 

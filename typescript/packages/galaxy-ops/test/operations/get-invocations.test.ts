@@ -7,7 +7,7 @@ import {
 } from "../../src/operations/get-invocations";
 import { mockClient } from "../util/mock-client";
 import { DEFAULT_POLL } from "../../src/context";
-import { GalaxyAuthError, GalaxyNotFoundError } from "../../src/errors";
+import { GalaxyAuthError, GalaxyConnectionError, GalaxyNotFoundError, GalaxyValidationError } from "../../src/errors";
 import type { GalaxyContext } from "../../src/context";
 
 const ctxWith = (client: any): GalaxyContext => ({ client, poll: DEFAULT_POLL });
@@ -28,18 +28,22 @@ const page = (n: number, from = 0) => Array.from({ length: n }, (_, k) => summar
 
 const asList = (result: unknown): InvocationSummary[] => result as InvocationSummary[];
 
+// By id, the id has to look like one -- hex, as Galaxy writes them -- and the reply has to
+// carry it back.
+const INV = "1e1d0c0b0a090807";
+
 describe("get_invocations", () => {
   it("has parity name and returns the invocation", async () => {
     expect(getInvocationsOp.name).toBe("get_invocations");
     const client = mockClient({
       GET: (path, init) => {
         expect(path).toBe("/api/invocations/{invocation_id}");
-        expect(init.params.path.invocation_id).toBe("inv1");
-        return { data: { id: "inv1", state: "scheduled", steps: [] }, response: { status: 200 } };
+        expect(init.params.path.invocation_id).toBe(INV);
+        return { data: { id: INV, state: "scheduled", steps: [] }, response: { status: 200 } };
       },
     });
-    const inv = await getInvocations({ invocationId: "inv1" }, ctxWith(client));
-    expect((inv as any).id).toBe("inv1");
+    const inv = await getInvocations({ invocationId: INV }, ctxWith(client));
+    expect((inv as any).id).toBe(INV);
   });
 
   it("takes the id and leaves the filters alone when both are given", async () => {
@@ -47,17 +51,17 @@ describe("get_invocations", () => {
     const client = mockClient({
       GET: (path, init) => {
         seen.push(path);
-        expect(init.params.path.invocation_id).toBe("inv1");
-        return { data: { id: "inv1", state: "ok" }, response: { status: 200 } };
+        expect(init.params.path.invocation_id).toBe(INV);
+        return { data: { id: INV, state: "ok" }, response: { status: 200 } };
       },
     });
     const inv = await getInvocations(
-      { invocationId: "inv1", workflowId: "wf1", historyId: "hist1", limit: 2, view: "element" },
+      { invocationId: INV, workflowId: "wf1", historyId: "hist1", limit: 2, view: "element" },
       ctxWith(client),
     );
     expect(seen).toEqual(["/api/invocations/{invocation_id}"]);
     expect(Array.isArray(inv)).toBe(false);
-    expect((inv as any).id).toBe("inv1");
+    expect((inv as any).id).toBe(INV);
   });
 
   it("lists when the id is an empty string, the way a falsy id does on the other surface", async () => {
@@ -77,24 +81,24 @@ describe("get_invocations", () => {
     const client = mockClient({
       GET: (path, init) => {
         seen.push({ path, params: init.params });
-        return { data: { id: "inv1", steps: [] }, response: { status: 200 } };
+        return { data: { id: INV, steps: [] }, response: { status: 200 } };
       },
     });
-    await getInvocations({ invocationId: "inv1", stepDetails: true }, ctxWith(client));
-    await getInvocations({ invocationId: "inv1" }, ctxWith(client));
+    await getInvocations({ invocationId: INV, stepDetails: true }, ctxWith(client));
+    await getInvocations({ invocationId: INV }, ctxWith(client));
     expect(seen[0]).toEqual({
       path: "/api/invocations/{invocation_id}",
-      params: { path: { invocation_id: "inv1" }, query: { step_details: true } },
+      params: { path: { invocation_id: INV }, query: { step_details: true } },
     });
     expect(seen[1]).toEqual({
       path: "/api/invocations/{invocation_id}",
-      params: { path: { invocation_id: "inv1" } },
+      params: { path: { invocation_id: INV } },
     });
   });
 
   it("throws GalaxyNotFoundError on 404", async () => {
     const client = mockClient({ GET: () => ({ error: {}, response: { status: 404 } }) });
-    await expect(getInvocations({ invocationId: "x" }, ctxWith(client))).rejects.toBeInstanceOf(
+    await expect(getInvocations({ invocationId: "0000000000000404" }, ctxWith(client))).rejects.toBeInstanceOf(
       GalaxyNotFoundError,
     );
   });
@@ -116,6 +120,9 @@ describe("get_invocations", () => {
       view: "collection",
       step_details: false,
       include_terminal: true,
+      offset: null,
+      sort_by: null,
+      sort_desc: undefined,
     });
     expect(result.map((i: any) => i.id)).toEqual(["inv1", "inv2", "inv3"]);
   });
@@ -154,8 +161,175 @@ describe("get_invocations", () => {
 
   it("advertises the defaults it applies, and declares no limit of its own", () => {
     const schema = z.object(getInvocationsOp.input);
-    expect(schema.parse({})).toEqual({ view: "collection", stepDetails: false });
+    expect(schema.parse({})).toEqual({
+      view: "collection",
+      stepDetails: false,
+      offset: 0,
+      includeTerminal: true,
+    });
     expect(() => schema.parse({ limit: 2.5 })).toThrow();
+    expect(() => schema.parse({ offset: 2.5 })).toThrow();
+    expect(() => schema.parse({ offset: "5" })).toThrow();
+  });
+
+  it("pages past the first window with offset, sent only when it is not zero", async () => {
+    const queries: any[] = [];
+    const client = mockClient({
+      GET: (_path, init) => {
+        queries.push(init.params.query);
+        return { data: page(2, 5), response: { status: 200 } };
+      },
+    });
+    const second = asList(await getInvocations({ limit: 5, offset: 5 }, ctxWith(client)));
+    await getInvocations({ limit: 5, offset: 0 }, ctxWith(client));
+    expect(queries[0]).toMatchObject({ limit: 5, offset: 5 });
+    expect(queries[1].offset).toBeNull();
+    expect(second.map((i: any) => i.id)).toEqual(["inv6", "inv7"]);
+  });
+
+  it("sends the sort only when asked, and the direction only alongside it", async () => {
+    const queries: any[] = [];
+    const client = mockClient({
+      GET: (_path, init) => {
+        queries.push(init.params.query);
+        return { data: page(1), response: { status: 200 } };
+      },
+    });
+    await getInvocations({ sortBy: "create_time", sortDesc: false }, ctxWith(client));
+    await getInvocations({ sortBy: "update_time" }, ctxWith(client));
+    await getInvocations({ sortBy: null, sortDesc: null }, ctxWith(client));
+    expect(queries[0]).toMatchObject({ sort_by: "create_time", sort_desc: false });
+    expect(queries[1]).toMatchObject({ sort_by: "update_time", sort_desc: undefined });
+    expect(queries[2]).toMatchObject({ sort_by: null, sort_desc: undefined });
+  });
+
+  it("lets a caller leave the finished ones out", async () => {
+    let query: any;
+    const client = mockClient({
+      GET: (_path, init) => {
+        query = init.params.query;
+        return { data: page(1), response: { status: 200 } };
+      },
+    });
+    await getInvocations({ includeTerminal: false }, ctxWith(client));
+    expect(query.include_terminal).toBe(false);
+  });
+
+  it("refuses a limit above Galaxy's cap before sending anything, naming the cap", async () => {
+    let sent = 0;
+    const client = mockClient({
+      GET: () => {
+        sent += 1;
+        return { data: page(1), response: { status: 200 } };
+      },
+    });
+    await expect(getInvocations({ limit: 101 }, ctxWith(client))).rejects.toThrow(
+      "limit must be at most 100 (got 101); request 100 or fewer and use offset to page through the rest",
+    );
+    await expect(getInvocations({ limit: 101 }, ctxWith(client))).rejects.toBeInstanceOf(GalaxyValidationError);
+    await expect(getInvocations({ limit: 0 }, ctxWith(client))).rejects.toThrow(/at least 1/);
+    await expect(getInvocations({ offset: -1 }, ctxWith(client))).rejects.toThrow(/offset must be 0 or greater/);
+    await expect(getInvocations({ limit: 5, offset: -1 }, ctxWith(client))).rejects.toThrow(
+      /offset must be 0 or greater/,
+    );
+    expect(sent).toBe(0);
+    // The cap itself is a page Galaxy serves.
+    expect(asList(await getInvocations({ limit: 100 }, ctxWith(client)))).toHaveLength(1);
+  });
+
+  it("ignores the cap on a lookup by id, where limit means nothing", async () => {
+    const client = mockClient({
+      GET: () => ({ data: { id: INV, state: "ok" }, response: { status: 200 } }),
+    });
+    const inv = await getInvocations({ invocationId: INV, limit: 500 }, ctxWith(client));
+    expect((inv as any).id).toBe(INV);
+  });
+
+  it("reads a 400 on a lookup by id as not-found, the way a 404 is", async () => {
+    const client = mockClient({
+      GET: () => ({
+        error: { err_msg: "Malformed id ( x ) specified, unable to decode.", err_code: 400009 },
+        response: { status: 400 },
+      }),
+    });
+    const failure = await getInvocations({ invocationId: "0000000000000404" }, ctxWith(client)).catch((e) => e);
+    expect(failure).toBeInstanceOf(GalaxyNotFoundError);
+    expect(failure.kind).toBe("not_found");
+    // The reply's facts still travel with it, so the sentence is worded from them.
+    expect(failure.http?.status).toBe(400);
+
+    // On the listing a 400 stays what it is: a rejected request, not a missing record.
+    await expect(getInvocations({ workflowId: "x" }, ctxWith(client))).rejects.not.toBeInstanceOf(
+      GalaxyNotFoundError,
+    );
+  });
+
+  it.each([".", "../histories", "not-an-id", "inv1"])(
+    "refuses %j as an invocation id before any request",
+    async (value) => {
+      // "." survives encoding and the fetch API folds it into the path: /api/invocations/,
+      // which is the listing, answered 200 with a list. Galaxy would answer "not-an-id" with
+      // a 400, which reads as not found anyway; the refusal just happens before the request.
+      let calls = 0;
+      const client = mockClient({
+        GET: () => {
+          calls++;
+          return { data: page(1), response: { status: 200 } };
+        },
+      });
+      const failure = await getInvocations({ invocationId: value }, ctxWith(client)).catch((e) => e);
+      expect(failure).toBeInstanceOf(GalaxyNotFoundError);
+      expect(failure.message).toBe(
+        `Invocation ID '${value}' not found: that is not a Galaxy id. Galaxy's ids are hex ` +
+          "strings, as get_invocations() reports them. Nothing was sent to Galaxy.",
+      );
+      expect(failure.http).toBeUndefined();
+      expect(calls).toBe(0);
+    },
+  );
+
+  it.each([
+    [{ id: "ffffffffffffffff", state: "ok" }],
+    [page(1)],
+    [{ state: "ok" }],
+  ])("refuses a 200 that is not this invocation's record: %j", async (answer) => {
+    // A 200 is not the answer; a 200 for this id is -- the check Loom's verifyGalaxyRun makes.
+    const client = mockClient({ GET: () => ({ data: answer, response: { status: 200 } }) });
+    const failure = await getInvocations({ invocationId: INV }, ctxWith(client)).catch((e) => e);
+    expect(failure).toBeInstanceOf(GalaxyConnectionError);
+    expect(failure.message).toBe(
+      `Galaxy answered the read of invocation '${INV}' with something that is not that ` +
+        "invocation's record (no matching id), so it was not returned.",
+    );
+  });
+
+  it("refuses an error body under a 200 on the single path, before the record check", async () => {
+    // server.py reads this reply through _refuse_error_body first, so the sentence is the
+    // err_msg one and not the record one.
+    const client = mockClient({
+      GET: () => ({
+        data: { err_msg: "Invocation not accessible", err_code: 403002 },
+        response: { status: 200 },
+      }),
+    });
+    const failure = await getInvocations({ invocationId: INV }, ctxWith(client)).catch((e) => e);
+    expect(failure).toBeInstanceOf(GalaxyConnectionError);
+    expect(failure.message).toContain("Invocation not accessible");
+    expect(failure.message).toContain("err_code=403002");
+  });
+
+  it("does not hold the id's case against the caller", async () => {
+    const client = mockClient({ GET: () => ({ data: { id: INV }, response: { status: 200 } }) });
+    const inv = await getInvocations({ invocationId: INV.toUpperCase() }, ctxWith(client));
+    expect((inv as any).id).toBe(INV);
+  });
+
+  it("still refuses null where the other surface refuses it, for the new parameters too", () => {
+    const schema = z.object(getInvocationsOp.input);
+    expect(() => schema.parse({ offset: null })).toThrow();
+    expect(() => schema.parse({ includeTerminal: null })).toThrow();
+    expect(schema.parse({ sortBy: null }).sortBy).toBeNull();
+    expect(schema.parse({ sortDesc: null }).sortDesc).toBeNull();
   });
 
   it("wants a real number for limit, like every other listing", () => {
@@ -190,6 +364,9 @@ describe("get_invocations", () => {
       view: "collection",
       step_details: false,
       include_terminal: true,
+      offset: null,
+      sort_by: null,
+      sort_desc: undefined,
     });
   });
 

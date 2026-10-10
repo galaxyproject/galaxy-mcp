@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 import { z, type ZodTypeAny } from "zod";
 import { Command } from "commander";
-import { getInvocationsOp, invokeWorkflowOp, runToolOp, searchToolsByNameOp } from "@galaxyproject/galaxy-ops";
-import { classifyField, buildInput } from "../src/flags";
+import { getInvocationsOp, getJobDetailsOp, invokeWorkflowOp, runToolOp, searchToolsByNameOp } from "@galaxyproject/galaxy-ops";
+import { classifyField, buildInput, keptPositionals } from "../src/flags";
 import { applyInputs } from "../src/flags-apply";
 
 describe("flags mapping", () => {
@@ -110,6 +110,25 @@ describe("flags mapping", () => {
     }
     // A non-integer converts fine and is then refused by the schema, which is the right layer.
     expect(buildInput(getInvocationsOp.input, [], { limit: "2.5" }).success).toBe(false);
+  });
+
+  it("takes a kept positional from either place, and refuses it from both", () => {
+    const kept = keptPositionals("get_job_details");
+    expect(kept).toEqual(["datasetId"]);
+    const shape = getJobDetailsOp.input;
+    expect(buildInput(shape, ["d1"], {}, kept)).toMatchObject({ success: true, data: { datasetId: "d1" } });
+    expect(buildInput(shape, [], { datasetId: "d1" }, kept)).toMatchObject({ success: true, data: { datasetId: "d1" } });
+    // Commander hands an optional argument that was left out over as undefined.
+    expect(buildInput(shape, [undefined], { jobId: "0123456789abcdef" }, kept)).toMatchObject({
+      success: true,
+      data: { jobId: "0123456789abcdef" },
+    });
+    const twice = buildInput(shape, ["d1"], { datasetId: "d1" }, kept);
+    expect(twice.success).toBe(false);
+    expect(!twice.success && twice.error.message).toContain("datasetId was given twice");
+    // Without the kept list the field is the flag it would be anyway, and the positional is ignored.
+    expect(buildInput(shape, ["d1"], {})).toMatchObject({ success: true, data: {} });
+    expect(keptPositionals("get_invocations")).toEqual([]);
   });
 
   it("reports a usage error for bad input", () => {

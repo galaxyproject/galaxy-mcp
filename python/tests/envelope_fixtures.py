@@ -63,6 +63,7 @@ from .test_helpers import (
     get_iwc_workflow_details_fn,
     get_iwc_workflows_fn,
     get_job_details_fn,
+    get_job_logs_fn,
     get_page_fn,
     get_page_revision_fn,
     get_server_info_fn,
@@ -72,11 +73,13 @@ from .test_helpers import (
     get_tool_panel_fn,
     get_tool_run_examples_fn,
     get_user_fn,
+    get_user_tool_fn,
     get_workflow_details_fn,
     get_workflow_input_template_fn,
     import_workflow_from_iwc_fn,
     invoke_workflow_fn,
     list_history_ids_fn,
+    list_jobs_fn,
     list_page_revisions_fn,
     list_pages_fn,
     list_user_tools_fn,
@@ -320,6 +323,22 @@ def invocation_rows(count: int) -> list[dict[str, Any]]:
             "history_id": "h0000",
             "create_time": "2026-01-01T00:00:00",
             "update_time": "2026-01-01T00:10:00",
+        }
+        for i in range(count)
+    ]
+
+
+def job_rows(count: int, *, state: str = "ok") -> list[dict[str, Any]]:
+    """What /api/jobs answers per job in the default 'collection' view."""
+    return [
+        {
+            "id": f"job{i:04d}",
+            "model_class": "Job",
+            "state": state,
+            "tool_id": "cat1",
+            "exit_code": 0,
+            "create_time": "2026-01-01T00:00:00",
+            "update_time": f"2026-01-01T00:{i:02d}:00",
         }
         for i in range(count)
     ]
@@ -1250,25 +1269,29 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         lambda: get_invocations_fn(limit=5),
         [route("/api/invocations", invocation_rows(3))],
     )
+    # By id, the id has to look like one -- hex, as Galaxy writes them -- and the reply has
+    # to carry it back, so these two name an invocation the way Galaxy would.
+    inv_hex = "1e1d0c0b0a090807"
     add(
         "get_invocations",
         "single",
         "one invocation by id: no count and no pagination",
-        {"invocation_id": "inv0000"},
-        lambda: get_invocations_fn(invocation_id="inv0000"),
-        [route("/api/invocations/inv0000", invocation_rows(1)[0])],
+        {"invocation_id": inv_hex},
+        lambda: get_invocations_fn(invocation_id=inv_hex),
+        [route(f"/api/invocations/{inv_hex}", {**invocation_rows(1)[0], "id": inv_hex})],
     )
     add(
         "get_invocations",
         "single_step_details",
         "one invocation with its steps' jobs: the route answers only when step_details is sent",
-        {"invocation_id": "inv0000", "step_details": True},
-        lambda: get_invocations_fn(invocation_id="inv0000", step_details=True),
+        {"invocation_id": inv_hex, "step_details": True},
+        lambda: get_invocations_fn(invocation_id=inv_hex, step_details=True),
         [
             route(
-                "/api/invocations/inv0000",
+                f"/api/invocations/{inv_hex}",
                 {
                     **invocation_rows(1)[0],
+                    "id": inv_hex,
                     "steps": [{"id": "s0", "jobs": [{"id": "j0", "state": "ok"}]}],
                 },
                 query={"step_details": "true"},
@@ -1282,6 +1305,85 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         {"limit": 5},
         lambda: get_invocations_fn(limit=5),
         [route("/api/invocations", [])],
+    )
+    add(
+        "get_invocations",
+        "second_page",
+        "the page after the first: the route answers only when offset is sent",
+        {"limit": 5, "offset": 5},
+        lambda: get_invocations_fn(limit=5, offset=5),
+        [route("/api/invocations", invocation_rows(7)[5:], query={"offset": "5"})],
+    )
+    add(
+        "get_invocations",
+        "sorted_by_create_time_ascending",
+        "oldest first: the route answers only when sort_by is sent (sort_desc goes with it)",
+        {"limit": 5, "sort_by": "create_time", "sort_desc": False},
+        lambda: get_invocations_fn(limit=5, sort_by="create_time", sort_desc=False),
+        [route("/api/invocations", invocation_rows(3), query={"sort_by": "create_time"})],
+    )
+    add(
+        "get_invocations",
+        "in_flight_only",
+        "include_terminal false: the finished ones are left out, the envelope is a plain list",
+        {"limit": 5, "include_terminal": False},
+        lambda: get_invocations_fn(limit=5, include_terminal=False),
+        [route("/api/invocations", [{**invocation_rows(1)[0], "state": "ready"}])],
+    )
+
+    # -- list_jobs -----------------------------------------------------------
+    # Galaxy windows this index itself and reports no total, so every case carries a
+    # count and no pagination block, as get_invocations does.
+    add(
+        "list_jobs",
+        "in_a_history",
+        "a page of one history's jobs",
+        {"history_id": "h0000", "limit": 5},
+        lambda: list_jobs_fn(history_id="h0000", limit=5),
+        [route("/api/jobs", job_rows(3))],
+    )
+    add(
+        "list_jobs",
+        "since_a_time",
+        "the jobs updated since a time, which is what a reconcile asks for",
+        {"history_id": "h0000", "date_range_min": "2026-01-01T00:01:00", "limit": 5},
+        lambda: list_jobs_fn(history_id="h0000", date_range_min="2026-01-01T00:01:00", limit=5),
+        [route("/api/jobs", job_rows(2))],
+    )
+    add(
+        "list_jobs",
+        "in_a_state",
+        "one history's jobs in one state",
+        {"history_id": "h0000", "state": "error", "limit": 5},
+        lambda: list_jobs_fn(history_id="h0000", state="error", limit=5),
+        [route("/api/jobs", job_rows(1, state="error"))],
+    )
+    add(
+        "list_jobs",
+        "empty_history",
+        "a history with no jobs",
+        {"history_id": "h0000", "limit": 5},
+        lambda: list_jobs_fn(history_id="h0000", limit=5),
+        [route("/api/jobs", [])],
+    )
+    # Galaxy filters the index by history_id without looking the history up, so a
+    # well-formed id nothing answers to is 200 [] -- the same bytes as empty_history, and
+    # not a 404. Pinned as its own case so the ambiguity is in the contract.
+    add(
+        "list_jobs",
+        "unknown_history",
+        "a well-formed id of a history that does not exist: an empty page, not a 404",
+        {"history_id": "h0404", "limit": 5},
+        lambda: list_jobs_fn(history_id="h0404", limit=5),
+        [route("/api/jobs", [])],
+    )
+    add(
+        "list_jobs",
+        "next_page",
+        "the page after the first, by offset; a short page is the last one",
+        {"history_id": "h0000", "limit": 5, "offset": 5},
+        lambda: list_jobs_fn(history_id="h0000", limit=5, offset=5),
+        [route("/api/jobs", job_rows(2))],
     )
 
     # -- list_pages ----------------------------------------------------------
@@ -1761,6 +1863,72 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
             {**wf_show, "readme": "", "help": "", "annotation": "out of order"},
         ),
     )
+    # The same workflow at its oldest stored version. Every read is narrowed on
+    # `version=0` -- the run model, the .ga export under both spellings, and the show
+    # the guide is built from -- and the unpinned answers sit beside them under the
+    # bare routes, so a surface that drops the version from any one request gets the
+    # latest answer there and the envelope says so. Version 0 has one more input than
+    # the latest (a reference the later versions resolve themselves), a different
+    # annotation, and no legacy warning yet.
+    old_data_step = {**data_step, "step_label": "Raw reads"}
+    old_ref_step = {
+        "step_type": "data_input",
+        "step_index": 1,
+        "step_label": "Reference FASTA",
+        "uuid": "55555555-5555-5555-5555-555555555555",
+        "inputs": [{"extensions": ["fasta"], "optional": False}],
+    }
+    add(
+        "get_workflow_input_template",
+        "pinned_version_zero",
+        "the oldest stored version, which has a slot the latest no longer asks for",
+        {"workflow_id": "wf000001", "version": 0},
+        lambda: get_workflow_input_template_fn("wf000001", version=0),
+        [
+            route(
+                "/api/workflows/wf000001/download",
+                run_model({"0": old_data_step, "1": old_ref_step}, version=0),
+                query={"style": "run", "version": "0"},
+            ),
+            route(
+                "/api/workflows/wf000001/download",
+                {
+                    "a_galaxy_workflow": "true",
+                    "name": "Reads QC",
+                    "steps": {
+                        "0": {"type": "data_input", "label": "Raw reads"},
+                        "1": {"type": "data_input", "label": "Reference FASTA"},
+                    },
+                },
+                query={"version": "0"},
+            ),
+            route(
+                "/api/workflows/download/wf000001",
+                {
+                    "a_galaxy_workflow": "true",
+                    "name": "Reads QC",
+                    "steps": {
+                        "0": {"type": "data_input", "label": "Raw reads"},
+                        "1": {"type": "data_input", "label": "Reference FASTA"},
+                    },
+                },
+                query={"version": "0"},
+            ),
+            route(
+                "/api/workflows/wf000001",
+                {**wf_show, "version": 0, "annotation": "first cut of the reads QC"},
+                query={"version": "0"},
+            ),
+            *wf_routes(
+                "wf000001",
+                run_model(
+                    {"0": data_step, "1": {"step_type": "tool", "step_index": 1, "inputs": []}}
+                ),
+                ga_definition({"0": {"type": "data_input", "label": "Input FASTQ"}}),
+                wf_show,
+            ),
+        ],
+    )
 
     # -- get_tool_citations --------------------------------------------------
     citations = [
@@ -1831,6 +1999,7 @@ def single_record_cases(add: AddCase) -> None:
     tool_input_template_cases(add)
     workflow_details_cases(add)
     job_details_cases(add)
+    job_logs_cases(add)
 
 
 def server_info_cases(add: AddCase) -> None:
@@ -2155,6 +2324,70 @@ def tool_details_cases(add: AddCase) -> None:
             )
         ],
     )
+    # The versioned cases narrow their route on tool_version: the value is a string on
+    # both sides, so there is no spelling to fall out over, and a surface that dropped
+    # the parameter would be answered with the 404 for an unmatched request rather
+    # than with the record it was meant to pin.
+    add(
+        "get_tool_details",
+        "pinned_version",
+        "tool_version names an installed version, and the record that comes back is it",
+        {"tool_id": "Cut1", "tool_version": "1.0.2"},
+        lambda: get_tool_details_fn("Cut1", tool_version="1.0.2"),
+        [
+            route(
+                "/api/tools/Cut1",
+                {
+                    "id": "Cut1",
+                    "name": "Cut",
+                    "version": "1.0.2",
+                    "description": "columns from a table",
+                    "model_class": "Tool",
+                    "panel_section_id": "text_manipulation",
+                    "panel_section_name": "Text Manipulation",
+                },
+                query={"tool_version": "1.0.2"},
+            )
+        ],
+    )
+    add(
+        "get_tool_details",
+        "pinned_version_with_io_details",
+        "io_details=True and tool_version together: that version's parameter list",
+        {"tool_id": "fastqc", "io_details": True, "tool_version": "0.73+galaxy0"},
+        lambda: get_tool_details_fn("fastqc", io_details=True, tool_version="0.73+galaxy0"),
+        [
+            route(
+                "/api/tools/fastqc",
+                {
+                    "id": "fastqc",
+                    "name": "FastQC",
+                    "version": "0.73+galaxy0",
+                    "description": "Read Quality reports",
+                    "model_class": "Tool",
+                    "inputs": [
+                        {
+                            "name": "input_file",
+                            "label": "Short read data from your current history",
+                            "type": "data",
+                            "optional": False,
+                            "multiple": False,
+                            "extensions": ["fastqsanger", "bam"],
+                            "value": None,
+                        },
+                    ],
+                    "outputs": [
+                        {
+                            "name": "html_file",
+                            "format": "html",
+                            "label": "${tool.name} on ${on_string}: Webpage",
+                        },
+                    ],
+                },
+                query={"tool_version": "0.73+galaxy0"},
+            )
+        ],
+    )
 
 
 def tool_input_template_cases(add: AddCase) -> None:
@@ -2414,6 +2647,145 @@ def job_details_cases(add: AddCase) -> None:
             ),
             dataset_route,
             job_route,
+        ],
+    )
+    # By id, the id has to look like one -- hex, as Galaxy writes them -- and the reply has
+    # to carry it back, so these cases name a job the way Galaxy would.
+    job_hex = "0123456789abcdef"
+    add(
+        "get_job_details",
+        "by_job_id",
+        "the job asked for by its own id: no lookup, and no dataset to name in the answer",
+        {"job_id": job_hex},
+        lambda: get_job_details_fn(job_id=job_hex),
+        [route(f"/api/jobs/{job_hex}", {**job, "id": job_hex})],
+    )
+
+
+def job_logs_cases(add: AddCase) -> None:
+    """A job's logs, read in full and cut to a budget.
+
+    One GET /api/jobs/{id}?full=true, and only the six log fields of the answer come back.
+    Every route here declares the query, so a surface that drops the flag gets the replay's
+    404 and a mismatched envelope rather than a plain job it could pass off as logs. The
+    cut is the one thing both surfaces compute rather than relay, so the long and the
+    multi-byte cases pin its bytes: the expected strings are whatever this server wrote,
+    and the other has to match them.
+
+    The canned jobs are finished ones, and a finished job on a 26.2 Galaxy carries all six
+    fields as strings: the four columns the runner wrote (empty or not), and the two legacy
+    properties the model joins from them. A live run showed the earlier two- and
+    three-field replies modelled a job Galaxy does not send.
+    """
+    job_hex = "0123456789abcdef"
+    plain = {"id": job_hex, "state": "error", "exit_code": 1, "tool_id": "fastqc"}
+    long_log = "\n".join(f"line {i:03d} of a long log" for i in range(300))
+
+    def finished(
+        tool_stdout: str = "", tool_stderr: str = "", job_stdout: str = "", job_stderr: str = ""
+    ) -> dict[str, Any]:
+        # Job.stdout and Job.stderr (lib/galaxy/model/__init__.py): the tool's text, then a
+        # newline and the job script's only when the latter is not empty.
+        stdout = tool_stdout + (f"\n{job_stdout}" if job_stdout else "")
+        stderr = tool_stderr + (f"\n{job_stderr}" if job_stderr else "")
+        return {
+            **plain,
+            "tool_stdout": tool_stdout,
+            "tool_stderr": tool_stderr,
+            "job_stdout": job_stdout,
+            "job_stderr": job_stderr,
+            "stdout": stdout,
+            "stderr": stderr,
+        }
+
+    add(
+        "get_job_logs",
+        "short_logs_untouched",
+        "logs within the budget come back as sent, all six fields of a finished job: the "
+        "empty strings Galaxy sent are kept, and stdout and stderr are the combined form "
+        "the model joins from the tool and job pairs",
+        {"job_id": job_hex},
+        lambda: get_job_logs_fn(job_hex),
+        [
+            route(
+                f"/api/jobs/{job_hex}",
+                finished(tool_stdout="a\nb\n", tool_stderr="", job_stdout="ran"),
+                query={"full": "true"},
+            )
+        ],
+    )
+    # The job script wrote nothing, so the combined stderr is the tool's, and the cut lands
+    # on both names of the same text.
+    long_route = route(
+        f"/api/jobs/{job_hex}",
+        finished(tool_stderr=long_log),
+        query={"full": "true"},
+    )
+    add(
+        "get_job_logs",
+        "long_log_cut",
+        "a log over the default budget keeps both ends on line boundaries, with a line in "
+        "the middle saying how much was left out",
+        {"job_id": job_hex},
+        lambda: get_job_logs_fn(job_hex),
+        [long_route],
+    )
+    add(
+        "get_job_logs",
+        "log_bytes_zero_uncut",
+        "a budget of 0 is the caller asking for the whole log, however long",
+        {"job_id": job_hex, "log_bytes": 0},
+        lambda: get_job_logs_fn(job_hex, log_bytes=0),
+        [long_route],
+    )
+    # Three widths of character at the cut, at a budget small enough to read: a line path
+    # through 2-byte text, and two no-newline fallbacks (3-byte and 4-byte) where the halves
+    # land inside a character and have to back off to its boundary. The combined stdout is
+    # the 2-byte lines joined to the 4-byte run, so its head takes the line path and its
+    # tail the character-boundary one in a single field.
+    add(
+        "get_job_logs",
+        "multibyte_text_at_the_cut",
+        "the budget is in bytes and the cut never splits a character: lines of 2-byte text, "
+        "and unbroken 3-byte and 4-byte text where both halves land mid-character",
+        {"job_id": job_hex, "log_bytes": 64},
+        lambda: get_job_logs_fn(job_hex, log_bytes=64),
+        [
+            route(
+                f"/api/jobs/{job_hex}",
+                finished(
+                    tool_stdout="\n".join(f"ünïcödé log line {i} ok" for i in range(40)),
+                    tool_stderr="€" * 40,
+                    job_stdout="🎉" * 50,
+                ),
+                query={"full": "true"},
+            )
+        ],
+    )
+    # Before the job has run, Galaxy answers the four tool_* and job_* columns as null (an
+    # older or narrower reply may leave some out), while stdout and stderr are properties
+    # of the model that always answer a string -- the empty streams come back as "". One
+    # case pins all three forms: null is absent, missing is absent, "" is kept.
+    add(
+        "get_job_logs",
+        "not_run_yet",
+        "a job that has not run: the tool_* and job_* fields are null or missing and left "
+        "out, while stdout and stderr are the empty strings Galaxy always answers",
+        {"job_id": job_hex},
+        lambda: get_job_logs_fn(job_hex),
+        [
+            route(
+                f"/api/jobs/{job_hex}",
+                {
+                    "id": job_hex,
+                    "state": "new",
+                    "tool_stdout": None,
+                    "tool_stderr": None,
+                    "stdout": "",
+                    "stderr": "",
+                },
+                query={"full": "true"},
+            )
         ],
     )
 
@@ -2804,6 +3176,24 @@ def user_tool_mutation_cases(add: AddCase) -> None:
                 method="POST",
             )
         ],
+    )
+    add(
+        "get_user_tool",
+        "found",
+        "one tool read back by uuid, the record create_user_tool answered with",
+        {"uuid": "61d15277-a911-45ef-aa66-5385146578cc"},
+        lambda: get_user_tool_fn("61d15277-a911-45ef-aa66-5385146578cc"),
+        [route("/api/unprivileged_tools/61d15277-a911-45ef-aa66-5385146578cc", created_tool)],
+    )
+    # Galaxy compares on the 32 hex digits, so the bare spelling names the same tool and goes
+    # through unchanged, as it does for delete_user_tool and run_user_tool.
+    add(
+        "get_user_tool",
+        "found_without_hyphens",
+        "the same tool by its bare 32-digit uuid, sent through as given",
+        {"uuid": "61d15277a91145efaa665385146578cc"},
+        lambda: get_user_tool_fn("61d15277a91145efaa665385146578cc"),
+        [route("/api/unprivileged_tools/61d15277a91145efaa665385146578cc", created_tool)],
     )
     add(
         "delete_user_tool",
@@ -3468,6 +3858,40 @@ def biocontainer_cases(add: AddCase) -> None:
 DENIED = '{"err_msg": "History is not accessible by user", "err_code": 403002}'
 MISSING = '{"err_msg": "History not found", "err_code": 404001}'
 BROKEN = '{"err_msg": "Uncaught exception in exposed API method:", "err_code": 0}'
+# What a read by id of a job that is not there says (managers/jobs.py get_accessible_job
+# raises ObjectNotFound bare, so the code's own default message).
+JOB_MISSING = '{"err_msg": "No such object found.", "err_code": 404001}'
+# What GET /api/jobs says, byte for byte, for a history the key cannot read, and for a
+# history_id that is not one. The filter is a typed query parameter, so a bad id is refused
+# by its validation before anything is decoded or looked up: pydantic's error, which
+# Galaxy's handler (exceptions/utils.py validation_error_to_message_exception) words as the
+# message with its location and carries alongside as validation_errors, one JSON string per
+# error. Not the decoder's 400009, which a bad id never reaches.
+JOBS_DENIED = '{"err_msg": "Cannot access the request job objects.", "err_code": 403002}'
+_BAD_HISTORY_ID = {
+    "type": "value_error",
+    "loc": ["query", "history_id"],
+    "msg": "Value error, Invalid id length, must be multiple of 16",
+    "input": "not-an-id",
+}
+MALFORMED = json.dumps(
+    {
+        "err_msg": f"{_BAD_HISTORY_ID['msg']} in ('query', 'history_id')",
+        "err_code": 400008,
+        "validation_errors": [json.dumps(_BAD_HISTORY_ID)],
+    }
+)
+# What GET /api/invocations/{id} says for an id no invocation has (managers/workflows.py
+# get_invocation): the id quoted back, in single quotes.
+INVOCATION_MISSING = (
+    '{"err_msg": "\'0000000000000404\' is not a valid workflow invocation id", "err_code": 404001}'
+)
+# What StoredWorkflow.get_internal_version raises for an index past the last stored one.
+NO_SUCH_VERSION = '{"err_msg": "Version does not exist", "err_code": 400008}'
+# What GET /api/tools/{id} says about an id the toolbox has at no version (v26.1.1
+# services/tools.py _get_tool). A version it lacks for an id it has is not an error
+# there: the newest installed version is served instead, and the refusal is ours.
+NO_SUCH_TOOL = '{"err_msg": "Could not find tool with id \'nope\'.", "err_code": 404001}'
 
 
 def fail(
@@ -3528,6 +3952,13 @@ def http_failure_cases(add: AddFailure) -> None:
         "a 401, whose hint is about the API key",
         {"tool_id": "cat1"},
         [fail("/api/tools/cat1", 401, DENIED)],
+    )
+    add(
+        "get_tool_details",
+        "unknown_tool_at_a_version",
+        "Galaxy's own 404 for an id it has at no version, with the version in the context",
+        {"tool_id": "nope", "tool_version": "1.0.0"},
+        [fail("/api/tools/nope", 404, NO_SUCH_TOOL, query={"tool_version": "1.0.0"})],
     )
     add(
         "get_history_contents",
@@ -3614,11 +4045,47 @@ def http_failure_cases(add: AddFailure) -> None:
         [fail("/api/unprivileged_tools/u0000405", 404, "", method="DELETE")],
     )
     add(
+        "get_user_tool",
+        "not_found",
+        "a well-formed uuid no tool of this user's carries",
+        {"uuid": "61d15277-a911-45ef-aa66-538514657404"},
+        [fail("/api/unprivileged_tools/61d15277-a911-45ef-aa66-538514657404", 404, MISSING)],
+    )
+    add(
         "run_user_tool",
         "lookup_refused",
         "the uuid lookup refused, before anything is submitted",
         {"history_id": "h0001", "tool_uuid": "u0000403", "inputs": {}},
         [fail("/api/unprivileged_tools/u0000403", 403, DENIED)],
+    )
+    # -- one invocation that is not there ----------------------------------
+    add(
+        "get_invocations",
+        "unknown_id",
+        "a lookup by an id Galaxy has no invocation for",
+        {"invocation_id": "0000000000000404"},
+        [fail("/api/invocations/0000000000000404", 404, INVOCATION_MISSING)],
+    )
+    add(
+        "get_invocations",
+        "malformed_id",
+        "a value that is not hex cannot be an id, and is refused before anything is sent: "
+        "Galaxy would answer it 400, and a '.' would not even reach it as an id but as the "
+        "listing",
+        {"invocation_id": "not-an-id"},
+        [],
+    )
+    add(
+        "get_invocations",
+        "answered_with_another_record",
+        "a 200 whose body is not the invocation asked for is refused rather than handed back",
+        {"invocation_id": "1e1d0c0b0a090807"},
+        [
+            route(
+                "/api/invocations/1e1d0c0b0a090807",
+                {**invocation_rows(1)[0], "id": "ffffffffffffffff"},
+            )
+        ],
     )
     # -- an error body under a 200 -----------------------------------------
     add(
@@ -3716,6 +4183,20 @@ def more_http_failure_cases(add: AddFailure) -> None:
             fail("/api/workflows/w0000500/download", 500, BROKEN),
         ],
     )
+    # A version the workflow does not have is Galaxy's 400 on the run model first, which
+    # both sides swallow on the way to the export, and then on the export, which is the
+    # one that gets reported -- with the version in the context, which it joins only when
+    # one was asked for. No hint, because format_error has none for a 400.
+    add(
+        "get_workflow_input_template",
+        "version_out_of_range",
+        "a stored version Galaxy does not have, refused by Galaxy on every read",
+        {"workflow_id": "wf000001", "version": 7},
+        [
+            fail("/api/workflows/download/wf000001", 400, NO_SUCH_VERSION),
+            fail("/api/workflows/wf000001/download", 400, NO_SUCH_VERSION),
+        ],
+    )
     add(
         "invoke_workflow",
         "refused_by_galaxy",
@@ -3745,6 +4226,24 @@ def more_http_failure_cases(add: AddFailure) -> None:
         "a raw GET whose text names the URL, query string and all",
         {},
         [fail("/api/pages", 403, DENIED)],
+    )
+    # The job index never 404s over a history_id: an unknown id is an empty page (a
+    # success case), a history the key cannot read is a 403 and an id Galaxy cannot
+    # decode is a 400, which the tool follows with a hint of its own.
+    add(
+        "list_jobs",
+        "history_not_accessible",
+        "a bioblend GET of the job index for a history the user cannot read",
+        {"history_id": "h0403"},
+        [fail("/api/jobs", 403, JOBS_DENIED)],
+    )
+    add(
+        "list_jobs",
+        "malformed_history_id",
+        "a history_id Galaxy's validation refuses, as the 400008 it answers; no 400 hint in "
+        "the table, so the tool adds one",
+        {"history_id": "not-an-id"},
+        [fail("/api/jobs", 400, MALFORMED)],
     )
     add(
         "create_page",
@@ -3809,6 +4308,66 @@ def more_http_failure_cases(add: AddFailure) -> None:
                 {"id": "d0002", "name": "out.txt", "state": "ok", "creating_job": "j0000500"},
             ),
             fail("/api/jobs/j0000500", 500, BROKEN),
+        ],
+    )
+    add(
+        "get_job_details",
+        "job_not_found",
+        "a job id nothing answers to -- the tool's own sentence, about the job this time",
+        {"job_id": "0000000000000404"},
+        [fail("/api/jobs/0000000000000404", 404, JOB_MISSING)],
+    )
+    add(
+        "get_job_details",
+        "job_id_malformed",
+        "a value that is not hex cannot be an id, and is refused before anything is sent: "
+        "Galaxy would answer it 400, and a '.' or '../histories' would not even reach it as "
+        "an id but as another path",
+        {"job_id": "not-an-id"},
+        [],
+    )
+    add(
+        "get_job_details",
+        "answered_with_another_record",
+        "a 200 whose body is not the job asked for -- a redirect's target, a listing -- is "
+        "refused rather than handed back as that job",
+        {"job_id": "0123456789abcdef"},
+        [route("/api/jobs/0123456789abcdef", {"id": "fedcba9876543210", "state": "ok"})],
+    )
+    # get_job_logs shares get_job_details' read by id -- the same guard before the request
+    # and the same check on the reply -- and only its action string is its own.
+    add(
+        "get_job_logs",
+        "not_found",
+        "a job id nothing answers to reads the same as it does from get_job_details",
+        {"job_id": "0000000000000404"},
+        [fail("/api/jobs/0000000000000404", 404, JOB_MISSING, query={"full": "true"})],
+    )
+    add(
+        "get_job_logs",
+        "read_refused",
+        "any other status names this tool in format_error's sentence",
+        {"job_id": "0000000000000500"},
+        [fail("/api/jobs/0000000000000500", 500, BROKEN, query={"full": "true"})],
+    )
+    add(
+        "get_job_logs",
+        "job_id_malformed",
+        "a value that is not hex is refused before anything is sent",
+        {"job_id": "not-an-id"},
+        [],
+    )
+    add(
+        "get_job_logs",
+        "answered_with_another_record",
+        "a 200 whose body is not this job's is refused, and the cut never runs over it",
+        {"job_id": "0123456789abcdef"},
+        [
+            route(
+                "/api/jobs/0123456789abcdef",
+                {"id": "fedcba9876543210", "tool_stderr": "not this job's log\n" * 500},
+                query={"full": "true"},
+            )
         ],
     )
 
@@ -3999,6 +4558,13 @@ def refusal_cases(add: AddFailure) -> None:
         [],
     )
     add(
+        "get_invocations",
+        "limit_above_galaxys_cap",
+        "Galaxy's own ceiling on /api/invocations, named here instead of as a 400 from there",
+        {"limit": 250},
+        [],
+    )
+    add(
         "get_history_contents",
         "limit_below_one",
         "the floor, on a listing with no ceiling",
@@ -4025,6 +4591,19 @@ def refusal_cases(add: AddFailure) -> None:
         "a refusal after a request that succeeded",
         {"section_id": "not-a-section"},
         [route("/api/tools", panel_sections(2, 2))],
+    )
+    add(
+        "get_tool_details",
+        "version_not_installed",
+        "Galaxy served its newest version for one it lacks, which the tool refuses by name",
+        {"tool_id": "cat1", "tool_version": "9.9.9"},
+        [
+            route(
+                "/api/tools/cat1",
+                {"id": "cat1", "name": "Concatenate datasets", "version": "1.0.0"},
+                query={"tool_version": "9.9.9"},
+            )
+        ],
     )
     add(
         "update_history",
@@ -4089,6 +4668,36 @@ def order_of_refusal_cases(add: AddFailure) -> None:
 
 def argument_refusal_cases(add: AddFailure) -> None:
     """Arguments this server refuses on its own terms, before it asks Galaxy anything."""
+    # Galaxy indexes its stored versions with a plain list subscript, so a negative one
+    # is not a 400 there but some other version, served quietly. Refused here instead.
+    add(
+        "get_workflow_input_template",
+        "negative_version",
+        "a version below zero, which Galaxy would silently resolve to another version",
+        {"workflow_id": "wf000001", "version": -1},
+        [],
+    )
+    add(
+        "get_job_details",
+        "both_ids_given",
+        "a dataset and a job: two questions, and the tool answers one",
+        {"dataset_id": "d0000002", "job_id": "j0000001"},
+        [],
+    )
+    add(
+        "get_job_details",
+        "neither_id_given",
+        "nothing to look up",
+        {},
+        [],
+    )
+    add(
+        "get_job_logs",
+        "negative_log_bytes",
+        "a budget below zero means nothing; 0 is the spelling for uncut",
+        {"job_id": "0123456789abcdef", "log_bytes": -1},
+        [],
+    )
     add(
         "create_user_tool",
         "representation_missing_a_field",
@@ -4133,6 +4742,23 @@ def argument_refusal_cases(add: AddFailure) -> None:
         "package_entry_with_no_name",
         "the entry is quoted with repr, so the sentence shows what arrived",
         {"packages": ["=1.17"]},
+        [],
+    )
+    add(
+        "list_jobs",
+        "limit_below_one",
+        "the floor every listing has, on the one listing with no ceiling",
+        {"limit": 0},
+        [],
+    )
+    # Galaxy 26.0+ answers a value uuid.UUID() refuses with a 400 "Invalid UUID format" (older
+    # Galaxies a 500 from the database driver), neither of which is a 404; the tool refuses it
+    # as not found itself.
+    add(
+        "get_user_tool",
+        "malformed_uuid",
+        "a tool id where a uuid should be, refused before anything is sent",
+        {"uuid": "row_filter"},
         [],
     )
 

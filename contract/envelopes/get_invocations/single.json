@@ -1,6 +1,6 @@
 {
   "data": {
-    "id": "inv0000",
+    "id": "1e1d0c0b0a090807",
     "state": "scheduled",
     "workflow_id": "w0000",
     "history_id": "h0000",
@@ -8,7 +8,7 @@
     "update_time": "2026-01-01T00:10:00"
   },
   "success": true,
-  "message": "Retrieved invocation 'inv0000'",
+  "message": "Retrieved invocation '1e1d0c0b0a090807'",
   "count": null,
   "pagination": null
 }

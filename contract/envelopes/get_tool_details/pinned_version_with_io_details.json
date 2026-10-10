@@ -1,0 +1,34 @@
+{
+  "data": {
+    "id": "fastqc",
+    "name": "FastQC",
+    "version": "0.73+galaxy0",
+    "description": "Read Quality reports",
+    "model_class": "Tool",
+    "inputs": [
+      {
+        "name": "input_file",
+        "label": "Short read data from your current history",
+        "type": "data",
+        "optional": false,
+        "multiple": false,
+        "extensions": [
+          "fastqsanger",
+          "bam"
+        ],
+        "value": null
+      }
+    ],
+    "outputs": [
+      {
+        "name": "html_file",
+        "format": "html",
+        "label": "${tool.name} on ${on_string}: Webpage"
+      }
+    ]
+  },
+  "success": true,
+  "message": "Retrieved details for tool 'fastqc' at version 0.73+galaxy0",
+  "count": null,
+  "pagination": null
+}

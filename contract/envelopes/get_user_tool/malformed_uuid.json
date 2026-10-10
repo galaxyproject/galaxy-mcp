@@ -1,0 +1,14 @@
+{
+  "$comment": "A failed tool call from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `result` is the CallToolResult the MCP wire carries, dumped the way the SDK dumps it (by alias, JSON mode, None-valued fields left out). `sentence` is the same text with FastMCP's own wrapper removed, which is what the tool itself said.",
+  "outcome": "failure",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Error calling tool 'get_user_tool': No user-defined tool found with UUID 'row_filter': that is not a UUID. A user tool's UUID is 32 hex digits, as list_user_tools() reports it (hyphenated, bare, braced or urn:uuid: spellings all name the same tool). Nothing was sent to Galaxy."
+      }
+    ],
+    "isError": true
+  },
+  "sentence": "No user-defined tool found with UUID 'row_filter': that is not a UUID. A user tool's UUID is 32 hex digits, as list_user_tools() reports it (hyphenated, bare, braced or urn:uuid: spellings all name the same tool). Nothing was sent to Galaxy."
+}

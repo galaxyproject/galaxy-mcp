@@ -7,6 +7,7 @@ import inspect
 import json
 import logging
 import os
+import re
 import threading
 import time
 import types
@@ -211,6 +212,8 @@ OUTPUT_BUDGET_BYTES = 50_000
 # page looks like for the kind of item the tool returns, so an agent asking for a
 # thousand tool records gets told no rather than getting a page cut to a fifth of it.
 MAX_PAGE_SIZE = {
+    # Galaxy's own ceiling: /api/invocations declares limit le=100 and answers 400 above it.
+    "get_invocations": 100,
     "get_iwc_workflows": 100,
     "get_tool_panel": 500,
     "list_history_ids": 500,
@@ -1588,7 +1591,9 @@ def search_tools_by_name(query: str, limit: int = 25, offset: int = 0) -> Galaxy
 
 
 @mcp.tool(tags={"tools", "read", "extended"})
-def get_tool_details(tool_id: str, io_details: bool = False) -> GalaxyResult:
+def get_tool_details(
+    tool_id: str, io_details: bool = False, tool_version: str | None = None
+) -> GalaxyResult:
     """
     Get detailed information about a specific tool including its input parameters.
 
@@ -1603,6 +1608,9 @@ def get_tool_details(tool_id: str, io_details: bool = False) -> GalaxyResult:
                  - Toolshed: "toolshed.g2.bx.psu.edu/repos/devteam/fastqc/fastqc/0.73"
         io_details: Set True to include detailed input/output parameter schemas.
                     Essential for understanding how to call run_tool().
+        tool_version: Describe this installed version of the tool rather than the one
+                    Galaxy picks for the id. Refused when Galaxy answers with a
+                    different version, so the answer is never about another one.
 
     Returns:
         GalaxyResult with tool info including:
@@ -1636,18 +1644,53 @@ def get_tool_details(tool_id: str, io_details: bool = False) -> GalaxyResult:
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
+    context: dict[str, Any] = {"tool_id": tool_id, "io_details": io_details}
+    if tool_version is not None:
+        context["tool_version"] = tool_version
     try:
-        # Get detailed information about the tool
-        tool_info = gi.tools.show_tool(tool_id, io_details=io_details)
+        if tool_version is None:
+            tool_info = gi.tools.show_tool(tool_id, io_details=io_details)
+        else:
+            # show_tool sends io_details and link_details and nothing else, and GET
+            # /api/tools/{id} reads tool_version out of the query string (v26.1.1
+            # api/tools.py show). Same client call underneath, so the request, the
+            # retries and the failure wording match show_tool's.
+            tool_info = gi.tools._get(
+                id=tool_id,
+                params={
+                    "io_details": io_details,
+                    "link_details": False,
+                    "tool_version": tool_version,
+                },
+            )
+    except Exception as e:
+        raise ValueError(format_error("Get tool details", e, context)) from e
+
+    if tool_version is None:
         return GalaxyResult(
             data=tool_info,
             success=True,
             message=f"Retrieved details for tool '{tool_id}'",
         )
-    except Exception as e:
+
+    # Asking for a version is not the same as getting it: the toolbox answers with the
+    # newest installed version when the one asked for is missing (v26.1.1
+    # tool_util/toolbox/base.py get_tool), as a 200 with no word about it. A caller
+    # pinning a version must not be handed another version's parameters as if they
+    # were its own, so the mismatch is a refusal rather than a footnote.
+    served = tool_info.get("version") if isinstance(tool_info, dict) else None
+    if isinstance(served, str) and served != tool_version:
         raise ValueError(
-            format_error("Get tool details", e, {"tool_id": tool_id, "io_details": io_details})
-        ) from e
+            f"Galaxy described version {served} of tool '{tool_id}' rather than the "
+            f"{tool_version} asked for, so that version is not installed on this server. "
+            f"Call get_tool_details('{tool_id}') without tool_version to see the version "
+            "Galaxy serves for this id."
+        )
+    return GalaxyResult(
+        data=tool_info,
+        success=True,
+        message=f"Retrieved details for tool '{tool_id}' at version {tool_version}",
+    )
 
 
 @mcp.tool(tags={"tools", "read", "extended"})
@@ -1843,6 +1886,7 @@ def run_tool(
 
     NEXT STEPS:
     - Check job status: get_job_details(output_dataset_id)
+    - A failed job's logs: get_job_logs(job_id)
     - View outputs: get_history_contents(history_id)
     - Download results: download_dataset(output_id)
 
@@ -2789,16 +2833,149 @@ def _job_details_failed(dataset_id: str, error: Exception) -> str:
     return format_error("Get job details", error, {"dataset_id": dataset_id})
 
 
-@mcp.tool(tags={"jobs", "read", "core"})
-def get_job_details(dataset_id: str, history_id: str | None = None) -> GalaxyResult:
+def _job_lookup_failed(job_id: str, error: Exception, action: str = "Get job details") -> str:
+    """What to tell the caller when a job asked for by its own id could not be read.
+
+    A 400 is answered the same way as a 404. Galaxy refuses an id it cannot decode with a
+    400 rather than looking anything up, and a caller holding a job id -- an agent asking
+    whether a run it started still exists -- gets the same answer either way: there is no
+    job by that id to read. Both surfaces report it as not found so that caller can act
+    on one kind of failure rather than two.
+
+    Everything else reads as `_job_details_failed` does: a status goes through
+    format_error under ``action`` -- the one place the two reads by id word a failure
+    differently -- and a failure carrying no status field never reached HTTP at all.
     """
-    Get detailed information about the job that created a specific dataset
+    if _http_status(error) in (400, 404):
+        return (
+            f"Job ID '{job_id}' not found or not accessible. "
+            "Make sure the job exists and you have permission to view it."
+        )
+    if _http_status(error) is _NO_STATUS_FIELD:
+        return f"Failed to get job information for job '{job_id}': {error}"
+    return format_error(action, error, {"job_id": job_id})
+
+
+# The log fields Galaxy adds to a job read with ?full=true, in the order they are answered.
+_JOB_LOG_FIELDS = ("tool_stdout", "tool_stderr", "job_stdout", "job_stderr", "stdout", "stderr")
+# get_job_logs' default budget per field, in UTF-8 bytes.
+JOB_LOG_BYTES = 4096
+# A lone surrogate, which json.loads lets through from a "\ud800" escape and which str.encode
+# refuses. The other surface's TextEncoder writes U+FFFD for one, so the same is done here.
+_LONE_SURROGATE = re.compile("[\ud800-\udfff]")
+
+
+def _log_ends(text: str, budget: int) -> str:
+    """Both ends of a log, cut on line boundaries, with a line saying what was left out.
+
+    The cause of a failure is usually at the end and the context at the start, and a
+    one-ended read loses one of them. Measured in UTF-8 bytes: ``budget`` is the most of
+    the field's own bytes kept (the omitted line is not charged against it), and 0 means
+    uncut. Each half is cut back to its last (or forward to its first) newline; a half with
+    no newline is cut on a character boundary instead, never inside a multi-byte character,
+    which is what lets both decodes below be strict. The TypeScript op's ``logEnds`` is
+    this function byte for byte, so change both.
+    """
+    if budget == 0:
+        return text
+    data = _LONE_SURROGATE.sub("\ufffd", text).encode("utf-8")
+    if len(data) <= budget:
+        return text
+    half = budget // 2
+    front = data[:half]
+    cut = front.rfind(b"\n")
+    if cut >= 0:
+        head = front[:cut]
+    else:
+        # The byte after the cut is a continuation byte only if the cut is inside a
+        # character; walk back to that character's lead byte and leave it out.
+        end = half
+        while end > 0 and (data[end] & 0xC0) == 0x80:
+            end -= 1
+        head = data[:end]
+    back = data[len(data) - half :]
+    newline = back.find(b"\n")
+    if newline >= 0:
+        tail = back[newline + 1 :]
+    else:
+        start = len(data) - half
+        while start < len(data) and (data[start] & 0xC0) == 0x80:
+            start += 1
+        tail = data[start:]
+    dropped = len(data) - len(head) - len(tail)
+    return (
+        f"{head.decode('utf-8')}\n"
+        f"[... {dropped} of {len(data)} bytes omitted ...]\n"
+        f"{tail.decode('utf-8')}"
+    )
+
+
+_ENCODED_ID_HEX = re.compile(r"[0-9a-fA-F]+")
+
+
+def _is_encoded_id(value: str) -> bool:
+    """Whether ``value`` has the shape of a Galaxy encoded id: hex digits and nothing else.
+
+    Galaxy refuses anything else with a 400 before it looks anything up, which the reads
+    by id already report as not found -- so the check changes no answer. What it changes
+    is the request. An id travels as one path segment, and requests (like the fetch API
+    on the other surface) renormalizes a value such as ``.`` or ``../histories`` into a
+    different path, ``/api/jobs/`` or ``/api/histories``, which answers 200 with a list
+    that is then not the record asked for. Refused here, nothing of the kind is sent. The
+    TypeScript ops check the same shape, so both surfaces refuse the same strings.
+    """
+    return _ENCODED_ID_HEX.fullmatch(value) is not None
+
+
+def _not_a_galaxy_id(noun: str, value: str, listing: str) -> str:
+    """The refusal for an id that cannot be one. Quoted by the TypeScript ops; change both."""
+    return (
+        f"{noun} ID '{value}' not found: that is not a Galaxy id. Galaxy's ids are hex "
+        f"strings, as {listing} reports them. Nothing was sent to Galaxy."
+    )
+
+
+def _is_this_record(payload: Any, record_id: str) -> bool:
+    """Whether a 200 answered for the record asked for, and not merely with a 200.
+
+    Galaxy writes its ids in lowercase hex and decodes either case, so a caller's uppercase
+    spelling of the same id is the same record.
+    """
+    if not isinstance(payload, dict):
+        return False
+    answered = payload.get("id")
+    return isinstance(answered, str) and answered.lower() == record_id.lower()
+
+
+def _not_that_record(noun: str, value: str) -> str:
+    """The refusal of a 200 whose body is not the record asked for. Quoted by the TypeScript ops."""
+    return (
+        f"Galaxy answered the read of {noun} '{value}' with something that is not that "
+        f"{noun}'s record (no matching id), so it was not returned."
+    )
+
+
+@mcp.tool(tags={"jobs", "read", "core"})
+def get_job_details(
+    dataset_id: str | None = None,
+    history_id: str | None = None,
+    job_id: str | None = None,
+) -> GalaxyResult:
+    """
+    Get a job's record, by its own id or by a dataset it created.
+
+    The record carries the job's state, exit code, tool id and version, create and update
+    times, params, inputs and outputs. It does not carry the job's stdout or stderr: a
+    failed job's logs are one get_job_logs call away. Exactly one of dataset_id and job_id
+    is required.
 
     Args:
-        dataset_id: Galaxy dataset ID - a hexadecimal hash string identifying the dataset
-                   (a 16-character hex string)
+        dataset_id: Galaxy dataset ID whose creating job to look up - a hexadecimal hash
+                   string (a 16-character hex string). Give this or job_id, not both
         history_id: Galaxy history ID containing the dataset - optional for performance optimization
-                   (a 16-character hex string)
+                   (a 16-character hex string); only used with dataset_id
+        job_id: Galaxy job ID to look up directly (a 16-character hex string). Give this or
+               dataset_id, not both
 
     Returns:
         GalaxyResult with job metadata, tool information, dataset ID, and job ID in data field
@@ -2810,10 +2987,43 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> GalaxyRes
     if not base_url or not api_key:
         raise ValueError("Galaxy connection is missing URL or API key information.")
 
+    # Refused before anything is asked of Galaxy, so neither sentence carries a status.
+    if dataset_id and job_id:
+        raise ValueError(
+            "get_job_details takes a dataset_id or a job_id, not both "
+            f"(got dataset_id '{dataset_id}' and job_id '{job_id}')."
+        )
+    if not dataset_id and not job_id:
+        raise ValueError("get_job_details needs a dataset_id or a job_id; neither was given.")
+
+    headers = {"x-api-key": api_key}
+
+    if job_id:
+        if not _is_encoded_id(job_id):
+            raise ValueError(_not_a_galaxy_id("Job", job_id, "list_jobs()"))
+        url = f"{base_url}api/jobs/{job_id}"
+        try:
+            response = requests.get(url, headers=headers, timeout=30, allow_redirects=False)
+            response.raise_for_status()
+            job_info = response.json()
+        except Exception as e:
+            raise ValueError(_job_lookup_failed(job_id, e)) from e
+        # A 200 is not the answer; a 200 for this job is. The caller holding the id is
+        # asking whether that job exists, and a reply about anything else -- a listing, a
+        # redirect's target -- must not be handed back as it.
+        if not _is_this_record(job_info, job_id):
+            raise ValueError(_not_that_record("job", job_id))
+        return GalaxyResult(
+            data={"job": job_info, "dataset_id": None, "job_id": job_id},
+            success=True,
+            message=f"Retrieved job details for job '{job_id}'",
+        )
+
+    assert dataset_id is not None  # one of the two, as refused above
+
     # Two lookups and a read, each answering for its own failure while that failure is
     # still in hand. One handler around all three could only see whatever the first one
     # wrapped, and a wrapper carries no status.
-    job_id: str | None = None
     provenance_error: Exception | None = None
     if history_id:
         try:
@@ -2857,7 +3067,6 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> GalaxyRes
     # Get job details using the Galaxy API directly
     # (Bioblend doesn't have a direct method for this)
     url = f"{base_url}api/jobs/{job_id}"
-    headers = {"x-api-key": api_key}
     try:
         response = requests.get(url, headers=headers, timeout=30, allow_redirects=False)
         response.raise_for_status()
@@ -2870,6 +3079,180 @@ def get_job_details(dataset_id: str, history_id: str | None = None) -> GalaxyRes
         success=True,
         message=f"Retrieved job details for dataset '{dataset_id}'",
     )
+
+
+@mcp.tool(tags={"jobs", "read", "core"})
+def get_job_logs(job_id: str, log_bytes: int = JOB_LOG_BYTES) -> GalaxyResult:
+    """
+    Read a job's logs: the stdout and stderr Galaxy keeps for it, each cut to a byte budget.
+
+    One GET /api/jobs/{job_id}?full=true, answered with only the six log fields the full
+    record adds -- tool_stdout, tool_stderr, job_stdout, job_stderr, stdout, stderr -- and
+    nothing the plain get_job_details read already has. The four tool_* and job_* fields are
+    null until the job has written them, and are then left out rather than returned empty;
+    stdout and stderr are the older combined form of those pairs, which Galaxy always answers
+    as a string, so a job that has not run reads as an empty stdout and stderr, and on a
+    current Galaxy the same text can appear under two names. A log longer than log_bytes
+    keeps its first and last half, cut on line boundaries, with one line in the middle saying
+    how many of how many bytes were omitted, so a cut field carries at most log_bytes of the
+    log plus that line; the cause of a failure is usually at the end and the context at the
+    start, and a one-ended read loses one of them.
+
+    Args:
+        job_id: Galaxy job ID (a 16-character hex string), as run_tool, list_jobs or
+               get_job_details report it
+        log_bytes: Budget per log field in UTF-8 bytes (default 4096). 0 returns every log
+                  uncut, however long; a negative value is refused
+    Returns:
+        GalaxyResult with the present log fields in data, keyed by their Galaxy names
+    """
+    state = ensure_connected()
+    base_url = state["url"] or normalized_galaxy_url or ""
+    api_key = state["api_key"]
+    if not base_url or not api_key:
+        raise ValueError("Galaxy connection is missing URL or API key information.")
+
+    # Refused before anything is sent, and worded whole, as the other reads by id do.
+    if log_bytes < 0:
+        raise ValueError(f"log_bytes must be 0 or greater (got {log_bytes})")
+    if not _is_encoded_id(job_id):
+        raise ValueError(_not_a_galaxy_id("Job", job_id, "list_jobs()"))
+
+    url = f"{base_url}api/jobs/{job_id}"
+    try:
+        response = requests.get(
+            url,
+            headers={"x-api-key": api_key},
+            params={"full": "true"},
+            timeout=30,
+            allow_redirects=False,
+        )
+        response.raise_for_status()
+        job_info = response.json()
+    except Exception as e:
+        raise ValueError(_job_lookup_failed(job_id, e, action="Get job logs")) from e
+    # The same check get_job_details makes: a 200 for this job, not merely a 200, and the
+    # clamp never runs over a body that is not this job's.
+    if not _is_this_record(job_info, job_id):
+        raise ValueError(_not_that_record("job", job_id))
+
+    # Only a string is a log. A missing key, a null (what Galaxy serialises for the tool_*
+    # and job_* fields before the job has run) or anything else is left out, never answered
+    # as "" -- an empty string is kept, because that is Galaxy saying the stream was empty,
+    # and stdout and stderr are always a string over there, empty before the job has run.
+    logs = {
+        field: _log_ends(job_info[field], log_bytes)
+        for field in _JOB_LOG_FIELDS
+        if isinstance(job_info.get(field), str)
+    }
+    return GalaxyResult(data=logs, success=True, message=f"Retrieved job logs for job '{job_id}'")
+
+
+# Appended to a 400 from the job index. Quoted by the TypeScript op, so change both.
+_LIST_JOBS_BAD_FILTER = (
+    "Galaxy could not read one of the filters: history_id has to be an encoded id, the "
+    "dates ISO 8601, and state, order_by and view values Galaxy knows. A well-formed id of "
+    "a history that does not exist is not refused this way -- it answers with an empty page"
+)
+
+
+@mcp.tool(tags={"jobs", "read", "extended"})
+def list_jobs(
+    history_id: str | None = None,
+    state: str | None = None,
+    date_range_min: str | None = None,
+    date_range_max: str | None = None,
+    order_by: str = "update_time",
+    view: str = "collection",
+    limit: int = 100,
+    offset: int = 0,
+) -> GalaxyResult:
+    """List jobs, optionally narrowed to one history, one state and a time window.
+
+    What an agent reconciling its own record of a history against Galaxy reads: the
+    jobs updated since a time, in one history, newest first, a page at a time. Galaxy
+    windows this index itself and reports no total, so the answer carries a count and
+    no pagination block: a page shorter than limit is the last one, and the next page
+    starts at offset + limit.
+
+    Galaxy filters this index by history_id without looking the history up, so a
+    well-formed id of a history that does not exist answers with an empty page -- the
+    same answer as a history with no jobs, not a 404. A reconcile that has to tell the
+    two apart confirms the history with get_history_details first. A history the user
+    cannot read is refused with a 403, and an id Galaxy cannot decode with a 400.
+
+    Args:
+        history_id: Only jobs in this history (an encoded history id). Leave it unset
+                   for jobs from any history the user can see. The id of a history
+                   that does not exist is not an error here: it answers with an empty
+                   page.
+        state: Only jobs in this state -- 'new', 'queued', 'running', 'ok', 'error',
+              'paused', 'deleted' and the rest of Galaxy's job states. A
+              comma-separated list matches any of them.
+        date_range_min: Only jobs updated at or after this time, as an ISO 8601 date or
+                       datetime such as '2026-01-01' or '2026-01-01T12:00:00'.
+        date_range_max: Only jobs updated at or before this time, in the same format.
+        order_by: Sort by 'update_time' (default) or 'create_time', newest first.
+        view: 'collection' (default) returns one small summary per job -- id, state,
+             tool_id, exit_code, create_time, update_time -- which is what a listing
+             wants. 'admin_job_list' adds runner and handler detail and needs an
+             admin key.
+        limit: Most jobs to return in one page (default 100). Galaxy puts no upper
+              cap on this, so this tool does not either; keep it to what fits the
+              output budget.
+        offset: Skip this many jobs (default 0). Page by raising it by limit until a
+               page comes back shorter than limit.
+
+    Returns:
+        GalaxyResult with the job summaries in data and their number in count.
+        pagination is None because the index reports no total.
+
+    NEXT STEPS:
+    - One job's parameters and outputs: get_job_details(dataset_id)
+    - A failed job's logs: get_job_logs(job_id)
+    - The datasets those jobs made: get_history_contents(history_id)
+    """
+    conn = ensure_connected()
+    gi: GalaxyInstance = conn["gi"]
+    _validate_pagination(limit, offset)
+
+    # The window is always sent; a filter only when it says something, which is how
+    # bioblend's get_jobs builds the same request -- a blank history_id sent as "" would
+    # reach Galaxy's encoded-id validator and fail the listing over a value nobody meant.
+    # Same client call as get_jobs underneath, so the request, retries and failure
+    # wording are bioblend's; this takes the direct route because get_jobs has no view.
+    params: dict[str, Any] = {"limit": limit, "offset": offset}
+    if history_id:
+        params["history_id"] = history_id
+    if state:
+        params["state"] = state
+    if date_range_min:
+        params["date_range_min"] = date_range_min
+    if date_range_max:
+        params["date_range_max"] = date_range_max
+    params["order_by"] = order_by
+    params["view"] = view
+
+    try:
+        jobs = gi.jobs._get(params=params)
+        _refuse_error_body("List jobs", jobs)
+        return GalaxyResult(
+            data=jobs,
+            success=True,
+            message=f"Retrieved {len(jobs)} jobs",
+            count=len(jobs),
+        )
+    except ValueError:
+        # Already the refusal above, which says more than the wrapper below would.
+        raise
+    except Exception as e:
+        base = format_error("List jobs", e, {"history_id": history_id})
+        # The hint table has no 400 row, and this index's 400 is one of the filters Galaxy
+        # could not read -- most often a history_id that is not an encoded id. Said here so
+        # a caller does not take it for the missing-history answer, which is an empty page.
+        if _http_status(e) == 400:
+            raise ValueError(f"{base}. {_LIST_JOBS_BAD_FILTER}") from e
+        raise ValueError(base) from e
 
 
 @mcp.tool(tags={"datasets", "read", "core"})
@@ -3348,6 +3731,10 @@ def get_invocations(
     limit: int | None = None,
     view: str = "collection",
     step_details: bool = False,
+    offset: int = 0,
+    sort_by: str | None = None,
+    sort_desc: bool | None = None,
+    include_terminal: bool = True,
 ) -> GalaxyResult:
     """
     View workflow invocations in Galaxy
@@ -3359,18 +3746,41 @@ def get_invocations(
                     (a 16-character hex string, optional)
         history_id: Filter invocations by history ID - a hexadecimal hash string
                    (a 16-character hex string, optional)
-        limit: Maximum number of invocations to return. Leave it unset and none is
-               sent, so Galaxy applies its own default of 20 -- not "no limit". Raise
-               it to see more.
+        limit: Maximum number of invocations to return, at most 100 -- Galaxy's
+               invocation index serves no larger page, so page with offset to see
+               more. Leave it unset and none is sent, so Galaxy applies its own
+               default of 20 -- not "no limit".
         view: Level of detail to return - 'element' for detailed or 'collection' for summary
              (default: 'collection')
         step_details: Include details on individual workflow steps -- each step's
                      jobs. Applies to one invocation by id, and to a listing when
                      view is 'element' (default: False)
+        offset: Number of invocations to skip before the page starts, for walking a
+                listing longer than one page of limit (default: 0)
+        sort_by: Order the listing by 'create_time' or 'update_time'. Left unset,
+                 Galaxy's own order applies, which is newest first (optional)
+        sort_desc: With sort_by, True orders newest first and False oldest first.
+                   Left unset, Galaxy's own direction applies (optional)
+        include_terminal: Whether invocations that have finished -- scheduled,
+                          failed or cancelled -- are listed. False keeps only the
+                          ones still in flight (default: True)
 
     Returns:
         GalaxyResult with workflow invocation information in data field
     """
+    if invocation_id:
+        # Not an id, not a request: see _is_encoded_id for what a stray "." would turn into.
+        if not _is_encoded_id(invocation_id):
+            raise ValueError(_not_a_galaxy_id("Invocation", invocation_id, "get_invocations()"))
+    else:
+        # Galaxy answers a limit above 100 with a 400 validation error. Refused here
+        # instead, before anything is sent and in the same words the other windowed
+        # listings use, which name the cap and the offset to page past it.
+        if limit is not None:
+            _validate_pagination(limit, offset, max_limit=MAX_PAGE_SIZE["get_invocations"])
+        elif offset < 0:
+            raise ValueError(f"offset must be 0 or greater (got {offset})")
+
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
 
@@ -3388,20 +3798,39 @@ def get_invocations(
             else:
                 invocation = gi.invocations.show_invocation(invocation_id)
             _refuse_error_body("Get workflow invocations", invocation)
+            # The same check get_job_details makes: the reply has to be this invocation's
+            # record, not merely a 200 from somewhere under /api/invocations.
+            if not _is_this_record(invocation, invocation_id):
+                raise ValueError(_not_that_record("invocation", invocation_id))
             return GalaxyResult(
                 data=invocation,
                 success=True,
                 message=f"Retrieved invocation '{invocation_id}'",
             )
 
-        # Otherwise get a list of invocations with optional filters
-        invocations = gi.invocations.get_invocations(
-            workflow_id=workflow_id,
-            history_id=history_id,
-            limit=limit,
-            view=view,
-            step_details=step_details,
-        )
+        # Otherwise get a list of invocations with optional filters. bioblend's
+        # get_invocations builds this same request but takes no sort parameters, so
+        # the params are assembled here the way it assembles them -- a blank filter is
+        # no filter, limit and offset only when asked for -- and sent through the same
+        # client call, so retries and failure wording are unchanged.
+        params: dict[str, Any] = {
+            "include_terminal": include_terminal,
+            "view": view,
+            "step_details": step_details,
+        }
+        if workflow_id:
+            params["workflow_id"] = workflow_id
+        if history_id:
+            params["history_id"] = history_id
+        if limit is not None:
+            params["limit"] = limit
+        if offset:
+            params["offset"] = offset
+        if sort_by:
+            params["sort_by"] = sort_by
+        if sort_desc is not None:
+            params["sort_desc"] = sort_desc
+        invocations = gi.invocations._get(params=params)
         _refuse_error_body("Get workflow invocations", invocations)
         return GalaxyResult(
             data=invocations,
@@ -4140,12 +4569,16 @@ def get_workflow_details(workflow_id: str, version: int | None = None) -> Galaxy
 
 
 def _resolve_workflow_slots(
-    gi: GalaxyInstance, workflow_id: str, history_id: str | None = None
+    gi: GalaxyInstance,
+    workflow_id: str,
+    history_id: str | None = None,
+    version: int | None = None,
 ) -> tuple[list[dict[str, Any]], str, dict[str, Any] | None]:
     """Resolve a workflow's input slots. Primary: style=run (webapp's source),
     behind our normalizer. Fallback: the .ga export. Returns
     (slots, provenance, run_model) -- run_model is the parsed style=run dict when
-    that path was used, else None.
+    that path was used, else None. ``version`` pins both reads to one stored
+    version (0 is the oldest); None is the latest.
     """
     # instance=false: workflow_id here is a StoredWorkflow id (what show_workflow /
     # list_workflows hand back). instance=true reinterprets it as a Workflow-version
@@ -4154,6 +4587,8 @@ def _resolve_workflow_slots(
     params = "style=run&instance=false"
     if history_id:
         params += f"&history_id={history_id}"
+    if version is not None:
+        params += f"&version={version}"
     try:
         resp = gi.make_get_request(f"{gi.url}/workflows/{workflow_id}/download?{params}")
         if resp.status_code == 200:
@@ -4163,13 +4598,16 @@ def _resolve_workflow_slots(
                 return slots, "style=run", run_model
     except Exception as e:  # noqa: BLE001 -- fall back on any style=run failure
         logger.info("style=run unavailable for %s (%s); falling back to .ga", workflow_id, e)
-    definition = gi.workflows.export_workflow_dict(workflow_id)
+    definition = gi.workflows.export_workflow_dict(workflow_id, version=version)
     return normalize_ga_steps(definition), "ga-fallback", None
 
 
 @mcp.tool(tags={"workflows", "read", "extended"})
 def get_workflow_input_template(
-    workflow_id: str, history_id: str | None = None, verbose: bool = False
+    workflow_id: str,
+    history_id: str | None = None,
+    verbose: bool = False,
+    version: int | None = None,
 ) -> GalaxyResult:
     """Return a ready-to-fill template plus a run guide for a workflow.
 
@@ -4183,22 +4621,34 @@ def get_workflow_input_template(
     values -- see `guide.notes`. `guide` carries a short description and provenance.
     Fill `inputs_template` (keyed by step_index) and invoke with
     `inputs_by="step_index|step_uuid"`. Pass `verbose=True` for the full readme
-    and uncapped option lists. `warnings` flags legacy patterns.
+    and uncapped option lists. `warnings` flags legacy patterns. `version` pins
+    every read to one stored version, counted the way get_workflow_details counts
+    them (0 is the oldest); left out, the latest is templated. A version Galaxy
+    does not have is Galaxy's own 400. A negative one is refused before anything
+    is sent, because Galaxy would quietly serve some other version for it.
     """
     state = ensure_connected()
     gi: GalaxyInstance = state["gi"]
+    if version is not None and version < 0:
+        raise ValueError(
+            f"version must be 0 or greater (got {version}); 0 is the oldest stored "
+            "version and get_workflow_details counts up from there"
+        )
     try:
         # Three independent best-effort reads of the same workflow: the run model
         # (_resolve_workflow_slots), the .ga export (legacy warnings), and
-        # show_workflow (guide docs).
-        slots, provenance, run_model = _resolve_workflow_slots(gi, workflow_id, history_id)
+        # show_workflow (guide docs). All three are pinned to `version` when one is
+        # given, so the slots of one version never meet the docs of another.
+        slots, provenance, run_model = _resolve_workflow_slots(
+            gi, workflow_id, history_id, version=version
+        )
         try:
-            definition = gi.workflows.export_workflow_dict(workflow_id)
+            definition = gi.workflows.export_workflow_dict(workflow_id, version=version)
             warnings = find_legacy_warnings(definition)
         except Exception:  # noqa: BLE001 -- warnings are best-effort
             warnings = []
         try:
-            workflow_show = gi.workflows.show_workflow(workflow_id=workflow_id)
+            workflow_show = gi.workflows.show_workflow(workflow_id=workflow_id, version=version)
         except Exception:  # noqa: BLE001 -- guide docs are best-effort
             workflow_show = {}
         guide = build_guide(workflow_show, run_model, verbose)
@@ -4216,9 +4666,12 @@ def get_workflow_input_template(
             count=len(slots),
         )
     except Exception as e:
-        raise ValueError(
-            format_error("Get workflow input template", e, {"workflow_id": workflow_id})
-        ) from e
+        # The version joins the context only when one was asked for, so a call that
+        # never named one fails in exactly the words it did before the parameter existed.
+        context: dict[str, Any] = {"workflow_id": workflow_id}
+        if version is not None:
+            context["version"] = version
+        raise ValueError(format_error("Get workflow input template", e, context)) from e
 
 
 def _enrich_supplied_inputs(gi: GalaxyInstance, inputs: dict[str, Any]) -> dict[str, Any]:
@@ -4680,6 +5133,69 @@ def list_user_tools(active: bool = True, limit: int = 25, offset: int = 0) -> Ga
         )
     except Exception as e:
         raise ValueError(format_error("List user tools", e)) from e
+
+
+_USER_TOOL_UUID_HEX = re.compile(r"[0-9a-fA-F]{32}")
+
+
+def _is_user_tool_uuid(value: str) -> bool:
+    """Whether Galaxy's own uuid check (``uuid.UUID(value)``) would accept ``value``.
+
+    Galaxy 26.0+ validates the path value with ``uuid.UUID`` and answers a 400 "Invalid UUID
+    format" for anything it refuses (older Galaxies bound it straight to the UUID column and
+    answered a 500 from the database driver). Neither is a 404, so the check is repeated here
+    and a malformed value reads as not found. The spellings ``uuid.UUID`` accepts all compare
+    on the same 32 hex digits, so the hyphenated form list_user_tools() reports, the bare
+    32-digit form, the braced form and ``urn:uuid:`` all find the same tool. The TypeScript op
+    normalizes the same way, so both surfaces refuse the same strings.
+    """
+    hex_digits = value.replace("urn:", "").replace("uuid:", "").strip("{}").replace("-", "")
+    return _USER_TOOL_UUID_HEX.fullmatch(hex_digits) is not None
+
+
+@mcp.tool(tags={"tools", "read", "extended"})
+def get_user_tool(uuid: str) -> GalaxyResult:
+    """Get one user-defined tool by its UUID, with its full representation.
+
+    One request to Galaxy's single-tool endpoint, so a caller holding a UUID from
+    list_user_tools() or create_user_tool() reads that tool's definition back without
+    paging through the whole list. A value that is not a UUID is refused as not found
+    before anything is sent.
+
+    Args:
+        uuid: The tool's UUID as list_user_tools() reports it (32 hex digits in
+            8-4-4-4-12 groups). The bare 32-digit, braced and urn:uuid: spellings
+            name the same tool and are accepted too.
+
+    Returns:
+        GalaxyResult with the tool record (id, uuid, tool_id, active status,
+        representation) in data.
+    """
+    if not _is_user_tool_uuid(uuid):
+        raise ValueError(
+            f"No user-defined tool found with UUID '{uuid}': that is not a UUID. A user tool's "
+            "UUID is 32 hex digits, as list_user_tools() reports it (hyphenated, bare, braced "
+            "or urn:uuid: spellings all name the same tool). Nothing was sent to Galaxy."
+        )
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+
+    try:
+        url = f"{gi.url}/unprivileged_tools/{uuid}"
+        response = gi.make_get_request(url)
+        # A raw request, like the rest of this API: the status is checked here, so a 404 is
+        # reported as one rather than read as a tool record.
+        response.raise_for_status()
+        tool_info = response.json()
+        return GalaxyResult(
+            data=tool_info,
+            success=True,
+            message=(
+                f"Retrieved user-defined tool '{tool_info.get('tool_id') or uuid}' (UUID: {uuid})"
+            ),
+        )
+    except Exception as e:
+        raise ValueError(format_error("Get user tool", e, {"uuid": uuid})) from e
 
 
 @mcp.tool(tags={"tools", "write", "extended"})

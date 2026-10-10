@@ -1,21 +1,32 @@
 import { z } from "zod";
 import type { components, GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
-import { httpError, GalaxyConnectionError } from "../errors";
+import { httpError, GalaxyConnectionError, GalaxyNotFoundError, GalaxyValidationError } from "../errors";
 import { pyFormatError } from "../python-failure";
 import { pyStr } from "../python-values";
+import { isEncodedId, isThisRecord, notAGalaxyId, notThatRecord } from "./encoded-id";
+import { validatePagination } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
 
 export type InvocationDetail = components["schemas"]["WorkflowInvocationElementView"];
 export type InvocationSummary = GetJson<"/api/invocations">[number];
+// What the index's sort_by query parameter is typed as (InvocationSortByEnum). The op takes a
+// plain string, as the Python tool does, and Galaxy refuses anything outside the enum itself.
+type InvocationSortBy = components["schemas"]["InvocationSortByEnum"];
 
 const DEFAULT_VIEW = "collection";
 const DEFAULT_STEP_DETAILS = false;
+const DEFAULT_OFFSET = 0;
+const DEFAULT_INCLUDE_TERMINAL = true;
+// Galaxy's own ceiling: /api/invocations declares limit le=100 and answers 400 above it.
+// server.py, MAX_PAGE_SIZE["get_invocations"] -- the same number, so the refusal reads the same.
+const MAX_LIMIT = 100;
 
-// Python spells every one of these `T | None = None` and treats the null as "not supplied", so
-// null is accepted here and means the same thing. The two parameters Python declares without a
-// null branch -- view and step_details -- reject it on both surfaces.
+// Python spells the id, the filters, the limit and the sort as `T | None = None` and treats the
+// null as "not supplied", so null is accepted here and means the same thing. The parameters
+// Python declares without a null branch -- view, step_details, offset and include_terminal --
+// reject it on both surfaces.
 const input = {
   invocationId: z
     .string()
@@ -28,9 +39,10 @@ const input = {
     .int()
     .nullish()
     .describe(
-      "List mode: most invocations to return. Left out, the parameter is not sent and Galaxy's own " +
-        "index default applies -- which is a page, not everything (26.1 returns 20). Pass a limit to " +
-        "know what you are getting.",
+      "List mode: most invocations to return, at most 100 -- Galaxy's invocation index serves no " +
+        "larger page, so page with offset to see more. Left out, the parameter is not sent and " +
+        "Galaxy's own index default applies -- which is a page, not everything (26.1 returns 20). " +
+        "Pass a limit to know what you are getting.",
     ),
   view: z
     .string()
@@ -42,6 +54,35 @@ const input = {
     .describe(
       "Include each step's jobs. Applies to one invocation by id, and in list mode only when view is 'element'",
     ),
+  offset: z
+    .number()
+    .int()
+    .default(DEFAULT_OFFSET)
+    .describe(
+      "List mode: how many invocations to skip before the page starts, for walking a listing longer " +
+        "than one page of limit",
+    ),
+  sortBy: z
+    .string()
+    .nullish()
+    .describe(
+      "List mode: order the listing by 'create_time' or 'update_time'. Left out, Galaxy's own order " +
+        "applies, which is newest first",
+    ),
+  sortDesc: z
+    .boolean()
+    .nullish()
+    .describe(
+      "List mode, with sortBy: true orders newest first and false oldest first. Left out, Galaxy's " +
+        "own direction applies",
+    ),
+  includeTerminal: z
+    .boolean()
+    .default(DEFAULT_INCLUDE_TERMINAL)
+    .describe(
+      "List mode: whether invocations that have finished -- scheduled, failed or cancelled -- are " +
+        "listed. false keeps only the ones still in flight",
+    ),
 };
 
 type In = {
@@ -51,13 +92,46 @@ type In = {
   limit?: number | null;
   view?: string;
   stepDetails?: boolean;
+  offset?: number;
+  sortBy?: string | null;
+  sortDesc?: boolean | null;
+  includeTerminal?: boolean;
 };
 
 /** One invocation when an id was given, the filtered listing when it was not. */
 export type GetInvocationsResult = InvocationDetail | InvocationSummary[];
 
+/**
+ * server.py, _refuse_error_body: a 200 whose body is Galaxy reporting a problem -- the
+ * err_msg shape -- is refused rather than read as the thing asked for. Worded here rather
+ * than through the op's failure contract, because it is not a failed request: it is a reply
+ * that succeeded and said no. Python builds it from an exception it made out of err_msg,
+ * which carries no status field, so the hint falls to the text search that exception text
+ * gets.
+ */
+function refuseErrorBody(data: unknown, status: number): void {
+  if (data && typeof data === "object" && "err_msg" in data) {
+    const body = data as { err_msg: unknown; err_code?: unknown };
+    throw new GalaxyConnectionError(
+      pyFormatError(
+        "Get workflow invocations",
+        pyStr(body.err_msg),
+        null,
+        { err_code: "err_code" in body ? body.err_code : undefined },
+        { statusIsKnown: false },
+      ),
+      status,
+    );
+  }
+}
+
 async function run(i: In, ctx: GalaxyContext): Promise<GetInvocationsResult> {
   if (i.invocationId) {
+    // Not an id, not a request: see encoded-id.ts for what a stray "." would turn into.
+    // A refusal of our own, worded whole, so no facts for the failure contract.
+    if (!isEncodedId(i.invocationId)) {
+      throw new GalaxyNotFoundError(notAGalaxyId("Invocation", i.invocationId, "get_invocations()"));
+    }
     // Galaxy answers a single invocation with every step's jobs list empty unless
     // step_details is set. Sent only when asked for, as the other server does, so the
     // default request is unchanged.
@@ -67,8 +141,36 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetInvocationsResult> {
         ...(i.stepDetails ? { query: { step_details: true } } : {}),
       },
     });
-    if (error || !data) throw httpError(response, error);
+    if (error || !data) {
+      const failed = httpError(response, error);
+      // An id Galaxy cannot decode is answered 400, not 404, and to a caller it is the same
+      // thing: there is no invocation by that name, and retrying will not make one. Reclassified
+      // here so the kind, and the CLI's exit code, say not-found either way; the reply's facts
+      // travel along, because the sentence is still worded from them.
+      if (response?.status === 400) {
+        const notFound = new GalaxyNotFoundError(failed.message);
+        notFound.http = failed.http;
+        throw notFound;
+      }
+      throw failed;
+    }
+    refuseErrorBody(data, response.status);
+    // The same check get_job_details makes: the reply has to be this invocation's record,
+    // not merely a 200 from somewhere under /api/invocations.
+    if (!isThisRecord(data, i.invocationId)) {
+      throw new GalaxyConnectionError(notThatRecord("invocation", i.invocationId), response.status);
+    }
     return data as InvocationDetail;
+  }
+
+  // server.py, get_invocations: the window is checked before anything is sent. Galaxy's
+  // index refuses limit > 100 with a 400 about validation; this refusal names the cap and
+  // the way past it. A negative offset is refused with or without a limit.
+  const offset = i.offset ?? DEFAULT_OFFSET;
+  if (i.limit != null) {
+    validatePagination(i.limit, offset, { maxLimit: MAX_LIMIT });
+  } else if (offset < 0) {
+    throw new GalaxyValidationError(`offset must be 0 or greater (got ${offset})`);
   }
 
   const { data, error, response } = await ctx.client.GET("/api/invocations", {
@@ -82,10 +184,15 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetInvocationsResult> {
         limit: i.limit ?? null,
         view: i.view ?? DEFAULT_VIEW,
         step_details: i.stepDetails ?? DEFAULT_STEP_DETAILS,
-        // Sent because the Python surface sends it: bioblend pins include_terminal=true on
-        // every listing, and leaving it to the index's own default would be one surface
-        // silently hiding finished invocations the other one shows.
-        include_terminal: true,
+        // Sent because the Python surface sends it: bioblend pins include_terminal on every
+        // listing (true unless told otherwise), and leaving it to the index's own default
+        // would be one surface silently hiding finished invocations the other one shows.
+        include_terminal: i.includeTerminal ?? DEFAULT_INCLUDE_TERMINAL,
+        // The rest only when asked for, as the other server sends them: a zero offset and an
+        // unset sort are left off, so the default listing is the request it always was.
+        offset: offset || null,
+        sort_by: (i.sortBy || null) as InvocationSortBy | null,
+        sort_desc: i.sortDesc ?? undefined,
       },
     },
   });
@@ -95,25 +202,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetInvocationsResult> {
     // A 200 whose body is not a list is Galaxy reporting a problem inside the response -- the
     // err_msg shape the other ops surface. Coercing it to [] would hand the caller a failure
     // dressed up as "Retrieved 0 workflow invocations".
-    //
-    // server.py, _refuse_error_body: this one is worded here rather than through the op's
-    // failure contract, because it is not a failed request -- it is a reply that succeeded
-    // and said no. Python builds it from an exception it made out of err_msg, which carries
-    // no status field, so the hint falls to the text search that exception text gets.
-    const said = data && typeof data === "object" && "err_msg" in data;
-    if (said) {
-      const body = data as { err_msg: unknown; err_code?: unknown };
-      throw new GalaxyConnectionError(
-        pyFormatError(
-          "Get workflow invocations",
-          pyStr(body.err_msg),
-          null,
-          { err_code: "err_code" in body ? body.err_code : undefined },
-          { statusIsKnown: false },
-        ),
-        response.status,
-      );
-    }
+    refuseErrorBody(data, response.status);
     throw new GalaxyConnectionError("the invocation index did not return a list", response.status);
   }
 
@@ -161,6 +250,8 @@ const withDefaults = (i: In): InputOf<typeof input> => ({
   ...i,
   view: i.view ?? DEFAULT_VIEW,
   stepDetails: i.stepDetails ?? DEFAULT_STEP_DETAILS,
+  offset: i.offset ?? DEFAULT_OFFSET,
+  includeTerminal: i.includeTerminal ?? DEFAULT_INCLUDE_TERMINAL,
 });
 
 export const getInvocations = (i: In, ctx: GalaxyContext) =>

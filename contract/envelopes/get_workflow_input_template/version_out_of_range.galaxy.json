@@ -1,0 +1,22 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example/",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/workflows/download/wf000001",
+      "query": {},
+      "status": 400,
+      "headers": {},
+      "bodyText": "{\"err_msg\": \"Version does not exist\", \"err_code\": 400008}"
+    },
+    {
+      "method": "GET",
+      "path": "/api/workflows/wf000001/download",
+      "query": {},
+      "status": 400,
+      "headers": {},
+      "bodyText": "{\"err_msg\": \"Version does not exist\", \"err_code\": 400008}"
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "$comment": "Generated snapshot of the Galaxy MCP tool surface -- do not edit by hand. Regenerate with `uv run python -m tests.surface_manifest`.",
   "source": "python/src/galaxy_mcp/server.py",
-  "toolCount": 46,
+  "toolCount": 49,
   "tools": [
     {
       "name": "cancel_workflow_invocation",
@@ -482,7 +482,7 @@
               }
             ],
             "default": null,
-            "description": "Maximum number of invocations to return. Leave it unset and none is\n   sent, so Galaxy applies its own default of 20 -- not \"no limit\". Raise\n   it to see more."
+            "description": "Maximum number of invocations to return, at most 100 -- Galaxy's\n   invocation index serves no larger page, so page with offset to see\n   more. Leave it unset and none is sent, so Galaxy applies its own\n   default of 20 -- not \"no limit\"."
           },
           "view": {
             "default": "collection",
@@ -493,6 +493,40 @@
             "default": false,
             "type": "boolean",
             "description": "Include details on individual workflow steps -- each step's\n         jobs. Applies to one invocation by id, and to a listing when\n         view is 'element' (default: False)"
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Number of invocations to skip before the page starts, for walking a\n    listing longer than one page of limit (default: 0)"
+          },
+          "sort_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Order the listing by 'create_time' or 'update_time'. Left unset,\n     Galaxy's own order applies, which is newest first (optional)"
+          },
+          "sort_desc": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "With sort_by, True orders newest first and False oldest first.\n       Left unset, Galaxy's own direction applies (optional)"
+          },
+          "include_terminal": {
+            "default": true,
+            "type": "boolean",
+            "description": "Whether invocations that have finished -- scheduled,\n              failed or cancelled -- are listed. False keeps only the\n              ones still in flight (default: True)"
           }
         },
         "type": "object"
@@ -557,8 +591,16 @@
         "additionalProperties": false,
         "properties": {
           "dataset_id": {
-            "type": "string",
-            "description": "Galaxy dataset ID - a hexadecimal hash string identifying the dataset\n       (a 16-character hex string)"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Galaxy dataset ID whose creating job to look up - a hexadecimal hash\n       string (a 16-character hex string). Give this or job_id, not both"
           },
           "history_id": {
             "anyOf": [
@@ -570,11 +612,47 @@
               }
             ],
             "default": null,
-            "description": "Galaxy history ID containing the dataset - optional for performance optimization\n       (a 16-character hex string)"
+            "description": "Galaxy history ID containing the dataset - optional for performance optimization\n       (a 16-character hex string); only used with dataset_id"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Galaxy job ID to look up directly (a 16-character hex string). Give this or\n   dataset_id, not both"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_job_logs",
+      "tags": [
+        "core",
+        "jobs",
+        "read"
+      ],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "description": "Galaxy job ID (a 16-character hex string), as run_tool, list_jobs or\n   get_job_details report it"
+          },
+          "log_bytes": {
+            "default": 4096,
+            "type": "integer",
+            "description": "Budget per log field in UTF-8 bytes (default 4096). 0 returns every log\n      uncut, however long; a negative value is refused"
           }
         },
         "required": [
-          "dataset_id"
+          "job_id"
         ],
         "type": "object"
       }
@@ -691,6 +769,18 @@
             "default": false,
             "type": "boolean",
             "description": "Set True to include detailed input/output parameter schemas.\n        Essential for understanding how to call run_tool()."
+          },
+          "tool_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Describe this installed version of the tool rather than the one\n        Galaxy picks for the id. Refused when Galaxy answers with a\n        different version, so the answer is never about another one."
           }
         },
         "required": [
@@ -806,6 +896,28 @@
       }
     },
     {
+      "name": "get_user_tool",
+      "tags": [
+        "extended",
+        "read",
+        "tools"
+      ],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "description": "The tool's UUID as list_user_tools() reports it (32 hex digits in\n8-4-4-4-12 groups). The bare 32-digit, braced and urn:uuid: spellings\nname the same tool and are accepted too."
+          }
+        },
+        "required": [
+          "uuid"
+        ],
+        "type": "object"
+      }
+    },
+    {
       "name": "get_workflow_details",
       "tags": [
         "extended",
@@ -867,6 +979,17 @@
           "verbose": {
             "default": false,
             "type": "boolean"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           }
         },
         "required": [
@@ -1005,6 +1128,89 @@
             "default": 0,
             "type": "integer",
             "description": "Skip this many histories (default 0). Pass pagination.next_offset\n    to walk to the following page."
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_jobs",
+      "tags": [
+        "extended",
+        "jobs",
+        "read"
+      ],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "history_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Only jobs in this history (an encoded history id). Leave it unset\n       for jobs from any history the user can see. The id of a history\n       that does not exist is not an error here: it answers with an empty\n       page."
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Only jobs in this state -- 'new', 'queued', 'running', 'ok', 'error',\n  'paused', 'deleted' and the rest of Galaxy's job states. A\n  comma-separated list matches any of them."
+          },
+          "date_range_min": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Only jobs updated at or after this time, as an ISO 8601 date or\n           datetime such as '2026-01-01' or '2026-01-01T12:00:00'."
+          },
+          "date_range_max": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Only jobs updated at or before this time, in the same format."
+          },
+          "order_by": {
+            "default": "update_time",
+            "type": "string",
+            "description": "Sort by 'update_time' (default) or 'create_time', newest first."
+          },
+          "view": {
+            "default": "collection",
+            "type": "string",
+            "description": "'collection' (default) returns one small summary per job -- id, state,\n tool_id, exit_code, create_time, update_time -- which is what a listing\n wants. 'admin_job_list' adds runner and handler detail and needs an\n admin key."
+          },
+          "limit": {
+            "default": 100,
+            "type": "integer",
+            "description": "Most jobs to return in one page (default 100). Galaxy puts no upper\n  cap on this, so this tool does not either; keep it to what fits the\n  output budget."
+          },
+          "offset": {
+            "default": 0,
+            "type": "integer",
+            "description": "Skip this many jobs (default 0). Page by raising it by limit until a\n   page comes back shorter than limit."
           }
         },
         "type": "object"

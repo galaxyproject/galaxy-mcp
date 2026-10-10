@@ -6,6 +6,115 @@ entry covers all three; where something only affects one surface, it says which.
 
 ## 0.3.1 (unreleased)
 
+### `get_job_details` by job id (#TBD)
+
+The op takes `jobId` as an alternative to `datasetId` -- exactly one of the two, refused as
+`validation` (exit 64) when neither or both arrive. The read is the plain job record on either
+path (state, exit code, tool id and version, params, inputs and outputs); the summary says so
+and points at `get_job_logs` for a job's stdout and stderr. A job id Galaxy answers 400 or 404
+to is reported as `not_found` (exit 66) with one sentence, because the agent holding the id is
+asking whether the run still exists and cannot act on which of the two it was. `datasetId` is
+no longer required, which by the CLI's own rule would make it `--dataset-id` only; it is kept
+as the positional it was as well, so `galaxy-cli get_job_details <id>` still runs and
+`--dataset-id <id>` is the same call (giving it both ways is a usage error, exit 64). The
+input shape is declared in the Python signature's order, `datasetId, historyId, jobId`, and
+`GetJobDetailsResult.dataset_id` is `null` when the job was asked for by id. Six golden cases
+pin it on both surfaces; every answer through a dataset is unchanged.
+### `get_job_logs` reads a job's stdout and stderr (#TBD)
+
+A new op on all three surfaces, and the other half of the question `get_job_details` answers:
+`getJobLogs({ jobId, logBytes })` sends one `GET /api/jobs/{job_id}?full=true` and returns
+only the six log fields the full record adds -- `tool_stdout`, `tool_stderr`, `job_stdout`,
+`job_stderr`, `stdout`, `stderr` -- as `JobLogs`, a partial record: the four `tool_*` and
+`job_*` fields are null until the job has written them and are then absent rather than empty,
+while `stdout` and `stderr` are the older combined form Galaxy always answers as a string, so
+a job that has not run reads as those two, empty. A log longer than `logBytes` (default 4096)
+keeps its first and last half, cut on line boundaries, with one line in the middle saying how
+many of how many bytes were omitted; `logEnds(text, budget)` is exported and is the Python
+server's `_log_ends` byte for byte, measured in UTF-8 bytes and never splitting a character.
+`logBytes: 0` returns every log uncut; a negative or non-integer budget is `validation`
+(exit 64) before anything is sent. The id goes through the same hex guard and the same
+answered-for-this-id check as `get_job_details`, so a malformed id or a 400/404 is `not_found`
+(exit 66) and a 200 that is not this job's record is `connection` (exit 69). On the CLI it is
+`galaxy-cli get_job_logs <jobId> [--log-bytes N]`. Ten golden cases pin it, and the multibyte
+one is replayed through `logEnds` directly so the two clamps are held to the same bytes.
+### A read by id answers for that id, or not at all (#TBD)
+
+`get_job_details` by `jobId` and `get_invocations` by `invocationId` refuse a value that is not
+hex before sending anything (`not_found`, exit 66), and refuse a 200 whose body is not a record
+carrying the id asked for (`connection`, exit 69). Galaxy's encoded ids are hex and it answers
+anything else with a 400 that both ops already reported as not found, so no answer changes;
+what changes is that a value such as `.` or `../histories`, which the fetch API folds into
+`/api/jobs/` or `/api/histories`, is never sent, and the listing those paths answer with can
+no longer come back as a job or an invocation. That is the check Loom's `verifyGalaxyRun`
+makes on its own, and with it the two ops are the existence check it can route through.
+`get_invocations` by id also refuses an `err_msg` body under a 200, the way the listing
+already did. Golden cases: `get_job_details/job_id_malformed` and `get_invocations/malformed_id`
+are now the pre-send refusal, and `answered_with_another_record` is new on both.
+### `list_jobs` pages Galaxy's job index
+
+A new op on both surfaces, wrapping `GET /api/jobs`: jobs narrowed to one history, one
+state and a window of update time, sorted by update or create time, in the small
+`collection` view by default, and paged by `limit` and `offset`. It is the read an agent
+reconciling its own record of a history needs -- the jobs updated since a time, in that
+history, a page at a time. Galaxy puts no upper cap on `limit` and reports no total, so
+the envelope carries a count and no pagination block, and a page shorter than `limit` is
+the last one. Galaxy filters the index by `history_id` without looking the history up, so
+the id of a history that does not exist is not a 404 but an empty page, the same answer as
+a history with no jobs; the description says so and points at `get_history_details` for a
+reconcile that has to tell the two apart. A history the key cannot read is a 403 (exit 77 on
+the CLI) and an id Galaxy cannot decode a 400 (exit 69), which both surfaces follow with a
+sentence saying it is a filter Galaxy could not read. Nine golden cases under
+`contract/envelopes/list_jobs` hold the two surfaces to the Python server's answer, the
+empty page for an unknown history, those two refusals and the refusal of `limit` 0 among them.
+### `get_invocations` pages, sorts and filters the listing (#TBD)
+
+The op could only ever see the newest page: Galaxy caps `/api/invocations` at 100 rows, and
+there was no way to ask for the next 100. It now takes `offset`, `sortBy` (`create_time` or
+`update_time`), `sortDesc` and `includeTerminal`, passed through to the index the way the
+Python tool passes them -- a zero offset and an unset sort are not sent, so the default
+request is unchanged. A `limit` above 100 is refused before anything is sent, with the same
+sentence the other windowed listings use, which names the cap and the offset to page with. On
+a lookup by id, a 400 (an id Galaxy cannot decode) is classified `not_found` alongside the
+404, so the CLI exits 66 for both. Six new golden cases: `second_page`,
+`sorted_by_create_time_ascending`, `in_flight_only`, `limit_above_galaxys_cap`, `unknown_id`
+and `malformed_id`.
+### `get_workflow_input_template` reads a stored version
+
+The op takes an optional `version`, counted the way `get_workflow_details` counts stored
+versions (0 is the oldest), and sends it on every read it makes -- the `style=run` model,
+the `.ga` export it falls back to and reads warnings from, and the show the guide is built
+on -- so the run form of a workflow pinned below its latest can be read without one
+version's slots meeting another's docs. Left out, no request changes. A version Galaxy does
+not have is Galaxy's own 400 (`version_out_of_range`, exit 69 on the CLI); a negative one is
+refused before anything is sent (`negative_version`, exit 64), because Galaxy indexes its
+versions with a plain list subscript and would quietly serve some other version for it. The
+`pinned_version_zero` golden case answers the pinned requests with a different workflow than
+the bare ones, so a surface that drops the version from any one read fails the replay.
+### `get_tool_details` describes a tool at a pinned version
+
+`toolVersion` (`--tool-version`, `tool_version` on the wire) goes to `GET /api/tools/{id}`
+as the query parameter Galaxy reads it from, which is still the classic controller the
+26.0 bindings do not type, so it rides the same untyped call as before. Galaxy answers a
+version it lacks with its newest installed one and a 200, so the op refuses that reply
+as not found -- the Python server's own sentence, exit 66 on the CLI -- rather than hand
+back another version's parameters as the pinned one. Three golden cases cover a pinned
+version, one with `ioDetails`, and the refusal; a fourth pins Galaxy's 404 for an id it
+has at no version, with the version in the context.
+### `get_user_tool` reads one user-defined tool by uuid
+
+A new read op on all three surfaces, mirroring the Python tool of the same name: one `GET
+/api/unprivileged_tools/{uuid}` through the typed client, answering the record with its full
+representation. Until now a caller holding a uuid from `list_user_tools` or `create_user_tool`
+had to page the whole list to read one definition back. A 404 is `not_found` (exit 66 on the
+CLI), and so is a value that is not a uuid -- that one is refused before any request goes out,
+with the same sentence the Python server raises, because Galaxy 26.0+ answers it with a 400
+"Invalid UUID format" (older Galaxies with a 500 from the database driver) and neither would
+read as not found. The check accepts what Galaxy's own `uuid.UUID()` does, so the bare
+32-digit, braced and `urn:uuid:` spellings find the tool as they already do for
+`delete_user_tool` and `run_user_tool`. Four golden cases: `found`, `found_without_hyphens`,
+`not_found`, `malformed_uuid`.
+
 ### `get_invocations` sends `step_details` for one invocation (#152)
 
 Given an `invocationId`, the op ignored `stepDetails` and Galaxy answered with every step's

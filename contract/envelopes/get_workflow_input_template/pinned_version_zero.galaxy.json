@@ -1,0 +1,229 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example/",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/workflows/wf000001/download",
+      "query": {
+        "style": "run",
+        "version": "0"
+      },
+      "status": 200,
+      "headers": {},
+      "body": {
+        "id": "wf000001",
+        "name": "Reads QC",
+        "has_upgrade_messages": false,
+        "step_version_changes": [],
+        "steps": {
+          "0": {
+            "step_type": "data_input",
+            "step_index": 0,
+            "step_label": "Raw reads",
+            "uuid": "11111111-1111-1111-1111-111111111111",
+            "inputs": [
+              {
+                "extensions": [
+                  "fastqsanger"
+                ],
+                "acceptable_extensions": [
+                  "fastqsanger",
+                  "fastqsanger.gz"
+                ],
+                "optional": false
+              }
+            ]
+          },
+          "1": {
+            "step_type": "data_input",
+            "step_index": 1,
+            "step_label": "Reference FASTA",
+            "uuid": "55555555-5555-5555-5555-555555555555",
+            "inputs": [
+              {
+                "extensions": [
+                  "fasta"
+                ],
+                "optional": false
+              }
+            ]
+          }
+        },
+        "version": 0
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/workflows/wf000001/download",
+      "query": {
+        "version": "0"
+      },
+      "status": 200,
+      "headers": {},
+      "body": {
+        "a_galaxy_workflow": "true",
+        "name": "Reads QC",
+        "steps": {
+          "0": {
+            "type": "data_input",
+            "label": "Raw reads"
+          },
+          "1": {
+            "type": "data_input",
+            "label": "Reference FASTA"
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/workflows/download/wf000001",
+      "query": {
+        "version": "0"
+      },
+      "status": 200,
+      "headers": {},
+      "body": {
+        "a_galaxy_workflow": "true",
+        "name": "Reads QC",
+        "steps": {
+          "0": {
+            "type": "data_input",
+            "label": "Raw reads"
+          },
+          "1": {
+            "type": "data_input",
+            "label": "Reference FASTA"
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/workflows/wf000001",
+      "query": {
+        "version": "0"
+      },
+      "status": 200,
+      "headers": {},
+      "body": {
+        "id": "wf000001",
+        "name": "Reads QC",
+        "version": 0,
+        "annotation": "first cut of the reads QC",
+        "readme": "# Reads QC\n\nRuns quality control over reads and reports on them.\n",
+        "help": "",
+        "source_metadata": {
+          "trs_tool_id": "#workflow/github.com/iwc-workflows/reads-qc/main",
+          "trs_url": "https://dockstore.org/api/ga4gh/trs/v2/tools/reads-qc"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/workflows/wf000001/download",
+      "query": {
+        "style": "run"
+      },
+      "status": 200,
+      "headers": {},
+      "body": {
+        "id": "wf000001",
+        "name": "Reads QC",
+        "has_upgrade_messages": false,
+        "step_version_changes": [],
+        "steps": {
+          "0": {
+            "step_type": "data_input",
+            "step_index": 0,
+            "step_label": "Input FASTQ",
+            "uuid": "11111111-1111-1111-1111-111111111111",
+            "inputs": [
+              {
+                "extensions": [
+                  "fastqsanger"
+                ],
+                "acceptable_extensions": [
+                  "fastqsanger",
+                  "fastqsanger.gz"
+                ],
+                "optional": false
+              }
+            ]
+          },
+          "1": {
+            "step_type": "tool",
+            "step_index": 1,
+            "inputs": []
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/workflows/wf000001/download",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "a_galaxy_workflow": "true",
+        "name": "Reads QC",
+        "steps": {
+          "0": {
+            "type": "data_input",
+            "label": "Input FASTQ"
+          },
+          "9": {
+            "type": "tool",
+            "tool_id": "fastqc",
+            "label": null,
+            "tool_state": "{\"adapters\": {\"__class__\": \"RuntimeValue\"}}"
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/workflows/download/wf000001",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "a_galaxy_workflow": "true",
+        "name": "Reads QC",
+        "steps": {
+          "0": {
+            "type": "data_input",
+            "label": "Input FASTQ"
+          },
+          "9": {
+            "type": "tool",
+            "tool_id": "fastqc",
+            "label": null,
+            "tool_state": "{\"adapters\": {\"__class__\": \"RuntimeValue\"}}"
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/workflows/wf000001",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "id": "wf000001",
+        "name": "Reads QC",
+        "version": 3,
+        "annotation": "quality control over sequencing reads",
+        "readme": "# Reads QC\n\nRuns quality control over reads and reports on them.\n",
+        "help": "",
+        "source_metadata": {
+          "trs_tool_id": "#workflow/github.com/iwc-workflows/reads-qc/main",
+          "trs_url": "https://dockstore.org/api/ga4gh/trs/v2/tools/reads-qc"
+        }
+      }
+    }
+  ]
+}

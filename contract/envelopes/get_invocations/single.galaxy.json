@@ -4,12 +4,12 @@
   "routes": [
     {
       "method": "GET",
-      "path": "/api/invocations/inv0000",
+      "path": "/api/invocations/1e1d0c0b0a090807",
       "query": {},
       "status": 200,
       "headers": {},
       "body": {
-        "id": "inv0000",
+        "id": "1e1d0c0b0a090807",
         "state": "scheduled",
         "workflow_id": "w0000",
         "history_id": "h0000",

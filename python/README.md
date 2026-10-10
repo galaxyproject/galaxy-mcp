@@ -258,7 +258,9 @@ editable markdown, which is what it is for.
 
 - `get_dataset_details`: Dataset metadata, optionally with a short content preview
 - `get_collection_details`: A dataset collection and its elements
-- `get_job_details`: The job that produced a dataset, with its state and parameters
+- `get_job_details`: A job's record by its `job_id`, or the job that produced a `dataset_id` (state, exit code, tool, params, inputs and outputs; no logs)
+- `get_job_logs`: A job's stdout and stderr by `job_id`, each cut to `log_bytes` (default 4096) on line boundaries with a line saying how much was omitted; `0` returns them uncut
+- `list_jobs`: A page of jobs, filtered by history, state and update time, newest first (an unknown history is an empty page, not a 404)
 - `upload_file`: Upload a local file into a history
 - `upload_file_from_url`: Have Galaxy fetch a file from a URL into a history
 - `download_dataset`: Download a dataset to a `file_path` on disk
@@ -267,7 +269,7 @@ editable markdown, which is what it is for.
 
 - `search_tools_by_name`: Substring search over tool name, id, and description; 25 per page
 - `search_tools_by_keywords`: Match keywords against tool names, descriptions, and the file extensions a tool accepts as input; 50 per page
-- `get_tool_details`: A tool's metadata, optionally including its full input schema
+- `get_tool_details`: A tool's metadata, optionally including its full input schema; pass `tool_version` to describe one installed version, refused if Galaxy answers with another
 - `get_tool_panel`: Browse the tool panel one level at a time -- the sections and their sizes, or one section's tools with `section_id`. The whole panel is megabytes on a production server, so it is never returned whole; 100 entries per page
 - `get_tool_citations`: How to cite a tool
 - `get_tool_run_examples`: The tool's own XML test definitions, as written -- good for seeing how inputs are shaped, but some expect failure and their input files are test fixtures
@@ -283,6 +285,7 @@ submitting the run, so they need their own run tool even though the run itself g
 the same Galaxy tools API as a catalog tool.
 
 - `list_user_tools`: The current user's user-defined tools; 25 per page, because each entry carries the tool's full representation
+- `get_user_tool`: One tool by UUID, with its full representation, without paging the list for it
 - `create_user_tool`: Create one from a tool representation
 - `delete_user_tool`: Deactivate one, so it stops loading into the toolbox
 - `run_user_tool`: Run one in a history
@@ -291,9 +294,9 @@ the same Galaxy tools API as a catalog tool.
 
 - `list_workflows`: Stored workflows, optionally filtered by name or published state; 50 per page
 - `get_workflow_details`: One workflow's steps and inputs, at a given version
-- `get_workflow_input_template`: A ready-to-fill input template plus a run guide; call this before `invoke_workflow`
+- `get_workflow_input_template`: A ready-to-fill input template plus a run guide, at a given version; call this before `invoke_workflow`
 - `invoke_workflow`: Run a workflow, validating the inputs against its steps first
-- `get_invocations`: Invocations, by invocation, workflow, or history
+- `get_invocations`: Invocations, by invocation, workflow, or history; pages with `limit` (at most 100, Galaxy's cap) and `offset`, sorts by `create_time` or `update_time`, and `include_terminal=False` keeps only the ones still running
 - `cancel_workflow_invocation`: Cancel a running invocation
 
 ### IWC catalog

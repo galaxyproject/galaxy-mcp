@@ -1,0 +1,14 @@
+{
+  "data": {
+    "tool_stdout": "ünïcödé log line 0 ok\n[... 1018 of 1069 bytes omitted ...]\nünïcödé log line 39 ok",
+    "tool_stderr": "€€€€€€€€€€\n[... 60 of 120 bytes omitted ...]\n€€€€€€€€€€",
+    "job_stdout": "🎉🎉🎉🎉🎉🎉🎉🎉\n[... 136 of 200 bytes omitted ...]\n🎉🎉🎉🎉🎉🎉🎉🎉",
+    "job_stderr": "",
+    "stdout": "ünïcödé log line 0 ok\n[... 1213 of 1270 bytes omitted ...]\n🎉🎉🎉🎉🎉🎉🎉🎉",
+    "stderr": "€€€€€€€€€€\n[... 60 of 120 bytes omitted ...]\n€€€€€€€€€€"
+  },
+  "success": true,
+  "message": "Retrieved job logs for job '0123456789abcdef'",
+  "count": null,
+  "pagination": null
+}

@@ -1,0 +1,32 @@
+{
+  "data": [
+    {
+      "id": "inv0000",
+      "state": "scheduled",
+      "workflow_id": "w0000",
+      "history_id": "h0000",
+      "create_time": "2026-01-01T00:00:00",
+      "update_time": "2026-01-01T00:10:00"
+    },
+    {
+      "id": "inv0001",
+      "state": "scheduled",
+      "workflow_id": "w0000",
+      "history_id": "h0000",
+      "create_time": "2026-01-01T00:00:00",
+      "update_time": "2026-01-01T00:10:00"
+    },
+    {
+      "id": "inv0002",
+      "state": "scheduled",
+      "workflow_id": "w0000",
+      "history_id": "h0000",
+      "create_time": "2026-01-01T00:00:00",
+      "update_time": "2026-01-01T00:10:00"
+    }
+  ],
+  "success": true,
+  "message": "Retrieved 3 workflow invocations",
+  "count": 3,
+  "pagination": null
+}

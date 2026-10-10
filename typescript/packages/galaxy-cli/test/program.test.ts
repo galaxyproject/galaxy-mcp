@@ -46,8 +46,8 @@ function invocationsContext(asked: string[]) {
         const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         asked.push(url);
         const body = url.includes("/api/invocations/")
-          ? { id: "inv1", state: "scheduled" }
-          : [{ id: "inv1", state: "scheduled" }];
+          ? { id: "1e1d0c0b0a090807", state: "scheduled" }
+          : [{ id: "1e1d0c0b0a090807", state: "scheduled" }];
         return new Response(JSON.stringify(body), {
           status: 200,
           headers: { "content-type": "application/json" },
@@ -118,8 +118,47 @@ describe("buildProgram", () => {
     // It used to be a required positional, so `galaxy-cli get_invocations abc123` worked. The
     // parity change made it optional, which moves it to --invocation-id.
     const asked: string[] = [];
-    const run = await runCli(["get_invocations", "--invocation-id", "inv1", "--format", "json"], invocationsContext(asked));
-    expect(asked).toEqual([expect.stringContaining("/api/invocations/inv1")]);
+    const run = await runCli(["get_invocations", "--invocation-id", "1e1d0c0b0a090807", "--format", "json"], invocationsContext(asked));
+    expect(asked).toEqual([expect.stringContaining("/api/invocations/1e1d0c0b0a090807")]);
+    expect(run.stdout).toContain('"success": true');
+    expect(run.exitCode).toBe(0);
+  });
+
+  /**
+   * The same move for get_job_details' dataset id, except that this one is kept: 0.3.1 is a
+   * patch release, and `galaxy-cli get_job_details <id>` is what every script written against
+   * 0.3.0 runs. So the id is a positional as before and `--dataset-id` like every other
+   * optional, and giving it both ways is a usage error rather than one quietly winning.
+   */
+  it("still takes get_job_details' dataset id as a positional, and as --dataset-id", async () => {
+    const job = { creating_job: "0123456789abcdef", id: "0123456789abcdef" };
+    for (const argv of [["get_job_details", "d1"], ["get_job_details", "--dataset-id", "d1"]]) {
+      const asked: string[] = [];
+      const run = await runCli([...argv, "--format", "json"], recordingContext(asked, job));
+      expect(asking(asked, "/api/datasets/d1"), argv.join(" ")).toBeDefined();
+      expect(run.stdout, argv.join(" ")).toContain('"success": true');
+      expect(run.exitCode, argv.join(" ")).toBe(0);
+    }
+  });
+
+  it("refuses get_job_details' dataset id given both ways", async () => {
+    const asked: string[] = [];
+    const run = await runCli(
+      ["get_job_details", "d1", "--dataset-id", "d2", "--format", "json"],
+      recordingContext(asked),
+    );
+    expect(run.exitCode).toBe(64);
+    expect(run.stderr).toContain("datasetId was given twice");
+    expect(asked).toEqual([]);
+  });
+
+  it("takes get_job_details' job id as a flag, with the positional left out", async () => {
+    const asked: string[] = [];
+    const run = await runCli(
+      ["get_job_details", "--job-id", "0123456789abcdef", "--format", "json"],
+      recordingContext(asked, { id: "0123456789abcdef", state: "ok" }),
+    );
+    expect(asked).toEqual([expect.stringContaining("/api/jobs/0123456789abcdef")]);
     expect(run.stdout).toContain('"success": true');
     expect(run.exitCode).toBe(0);
   });
@@ -318,10 +357,15 @@ describe("the names the CLI gives an op's inputs", () => {
     }
   });
 
+  // The optional fields kept as a positional from when they were required -- an agreement
+  // with `keptPositionals`, written out so that adding one is a deliberate change here too.
+  const KEPT: Record<string, string[]> = { get_job_details: ["datasetId"] };
+
   it("names every positional after the op's own key", () => {
     for (const op of allOperations) {
+      const kept = KEPT[op.name] ?? [];
       const expected = Object.entries(op.input)
-        .filter(([, schema]) => classifyField(schema as ZodTypeAny) === "positional")
+        .filter(([key, schema]) => classifyField(schema as ZodTypeAny) === "positional" || kept.includes(key))
         .map(([key]) => key);
       expect(
         (commands.get(op.name)?.registeredArguments ?? []).map((a) => a.name()),
@@ -385,6 +429,18 @@ describe("the names the CLI gives an op's inputs", () => {
     expect(help("list_pages")).toContain("Pass --history-id to list only");
     expect(help("create_page")).toContain("With --history-id it is a notebook");
     expect(help("invoke_workflow")).toContain("ignored if --history-id is provided");
+  });
+
+  it("never respells another op's call into a flag this op does not take", () => {
+    // spellParamNames respells every key of THIS op's input wherever it appears, so a
+    // summary that wrote `get_job_logs(jobId)` would read `get_job_logs(--job-id)` here,
+    // and `galaxy-cli get_job_logs --job-id <id>` is a usage error (jobId is its positional).
+    // A pointer at another op names it bare, with no parameter token to respell.
+    const help = (name: string) => commands.get(name)!.helpInformation().replace(/\s+/g, " ");
+    expect(help("get_job_details")).toContain("one get_job_logs call away");
+    for (const op of allOperations) {
+      expect(help(op.name), op.name).not.toMatch(/\w\(--/);
+    }
   });
 
   it("spells a few of them out, so the whole set cannot drift together", () => {

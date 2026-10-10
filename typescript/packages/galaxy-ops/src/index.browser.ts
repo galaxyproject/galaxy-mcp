@@ -80,6 +80,9 @@ export { getToolCitationsOp, getToolCitations, type ToolCitationsResult } from "
 export { getToolRunExamplesOp, getToolRunExamples, type ToolRunExamples } from "./operations/get-tool-run-examples";
 export { searchToolsByKeywordsOp, searchToolsByKeywords, type ToolKeywordMatch } from "./operations/search-tools-by-keywords";
 export { getJobDetailsOp, getJobDetails, type GetJobDetailsResult, type JobDetail } from "./operations/get-job-details";
+export { getJobLogsOp, getJobLogs, JOB_LOG_FIELDS, type JobLogs } from "./operations/get-job-logs";
+export { logEnds } from "./operations/log-ends";
+export { listJobsOp, listJobs, type JobSummary } from "./operations/list-jobs";
 export { updateHistoryOp, updateHistory, type UpdatedHistory } from "./operations/update-history";
 export { cancelWorkflowInvocationOp, cancelWorkflowInvocation, type CancelledInvocation } from "./operations/cancel-workflow-invocation";
 export { getIwcWorkflowsOp, getIwcWorkflows } from "./operations/get-iwc-workflows";
@@ -88,6 +91,7 @@ export { searchIwcWorkflowsOp, searchIwcWorkflows } from "./operations/search-iw
 export { recommendIwcWorkflowsOp, recommendIwcWorkflows, type Recommendations } from "./operations/recommend-iwc-workflows";
 export { importWorkflowFromIwcOp, importWorkflowFromIwc, type ImportedWorkflow } from "./operations/import-workflow-from-iwc";
 export { listUserToolsOp, listUserTools, type UserTool } from "./operations/list-user-tools";
+export { getUserToolOp, getUserTool, type UserToolRecord } from "./operations/get-user-tool";
 export { createUserToolOp, createUserTool, type CreatedUserTool } from "./operations/create-user-tool";
 export { deleteUserToolOp, deleteUserTool, type DeletedUserTool } from "./operations/delete-user-tool";
 export { runUserToolOp, runUserTool, type UserToolRun } from "./operations/run-user-tool";

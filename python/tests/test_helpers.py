@@ -27,6 +27,7 @@ from galaxy_mcp.server import (
     get_iwc_workflow_details,
     get_iwc_workflows,
     get_job_details,
+    get_job_logs,
     get_page,
     get_page_revision,
     get_server_info,
@@ -36,11 +37,13 @@ from galaxy_mcp.server import (
     get_tool_panel,
     get_tool_run_examples,
     get_user,
+    get_user_tool,
     get_workflow_details,
     get_workflow_input_template,
     import_workflow_from_iwc,
     invoke_workflow,
     list_history_ids,
+    list_jobs,
     list_page_revisions,
     list_pages,
     list_user_tools,
@@ -82,6 +85,7 @@ get_invocations_fn = get_function(get_invocations)
 get_iwc_workflow_details_fn = get_function(get_iwc_workflow_details)
 get_iwc_workflows_fn = get_function(get_iwc_workflows)
 get_job_details_fn = get_function(get_job_details)
+get_job_logs_fn = get_function(get_job_logs)
 get_server_info_fn = get_function(get_server_info)
 get_tool_citations_fn = get_function(get_tool_citations)
 get_tool_details_fn = get_function(get_tool_details)
@@ -94,6 +98,7 @@ get_workflow_input_template_fn = get_function(get_workflow_input_template)
 import_workflow_from_iwc_fn = get_function(import_workflow_from_iwc)
 invoke_workflow_fn = get_function(invoke_workflow)
 list_history_ids_fn = get_function(list_history_ids)
+list_jobs_fn = get_function(list_jobs)
 list_page_revisions_fn = get_function(list_page_revisions)
 list_pages_fn = get_function(list_pages)
 list_workflows_fn = get_function(list_workflows)
@@ -106,6 +111,7 @@ run_tool_fn = get_function(run_tool)
 create_user_tool_fn = get_function(create_user_tool)
 recommend_biocontainer_fn = get_function(recommend_biocontainer)
 delete_user_tool_fn = get_function(delete_user_tool)
+get_user_tool_fn = get_function(get_user_tool)
 list_user_tools_fn = get_function(list_user_tools)
 run_user_tool_fn = get_function(run_user_tool)
 search_iwc_workflows_fn = get_function(search_iwc_workflows)
@@ -133,6 +139,7 @@ __all__ = [
     "get_iwc_workflow_details_fn",
     "get_iwc_workflows_fn",
     "get_job_details_fn",
+    "get_job_logs_fn",
     "get_server_info_fn",
     "get_tool_citations_fn",
     "get_tool_details_fn",
@@ -145,6 +152,7 @@ __all__ = [
     "import_workflow_from_iwc_fn",
     "invoke_workflow_fn",
     "list_history_ids_fn",
+    "list_jobs_fn",
     "list_page_revisions_fn",
     "list_pages_fn",
     "list_workflows_fn",
@@ -157,6 +165,7 @@ __all__ = [
     "create_user_tool_fn",
     "recommend_biocontainer_fn",
     "delete_user_tool_fn",
+    "get_user_tool_fn",
     "list_user_tools_fn",
     "run_user_tool_fn",
     "search_iwc_workflows_fn",

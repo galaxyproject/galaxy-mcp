@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "python/src/galaxy_mcp/server.py",
-  "caseCount": 224,
-  "failureCaseCount": 65,
+  "caseCount": 267,
+  "failureCaseCount": 88,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -836,7 +836,7 @@
       "note": "one invocation by id: no count and no pagination",
       "outcome": "success",
       "input": {
-        "invocation_id": "inv0000"
+        "invocation_id": "1e1d0c0b0a090807"
       },
       "envelope": "get_invocations/single.json",
       "replies": "get_invocations/single.galaxy.json"
@@ -847,7 +847,7 @@
       "note": "one invocation with its steps' jobs: the route answers only when step_details is sent",
       "outcome": "success",
       "input": {
-        "invocation_id": "inv0000",
+        "invocation_id": "1e1d0c0b0a090807",
         "step_details": true
       },
       "envelope": "get_invocations/single_step_details.json",
@@ -863,6 +863,118 @@
       },
       "envelope": "get_invocations/empty.json",
       "replies": "get_invocations/empty.galaxy.json"
+    },
+    {
+      "tool": "get_invocations",
+      "case": "second_page",
+      "note": "the page after the first: the route answers only when offset is sent",
+      "outcome": "success",
+      "input": {
+        "limit": 5,
+        "offset": 5
+      },
+      "envelope": "get_invocations/second_page.json",
+      "replies": "get_invocations/second_page.galaxy.json"
+    },
+    {
+      "tool": "get_invocations",
+      "case": "sorted_by_create_time_ascending",
+      "note": "oldest first: the route answers only when sort_by is sent (sort_desc goes with it)",
+      "outcome": "success",
+      "input": {
+        "limit": 5,
+        "sort_by": "create_time",
+        "sort_desc": false
+      },
+      "envelope": "get_invocations/sorted_by_create_time_ascending.json",
+      "replies": "get_invocations/sorted_by_create_time_ascending.galaxy.json"
+    },
+    {
+      "tool": "get_invocations",
+      "case": "in_flight_only",
+      "note": "include_terminal false: the finished ones are left out, the envelope is a plain list",
+      "outcome": "success",
+      "input": {
+        "limit": 5,
+        "include_terminal": false
+      },
+      "envelope": "get_invocations/in_flight_only.json",
+      "replies": "get_invocations/in_flight_only.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "in_a_history",
+      "note": "a page of one history's jobs",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0000",
+        "limit": 5
+      },
+      "envelope": "list_jobs/in_a_history.json",
+      "replies": "list_jobs/in_a_history.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "since_a_time",
+      "note": "the jobs updated since a time, which is what a reconcile asks for",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0000",
+        "date_range_min": "2026-01-01T00:01:00",
+        "limit": 5
+      },
+      "envelope": "list_jobs/since_a_time.json",
+      "replies": "list_jobs/since_a_time.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "in_a_state",
+      "note": "one history's jobs in one state",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0000",
+        "state": "error",
+        "limit": 5
+      },
+      "envelope": "list_jobs/in_a_state.json",
+      "replies": "list_jobs/in_a_state.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "empty_history",
+      "note": "a history with no jobs",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0000",
+        "limit": 5
+      },
+      "envelope": "list_jobs/empty_history.json",
+      "replies": "list_jobs/empty_history.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "unknown_history",
+      "note": "a well-formed id of a history that does not exist: an empty page, not a 404",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0404",
+        "limit": 5
+      },
+      "envelope": "list_jobs/unknown_history.json",
+      "replies": "list_jobs/empty_history.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "next_page",
+      "note": "the page after the first, by offset; a short page is the last one",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0000",
+        "limit": 5,
+        "offset": 5
+      },
+      "envelope": "list_jobs/next_page.json",
+      "replies": "list_jobs/since_a_time.galaxy.json"
     },
     {
       "tool": "list_pages",
@@ -1104,6 +1216,18 @@
       "replies": "get_workflow_input_template/steps_out_of_order.galaxy.json"
     },
     {
+      "tool": "get_workflow_input_template",
+      "case": "pinned_version_zero",
+      "note": "the oldest stored version, which has a slot the latest no longer asks for",
+      "outcome": "success",
+      "input": {
+        "workflow_id": "wf000001",
+        "version": 0
+      },
+      "envelope": "get_workflow_input_template/pinned_version_zero.json",
+      "replies": "get_workflow_input_template/pinned_version_zero.galaxy.json"
+    },
+    {
       "tool": "get_tool_citations",
       "case": "some",
       "note": "citations counted",
@@ -1293,6 +1417,31 @@
       "replies": "get_tool_details/with_io_details.galaxy.json"
     },
     {
+      "tool": "get_tool_details",
+      "case": "pinned_version",
+      "note": "tool_version names an installed version, and the record that comes back is it",
+      "outcome": "success",
+      "input": {
+        "tool_id": "Cut1",
+        "tool_version": "1.0.2"
+      },
+      "envelope": "get_tool_details/pinned_version.json",
+      "replies": "get_tool_details/pinned_version.galaxy.json"
+    },
+    {
+      "tool": "get_tool_details",
+      "case": "pinned_version_with_io_details",
+      "note": "io_details=True and tool_version together: that version's parameter list",
+      "outcome": "success",
+      "input": {
+        "tool_id": "fastqc",
+        "io_details": true,
+        "tool_version": "0.73+galaxy0"
+      },
+      "envelope": "get_tool_details/pinned_version_with_io_details.json",
+      "replies": "get_tool_details/pinned_version_with_io_details.galaxy.json"
+    },
+    {
       "tool": "get_tool_input_template",
       "case": "every_nesting",
       "note": "a data param, a repeat, a conditional, a section and a select in one schema",
@@ -1382,6 +1531,74 @@
       },
       "envelope": "get_job_details/provenance_without_a_job_id.json",
       "replies": "get_job_details/provenance_without_a_job_id.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "by_job_id",
+      "note": "the job asked for by its own id: no lookup, and no dataset to name in the answer",
+      "outcome": "success",
+      "input": {
+        "job_id": "0123456789abcdef"
+      },
+      "envelope": "get_job_details/by_job_id.json",
+      "replies": "get_job_details/by_job_id.galaxy.json"
+    },
+    {
+      "tool": "get_job_logs",
+      "case": "short_logs_untouched",
+      "note": "logs within the budget come back as sent, all six fields of a finished job: the empty strings Galaxy sent are kept, and stdout and stderr are the combined form the model joins from the tool and job pairs",
+      "outcome": "success",
+      "input": {
+        "job_id": "0123456789abcdef"
+      },
+      "envelope": "get_job_logs/short_logs_untouched.json",
+      "replies": "get_job_logs/short_logs_untouched.galaxy.json"
+    },
+    {
+      "tool": "get_job_logs",
+      "case": "long_log_cut",
+      "note": "a log over the default budget keeps both ends on line boundaries, with a line in the middle saying how much was left out",
+      "outcome": "success",
+      "input": {
+        "job_id": "0123456789abcdef"
+      },
+      "envelope": "get_job_logs/long_log_cut.json",
+      "replies": "get_job_logs/long_log_cut.galaxy.json"
+    },
+    {
+      "tool": "get_job_logs",
+      "case": "log_bytes_zero_uncut",
+      "note": "a budget of 0 is the caller asking for the whole log, however long",
+      "outcome": "success",
+      "input": {
+        "job_id": "0123456789abcdef",
+        "log_bytes": 0
+      },
+      "envelope": "get_job_logs/log_bytes_zero_uncut.json",
+      "replies": "get_job_logs/long_log_cut.galaxy.json"
+    },
+    {
+      "tool": "get_job_logs",
+      "case": "multibyte_text_at_the_cut",
+      "note": "the budget is in bytes and the cut never splits a character: lines of 2-byte text, and unbroken 3-byte and 4-byte text where both halves land mid-character",
+      "outcome": "success",
+      "input": {
+        "job_id": "0123456789abcdef",
+        "log_bytes": 64
+      },
+      "envelope": "get_job_logs/multibyte_text_at_the_cut.json",
+      "replies": "get_job_logs/multibyte_text_at_the_cut.galaxy.json"
+    },
+    {
+      "tool": "get_job_logs",
+      "case": "not_run_yet",
+      "note": "a job that has not run: the tool_* and job_* fields are null or missing and left out, while stdout and stderr are the empty strings Galaxy always answers",
+      "outcome": "success",
+      "input": {
+        "job_id": "0123456789abcdef"
+      },
+      "envelope": "get_job_logs/not_run_yet.json",
+      "replies": "get_job_logs/not_run_yet.galaxy.json"
     },
     {
       "tool": "create_history",
@@ -1811,6 +2028,28 @@
       "replies": "create_user_tool/name_stated_as_null.galaxy.json"
     },
     {
+      "tool": "get_user_tool",
+      "case": "found",
+      "note": "one tool read back by uuid, the record create_user_tool answered with",
+      "outcome": "success",
+      "input": {
+        "uuid": "61d15277-a911-45ef-aa66-5385146578cc"
+      },
+      "envelope": "get_user_tool/found.json",
+      "replies": "get_user_tool/found.galaxy.json"
+    },
+    {
+      "tool": "get_user_tool",
+      "case": "found_without_hyphens",
+      "note": "the same tool by its bare 32-digit uuid, sent through as given",
+      "outcome": "success",
+      "input": {
+        "uuid": "61d15277a91145efaa665385146578cc"
+      },
+      "envelope": "get_user_tool/found_without_hyphens.json",
+      "replies": "get_user_tool/found_without_hyphens.galaxy.json"
+    },
+    {
       "tool": "delete_user_tool",
       "case": "deactivated",
       "note": "a soft delete, where the answer is built here rather than read from Galaxy",
@@ -2036,6 +2275,18 @@
       "replies": "get_tool_details/unauthorized.galaxy.json"
     },
     {
+      "tool": "get_tool_details",
+      "case": "unknown_tool_at_a_version",
+      "note": "Galaxy's own 404 for an id it has at no version, with the version in the context",
+      "outcome": "failure",
+      "input": {
+        "tool_id": "nope",
+        "tool_version": "1.0.0"
+      },
+      "envelope": "get_tool_details/unknown_tool_at_a_version.json",
+      "replies": "get_tool_details/unknown_tool_at_a_version.galaxy.json"
+    },
+    {
       "tool": "get_history_contents",
       "case": "permission_denied",
       "note": "a 403, whose hint is about the account",
@@ -2152,6 +2403,17 @@
       "replies": "delete_user_tool/not_found_with_an_empty_body.galaxy.json"
     },
     {
+      "tool": "get_user_tool",
+      "case": "not_found",
+      "note": "a well-formed uuid no tool of this user's carries",
+      "outcome": "failure",
+      "input": {
+        "uuid": "61d15277-a911-45ef-aa66-538514657404"
+      },
+      "envelope": "get_user_tool/not_found.json",
+      "replies": "get_user_tool/not_found.galaxy.json"
+    },
+    {
       "tool": "run_user_tool",
       "case": "lookup_refused",
       "note": "the uuid lookup refused, before anything is submitted",
@@ -2163,6 +2425,39 @@
       },
       "envelope": "run_user_tool/lookup_refused.json",
       "replies": "run_user_tool/lookup_refused.galaxy.json"
+    },
+    {
+      "tool": "get_invocations",
+      "case": "unknown_id",
+      "note": "a lookup by an id Galaxy has no invocation for",
+      "outcome": "failure",
+      "input": {
+        "invocation_id": "0000000000000404"
+      },
+      "envelope": "get_invocations/unknown_id.json",
+      "replies": "get_invocations/unknown_id.galaxy.json"
+    },
+    {
+      "tool": "get_invocations",
+      "case": "malformed_id",
+      "note": "a value that is not hex cannot be an id, and is refused before anything is sent: Galaxy would answer it 400, and a '.' would not even reach it as an id but as the listing",
+      "outcome": "failure",
+      "input": {
+        "invocation_id": "not-an-id"
+      },
+      "envelope": "get_invocations/malformed_id.json",
+      "replies": "get_invocations/malformed_id.galaxy.json"
+    },
+    {
+      "tool": "get_invocations",
+      "case": "answered_with_another_record",
+      "note": "a 200 whose body is not the invocation asked for is refused rather than handed back",
+      "outcome": "failure",
+      "input": {
+        "invocation_id": "1e1d0c0b0a090807"
+      },
+      "envelope": "get_invocations/answered_with_another_record.json",
+      "replies": "get_invocations/answered_with_another_record.galaxy.json"
     },
     {
       "tool": "get_invocations",
@@ -2289,6 +2584,18 @@
       "replies": "get_workflow_input_template/server_error.galaxy.json"
     },
     {
+      "tool": "get_workflow_input_template",
+      "case": "version_out_of_range",
+      "note": "a stored version Galaxy does not have, refused by Galaxy on every read",
+      "outcome": "failure",
+      "input": {
+        "workflow_id": "wf000001",
+        "version": 7
+      },
+      "envelope": "get_workflow_input_template/version_out_of_range.json",
+      "replies": "get_workflow_input_template/version_out_of_range.galaxy.json"
+    },
+    {
       "tool": "invoke_workflow",
       "case": "refused_by_galaxy",
       "note": "every argument that decides where the run went is in the context",
@@ -2326,6 +2633,28 @@
       "input": {},
       "envelope": "list_pages/permission_denied.json",
       "replies": "list_pages/permission_denied.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "history_not_accessible",
+      "note": "a bioblend GET of the job index for a history the user cannot read",
+      "outcome": "failure",
+      "input": {
+        "history_id": "h0403"
+      },
+      "envelope": "list_jobs/history_not_accessible.json",
+      "replies": "list_jobs/history_not_accessible.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "malformed_history_id",
+      "note": "a history_id Galaxy's validation refuses, as the 400008 it answers; no 400 hint in the table, so the tool adds one",
+      "outcome": "failure",
+      "input": {
+        "history_id": "not-an-id"
+      },
+      "envelope": "list_jobs/malformed_history_id.json",
+      "replies": "list_jobs/malformed_history_id.galaxy.json"
     },
     {
       "tool": "create_page",
@@ -2419,6 +2748,83 @@
       },
       "envelope": "get_job_details/the_job_read_refused.json",
       "replies": "get_job_details/the_job_read_refused.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "job_not_found",
+      "note": "a job id nothing answers to -- the tool's own sentence, about the job this time",
+      "outcome": "failure",
+      "input": {
+        "job_id": "0000000000000404"
+      },
+      "envelope": "get_job_details/job_not_found.json",
+      "replies": "get_job_details/job_not_found.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "job_id_malformed",
+      "note": "a value that is not hex cannot be an id, and is refused before anything is sent: Galaxy would answer it 400, and a '.' or '../histories' would not even reach it as an id but as another path",
+      "outcome": "failure",
+      "input": {
+        "job_id": "not-an-id"
+      },
+      "envelope": "get_job_details/job_id_malformed.json",
+      "replies": "get_invocations/malformed_id.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "answered_with_another_record",
+      "note": "a 200 whose body is not the job asked for -- a redirect's target, a listing -- is refused rather than handed back as that job",
+      "outcome": "failure",
+      "input": {
+        "job_id": "0123456789abcdef"
+      },
+      "envelope": "get_job_details/answered_with_another_record.json",
+      "replies": "get_job_details/answered_with_another_record.galaxy.json"
+    },
+    {
+      "tool": "get_job_logs",
+      "case": "not_found",
+      "note": "a job id nothing answers to reads the same as it does from get_job_details",
+      "outcome": "failure",
+      "input": {
+        "job_id": "0000000000000404"
+      },
+      "envelope": "get_job_logs/not_found.json",
+      "replies": "get_job_logs/not_found.galaxy.json"
+    },
+    {
+      "tool": "get_job_logs",
+      "case": "read_refused",
+      "note": "any other status names this tool in format_error's sentence",
+      "outcome": "failure",
+      "input": {
+        "job_id": "0000000000000500"
+      },
+      "envelope": "get_job_logs/read_refused.json",
+      "replies": "get_job_logs/read_refused.galaxy.json"
+    },
+    {
+      "tool": "get_job_logs",
+      "case": "job_id_malformed",
+      "note": "a value that is not hex is refused before anything is sent",
+      "outcome": "failure",
+      "input": {
+        "job_id": "not-an-id"
+      },
+      "envelope": "get_job_logs/job_id_malformed.json",
+      "replies": "get_invocations/malformed_id.galaxy.json"
+    },
+    {
+      "tool": "get_job_logs",
+      "case": "answered_with_another_record",
+      "note": "a 200 whose body is not this job's is refused, and the cut never runs over it",
+      "outcome": "failure",
+      "input": {
+        "job_id": "0123456789abcdef"
+      },
+      "envelope": "get_job_logs/answered_with_another_record.json",
+      "replies": "get_job_logs/answered_with_another_record.galaxy.json"
     },
     {
       "tool": "run_tool",
@@ -2599,7 +3005,18 @@
         "limit": 5000
       },
       "envelope": "list_workflows/limit_above_the_ceiling.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
+    },
+    {
+      "tool": "get_invocations",
+      "case": "limit_above_galaxys_cap",
+      "note": "Galaxy's own ceiling on /api/invocations, named here instead of as a 400 from there",
+      "outcome": "failure",
+      "input": {
+        "limit": 250
+      },
+      "envelope": "get_invocations/limit_above_galaxys_cap.json",
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "get_history_contents",
@@ -2611,7 +3028,7 @@
         "limit": 0
       },
       "envelope": "get_history_contents/limit_below_one.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "search_tools_by_name",
@@ -2623,7 +3040,7 @@
         "offset": -1
       },
       "envelope": "search_tools_by_name/negative_offset.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "get_history_details",
@@ -2648,6 +3065,18 @@
       "replies": "get_tool_panel/no_such_section.galaxy.json"
     },
     {
+      "tool": "get_tool_details",
+      "case": "version_not_installed",
+      "note": "Galaxy served its newest version for one it lacks, which the tool refuses by name",
+      "outcome": "failure",
+      "input": {
+        "tool_id": "cat1",
+        "tool_version": "9.9.9"
+      },
+      "envelope": "get_tool_details/version_not_installed.json",
+      "replies": "get_tool_details/version_not_installed.galaxy.json"
+    },
+    {
       "tool": "update_history",
       "case": "nothing_to_update",
       "note": "no field to change, refused before anything is sent",
@@ -2656,7 +3085,7 @@
         "history_id": "h0001"
       },
       "envelope": "update_history/nothing_to_update.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "get_dataset_details",
@@ -2670,6 +3099,51 @@
       "replies": "get_dataset_details/is_a_collection.galaxy.json"
     },
     {
+      "tool": "get_workflow_input_template",
+      "case": "negative_version",
+      "note": "a version below zero, which Galaxy would silently resolve to another version",
+      "outcome": "failure",
+      "input": {
+        "workflow_id": "wf000001",
+        "version": -1
+      },
+      "envelope": "get_workflow_input_template/negative_version.json",
+      "replies": "get_invocations/malformed_id.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "both_ids_given",
+      "note": "a dataset and a job: two questions, and the tool answers one",
+      "outcome": "failure",
+      "input": {
+        "dataset_id": "d0000002",
+        "job_id": "j0000001"
+      },
+      "envelope": "get_job_details/both_ids_given.json",
+      "replies": "get_invocations/malformed_id.galaxy.json"
+    },
+    {
+      "tool": "get_job_details",
+      "case": "neither_id_given",
+      "note": "nothing to look up",
+      "outcome": "failure",
+      "input": {},
+      "envelope": "get_job_details/neither_id_given.json",
+      "replies": "get_invocations/malformed_id.galaxy.json"
+    },
+    {
+      "tool": "get_job_logs",
+      "case": "negative_log_bytes",
+      "note": "a budget below zero means nothing; 0 is the spelling for uncut",
+      "outcome": "failure",
+      "input": {
+        "job_id": "0123456789abcdef",
+        "log_bytes": -1
+      },
+      "envelope": "get_job_logs/negative_log_bytes.json",
+      "replies": "get_invocations/malformed_id.galaxy.json"
+    },
+    {
       "tool": "create_user_tool",
       "case": "representation_missing_a_field",
       "note": "the first of six required fields that is not there",
@@ -2681,7 +3155,7 @@
         }
       },
       "envelope": "create_user_tool/representation_missing_a_field.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "create_user_tool",
@@ -2699,7 +3173,7 @@
         }
       },
       "envelope": "create_user_tool/wrong_class.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "create_user_tool",
@@ -2717,7 +3191,7 @@
         }
       },
       "envelope": "create_user_tool/container_is_not_a_string.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "recommend_biocontainer",
@@ -2730,7 +3204,29 @@
         ]
       },
       "envelope": "recommend_biocontainer/package_entry_with_no_name.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
+    },
+    {
+      "tool": "list_jobs",
+      "case": "limit_below_one",
+      "note": "the floor every listing has, on the one listing with no ceiling",
+      "outcome": "failure",
+      "input": {
+        "limit": 0
+      },
+      "envelope": "list_jobs/limit_below_one.json",
+      "replies": "get_invocations/malformed_id.galaxy.json"
+    },
+    {
+      "tool": "get_user_tool",
+      "case": "malformed_uuid",
+      "note": "a tool id where a uuid should be, refused before anything is sent",
+      "outcome": "failure",
+      "input": {
+        "uuid": "row_filter"
+      },
+      "envelope": "get_user_tool/malformed_uuid.json",
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "list_history_ids",
@@ -2755,7 +3251,7 @@
         "published": null
       },
       "envelope": "update_history/every_field_null.json",
-      "replies": "list_workflows/limit_above_the_ceiling.galaxy.json"
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "create_page",
