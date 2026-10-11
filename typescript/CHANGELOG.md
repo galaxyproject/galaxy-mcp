@@ -165,6 +165,13 @@ galaxy-ops exports `GALAXY_MCP_SURFACE`, the description and parameter descripti
 Python server advertises, generated from its surface manifest, and the TypeScript server
 advertises them.
 
+### `search_tools_by_name` matches every word of a query (#155)
+
+After its substring matches, it also returns the tools whose name, ID and description
+hold every word of the query between them. A phrase that is no substring of any one of
+them, such as `count occurrences` for Count ("occurrences of each record"), found nothing.
+Punctuation around a word is ignored; a query with a single-character word finds no more.
+
 ## 0.3.2 (2026-10-12)
 
 ### Redirects are no longer followed, so the API key cannot leak off-origin (security)

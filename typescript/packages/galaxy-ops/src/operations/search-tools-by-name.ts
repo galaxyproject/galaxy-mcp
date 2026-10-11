@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { legacyGet } from "../legacy";
-import { pyContains, pyLower } from "../python-str";
+import { isPyWordChar, pyContains, pyLower, pySplitWhitespace } from "../python-str";
 import { paginate, shrinkPaged, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
@@ -52,7 +52,36 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<ToolListItem>> {
       pyContains(pyLower(t.id ?? ""), needle) ||
       pyContains(pyLower(t.description ?? ""), needle),
   );
+  matches.push(...wordMatches(needle, Array.isArray(tools) ? tools : [], matches));
   return paginate(matches, { limit, offset, noun: "tools" });
+}
+
+/**
+ * The tools whose name, id and description hold every word of the query between them, beyond
+ * those already found. A phrase need not be a substring of any one field: "count occurrences"
+ * finds Count, described as "occurrences of each record". Punctuation around a word is ignored. A
+ * one-word query is left to the substring match, and a one-character word, which nearly every tool
+ * holds, makes the query find no more.
+ */
+function wordMatches(needle: string, tools: ToolListItem[], found: ToolListItem[]): ToolListItem[] {
+  const words = pySplitWhitespace(needle).map(trimWord).filter(Boolean);
+  if (words.length < 2 || words.some((word) => [...word].length < 2)) return [];
+  const seen = new Set(found.map((t) => t.id));
+  return tools.filter((t) => {
+    if (seen.has(t.id)) return false;
+    const fields = [t.name, t.id, t.description].map((field) => pyLower(field ?? ""));
+    return words.every((word) => fields.some((field) => pyContains(field, word)));
+  });
+}
+
+/** The other server's `re.sub(r"^\W+|\W+$", "", word)`: what is no word character, off both ends. */
+function trimWord(word: string): string {
+  const points = Array.from(word, (c) => c.codePointAt(0) ?? 0);
+  let start = 0;
+  let end = points.length;
+  while (start < end && !isPyWordChar(points[start] ?? 0)) start++;
+  while (end > start && !isPyWordChar(points[end - 1] ?? 0)) end--;
+  return String.fromCodePoint(...points.slice(start, end));
 }
 
 export const searchToolsByNameOp: Operation<typeof input, Paged<ToolListItem>> = {
@@ -60,7 +89,7 @@ export const searchToolsByNameOp: Operation<typeof input, Paged<ToolListItem>> =
   domain: "tools",
   result: { kind: "list", paginated: true },
   summary:
-    "Search Galaxy tools by name, id, or description substring (case-insensitive), a page at a time.",
+    "Search Galaxy tools by name, id, or description substring (case-insensitive), then by every word of the query, a page at a time.",
   input,
   run,
   budget: {

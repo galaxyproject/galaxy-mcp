@@ -1525,10 +1525,36 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
         raise ValueError(error_msg) from (None if remote_caller_possible() else e)
 
 
+def _word_matches(
+    query_lower: str, all_tools: list[dict[str, Any]], found: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """The tools whose name, ID and description hold every word of the query between them,
+    beyond those already found.
+
+    A phrase need not be a substring of any one field: "count occurrences" finds Count,
+    described as "occurrences of each record". Punctuation around a word is ignored. A
+    one-word query is left to the substring match, and a one-character word, which nearly
+    every tool holds, makes the query find no more.
+    """
+    words = [w for w in (re.sub(r"^\W+|\W+$", "", word) for word in query_lower.split()) if w]
+    if len(words) < 2 or any(len(word) < 2 for word in words):
+        return []
+    seen = {tool.get("id") for tool in found}
+    matches = []
+    for tool in all_tools:
+        if tool.get("id") in seen:
+            continue
+        fields = [(tool.get(key) or "").lower() for key in ("name", "id", "description")]
+        if all(any(word in field for field in fields) for word in words):
+            matches.append(tool)
+    return matches
+
+
 @mcp.tool(tags={"tools", "read", "extended"})
 def search_tools_by_name(query: str, limit: int = 25, offset: int = 0) -> GalaxyResult:
     """
-    Search Galaxy tools whose name, ID, or description contains the given query (substring match).
+    Search Galaxy tools whose name, ID, or description contains the given query (substring match),
+    followed by those whose name, ID and description hold every word of it between them.
 
     Results are paginated. pagination.total_items is how many tools matched in total;
     pagination.next_offset is where the next page starts (None on the last page).
@@ -1591,6 +1617,7 @@ def search_tools_by_name(query: str, limit: int = 25, offset: int = 0) -> Galaxy
             or query_lower in tool.get("id", "").lower()
             or query_lower in tool.get("description", "").lower()
         ]
+        matching_tools += _word_matches(query_lower, all_tools, matching_tools)
 
         # Galaxy's tool index has no pagination either, so the window is applied here.
         return _budgeted_page(

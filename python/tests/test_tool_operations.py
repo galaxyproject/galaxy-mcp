@@ -56,6 +56,30 @@ class TestToolOperations:
             assert len(result.data) == 1
             assert result.data[0]["id"] == "tool2"
 
+    def test_search_tools_adds_tools_holding_every_word(self, mock_galaxy_instance):
+        """A phrase no one field contains still finds the tools holding all its words."""
+        mock_galaxy_instance.tools.get_tools.return_value = [
+            {"id": "Count1", "name": "Count", "description": "occurrences of each record"},
+            {"id": "htseq_count", "name": "htseq-count", "description": "Count aligned reads"},
+            {"id": "sort1", "name": "Sort", "description": "data in ascending or descending order"},
+        ]
+
+        def ids(query):
+            return [tool["id"] for tool in search_tools_fn(query).data]
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            assert ids("Count occurrences") == ["Count1"]
+            assert ids("count reads") == ["htseq_count"]
+            assert ids("count bases") == []
+            # A single character is in nearly every tool, so a query with one finds no more.
+            assert ids("c o u n t") == []
+            assert ids("R count") == []
+            # Punctuation around a word is no part of it, and punctuation alone is no word.
+            assert ids("Sort - data in ascending or descending order") == ["sort1"]
+            assert ids("(Count) occurrences,") == ["Count1"]
+            assert ids("- -") == []
+            assert ids("(count)") == []
+
     def test_search_tools_with_results(self, mock_galaxy_instance):
         """Test search tools returns filtered results"""
         all_tools = [

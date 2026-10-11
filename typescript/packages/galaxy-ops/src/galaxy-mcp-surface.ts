@@ -359,7 +359,7 @@ export const GALAXY_MCP_SURFACE: Readonly<Record<string, GalaxyMcpTool>> = {
     },
   },
   "search_tools_by_name": {
-    description: "Search Galaxy tools whose name, ID, or description contains the given query (substring match).\n\nResults are paginated. pagination.total_items is how many tools matched in total;\npagination.next_offset is where the next page starts (None on the last page).\n\nRECOMMENDED WORKFLOW:\n1. Use this function to find tools by name/keyword\n2. Review the returned tool IDs and names\n3. Call get_tool_details(tool_id) for full input parameters\n4. Call run_tool() with the correct inputs",
+    description: "Search Galaxy tools whose name, ID, or description contains the given query (substring match),\nfollowed by those whose name, ID and description hold every word of it between them.\n\nResults are paginated. pagination.total_items is how many tools matched in total;\npagination.next_offset is where the next page starts (None on the last page).\n\nRECOMMENDED WORKFLOW:\n1. Use this function to find tools by name/keyword\n2. Review the returned tool IDs and names\n3. Call get_tool_details(tool_id) for full input parameters\n4. Call run_tool() with the correct inputs",
     parameters: {
       "query": "Search query - matches against tool name, ID, or description.\n   Examples: \"fastq\", \"alignment\", \"filter\", \"bwa\"",
       "limit": "Maximum tools to return per page (default 25, max 100). A page is\n   also cut short when it would not fit the output budget, so ask for\n   what you want and walk pagination.next_offset.",

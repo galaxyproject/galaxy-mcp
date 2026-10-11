@@ -1823,7 +1823,7 @@
         "read",
         "tools"
       ],
-      "description": "Search Galaxy tools whose name, ID, or description contains the given query (substring match).\n\nResults are paginated. pagination.total_items is how many tools matched in total;\npagination.next_offset is where the next page starts (None on the last page).\n\nRECOMMENDED WORKFLOW:\n1. Use this function to find tools by name/keyword\n2. Review the returned tool IDs and names\n3. Call get_tool_details(tool_id) for full input parameters\n4. Call run_tool() with the correct inputs",
+      "description": "Search Galaxy tools whose name, ID, or description contains the given query (substring match),\nfollowed by those whose name, ID and description hold every word of it between them.\n\nResults are paginated. pagination.total_items is how many tools matched in total;\npagination.next_offset is where the next page starts (None on the last page).\n\nRECOMMENDED WORKFLOW:\n1. Use this function to find tools by name/keyword\n2. Review the returned tool IDs and names\n3. Call get_tool_details(tool_id) for full input parameters\n4. Call run_tool() with the correct inputs",
       "annotations": {},
       "inputSchema": {
         "additionalProperties": false,
