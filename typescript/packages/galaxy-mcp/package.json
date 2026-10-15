@@ -28,14 +28,14 @@
   },
   "dependencies": {
     "@galaxyproject/galaxy-ops": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "zod": "^4.3.0"
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^26.6.5",
     "tsup": "^8.3.0",
     "tsx": "^4.23.15",
-    "vitest": "^4.1.11",
-    "typescript": "^6.0.0"
+    "vitest": "^5.0.4",
+    "typescript": "^7.0.2"
   }
 }
