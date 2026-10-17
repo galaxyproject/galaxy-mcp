@@ -12,7 +12,7 @@ from unittest.mock import Mock
 import pytest
 from bioblend.galaxy import GalaxyInstance
 
-from galaxy_mcp.server import galaxy_state
+from galaxy_mcp.server import _apply_section_edit, _malformed_object_ids, galaxy_state
 from tests.test_helpers import (
     create_page_fn,
     get_page_fn,
@@ -131,6 +131,14 @@ class TestPageOperations:
         # The large rendered form is dropped unless explicitly requested.
         assert "content" not in result.data
         assert self.gi.make_get_request.call_args.args[0] == f"{GALAXY_API_URL}/pages/page1"
+
+    def test_get_page_hashes_code_points_as_galaxys_page_assistant_does(self):
+        # Galaxy's client walks UTF-16 code units and would say 65861004 here.
+        self.gi.make_get_request.return_value = _get_response(
+            {"id": "page1", "content_editor": "# \U0001f9ec genes"}
+        )
+
+        assert get_page_fn("page1").data["content_hash"] == "52098886"
 
     def test_get_page_include_rendered(self):
         self.gi.make_get_request.return_value = _get_response(
@@ -301,3 +309,31 @@ class TestPageOperations:
         galaxy_state["connected"] = False
         with pytest.raises(ValueError, match="Not connected to Galaxy"):
             list_pages_fn()
+
+
+class TestUpdatePageHelpers:
+    """The branches the update_page golden cases do not reach."""
+
+    def test_a_section_the_page_lacks_is_appended(self):
+        doc = "## Record\n\nintro\n\n## Results\n\nfindings\n"
+        edited = _apply_section_edit(doc, "## Notes", "## Notes\n\nadded")
+        assert edited.endswith("findings\n\n## Notes\n\nadded")
+
+    @pytest.mark.parametrize(
+        ("content", "malformed"),
+        [
+            ("about history_id=3 in prose", []),
+            (
+                "```galaxy\nhistory_dataset_display(history_dataset_id=reads)\n```",
+                ["history_dataset_id=reads"],
+            ),
+            ("${galaxy job_metrics(job_id=12)}", ["job_id=12"]),
+            ("${galaxy history_dataset_name(history_dataset_id=0c97fda4aafcf418)}", []),
+            (
+                "```galaxy\ninvocation_outputs(invocation_id=" + "0c97fda4aafcf418" * 2 + ")\n```",
+                [],
+            ),
+        ],
+    )
+    def test_malformed_object_ids(self, content, malformed):
+        assert _malformed_object_ids(content) == malformed

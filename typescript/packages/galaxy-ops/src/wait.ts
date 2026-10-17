@@ -26,7 +26,10 @@ function nextInterval(attempt: number, p: PollPolicy): number {
   return base + jitter;
 }
 
-/** Poll GET /api/jobs/{id} until the job reaches a terminal state. ok -> return; else throw. */
+/**
+ * Poll GET /api/jobs/{id} until the job settles. ok -> return; any other settled state --
+ * a failure, or a job that was skipped or stopped and so produced nothing -- throws with it.
+ */
 export async function waitForJob(jobId: string, ctx: GalaxyContext): Promise<JobDetail> {
   const start = Date.now();
   for (let attempt = 0; ; attempt++) {

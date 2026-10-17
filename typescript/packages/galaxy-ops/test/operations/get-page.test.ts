@@ -28,6 +28,13 @@ describe("get_page", () => {
     expect("content" in out).toBe(false);
   });
 
+  it("hashes code points, not UTF-16 code units", async () => {
+    // Galaxy's client walks code units and would say 65861004 here; the other server says this.
+    const emoji = { id: "page3", content_editor: "# \u{1F9EC} genes" };
+    const client = mockClient({ GET: () => ({ data: emoji, response: { status: 200 } }) });
+    expect((await getPage({ pageId: "page3" }, ctxWith(client))).content_hash).toBe("52098886");
+  });
+
   it("keeps the rendered form when it is asked for", async () => {
     const client = mockClient({ GET: () => ({ data: { ...page }, response: { status: 200 } }) });
     const out = await getPage({ pageId: "page1", includeRendered: true }, ctxWith(client));

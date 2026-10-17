@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "python/src/galaxy_mcp/server.py",
-  "caseCount": 270,
-  "failureCaseCount": 91,
+  "caseCount": 280,
+  "failureCaseCount": 96,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -411,7 +411,7 @@
     {
       "tool": "get_history_contents",
       "case": "full_page",
-      "note": "a page of contents, wrapped in this tool's own data shape",
+      "note": "a page of contents Galaxy cut, wrapped in this tool's own data shape",
       "outcome": "success",
       "input": {
         "history_id": "h0000",
@@ -432,7 +432,7 @@
         "offset": 20
       },
       "envelope": "get_history_contents/last_short_page.json",
-      "replies": "get_history_contents/full_page.galaxy.json"
+      "replies": "get_history_contents/last_short_page.galaxy.json"
     },
     {
       "tool": "get_history_contents",
@@ -458,7 +458,34 @@
         "offset": 400
       },
       "envelope": "get_history_contents/past_the_end.json",
-      "replies": "get_history_contents/full_page.galaxy.json"
+      "replies": "get_history_contents/past_the_end.galaxy.json"
+    },
+    {
+      "tool": "get_history_contents",
+      "case": "newest_first",
+      "note": "an order Galaxy sorts by, passed through as the caller named it",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0000",
+        "limit": 5,
+        "offset": 0,
+        "order": "hid-dsc"
+      },
+      "envelope": "get_history_contents/newest_first.json",
+      "replies": "get_history_contents/newest_first.galaxy.json"
+    },
+    {
+      "tool": "get_history_contents",
+      "case": "without_dataset_id",
+      "note": "rows without the Dataset id Galaxy sends beside each item's own id",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0000",
+        "limit": 10,
+        "offset": 0
+      },
+      "envelope": "get_history_contents/without_dataset_id.json",
+      "replies": "get_history_contents/without_dataset_id.galaxy.json"
     },
     {
       "tool": "get_history_details",
@@ -840,6 +867,17 @@
       },
       "envelope": "get_invocations/single.json",
       "replies": "get_invocations/single.galaxy.json"
+    },
+    {
+      "tool": "get_invocations",
+      "case": "completed_with_a_failed_job",
+      "note": "Galaxy says completed; the jobs summary says one failed, so the outcome is failed",
+      "outcome": "success",
+      "input": {
+        "invocation_id": "1e1d0c0b0a090807"
+      },
+      "envelope": "get_invocations/completed_with_a_failed_job.json",
+      "replies": "get_invocations/completed_with_a_failed_job.galaxy.json"
     },
     {
       "tool": "get_invocations",
@@ -1941,6 +1979,32 @@
     },
     {
       "tool": "update_page",
+      "case": "section_replaced",
+      "note": "one section replaced by its heading, read first and the rest left as it was",
+      "outcome": "success",
+      "input": {
+        "page_id": "pg000001",
+        "section_heading": "## Methods",
+        "section_content": "## Methods\n\nnew\n"
+      },
+      "envelope": "update_page/section_replaced.json",
+      "replies": "update_page/section_replaced.galaxy.json"
+    },
+    {
+      "tool": "update_page",
+      "case": "expected_hash_matches",
+      "note": "the page is as it was read, so the write goes",
+      "outcome": "success",
+      "input": {
+        "page_id": "pg000001",
+        "content": "# Reads QC\n\nrewritten\n",
+        "expect_hash": "862b1e76"
+      },
+      "envelope": "update_page/expected_hash_matches.json",
+      "replies": "update_page/expected_hash_matches.galaxy.json"
+    },
+    {
+      "tool": "update_page",
       "case": "title_only_on_an_html_page",
       "note": "a title change on a page whose body is the expanded render, which still goes",
       "outcome": "success",
@@ -2713,6 +2777,69 @@
       },
       "envelope": "update_page/not_found.json",
       "replies": "update_page/not_found.galaxy.json"
+    },
+    {
+      "tool": "update_page",
+      "case": "page_changed_since_read",
+      "note": "a stale expect_hash: read, compared, and refused with the hash the page has now",
+      "outcome": "failure",
+      "input": {
+        "page_id": "pg000001",
+        "content": "# Reads QC\n\nrewritten\n",
+        "expect_hash": "deadbeef"
+      },
+      "envelope": "update_page/page_changed_since_read.json",
+      "replies": "update_page/page_changed_since_read.galaxy.json"
+    },
+    {
+      "tool": "update_page",
+      "case": "directive_id_not_encoded",
+      "note": "a directive naming a dataset by a hid, refused before anything is sent",
+      "outcome": "failure",
+      "input": {
+        "page_id": "pg000001",
+        "content": "```galaxy\nhistory_dataset_display(history_dataset_id=3)\n```\n"
+      },
+      "envelope": "update_page/directive_id_not_encoded.json",
+      "replies": "update_page/directive_id_not_encoded.galaxy.json"
+    },
+    {
+      "tool": "update_page",
+      "case": "half_a_section_edit",
+      "note": "a heading with no section text, refused before anything is sent",
+      "outcome": "failure",
+      "input": {
+        "page_id": "pg000001",
+        "section_heading": "## Methods"
+      },
+      "envelope": "update_page/half_a_section_edit.json",
+      "replies": "update_page/directive_id_not_encoded.galaxy.json"
+    },
+    {
+      "tool": "update_page",
+      "case": "read_not_found",
+      "note": "the read a section edit needs, on a page that is not there",
+      "outcome": "failure",
+      "input": {
+        "page_id": "p0000404",
+        "section_heading": "## Methods",
+        "section_content": "## Methods\n\nnew\n"
+      },
+      "envelope": "update_page/read_not_found.json",
+      "replies": "update_page/read_not_found.galaxy.json"
+    },
+    {
+      "tool": "update_page",
+      "case": "section_on_html",
+      "note": "a section edit on a page authored as HTML, refused after the read and before a write",
+      "outcome": "failure",
+      "input": {
+        "page_id": "pg000001",
+        "section_heading": "## Methods",
+        "section_content": "## Methods\n\nnew\n"
+      },
+      "envelope": "update_page/section_on_html.json",
+      "replies": "update_page/section_on_html.galaxy.json"
     },
     {
       "tool": "list_page_revisions",

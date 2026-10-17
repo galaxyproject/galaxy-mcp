@@ -115,6 +115,63 @@ read as not found. The check accepts what Galaxy's own `uuid.UUID()` does, so th
 `delete_user_tool` and `run_user_tool`. Four golden cases: `found`, `found_without_hyphens`,
 `not_found`, `malformed_uuid`.
 
+### `update_history` is marked destructive (#155)
+
+It sets MCP's `destructiveHint`, since it deletes the history when `deleted` is true.
+
+### One list of settled job states (#155)
+
+galaxy-ops exports Galaxy's job, dataset and invocation state lists. Breaking for the
+library: `waitForJob` ends on a skipped or stopped job with `JobFailedError` instead
+of polling until the timeout.
+
+### `get_invocations` says what one invocation amounted to (#155)
+
+Given an invocation id, the answer adds `job_states` and `outcome` (`failing`, `failed`,
+`cancelled`, `completed`), read from its jobs summary with one more request: Galaxy's
+`state` describes scheduling and reports `completed` for a run whose jobs failed.
+Listings are unchanged. galaxy-ops exports `invocationOutcome`.
+
+### `get_page` answers with a content hash (#155)
+
+The answer carries `content_hash`, Galaxy's hash of the editable source. galaxy-ops
+exports `contentHash`.
+
+### `update_page` replaces one section and refuses a stale write (#155)
+
+`update_page` takes `section_heading` and `section_content` to replace one section by
+its heading line, as Galaxy's page editor does, and `expect_hash` to refuse a write when
+the page changed since it was read. The answer carries the page's new `content_hash`.
+Breaking: it refuses content whose directives name an object by something other than
+an encoded id (a hid, a name), which Galaxy cannot resolve, and a section edit on a page
+authored as HTML. galaxy-ops exports `malformedObjectIds`.
+
+### `get_history_contents` pages with Galaxy's real total (#155)
+
+It asks Galaxy for one filtered, sorted window and the count it matched, instead of
+fetching the whole history; a page over the output budget is cut, and its `pagination`
+names where to continue. Breaking: rows no longer carry `dataset_id`, the id of the
+Dataset under a history item rather than of the item, which no operation takes; use
+`id`. An `order` without a direction is refused, because a bare key was read as
+ascending here while Galaxy reads it as descending; `order` is one of Galaxy's sort keys
+for a history (`hid`, `create_time`, `update_time`, `name`, `extension`, `size`) with
+`-asc` or `-dsc`, e.g. `hid-asc`. Rows are the contents index's summary view: dataset
+rows are unchanged, and collection rows gain `type_id` and `store_times_summary` and
+lose `model_class`, `populated` and `column_definitions`.
+
+### Both MCP servers describe each tool the same way (#155)
+
+galaxy-ops exports `GALAXY_MCP_SURFACE`, the description and parameter descriptions the
+Python server advertises, generated from its surface manifest, and the TypeScript server
+advertises them.
+
+### `search_tools_by_name` matches every word of a query (#155)
+
+After its substring matches, it also returns the tools whose name, ID and description
+hold every word of the query between them. A phrase that is no substring of any one of
+them, such as `count occurrences` for Count ("occurrences of each record"), found nothing.
+Punctuation around a word is ignored; a query with a single-character word finds no more.
+
 ## 0.3.2 (2026-10-12)
 
 ### Redirects are no longer followed, so the API key cannot leak off-origin (security)
