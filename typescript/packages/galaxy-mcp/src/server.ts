@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { ZodRawShape } from "zod";
 import { allOperations, describeOperation, runWithEnvelope, type GalaxyContext } from "@galaxyproject/galaxy-ops";
+import { HISTORIES_APP_URI, registerHistoriesApp } from "./apps/histories.js";
 import { LaxArgumentsTransport } from "./lax-transport.js";
 import { inWireNames, toOperationInput, wireShape } from "./wire-names.js";
 // The version a client is told, read from the package rather than written twice. tsup
@@ -98,37 +99,64 @@ function localFilesRefusal({ action, alternative }: { action: string; alternativ
 export interface ServerOptions {
   /** Whether tools may read or write paths on this machine. True over stdio. */
   allowLocalFiles?: boolean;
+  /** Whether to add the MCP Apps cards and the show_* tools that open them. Off by default. */
+  apps?: boolean;
 }
+
+/**
+ * Tools that only show a card. Each runs an existing operation and returns what it returns; the
+ * difference is the card the host renders for it. They are separate from the read they wrap so
+ * an agent can read without putting a card in front of the user every time.
+ */
+const appTools = [
+  {
+    name: "show_histories",
+    operation: "get_histories",
+    resourceUri: HISTORIES_APP_URI,
+    description:
+      "Show the user's Galaxy histories as an interactive list they can page through. Use this " +
+      "when the user wants to see their histories; use get_histories to read them without a card.",
+  },
+];
 
 /**
  * One MCP server over one Galaxy context. The context is passed in rather than built here so
  * servers can share it, along with the Galaxy version it caches.
  */
-export function buildServer(ctx: GalaxyContext, { allowLocalFiles = true }: ServerOptions = {}): McpServer {
+export function buildServer(ctx: GalaxyContext, { allowLocalFiles = true, apps = false }: ServerOptions = {}): McpServer {
   const server = new McpServer({ name: "galaxy", version });
   const annotations = toolAnnotations();
   const shapes = new Map<string, ZodRawShape>();
-  for (const op of allOperations) {
+  const register = (name: string, op: (typeof allOperations)[number], extra: { description?: string; _meta?: Record<string, unknown> } = {}) => {
     // Advertised, validated and decoded under the Python parameter names; the op is handed
     // back its own. See wire-names.ts for why the rename stops at the top level.
     const { shape, object, toInput } = wireShape(op);
-    shapes.set(op.name, shape);
+    shapes.set(name, shape);
     server.registerTool(
-      op.name,
+      name,
       {
-        description: inWireNames(describeOperation(op), op.input),
+        description: extra.description ?? inWireNames(describeOperation(op), op.input),
         inputSchema: object,
         annotations: annotations[op.name],
+        ...(extra._meta && { _meta: extra._meta }),
       },
       async (args: unknown) => {
         const input = toOperationInput(args as Record<string, unknown>, toInput);
         const localFiles = localFileTools[op.name];
         if (!allowLocalFiles && localFiles?.uses(input as Record<string, unknown>)) {
-          return toolResult(op.name, { success: false, message: localFilesRefusal(localFiles) });
+          return toolResult(name, { success: false, message: localFilesRefusal(localFiles) });
         }
-        return toolResult(op.name, await runWithEnvelope(op as never, input as never, ctx));
+        return toolResult(name, await runWithEnvelope(op as never, input as never, ctx));
       },
     );
+  };
+  for (const op of allOperations) register(op.name, op);
+  if (apps) {
+    registerHistoriesApp(server);
+    for (const tool of appTools) {
+      const op = allOperations.find((candidate) => candidate.name === tool.operation)!;
+      register(tool.name, op, { description: tool.description, _meta: { ui: { resourceUri: tool.resourceUri } } });
+    }
   }
   // Arguments are decoded as a call arrives, under the same wire names they are validated
   // against; see LaxArgumentsTransport for why it is here and not in the handlers above.
