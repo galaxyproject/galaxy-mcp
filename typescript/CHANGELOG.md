@@ -6,6 +6,15 @@ entry covers all three; where something only affects one surface, it says which.
 
 ## Unreleased
 
+### galaxy-mcp can show cards (MCP Apps)
+
+With `GALAXY_MCP_APPS=1` (or `buildServer(ctx, { apps: true })`), `galaxy-mcp` serves an
+[MCP Apps](https://github.com/modelcontextprotocol/ext-apps) card and the tool that opens it.
+`show_histories` returns exactly what `get_histories` returns and asks the host to render
+`ui://galaxy/histories.html` with it, a list of the user's histories that pages with
+`get_histories`. Cards are off by default, so the tool list and the parity report are
+unchanged unless they are turned on.
+
 ### galaxy-mcp serves Streamable HTTP
 
 `galaxy-mcp --transport streamable-http` (or `GALAXY_MCP_TRANSPORT=streamable-http`) serves the
