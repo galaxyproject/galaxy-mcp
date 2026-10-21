@@ -73,6 +73,23 @@ There is no OAuth on this server yet, so every caller acts with the configured
 The older HTTP+SSE transport the Python server also offers (`--transport sse`) is deprecated
 in MCP and not provided here.
 
+## Cards (MCP Apps)
+
+With `GALAXY_MCP_APPS=1`, over either transport, the server also offers interactive cards for
+[MCP Apps](https://github.com/modelcontextprotocol/ext-apps) hosts. Each card has a `show_*`
+tool that runs an existing read and returns the same result, plus a card the host renders
+next to it. Reads stay card-free, so an agent can look things up without putting a card in
+front of the user each time.
+
+| Tool | Card |
+| --- | --- |
+| `show_histories` | The user's histories, with "Load more" paging through `get_histories` |
+
+A card is a self-contained page with no external resources. It gets data only through tool
+calls the host relays, so it never holds a Galaxy credential. Cards are off by default, which
+keeps the tool list identical to the Python server's. Hosts without MCP Apps just see the
+`show_*` tools' ordinary results.
+
 ## Tool arguments
 
 Parameters are spelled the way the [Python MCP server](https://github.com/galaxyproject/galaxy-mcp/tree/main/python)
