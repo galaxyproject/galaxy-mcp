@@ -87,6 +87,7 @@ const localFileTools: Record<string, { uses: (input: Record<string, unknown>) =>
 };
 
 export const ALLOW_LOCAL_FILES_ENV = "GALAXY_MCP_ALLOW_LOCAL_FILES";
+export const APPS_ENV = "GALAXY_MCP_APPS";
 
 function localFilesRefusal({ action, alternative }: { action: string; alternative: string }): string {
   return (

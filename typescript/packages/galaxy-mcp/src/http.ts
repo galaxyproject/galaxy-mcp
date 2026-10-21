@@ -44,7 +44,8 @@ function envList(value: string | undefined): Set<string> {
   return new Set((value ?? "").split(",").map((item) => item.trim().toLowerCase()).filter(Boolean));
 }
 
-function envFlag(value: string | undefined): boolean {
+/** A yes/no setting, read the way the Python server reads its flags. */
+export function envFlag(value: string | undefined): boolean {
   return ["1", "true", "yes", "on"].includes((value ?? "").trim().toLowerCase());
 }
 
