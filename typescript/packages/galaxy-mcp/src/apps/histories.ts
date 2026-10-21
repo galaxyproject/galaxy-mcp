@@ -64,6 +64,8 @@ export const historiesAppHtml = `<!doctype html>
   let canCallTools = false;
   let nextOffset = null;
   let total = null;
+  // The name filter the card was opened with, kept for the pages "Load more" fetches.
+  const filters = {};
 
   function post(message) {
     window.parent.postMessage(message, "*");
@@ -85,14 +87,19 @@ export const historiesAppHtml = `<!doctype html>
     if (event.source !== window.parent) return;
     const message = event.data;
     if (message?.jsonrpc !== "2.0") return;
-    if (message.id !== undefined && pending.has(message.id)) {
+    if (message.method === undefined && pending.has(message.id)) {
       const { resolve, reject, timer } = pending.get(message.id);
       pending.delete(message.id);
       clearTimeout(timer);
       if (message.error) reject(new Error(message.error.message || "The host refused the request."));
       else resolve(message.result);
+    } else if (message.method === "ui/notifications/tool-input") {
+      const name = message.params?.arguments?.name;
+      if (typeof name === "string") filters.name = name;
     } else if (message.method === "ui/notifications/tool-result") {
       show(message.params, false);
+    } else if (message.method === "ui/resource-teardown") {
+      post({ jsonrpc: "2.0", id: message.id, result: {} });
     } else if (message.method === "ui/notifications/host-context-changed") {
       applyTheme(message.params?.theme);
     }
@@ -149,7 +156,7 @@ export const historiesAppHtml = `<!doctype html>
     try {
       const result = await request("tools/call", {
         name: "get_histories",
-        arguments: { limit: PAGE_SIZE, offset: nextOffset },
+        arguments: { ...filters, limit: PAGE_SIZE, offset: nextOffset },
       });
       show(result, true);
     } catch (error) {
@@ -164,10 +171,6 @@ export const historiesAppHtml = `<!doctype html>
     if (theme === "light" || theme === "dark") document.documentElement.style.colorScheme = theme;
   }
 
-  new ResizeObserver(() => {
-    post({ jsonrpc: "2.0", method: "ui/notifications/size-changed", params: { height: Math.ceil(document.documentElement.getBoundingClientRect().height) } });
-  }).observe(document.documentElement);
-
   request("ui/initialize", {
     appInfo: { name: "Galaxy histories", version: "1" },
     appCapabilities: {},
@@ -177,6 +180,10 @@ export const historiesAppHtml = `<!doctype html>
     applyTheme(result?.hostContext?.theme);
     more.hidden = nextOffset === null || !canCallTools;
     post({ jsonrpc: "2.0", method: "ui/notifications/initialized", params: {} });
+    // Sizes are reported once the host has the card, starting now.
+    new ResizeObserver(() => {
+      post({ jsonrpc: "2.0", method: "ui/notifications/size-changed", params: { height: Math.ceil(document.documentElement.getBoundingClientRect().height) } });
+    }).observe(document.documentElement);
   }, (error) => setStatus(error.message, true));
 </script>
 </body>

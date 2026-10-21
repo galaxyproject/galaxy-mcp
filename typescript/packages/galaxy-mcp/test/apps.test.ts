@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { runInNewContext } from "node:vm";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createGalaxyContext } from "@galaxyproject/galaxy-ops";
@@ -84,5 +85,97 @@ describe("the histories card page", () => {
     expect(pattern.test("2026-10-21T12:00:00.123456")).toBe(false);
     expect(pattern.test("2026-10-21T12:00:00Z")).toBe(true);
     expect(pattern.test("2026-10-21T12:00:00+02:00")).toBe(true);
+  });
+});
+
+/** Runs the card's script against a stand-in for the few DOM pieces it touches, as a host would. */
+function runCard() {
+  class Element {
+    textContent = "";
+    hidden = false;
+    disabled = false;
+    className = "";
+    children: Element[] = [];
+    handlers: Record<string, () => unknown> = {};
+    append(...children: Element[]) {
+      this.children.push(...children);
+    }
+    replaceChildren() {
+      this.children = [];
+    }
+    toggleAttribute() {}
+    addEventListener(type: string, handler: () => unknown) {
+      this.handlers[type] = handler;
+    }
+  }
+  const elements: Record<string, Element> = { status: new Element(), histories: new Element(), more: new Element() };
+  elements.more!.hidden = true;
+  const sent: Record<string, any>[] = [];
+  const parent = { postMessage: (message: Record<string, any>) => sent.push(message) };
+  const listeners: ((event: { source: unknown; data: unknown }) => void)[] = [];
+  const documentElement = { style: {}, getBoundingClientRect: () => ({ height: 120 }) };
+  const script = historiesAppHtml.match(/<script>([\s\S]*)<\/script>/)![1]!;
+  runInNewContext(script, {
+    window: { parent, addEventListener: (type: string, f: (typeof listeners)[number]) => type === "message" && listeners.push(f) },
+    document: { getElementById: (id: string) => elements[id], createElement: () => new Element(), documentElement },
+    ResizeObserver: class {
+      constructor(private readonly report: () => void) {}
+      observe() {
+        this.report();
+      }
+    },
+    setTimeout,
+    clearTimeout,
+  });
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  return {
+    sent,
+    elements,
+    deliver: async (data: Record<string, unknown>) => {
+      for (const listener of listeners) listener({ source: parent, data: { jsonrpc: "2.0", ...data } });
+      await settle();
+    },
+    /** Answer the card's ui/initialize as a host with server tools. */
+    initialize: async function () {
+      await this.deliver({ id: sent[0]!.id, result: { hostCapabilities: { serverTools: {} } } });
+    },
+  };
+}
+
+const page = (data: unknown[], next: number | null) => ({
+  content: [{ type: "text", text: JSON.stringify({ success: true, data, pagination: { total_items: 3, has_next: next !== null, next_offset: next } }) }],
+});
+
+describe("the histories card's script", () => {
+  it("starts with ui/initialize and reports its size only once the host has it", async () => {
+    const card = runCard();
+    expect(card.sent.map((m) => m.method)).toEqual(["ui/initialize"]);
+    await card.initialize();
+    expect(card.sent.map((m) => m.method)).toEqual(["ui/initialize", "ui/notifications/initialized", "ui/notifications/size-changed"]);
+  });
+
+  it("answers the host's teardown request, even under an id its own request uses", async () => {
+    const card = runCard();
+    const ownId = card.sent[0]!.id;
+    await card.deliver({ id: ownId, method: "ui/resource-teardown", params: {} });
+    expect(card.sent.at(-1)).toEqual({ jsonrpc: "2.0", id: ownId, result: {} });
+    await card.initialize(); // its own request is still answerable
+    expect(card.sent.at(-2)?.method).toBe("ui/notifications/initialized");
+  });
+
+  it("keeps the name filter it was opened with when it loads more", async () => {
+    const card = runCard();
+    await card.initialize();
+    await card.deliver({ method: "ui/notifications/tool-input", params: { arguments: { name: "RNA-seq", limit: 1 } } });
+    await card.deliver({ method: "ui/notifications/tool-result", params: page([histories[0]], 1) });
+    expect(card.elements.histories!.children).toHaveLength(1);
+    expect(card.elements.more!.hidden).toBe(false);
+
+    void card.elements.more!.handlers.click!();
+    const call = card.sent.at(-1)!;
+    expect(call).toMatchObject({ method: "tools/call", params: { name: "get_histories", arguments: { name: "RNA-seq", limit: 5, offset: 1 } } });
+    await card.deliver({ id: call.id, result: page([histories[1]], null) });
+    expect(card.elements.histories!.children).toHaveLength(2);
+    expect(card.elements.more!.hidden).toBe(true);
   });
 });
