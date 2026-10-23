@@ -13,6 +13,7 @@ import {
   laxenCall,
   refuseDroppedKeys,
 } from "../src/lax-transport";
+import { createGalaxyContext } from "@galaxyproject/galaxy-ops";
 import { buildServer } from "../src/server";
 
 const shapes = new Map([["list_history_ids", { limit: z.number().int().optional() }]]);
@@ -316,7 +317,7 @@ describe("the keys the SDK's argument parser drops", () => {
 describe("a server behind it", () => {
   it("hears the peer close, and stops believing it is connected", async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const server = buildServer({ baseUrl: "https://g.example", apiKey: "K" });
+    const server = buildServer(createGalaxyContext({ baseUrl: "https://g.example", apiKey: "K" }));
     const client = new Client({ name: "close-check", version: "0" });
     const closed = vi.fn();
     server.server.onclose = closed;
@@ -341,7 +342,7 @@ describe("a server behind it", () => {
    */
   it("keeps working after a second connect is refused", async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const server = buildServer({ baseUrl: "https://g.example", apiKey: "K" });
+    const server = buildServer(createGalaxyContext({ baseUrl: "https://g.example", apiKey: "K" }));
     const client = new Client({ name: "double-connect", version: "0" });
     const closed = vi.fn();
     server.server.onclose = closed;
@@ -365,7 +366,7 @@ describe("a server behind it", () => {
     // invariant itself: a connect that was refused has touched nothing. Wiring in start() is
     // what makes it true -- connect throws before it ever calls start.
     const inner = fakeInner();
-    const server = buildServer({ baseUrl: "https://g.example", apiKey: "K" });
+    const server = buildServer(createGalaxyContext({ baseUrl: "https://g.example", apiKey: "K" }));
     await server.connect(inner);
     const wired = [inner.onmessage, inner.onerror, inner.onclose];
 
@@ -383,7 +384,7 @@ describe("a server behind it", () => {
         done();
       },
     });
-    const server = buildServer({ baseUrl: "https://g.example", apiKey: "K" });
+    const server = buildServer(createGalaxyContext({ baseUrl: "https://g.example", apiKey: "K" }));
     const errors: Error[] = [];
     server.server.onerror = (error) => errors.push(error);
     await server.connect(new StdioServerTransport(stdin, stdout));
@@ -416,7 +417,7 @@ describe("a server behind it", () => {
         done();
       },
     });
-    const server = buildServer({ baseUrl: "https://g.example", apiKey: "K" });
+    const server = buildServer(createGalaxyContext({ baseUrl: "https://g.example", apiKey: "K" }));
     await server.connect(new StdioServerTransport(stdin, stdout));
 
     stdin.push(

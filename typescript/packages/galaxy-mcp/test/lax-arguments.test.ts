@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { runInNewContext } from "node:vm";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { createGalaxyContext } from "@galaxyproject/galaxy-ops";
 import { buildServer } from "../src/server";
 
 /**
@@ -79,7 +80,7 @@ afterEach(() => vi.restoreAllMocks());
 
 async function call(name: string, args: Record<string, unknown>) {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const server = buildServer({ baseUrl: "https://g.example", apiKey: "K" });
+  const server = buildServer(createGalaxyContext({ baseUrl: "https://g.example", apiKey: "K" }));
   const client = new Client({ name: "lax-check", version: "0" });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {
@@ -243,7 +244,7 @@ describe("an arguments container that is not an object", () => {
     [new (class Args { limit = 5 })(), "a class instance"],
   ] as Array<[unknown, string]>)("is refused, not decoded: %s", async (args) => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const server = buildServer({ baseUrl: "https://g.example", apiKey: "K" });
+    const server = buildServer(createGalaxyContext({ baseUrl: "https://g.example", apiKey: "K" }));
     await server.connect(serverTransport);
     const replies: Array<Record<string, unknown>> = [];
     clientTransport.onmessage = (message) => replies.push(message as Record<string, unknown>);
@@ -279,7 +280,7 @@ describe("an arguments container another realm parsed", () => {
     expect(Object.getPrototypeOf(elsewhere)).not.toBe(Object.prototype);
     for (const args of [elsewhere, JSON.parse(text) as Record<string, unknown>]) {
       const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-      const server = buildServer({ baseUrl: "https://g.example", apiKey: "K" });
+      const server = buildServer(createGalaxyContext({ baseUrl: "https://g.example", apiKey: "K" }));
       await server.connect(serverTransport);
       const replies: Array<Record<string, unknown>> = [];
       let arrived: () => void = () => {};

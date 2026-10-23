@@ -3,7 +3,7 @@ import { runInNewContext } from "node:vm";
 import { z, type ZodType } from "zod";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { allOperations } from "@galaxyproject/galaxy-ops";
+import { allOperations, createGalaxyContext } from "@galaxyproject/galaxy-ops";
 import { buildServer } from "../src/server";
 import { toOperationInput, toSnakeCase, wireShape } from "../src/wire-names";
 import { loadManifest, loadRegistry } from "./parity/surfaces";
@@ -46,7 +46,7 @@ afterEach(() => vi.restoreAllMocks());
 
 async function withClient<T>(use: (client: Client) => Promise<T>): Promise<T> {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const server = buildServer({ baseUrl: "https://g.example", apiKey: "K" });
+  const server = buildServer(createGalaxyContext({ baseUrl: "https://g.example", apiKey: "K" }));
   const client = new Client({ name: "wire-names", version: "0" });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {
@@ -64,7 +64,7 @@ async function withClient<T>(use: (client: Client) => Promise<T>): Promise<T> {
  */
 async function rawCall(params: Record<string, unknown>) {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const server = buildServer({ baseUrl: "https://g.example", apiKey: "K" });
+  const server = buildServer(createGalaxyContext({ baseUrl: "https://g.example", apiKey: "K" }));
   await server.connect(serverTransport);
   const replies: Array<Record<string, unknown>> = [];
   let arrived: () => void = () => {};

@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { allOperations, requirementSentence } from "@galaxyproject/galaxy-ops";
+import { allOperations, requirementSentence, createGalaxyContext } from "@galaxyproject/galaxy-ops";
 import { buildServer, toolNames, toolAnnotations, annotationsFor, toolResult } from "../src/server";
 import { inWireNames } from "../src/wire-names";
 
@@ -51,7 +51,7 @@ describe("MCP surface is a mechanical projection", () => {
 
   it("tells a model what an op needs from the server, in the op's own description", async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const server = buildServer({ baseUrl: "https://g.example", apiKey: "K" });
+    const server = buildServer(createGalaxyContext({ baseUrl: "https://g.example", apiKey: "K" }));
     const client = new Client({ name: "surface-check", version: "0" });
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     try {
@@ -91,7 +91,7 @@ describe("MCP surface is a mechanical projection", () => {
    */
   it("ships no example id an agent could copy, anywhere in tools/list", async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const server = buildServer({ baseUrl: "https://g.example", apiKey: "K" });
+    const server = buildServer(createGalaxyContext({ baseUrl: "https://g.example", apiKey: "K" }));
     const client = new Client({ name: "surface-check", version: "0" });
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     try {
@@ -114,7 +114,7 @@ describe("MCP surface is a mechanical projection", () => {
       readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8"),
     ) as { version: string };
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const server = buildServer({ baseUrl: "https://g.example", apiKey: "K" });
+    const server = buildServer(createGalaxyContext({ baseUrl: "https://g.example", apiKey: "K" }));
     const client = new Client({ name: "surface-check", version: "0" });
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     try {
@@ -127,7 +127,7 @@ describe("MCP surface is a mechanical projection", () => {
   });
 
   it("builds a server without throwing", () => {
-    expect(buildServer({ baseUrl: "https://g.example", apiKey: "K" })).toBeDefined();
+    expect(buildServer(createGalaxyContext({ baseUrl: "https://g.example", apiKey: "K" }))).toBeDefined();
   });
 });
 
@@ -176,7 +176,7 @@ describe("the text a tool call puts on the wire", () => {
 describe("a page bigger than the cap", () => {
   const paged = async (args: Record<string, unknown>) => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const server = buildServer({ baseUrl: "https://unreachable.invalid", apiKey: "K" });
+    const server = buildServer(createGalaxyContext({ baseUrl: "https://unreachable.invalid", apiKey: "K" }));
     const client = new Client({ name: "cap-check", version: "0" });
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     try {

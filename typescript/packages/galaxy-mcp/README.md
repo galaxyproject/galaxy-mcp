@@ -2,7 +2,8 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server (Node) that
 exposes [Galaxy](https://galaxyproject.org/) agent operations -- histories,
-datasets, tools, workflows, pages, and the IWC catalog -- as MCP tools over stdio. Built
+datasets, tools, workflows, pages, and the IWC catalog -- as MCP tools over stdio or
+Streamable HTTP. Built
 on [`@galaxyproject/galaxy-ops`](https://www.npmjs.com/package/@galaxyproject/galaxy-ops).
 
 ## Install / run
@@ -37,6 +38,40 @@ For example, in Claude Desktop's `claude_desktop_config.json`:
 
 Every operation is registered as an MCP tool; read-only operations are flagged
 with `readOnlyHint`.
+
+## Serving over HTTP
+
+```bash
+GALAXY_URL=https://usegalaxy.org/ GALAXY_API_KEY=your-api-key \
+  npx @galaxyproject/galaxy-mcp --transport streamable-http --port 8000
+# -> "galaxy-mcp: listening on http://127.0.0.1:8000/"
+```
+
+The flags and environment variables are the [Python server's](https://github.com/galaxyproject/galaxy-mcp/tree/main/python#serving-over-http):
+`--transport` / `GALAXY_MCP_TRANSPORT`, `--host` / `GALAXY_MCP_HOST` (default
+`127.0.0.1`), `--port` / `GALAXY_MCP_PORT` (default `8000`) and `--path` /
+`GALAXY_MCP_HTTP_PATH` (default `/`). Requests are stateless: each POST is answered
+on its own, so there is no MCP session, `GET` and `DELETE` are not served, and the
+server sends nothing outside the response to a request. None of the tools need more.
+
+There is no OAuth on this server yet, so every caller acts with the configured
+`GALAXY_API_KEY`. It applies the same guards the Python server applies without OAuth:
+
+- **Loopback by default.** Binding to any other address is refused unless
+  `--allow-unauthenticated` (`GALAXY_MCP_ALLOW_UNAUTHENTICATED=1`) says something
+  else controls who can reach the listener, such as a container port published only
+  to loopback or an authenticating reverse proxy.
+- **Host and Origin checks.** Requests must carry a loopback `Host`, and browser
+  requests are only answered for pages served from the same machine. Add names with
+  `GALAXY_MCP_ALLOWED_HOSTS` and `GALAXY_MCP_ALLOWED_ORIGINS` (comma-separated; `*`
+  disables the check).
+- **No server-filesystem access.** `upload_file` and `download_dataset` with
+  `file_path` would use paths on the machine running the server, so they are refused
+  over HTTP. A trusted single-user deployment can turn them back on with
+  `GALAXY_MCP_ALLOW_LOCAL_FILES=1`.
+
+The older HTTP+SSE transport the Python server also offers (`--transport sse`) is deprecated
+in MCP and not provided here.
 
 ## Tool arguments
 

@@ -4,6 +4,7 @@ import { runInNewContext } from "node:vm";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { createGalaxyContext } from "@galaxyproject/galaxy-ops";
 import { buildServer } from "../src/server";
 
 /**
@@ -67,7 +68,7 @@ afterEach(() => vi.restoreAllMocks());
  */
 async function rawCall(params: Record<string, unknown>) {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const server = buildServer({ baseUrl: "https://g.example", apiKey: "K" });
+  const server = buildServer(createGalaxyContext({ baseUrl: "https://g.example", apiKey: "K" }));
   await server.connect(serverTransport);
   const replies: Array<Record<string, unknown>> = [];
   let arrived: () => void = () => {};
@@ -297,7 +298,7 @@ describe("a key at the top level of an object-valued parameter", () => {
         done();
       },
     });
-    const server = buildServer({ baseUrl: "https://g.example", apiKey: "K" });
+    const server = buildServer(createGalaxyContext({ baseUrl: "https://g.example", apiKey: "K" }));
     await server.connect(new StdioServerTransport(stdin, stdout));
 
     stdin.push(
@@ -355,7 +356,7 @@ describe("a key at the top level of an object-valued parameter", () => {
    */
   it("advertises exactly the schema a record advertised", async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const server = buildServer({ baseUrl: "https://g.example", apiKey: "K" });
+    const server = buildServer(createGalaxyContext({ baseUrl: "https://g.example", apiKey: "K" }));
     const client = new Client({ name: "json-object-params", version: "0" });
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     const { tools } = await client.listTools();

@@ -6,6 +6,18 @@ entry covers all three; where something only affects one surface, it says which.
 
 ## Unreleased
 
+### galaxy-mcp serves Streamable HTTP
+
+`galaxy-mcp --transport streamable-http` (or `GALAXY_MCP_TRANSPORT=streamable-http`) serves the
+same tools over MCP's Streamable HTTP transport, statelessly, with the Python server's flags,
+environment variables and defaults. Without OAuth it applies the Python server's unauthenticated
+guards: it binds to loopback unless `--allow-unauthenticated` is given, checks the `Host` and
+`Origin` headers (`GALAXY_MCP_ALLOWED_HOSTS`, `GALAXY_MCP_ALLOWED_ORIGINS`), and refuses
+`upload_file` and `download_dataset(file_path=...)` with the Python server's sentence unless
+`GALAXY_MCP_ALLOW_LOCAL_FILES` is set. stdio is unchanged, and remains the default. Unknown
+command-line arguments are now refused rather than ignored, and an address that cannot be
+listened on (a port in use, say) is reported in one line instead of a stack trace.
+
 ### zod 4.6
 
 All three packages move from `zod ^4.3.0` to `^4.6.7`. The one visible change is in the JSON

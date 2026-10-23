@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { ZodRawShape } from "zod";
-import { allOperations, createGalaxyContext, describeOperation, runWithEnvelope } from "@galaxyproject/galaxy-ops";
+import { allOperations, describeOperation, runWithEnvelope, type GalaxyContext } from "@galaxyproject/galaxy-ops";
 import { LaxArgumentsTransport } from "./lax-transport.js";
 import { inWireNames, toOperationInput, wireShape } from "./wire-names.js";
 // The version a client is told, read from the package rather than written twice. tsup
@@ -67,9 +67,45 @@ export function toolResult(
   return { content: [{ type: "text", text: JSON.stringify(result) }], isError: false };
 }
 
-export function buildServer(conn: { baseUrl: string; apiKey: string }): McpServer {
+/**
+ * Tools that take a path on the machine running this server. Over stdio that machine is the
+ * caller's own; over HTTP it is not, so they are refused there with the Python server's
+ * sentence (its `require_local_files`), unless the operator turns them back on.
+ */
+const localFileTools: Record<string, { uses: (input: Record<string, unknown>) => boolean; action: string; alternative: string }> = {
+  upload_file: {
+    uses: () => true,
+    action: "upload_file",
+    alternative: "Use upload_file_from_url to load data the Galaxy server can fetch itself.",
+  },
+  download_dataset: {
+    uses: (input) => Boolean(input.filePath),
+    action: "download_dataset(file_path=...)",
+    alternative: "Omit file_path to receive the content in the response instead.",
+  },
+};
+
+export const ALLOW_LOCAL_FILES_ENV = "GALAXY_MCP_ALLOW_LOCAL_FILES";
+
+function localFilesRefusal({ action, alternative }: { action: string; alternative: string }): string {
+  return (
+    `${action} is disabled over HTTP transports, because the path would refer to the MCP ` +
+    `server's filesystem rather than yours. ${alternative} Operators of a trusted single-user ` +
+    `deployment can re-enable it with ${ALLOW_LOCAL_FILES_ENV}=1.`
+  );
+}
+
+export interface ServerOptions {
+  /** Whether tools may read or write paths on this machine. True over stdio. */
+  allowLocalFiles?: boolean;
+}
+
+/**
+ * One MCP server over one Galaxy context. The context is passed in rather than built here so
+ * servers can share it, along with the Galaxy version it caches.
+ */
+export function buildServer(ctx: GalaxyContext, { allowLocalFiles = true }: ServerOptions = {}): McpServer {
   const server = new McpServer({ name: "galaxy", version });
-  const ctx = createGalaxyContext(conn);
   const annotations = toolAnnotations();
   const shapes = new Map<string, ZodRawShape>();
   for (const op of allOperations) {
@@ -86,6 +122,10 @@ export function buildServer(conn: { baseUrl: string; apiKey: string }): McpServe
       },
       async (args: unknown) => {
         const input = toOperationInput(args as Record<string, unknown>, toInput);
+        const localFiles = localFileTools[op.name];
+        if (!allowLocalFiles && localFiles?.uses(input as Record<string, unknown>)) {
+          return toolResult(op.name, { success: false, message: localFilesRefusal(localFiles) });
+        }
         return toolResult(op.name, await runWithEnvelope(op as never, input as never, ctx));
       },
     );

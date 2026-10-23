@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { runInNewContext } from "node:vm";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { createGalaxyContext } from "@galaxyproject/galaxy-ops";
 import { buildServer } from "../src/server";
 
 /**
@@ -77,7 +78,7 @@ interface Reply {
  */
 async function rawMessage(message: unknown, wait = 5_000): Promise<Reply | undefined> {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const server = buildServer({ baseUrl: "https://g.example", apiKey: "K" });
+  const server = buildServer(createGalaxyContext({ baseUrl: "https://g.example", apiKey: "K" }));
   await server.connect(serverTransport);
   const replies: Reply[] = [];
   let arrived: () => void = () => {};

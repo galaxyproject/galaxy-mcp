@@ -33,6 +33,7 @@ import { fileURLToPath } from "node:url";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { createGalaxyContext } from "@galaxyproject/galaxy-ops";
 import { buildServer } from "../src/server";
 // The IWC manifest and the container recommender are both memoised for the life of
 // the process, as they are on the other side, so a case that serves its own manifest
@@ -141,7 +142,7 @@ async function callThroughMcp(
   args: Record<string, unknown>,
 ): Promise<{ content: Array<{ type: string; text?: string }>; isError: boolean }> {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const server = buildServer({ baseUrl, apiKey: "envelope-parity-not-a-key" });
+  const server = buildServer(createGalaxyContext({ baseUrl, apiKey: "envelope-parity-not-a-key" }));
   const client = new Client({ name: "envelope-parity", version: "0" });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {

@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { allOperations } from "@galaxyproject/galaxy-ops";
+import { allOperations, createGalaxyContext } from "@galaxyproject/galaxy-ops";
 import { buildServer } from "../../src/server";
 import {
   describe as describeValue,
@@ -364,7 +364,7 @@ export function pythonSurface(manifest: Manifest): Surface {
  */
 export async function typescriptSurface(): Promise<Surface> {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const server = buildServer({ baseUrl: "https://galaxy.invalid", apiKey: "not-used" });
+  const server = buildServer(createGalaxyContext({ baseUrl: "https://galaxy.invalid", apiKey: "not-used" }));
   const client = new Client({ name: "parity-check", version: "0" });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   // MCP has no field for what a tool needs from the server, so this side declares it
