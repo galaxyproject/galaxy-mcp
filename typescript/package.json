@@ -12,8 +12,8 @@
     "parity:report:print": "pnpm --silent --filter @galaxyproject/galaxy-mcp parity:report:print"
   },
   "devDependencies": {
-    "typescript": "^6.0.0",
-    "dependency-cruiser": "^16.0.0"
+    "typescript": "^7.0.2",
+    "dependency-cruiser": "^18.7.0"
   },
   "packageManager": "pnpm@9.12.0",
   "pnpm": {
