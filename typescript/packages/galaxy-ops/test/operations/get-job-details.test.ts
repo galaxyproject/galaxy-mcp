@@ -15,6 +15,9 @@ describe("get_job_details", () => {
         if (path.includes("/provenance")) {
           return { data: { job_id: "j1" }, response: { status: 200 } };
         }
+        if (path === "/api/datasets/{dataset_id}") {
+          return { data: { id: "d1", history_id: "h1", creating_job: "j1" }, response: { status: 200 } };
+        }
         if (path.includes("/jobs/")) {
           return { data: { id: "j1", state: "ok" }, response: { status: 200 } };
         }
@@ -72,7 +75,7 @@ describe("get_job_details", () => {
           return { error: { err_msg: "Forbidden" }, response: { status: 403 } };
         }
         if (path.includes("/datasets/")) {
-          return { data: { creating_job: "j4" }, response: { status: 200 } };
+          return { data: { history_id: "h4", creating_job: "j4" }, response: { status: 200 } };
         }
         return { data: { id: "j4", state: "ok" }, response: { status: 200 } };
       },
@@ -87,7 +90,7 @@ describe("get_job_details", () => {
         if (path.includes("/provenance")) {
           return { error: { err_msg: "Forbidden" }, response: { status: 403 } };
         }
-        return { data: { id: "d5" }, response: { status: 200 } };
+        return { data: { id: "d5", history_id: "h5" }, response: { status: 200 } };
       },
     });
     await expect(
@@ -103,7 +106,7 @@ describe("get_job_details", () => {
           return { data: { some_other_field: "x" }, response: { status: 200 } };
         }
         if (path.includes("/datasets/") && !path.includes("/jobs/")) {
-          return { data: { creating_job: "j5" }, response: { status: 200 } };
+          return { data: { history_id: "h5", creating_job: "j5" }, response: { status: 200 } };
         }
         if (path.includes("/jobs/")) {
           return { data: { id: "j5", state: "ok" }, response: { status: 200 } };
@@ -114,6 +117,102 @@ describe("get_job_details", () => {
     const out = await getJobDetails({ datasetId: "d5", historyId: "h5" }, ctxWith(client));
     expect(out.job_id).toBe("j5");
     expect(out.dataset_id).toBe("d5");
+  });
+});
+
+// server.py, get_job_details: Galaxy finds the dataset by its id alone on both routes, so with
+// a history named the dataset's own record decides whether it is in that history. The job's
+// history does not: a dataset copied into this history keeps the job that made the original.
+describe("get_job_details with a history named", () => {
+  const D = "0123456789abcdef";
+  const H = "1a2b3c4d5e6f7a8b";
+  const OTHER = "8b7a6f5e4d3c2b1a";
+  const J = "3333333333333333";
+  const PROVENANCE = "/api/histories/{history_id}/contents/{dataset_id}/provenance";
+  const DATASET = "/api/datasets/{dataset_id}";
+  const JOB = "/api/jobs/{job_id}";
+  const REFUSAL =
+    `Dataset ID '${D}' not found in history '${H}': Galaxy's record of that dataset does ` +
+    "not put it in that history, so its job was not returned.";
+  // Provenance answers for the dataset whatever history is in its path: Galaxy never reads it.
+  const PROVENANCE_ANSWERS = { data: { id: D, job_id: J }, response: { status: 200 } };
+  const inHistory = (historyId: string) => ({ id: D, history_id: historyId, creating_job: J });
+  // Every reply that does not put the dataset in the history named, as server.py's tests
+  // list them: another history, null (a dataset in no history), no history_id at all, and a
+  // listing -- what a "." for an id folds the read into -- even one naming the right history.
+  const NOT_THERE: Array<[string, unknown]> = [
+    ["a record in another history", inHistory(OTHER)],
+    ["a record in no history", { id: D, history_id: null, creating_job: J }],
+    ["a record without history_id", { id: D, creating_job: J }],
+    ["a listing", [inHistory(H)]],
+  ];
+
+  function galaxy(reply: unknown, provenance: object = PROVENANCE_ANSWERS) {
+    const paths: string[] = [];
+    const client = mockClient({
+      GET: (path) => {
+        paths.push(path);
+        if (path === PROVENANCE) return provenance;
+        if (path === DATASET) return { data: reply, response: { status: 200 } };
+        return { data: { id: J, history_id: OTHER, state: "ok" }, response: { status: 200 } };
+      },
+    });
+    return { ctx: ctxWith(client), paths };
+  }
+
+  it.each(NOT_THERE)("refuses %s before any job is read", async (_label, reply) => {
+    const { ctx, paths } = galaxy(reply);
+    const failure = await getJobDetails({ datasetId: D, historyId: H }, ctx).catch((e) => e);
+    expect(failure).toBeInstanceOf(GalaxyNotFoundError);
+    expect(failure.message).toBe(REFUSAL);
+    expect(failure.http).toBeUndefined();
+    expect(paths).toEqual([PROVENANCE, DATASET]);
+  });
+
+  it.each(NOT_THERE)("refuses %s over a provenance failure, which is never about the history", async (_label, reply) => {
+    const { ctx, paths } = galaxy(reply, { error: { err_msg: "Forbidden" }, response: { status: 403 } });
+    const failure = await getJobDetails({ datasetId: D, historyId: H }, ctx).catch((e) => e);
+    expect(failure).toBeInstanceOf(GalaxyNotFoundError);
+    expect(failure.message).toBe(REFUSAL);
+    expect(paths).not.toContain(JOB);
+  });
+
+  it("reports a dataset record it could not read, even after provenance answered", async () => {
+    const paths: string[] = [];
+    const client = mockClient({
+      GET: (path) => {
+        paths.push(path);
+        if (path === PROVENANCE) return PROVENANCE_ANSWERS;
+        if (path === DATASET) return { error: { err_msg: "boom" }, response: { status: 500 } };
+        return { data: { id: J }, response: { status: 200 } };
+      },
+    });
+    const failure = await getJobDetails({ datasetId: D, historyId: H }, ctxWith(client)).catch(
+      (e) => e,
+    );
+    expect(failure).toBeInstanceOf(GalaxyConnectionError);
+    expect(failure.http?.status).toBe(500);
+    expect(paths).toEqual([PROVENANCE, DATASET]);
+  });
+
+  it("answers for a copy in the history named, with the job that made the original", async () => {
+    const { ctx } = galaxy(inHistory(H));
+    const out = await getJobDetails({ datasetId: D, historyId: H }, ctx);
+    expect(out).toEqual({ job: { id: J, history_id: OTHER, state: "ok" }, dataset_id: D, job_id: J });
+  });
+
+  it("does not hold the history's case against the caller", async () => {
+    // Galaxy decodes either case and writes lowercase, so the two spell one history.
+    const { ctx } = galaxy(inHistory(H));
+    const out = await getJobDetails({ datasetId: D, historyId: H.toUpperCase() }, ctx);
+    expect(out.job_id).toBe(J);
+  });
+
+  it("scopes nothing when no history is named: a dataset anywhere answers", async () => {
+    const { ctx, paths } = galaxy(inHistory(OTHER));
+    const out = await getJobDetails({ datasetId: D }, ctx);
+    expect(out.job_id).toBe(J);
+    expect(paths).toEqual([DATASET, JOB]);
   });
 });
 

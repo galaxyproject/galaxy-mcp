@@ -216,10 +216,15 @@ class TestGetJobDetails:
 
     JOB_ID = "404ccccccccccccc"
     PROVENANCE_URL = f"{BASE}/api/histories/{HISTORY_404}/contents/{ID_404}/provenance"
+    DATASET_URL = f"{BASE}/api/datasets/{ID_404}"
     JOB_URL = f"{BASE}/api/jobs/{JOB_ID}"
 
     def _provenance(self):
         responses.add(responses.GET, self.PROVENANCE_URL, json={"job_id": self.JOB_ID}, status=200)
+        # A history is named, so the dataset's own record is read too, and puts it there.
+        responses.add(
+            responses.GET, self.DATASET_URL, json={"id": ID_404, "history_id": HISTORY_404}
+        )
 
     @responses.activate
     def test_a_real_404_is_a_missing_or_unreadable_job(self):
@@ -316,7 +321,13 @@ class TestGetJobDetailsWhenProvenanceFailed:
     )
 
     def _dataset_without_a_job(self):
-        responses.add(responses.GET, self.DATASET_URL, json={"id": ID_401}, status=200)
+        # In the history named, so the missing job is the only thing left to explain.
+        responses.add(
+            responses.GET,
+            self.DATASET_URL,
+            json={"id": ID_401, "history_id": HISTORY_404},
+            status=200,
+        )
 
     @responses.activate
     def test_a_500_from_provenance_survives_a_fallback_that_found_no_job(self):

@@ -2688,10 +2688,12 @@ def job_details_cases(add: AddCase) -> None:
 
     With a history the provenance record is asked first and its ``job_id`` is used;
     without one, or when provenance answers without a job id, the dataset's own
-    ``creating_job`` is read instead. Both paths end at the same GET /api/jobs/{id},
-    which this server reaches with requests rather than through bioblend -- joined onto
-    the session's stored address, which is why that address has to be the one connect
-    would have stored.
+    ``creating_job`` is read instead. With a history the dataset's record is read either
+    way, because Galaxy answers provenance without reading the history and the record's
+    ``history_id`` is the only thing that says the dataset is in it. Both paths end at
+    the same GET /api/jobs/{id}, which this server reaches with requests rather than
+    through bioblend -- joined onto the session's stored address, which is why that
+    address has to be the one connect would have stored.
     """
     job = {
         "id": "j0000001",
@@ -2733,6 +2735,7 @@ def job_details_cases(add: AddCase) -> None:
                     "parameters": {},
                 },
             ),
+            dataset_route,
             job_route,
         ],
     )
@@ -4608,6 +4611,30 @@ def more_http_failure_cases(add: AddFailure) -> None:
         "a dataset that reads fine and names no job -- a refusal, not a failed request",
         {"dataset_id": "d0001"},
         [route("/api/datasets/d0001", {"id": "d0001", "name": "uploaded.txt", "state": "ok"})],
+    )
+    add(
+        "get_job_details",
+        "dataset_in_another_history",
+        "provenance answers for a dataset wherever it is, since Galaxy never reads the history "
+        "in that path, so the dataset's own record decides: it is in another history, which is "
+        "refused before any job is read",
+        {"dataset_id": "d0003", "history_id": "h0001"},
+        [
+            route(
+                "/api/histories/h0001/contents/d0003/provenance",
+                {"id": "d0003", "job_id": "j0000003", "tool_id": "cat1", "parameters": {}},
+            ),
+            route(
+                "/api/datasets/d0003",
+                {
+                    "id": "d0003",
+                    "name": "out.txt",
+                    "state": "ok",
+                    "history_id": "h0002",
+                    "creating_job": "j0000003",
+                },
+            ),
+        ],
     )
     add(
         "get_job_details",

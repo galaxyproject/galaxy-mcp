@@ -18,6 +18,21 @@
     },
     {
       "method": "GET",
+      "path": "/api/datasets/d0000002",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "id": "d0000002",
+        "name": "FastQC on data 1: Webpage",
+        "state": "ok",
+        "extension": "html",
+        "creating_job": "j0000001",
+        "history_id": "h0000"
+      }
+    },
+    {
+      "method": "GET",
       "path": "/api/jobs/j0000001",
       "query": {},
       "status": 200,
