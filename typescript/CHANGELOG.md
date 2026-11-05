@@ -28,6 +28,17 @@ old `anyOf` will see the new spelling in the input schemas `galaxy-mcp` advertis
 `galaxy-ops` hands out. The parity comparison reads the list as the union it is, so the report
 against the Python server is unchanged.
 
+### `get_job_details` answers only for a dataset in the history it names
+
+With `historyId`, a dataset in another history came back with success and a job from that
+history, because Galaxy looks the dataset up by its id alone on both reads and its provenance
+route never reads the history in the path. The op now reads the dataset's own record whether
+or not a history is named, and a dataset it does not put in that history is refused as
+`not_found` (exit 66) with the Python server's sentence, before any job is read. The
+provenance route is no longer asked, since the record's `creating_job` is the job it
+reported, so a provenance failure is no longer held back to report when the record names no
+job. Without `historyId` nothing changes.
+
 ## 0.5.0 (2026-10-20)
 
 ### galaxy-mcp on `@modelcontextprotocol/sdk` 1.32 (#190)

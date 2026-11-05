@@ -209,21 +209,26 @@ class TestGetCollectionDetails:
 class TestGetJobDetails:
     """The one that does not go through bioblend for the call that fails.
 
-    Provenance comes from bioblend and answers; the job read is a plain `requests.get`
-    followed by `raise_for_status`, so the failure carries its status on `response` rather
-    than on a field of its own. Same question, other spelling.
+    The dataset record comes from bioblend and answers; the job read is a plain
+    `requests.get` followed by `raise_for_status`, so the failure carries its status on
+    `response` rather than on a field of its own. Same question, other spelling.
     """
 
     JOB_ID = "404ccccccccccccc"
-    PROVENANCE_URL = f"{BASE}/api/histories/{HISTORY_404}/contents/{ID_404}/provenance"
+    DATASET_URL = f"{BASE}/api/datasets/{ID_404}"
     JOB_URL = f"{BASE}/api/jobs/{JOB_ID}"
 
-    def _provenance(self):
-        responses.add(responses.GET, self.PROVENANCE_URL, json={"job_id": self.JOB_ID}, status=200)
+    def _dataset(self):
+        # In the history named, and made by the job whose read is the one that fails.
+        responses.add(
+            responses.GET,
+            self.DATASET_URL,
+            json={"id": ID_404, "history_id": HISTORY_404, "creating_job": self.JOB_ID},
+        )
 
     @responses.activate
     def test_a_real_404_is_a_missing_or_unreadable_job(self):
-        self._provenance()
+        self._dataset()
         answer(self.JOB_URL, 404)
 
         message = failure_from(lambda: get_job_details_fn(ID_404, history_id=HISTORY_404))
@@ -232,7 +237,7 @@ class TestGetJobDetails:
 
     @responses.activate
     def test_a_request_that_never_completed_claims_nothing_about_the_id(self):
-        self._provenance()
+        self._dataset()
         never_answers(self.JOB_URL)
 
         message = failure_from(lambda: get_job_details_fn(ID_404, history_id=HISTORY_404))
@@ -243,7 +248,7 @@ class TestGetJobDetails:
 
     @responses.activate
     def test_a_500_is_reported_as_the_server_s_problem(self):
-        self._provenance()
+        self._dataset()
         answer(self.JOB_URL, 500)
 
         message = failure_from(lambda: get_job_details_fn(ID_404, history_id=HISTORY_404))
@@ -253,8 +258,8 @@ class TestGetJobDetails:
 
 
 class TestGetJobDetailsFindingTheJob:
-    """The two lookups before the job read, whose failures used to be folded into a sentence
-    of the tool's own before anything asked what had gone wrong.
+    """The dataset lookup before the job read, whose failures used to be folded into a
+    sentence of the tool's own before anything asked what had gone wrong.
 
     That wrapper carried no status, so the fallback searched its text -- and its text quotes
     the dataset id. `401aaaaaaaaaaaaa` was answered with an API key to check, and so was a
@@ -292,65 +297,3 @@ class TestGetJobDetailsFindingTheJob:
         assert f"Dataset ID '{ID_401}' not found or job not accessible" in message
         assert "permission to view it" in message
         assert AUTH_HINT not in message
-
-
-class TestGetJobDetailsWhenProvenanceFailed:
-    """Provenance failed, the dataset record answered, and it knows of no job.
-
-    The one path where two lookups disagree about what happened. "The dataset was not
-    created by a job" is what the fallback found; it is not an answer to why provenance
-    failed, and saying it instead throws away the only exception here that knows. The
-    caller asked about provenance -- a 500, a permission refusal or a request that never
-    completed has to survive a fallback that came back empty.
-
-    The dataset id carries 401 so that anything reading a status out of the text would say
-    the API key was rejected, and every one of these failures is something else.
-    """
-
-    PROVENANCE_URL = f"{BASE}/api/histories/{HISTORY_404}/contents/{ID_401}/provenance"
-    DATASET_URL = f"{BASE}/api/datasets/{ID_401}"
-    JOBLESS = "may not have been created by a job"
-    UNREACHED_PROVENANCE = (
-        f"HTTPConnectionPool(host='status-test.invalid', port=80): Max retries exceeded "
-        f"with url: /api/histories/{HISTORY_404}/contents/{ID_401}/provenance"
-    )
-
-    def _dataset_without_a_job(self):
-        responses.add(responses.GET, self.DATASET_URL, json={"id": ID_401}, status=200)
-
-    @responses.activate
-    def test_a_500_from_provenance_survives_a_fallback_that_found_no_job(self):
-        answer(self.PROVENANCE_URL, 500)
-        self._dataset_without_a_job()
-
-        message = failure_from(lambda: get_job_details_fn(ID_401, history_id=HISTORY_404))
-
-        assert SERVER_ERROR_HINT in message
-        assert "error 500" in message
-        assert self.JOBLESS not in message
-        assert AUTH_HINT not in message
-
-    @responses.activate
-    def test_a_404_from_provenance_still_says_it_may_be_permission(self):
-        answer(self.PROVENANCE_URL, 404)
-        self._dataset_without_a_job()
-
-        message = failure_from(lambda: get_job_details_fn(ID_401, history_id=HISTORY_404))
-
-        assert f"Dataset ID '{ID_401}' not found or job not accessible" in message
-        assert "permission to view it" in message
-        assert self.JOBLESS not in message
-        assert AUTH_HINT not in message
-
-    @responses.activate
-    def test_provenance_that_never_completed_is_reported_without_a_diagnosis(self):
-        never_answers(self.PROVENANCE_URL, self.UNREACHED_PROVENANCE)
-        self._dataset_without_a_job()
-
-        message = failure_from(lambda: get_job_details_fn(ID_401, history_id=HISTORY_404))
-
-        assert "Get job details failed" in message
-        assert "Max retries exceeded" in message
-        assert self.JOBLESS not in message
-        assert NOT_FOUND not in message.lower()
-        assert not [hint for hint in EVERY_HINT if hint in message]

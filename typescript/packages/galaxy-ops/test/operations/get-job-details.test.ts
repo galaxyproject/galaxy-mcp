@@ -9,11 +9,16 @@ import { GalaxyConnectionError, GalaxyNotFoundError, GalaxyAuthError, GalaxyVali
 const ctxWith = (client: any): GalaxyContext => ({ client, poll: DEFAULT_POLL });
 
 describe("get_job_details", () => {
-  it("(a) historyId path: resolves job_id from provenance then fetches job", async () => {
+  it("(a) historyId path: reads creating_job from the dataset in that history; provenance not called", async () => {
+    let provenanceCalls = 0;
     const client = mockClient({
       GET: (path, _init) => {
         if (path.includes("/provenance")) {
-          return { data: { job_id: "j1" }, response: { status: 200 } };
+          provenanceCalls++;
+          return { data: { job_id: "should-not-use" }, response: { status: 200 } };
+        }
+        if (path === "/api/datasets/{dataset_id}") {
+          return { data: { id: "d1", history_id: "h1", creating_job: "j1" }, response: { status: 200 } };
         }
         if (path.includes("/jobs/")) {
           return { data: { id: "j1", state: "ok" }, response: { status: 200 } };
@@ -26,9 +31,10 @@ describe("get_job_details", () => {
     expect(out.dataset_id).toBe("d1");
     expect((out.job as any).id).toBe("j1");
     expect((out.job as any).state).toBe("ok");
+    expect(provenanceCalls).toBe(0);
   });
 
-  it("(b) fallback path: no historyId, reads creating_job from dataset GET; provenance not called", async () => {
+  it("(b) no historyId: reads creating_job from dataset GET; provenance not called", async () => {
     let provenanceCalls = 0;
     const client = mockClient({
       GET: (path, _init) => {
@@ -59,61 +65,90 @@ describe("get_job_details", () => {
     });
     await expect(getJobDetails({ datasetId: "d3" }, ctxWith(client))).rejects.toThrow();
   });
+});
 
-  // server.py, get_job_details: a provenance failure is held, not raised. The dataset's own
-  // record names the job that made it, so a history whose provenance is out of reach still
-  // answers the question -- and the held failure is only reported if the fallback fails too,
-  // or finds no job. That is what the other server does, and it is why this asks for the job
-  // rather than refusing.
-  it("(d) historyId given, provenance returns 403 -> the dataset's creating_job answers", async () => {
+// server.py, get_job_details: Galaxy finds the dataset by its id alone, so with a history named
+// the dataset's own record decides whether it is in that history. The job's history does not:
+// a dataset copied into this history keeps the job that made the original. The same record
+// names the job, so the provenance route is never asked.
+describe("get_job_details with a history named", () => {
+  const D = "0123456789abcdef";
+  const H = "1a2b3c4d5e6f7a8b";
+  const OTHER = "8b7a6f5e4d3c2b1a";
+  const J = "3333333333333333";
+  const DATASET = "/api/datasets/{dataset_id}";
+  const JOB = "/api/jobs/{job_id}";
+  const REFUSAL =
+    `Dataset ID '${D}' not found in history '${H}': Galaxy's record of that dataset does ` +
+    "not put it in that history, so its job was not returned.";
+  const inHistory = (historyId: string) => ({ id: D, history_id: historyId, creating_job: J });
+  // Every reply that does not put the dataset in the history named, as server.py's tests
+  // list them: another history, null (a dataset in no history), no history_id at all, and a
+  // listing -- what a "." for an id folds the read into -- even one naming the right history.
+  const NOT_THERE: Array<[string, unknown]> = [
+    ["a record in another history", inHistory(OTHER)],
+    ["a record in no history", { id: D, history_id: null, creating_job: J }],
+    ["a record without history_id", { id: D, creating_job: J }],
+    ["a listing", [inHistory(H)]],
+  ];
+
+  function galaxy(reply: unknown) {
+    const paths: string[] = [];
     const client = mockClient({
-      GET: (path, _init) => {
-        if (path.includes("/provenance")) {
-          return { error: { err_msg: "Forbidden" }, response: { status: 403 } };
-        }
-        if (path.includes("/datasets/")) {
-          return { data: { creating_job: "j4" }, response: { status: 200 } };
-        }
-        return { data: { id: "j4", state: "ok" }, response: { status: 200 } };
+      GET: (path) => {
+        paths.push(path);
+        if (path === DATASET) return { data: reply, response: { status: 200 } };
+        return { data: { id: J, history_id: OTHER, state: "ok" }, response: { status: 200 } };
       },
     });
-    const out = await getJobDetails({ datasetId: "d4", historyId: "h4" }, ctxWith(client));
-    expect(out.job_id).toBe("j4");
+    return { ctx: ctxWith(client), paths };
+  }
+
+  it.each(NOT_THERE)("refuses %s before any job is read", async (_label, reply) => {
+    const { ctx, paths } = galaxy(reply);
+    const failure = await getJobDetails({ datasetId: D, historyId: H }, ctx).catch((e) => e);
+    expect(failure).toBeInstanceOf(GalaxyNotFoundError);
+    expect(failure.message).toBe(REFUSAL);
+    expect(failure.http).toBeUndefined();
+    expect(paths).toEqual([DATASET]);
   });
 
-  it("(d2) a held provenance failure is what a dataset with no creating_job reports", async () => {
+  it("reports a dataset record it could not read", async () => {
+    const paths: string[] = [];
     const client = mockClient({
-      GET: (path, _init) => {
-        if (path.includes("/provenance")) {
-          return { error: { err_msg: "Forbidden" }, response: { status: 403 } };
-        }
-        return { data: { id: "d5" }, response: { status: 200 } };
+      GET: (path) => {
+        paths.push(path);
+        if (path === DATASET) return { error: { err_msg: "boom" }, response: { status: 500 } };
+        return { data: { id: J }, response: { status: 200 } };
       },
     });
-    await expect(
-      getJobDetails({ datasetId: "d5", historyId: "h5" }, ctxWith(client)),
-    ).rejects.toBeInstanceOf(GalaxyAuthError);
+    const failure = await getJobDetails({ datasetId: D, historyId: H }, ctxWith(client)).catch(
+      (e) => e,
+    );
+    expect(failure).toBeInstanceOf(GalaxyConnectionError);
+    expect(failure.http?.status).toBe(500);
+    expect(paths).toEqual([DATASET]);
   });
 
-  it("(e) historyId given, provenance returns 200 but no job_id -> falls through to dataset creating_job", async () => {
-    const client = mockClient({
-      GET: (path, _init) => {
-        if (path.includes("/provenance")) {
-          // 200 response with no job_id field
-          return { data: { some_other_field: "x" }, response: { status: 200 } };
-        }
-        if (path.includes("/datasets/") && !path.includes("/jobs/")) {
-          return { data: { creating_job: "j5" }, response: { status: 200 } };
-        }
-        if (path.includes("/jobs/")) {
-          return { data: { id: "j5", state: "ok" }, response: { status: 200 } };
-        }
-        return { error: "not found", response: { status: 404 } };
-      },
-    });
-    const out = await getJobDetails({ datasetId: "d5", historyId: "h5" }, ctxWith(client));
-    expect(out.job_id).toBe("j5");
-    expect(out.dataset_id).toBe("d5");
+  it("answers for a copy in the history named, with the job that made the original", async () => {
+    const { ctx, paths } = galaxy(inHistory(H));
+    const out = await getJobDetails({ datasetId: D, historyId: H }, ctx);
+    expect(out).toEqual({ job: { id: J, history_id: OTHER, state: "ok" }, dataset_id: D, job_id: J });
+    expect(paths).toEqual([DATASET, JOB]);
+  });
+
+  it("does not hold the history's case against the caller", async () => {
+    // Galaxy decodes either case and writes lowercase, so the two spell one history.
+    const { ctx } = galaxy(inHistory(H));
+    const out = await getJobDetails({ datasetId: D, historyId: H.toUpperCase() }, ctx);
+    expect(out.job_id).toBe(J);
+  });
+
+  it("scopes nothing when no history is named: a dataset anywhere answers", async () => {
+    const { ctx, paths } = galaxy(inHistory(OTHER));
+    const out = await getJobDetails({ datasetId: D }, ctx);
+    expect(out.job_id).toBe(J);
+    expect(paths).toEqual([DATASET, JOB]);
   });
 });
 

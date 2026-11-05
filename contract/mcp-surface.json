@@ -626,7 +626,7 @@
               }
             ],
             "default": null,
-            "description": "Galaxy history ID containing the dataset - optional for performance optimization\n       (a 16-character hex string); only used with dataset_id"
+            "description": "Galaxy history ID containing the dataset (a 16-character hex string);\n       only used with dataset_id. A dataset in any other history is refused"
           },
           "job_id": {
             "anyOf": [
