@@ -58,14 +58,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of each record"), found nothing. Punctuation around a word is ignored; a query with a
   single-character word finds no more.
 - `get_job_details` given a `history_id` answered for a dataset in any history. Galaxy
-  looks the dataset up by its id alone on both reads the tool makes (its provenance
+  looks the dataset up by its id alone on both reads the tool made (its provenance
   route never reads the history in the path), so a dataset id from another history, or a
   job's id that decodes to some other dataset, came back with success and a job from
-  that other history. The dataset's own record is now read whenever a history is named,
-  one more request, and a dataset it does not put in that history is refused before any
-  job is read. A dataset copied into the history still answers with the job that made
-  the original, which ran in another one. The TypeScript server had the same bug and is
-  fixed alongside.
+  that other history. The tool now reads the dataset's own record whether or not a
+  history is named, and a dataset it does not put in that history is refused before any
+  job is read. The provenance route is no longer asked: the record's `creating_job` is
+  the job it reported. A dataset copied into the history still answers with the job that
+  made the original, which ran in another one. The TypeScript server had the same bug
+  and is fixed alongside.
 
 ## [1.12.0] - 2026-10-19
 

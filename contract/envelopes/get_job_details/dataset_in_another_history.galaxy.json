@@ -4,19 +4,6 @@
   "routes": [
     {
       "method": "GET",
-      "path": "/api/histories/h0001/contents/d0003/provenance",
-      "query": {},
-      "status": 200,
-      "headers": {},
-      "body": {
-        "id": "d0003",
-        "job_id": "j0000003",
-        "tool_id": "cat1",
-        "parameters": {}
-      }
-    },
-    {
-      "method": "GET",
       "path": "/api/datasets/d0003",
       "query": {},
       "status": 200,

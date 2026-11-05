@@ -26,20 +26,21 @@ class TestJobOperations:
         galaxy_state["gi"] = None
 
     @responses.activate
-    def test_get_job_details_with_provenance(self):
-        """Test getting job details using dataset provenance"""
+    def test_get_job_details_with_a_history(self):
+        """Test getting job details for a dataset whose record puts it in the history named"""
         dataset_id = "dataset123"
         history_id = "history789"
         job_id = "job456"
 
-        # Mock the bioblend provenance call
+        # The dataset's own record says where it is and which job made it; nothing else is
+        # asked, so the mock has no histories client for a provenance call to reach.
         mock_gi = type("MockGI", (), {})()
-        mock_histories = type("MockHistories", (), {})()
-        mock_histories.show_dataset_provenance = lambda history_id, dataset_id: {"job_id": job_id}
-        mock_gi.histories = mock_histories
-        # A history is named, so the dataset's own record is read too, and puts it there
         mock_datasets = type("MockDatasets", (), {})()
-        mock_datasets.show_dataset = lambda dataset_id: {"id": dataset_id, "history_id": history_id}
+        mock_datasets.show_dataset = lambda dataset_id: {
+            "id": dataset_id,
+            "history_id": history_id,
+            "creating_job": job_id,
+        }
         mock_gi.datasets = mock_datasets
         galaxy_state["gi"] = mock_gi
 
@@ -59,22 +60,18 @@ class TestJobOperations:
         assert result.data["job_id"] == job_id
 
     @responses.activate
-    def test_get_job_details_fallback_to_dataset_details(self):
-        """Test fallback to dataset details when provenance fails"""
+    def test_get_job_details_from_the_dataset_record(self):
+        """Test reading the dataset's creating_job when no history is named"""
         dataset_id = "dataset123"
         job_id = "job456"
 
         # Mock the bioblend calls
         mock_gi = type("MockGI", (), {})()
-        mock_histories = type("MockHistories", (), {})()
         mock_datasets = type("MockDatasets", (), {})()
 
-        # Provenance fails
-        mock_histories.show_dataset_provenance = lambda history_id, dataset_id: None
         # Dataset details has creating_job
         mock_datasets.show_dataset = lambda dataset_id: {"creating_job": job_id}
 
-        mock_gi.histories = mock_histories
         mock_gi.datasets = mock_datasets
         galaxy_state["gi"] = mock_gi
 
@@ -99,13 +96,10 @@ class TestJobOperations:
 
         # Mock the bioblend calls to return no job info
         mock_gi = type("MockGI", (), {})()
-        mock_histories = type("MockHistories", (), {})()
         mock_datasets = type("MockDatasets", (), {})()
 
-        mock_histories.show_dataset_provenance = lambda history_id, dataset_id: {}
         mock_datasets.show_dataset = lambda dataset_id: {}
 
-        mock_gi.histories = mock_histories
         mock_gi.datasets = mock_datasets
         galaxy_state["gi"] = mock_gi
 
@@ -202,17 +196,16 @@ class TestGetJobDetailsByJobId:
         """get_job_details(dataset_id, history_id) predates job_id, so job_id sits after both.
 
         Ordered the other way, a caller's positional history id would land in job_id and be
-        refused as a second id rather than used for the provenance lookup.
+        refused as a second id rather than used as the history the dataset has to be in.
         """
-        asked: list[tuple[str, str]] = []
+        asked: list[str] = []
         mock_gi = type("MockGI", (), {})()
-        mock_histories = type("MockHistories", (), {})()
-        mock_histories.show_dataset_provenance = lambda history_id, dataset_id: (
-            asked.append((history_id, dataset_id)) or {"job_id": self.JOB_ID}
-        )
-        mock_gi.histories = mock_histories
         mock_datasets = type("MockDatasets", (), {})()
-        mock_datasets.show_dataset = lambda dataset_id: {"id": dataset_id, "history_id": "h0001"}
+        mock_datasets.show_dataset = lambda dataset_id: asked.append(dataset_id) or {
+            "id": dataset_id,
+            "history_id": "h0001",
+            "creating_job": self.JOB_ID,
+        }
         mock_gi.datasets = mock_datasets
         galaxy_state["gi"] = mock_gi
         responses.add(
@@ -221,9 +214,11 @@ class TestGetJobDetailsByJobId:
 
         result = get_job_details_fn("d0001", "h0001")
 
-        assert asked == [("h0001", "d0001")]
+        assert asked == ["d0001"]
         assert result.data["dataset_id"] == "d0001"
         assert result.data["job_id"] == self.JOB_ID
+        with pytest.raises(ValueError, match="not found in history 'h0002'"):
+            get_job_details_fn("d0001", "h0002")
 
     @pytest.mark.parametrize("value", [".", "../histories", "not-an-id", "j0000001"])
     @responses.activate
@@ -269,13 +264,13 @@ class TestGetJobDetailsByJobId:
 class TestGetJobDetailsInTheHistoryNamed:
     """With a history named, the answer is about a dataset in that history, or there is none.
 
-    Neither lookup scopes it. Galaxy finds the dataset by its id alone on both routes: the
-    provenance route never reads the history in its own path, and the dataset read has no
-    history in it. A dataset id from another history -- or a job's id, which Galaxy decodes
-    to whichever dataset has the same number -- came back as a job from that other history,
-    with success. The dataset's own record is the one place Galaxy says which history it is
-    in, so that is what is compared. Not the job's: a dataset copied into this history keeps
-    the job that made the original, and that job ran in another one.
+    Galaxy finds the dataset by its id alone, so a dataset id from another history -- or a
+    job's id, which Galaxy decodes to whichever dataset has the same number -- came back as
+    a job from that other history, with success. The dataset's own record is the one place
+    Galaxy says which history it is in, so that is what is compared. Not the job's: a dataset
+    copied into this history keeps the job that made the original, and that job ran in
+    another one. The same record names the job, so the provenance route, which reports that
+    same job and never reads the history in its path, is not asked at all.
 
     A real bioblend client against `responses`, so the requests themselves are pinned: a
     refusal is made before the job is read, not after.
@@ -286,7 +281,6 @@ class TestGetJobDetailsInTheHistoryNamed:
     HISTORY_ID = "1a2b3c4d5e6f7a8b"
     OTHER_HISTORY_ID = "8b7a6f5e4d3c2b1a"
     JOB_ID = "3333333333333333"
-    PROVENANCE_URL = f"{BASE}/api/histories/{HISTORY_ID}/contents/{DATASET_ID}/provenance"
     DATASET_URL = f"{BASE}/api/datasets/{DATASET_ID}"
     JOB_URL = f"{BASE}/api/jobs/{JOB_ID}"
     REFUSAL = (
@@ -319,14 +313,6 @@ class TestGetJobDetailsInTheHistoryNamed:
         galaxy_state["connected"] = False
         galaxy_state["gi"] = None
 
-    def _provenance_answers(self):
-        """What Galaxy answers whichever history is in the path: it never reads that one."""
-        responses.add(
-            responses.GET,
-            self.PROVENANCE_URL,
-            json={"id": self.DATASET_ID, "job_id": self.JOB_ID, "tool_id": "cat1"},
-        )
-
     def _dataset_in(self, history_id):
         record = {"id": self.DATASET_ID, "history_id": history_id, "creating_job": self.JOB_ID}
         responses.add(responses.GET, self.DATASET_URL, json=record)
@@ -340,8 +326,7 @@ class TestGetJobDetailsInTheHistoryNamed:
 
     @pytest.mark.parametrize("reply", NOT_THERE, ids=NOT_THERE_IDS)
     @responses.activate
-    def test_a_dataset_provenance_answers_for_outside_that_history_is_refused(self, reply):
-        self._provenance_answers()
+    def test_a_dataset_outside_that_history_is_refused_before_its_job_is_read(self, reply):
         responses.add(responses.GET, self.DATASET_URL, json=reply)
         self._job_in(self.OTHER_HISTORY_ID)
 
@@ -349,26 +334,10 @@ class TestGetJobDetailsInTheHistoryNamed:
             get_job_details_fn(self.DATASET_ID, history_id=self.HISTORY_ID)
 
         assert str(raised.value) == self.REFUSAL
-        assert self._asked() == [self.PROVENANCE_URL, self.DATASET_URL]
-
-    @pytest.mark.parametrize("reply", NOT_THERE, ids=NOT_THERE_IDS)
-    @responses.activate
-    def test_the_refusal_is_made_over_a_provenance_failure_it_has_nothing_to_do_with(self, reply):
-        """Galaxy does not read the history in the provenance path, so its failure is never
-        about the history, and reporting it would send the caller after the wrong thing."""
-        responses.add(responses.GET, self.PROVENANCE_URL, json={"err_msg": "error 500"}, status=500)
-        responses.add(responses.GET, self.DATASET_URL, json=reply)
-        self._job_in(self.OTHER_HISTORY_ID)
-
-        with pytest.raises(ValueError) as raised:
-            get_job_details_fn(self.DATASET_ID, history_id=self.HISTORY_ID)
-
-        assert str(raised.value) == self.REFUSAL
-        assert self.JOB_URL not in self._asked()
+        assert self._asked() == [self.DATASET_URL]
 
     @responses.activate
-    def test_a_dataset_record_that_cannot_be_read_is_reported_after_provenance_answered(self):
-        self._provenance_answers()
+    def test_a_dataset_record_that_cannot_be_read_is_reported(self):
         responses.add(responses.GET, self.DATASET_URL, json={"err_msg": "error 500"}, status=500)
         self._job_in(self.HISTORY_ID)
 
@@ -383,7 +352,6 @@ class TestGetJobDetailsInTheHistoryNamed:
 
     @responses.activate
     def test_a_copy_in_that_history_answers_with_the_job_that_made_the_original(self):
-        self._provenance_answers()
         self._dataset_in(self.HISTORY_ID)
         self._job_in(self.OTHER_HISTORY_ID)
 
@@ -392,26 +360,21 @@ class TestGetJobDetailsInTheHistoryNamed:
         assert result.success is True
         assert result.data["job_id"] == self.JOB_ID
         assert result.data["job"]["history_id"] == self.OTHER_HISTORY_ID
+        assert self._asked() == [self.DATASET_URL, self.JOB_URL]
 
     @responses.activate
     def test_the_historys_case_is_not_held_against_the_caller(self):
         """Galaxy decodes either case and writes lowercase, so the two spell one history."""
-        shouted = self.HISTORY_ID.upper()
-        responses.add(
-            responses.GET,
-            f"{self.BASE}/api/histories/{shouted}/contents/{self.DATASET_ID}/provenance",
-            json={"id": self.DATASET_ID, "job_id": self.JOB_ID},
-        )
         self._dataset_in(self.HISTORY_ID)
         self._job_in(self.HISTORY_ID)
 
-        result = get_job_details_fn(self.DATASET_ID, history_id=shouted)
+        result = get_job_details_fn(self.DATASET_ID, history_id=self.HISTORY_ID.upper())
 
         assert result.success is True
 
     @responses.activate
     def test_without_a_history_a_dataset_anywhere_answers(self):
-        """Nothing was named to scope against, so nothing is refused: no provenance either."""
+        """Nothing was named to scope against, so nothing is refused."""
         self._dataset_in(self.OTHER_HISTORY_ID)
         self._job_in(self.OTHER_HISTORY_ID)
 

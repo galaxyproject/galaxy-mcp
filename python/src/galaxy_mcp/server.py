@@ -3131,57 +3131,28 @@ def get_job_details(
 
     assert dataset_id is not None  # one of the two, as refused above
 
-    # Two lookups and a read, each answering for its own failure while that failure is
-    # still in hand. One handler around all three could only see whatever the first one
-    # wrapped, and a wrapper carries no status.
-    provenance_error: Exception | None = None
-    if history_id:
-        try:
-            provenance = gi.histories.show_dataset_provenance(
-                history_id=history_id, dataset_id=dataset_id
-            )
-
-            # Extract job ID from provenance
-            job_id = provenance.get("job_id")
-        except Exception as exc:
-            provenance_error = exc
-
-    # Neither lookup is scoped to the history named. Galaxy finds the dataset by its id
-    # alone on both routes -- the provenance route never reads the history in its own
-    # path -- so a dataset in any other history answers both, with its own job. Its record
-    # is the one thing that says which history it is in, so it is read on every call,
-    # even after provenance has answered. The job is no test of that: a dataset
-    # copied into this history keeps the job that made the original, and that job ran in
-    # another one.
+    # The dataset's own record answers both questions: which history it is in, and which
+    # job made it. Galaxy finds the dataset by its id alone, so a dataset in any other
+    # history answers too, and the record's history_id is the one thing that says where it
+    # is. Its creating_job is the job Galaxy's provenance route reports as well (both read
+    # the dataset's creating_job property), so that route is not asked: it would add a
+    # request and nothing else, and it does not read the history in its path either. The
+    # job is no test of the history: a dataset copied into this history keeps the job that
+    # made the original, and that job ran in another one.
     try:
         dataset_details = gi.datasets.show_dataset(dataset_id)
         # Decided before anything is taken from the reply, so one that is not a record at
         # all is refused below, as the TypeScript op refuses it, rather than failing here
         # on its way to a job.
         in_history = not history_id or _is_in_history(dataset_details, history_id)
-        if in_history and not job_id:
+        if in_history:
             job_id = dataset_details.get("creating_job")
-    except Exception as dataset_error:
-        # The provenance failure when there was one -- that is the lookup the caller
-        # asked for. Either way it is the original exception, not a paraphrase of it.
-        source = provenance_error or dataset_error
-        raise ValueError(_job_details_failed(dataset_id, source)) from source
+    except Exception as e:
+        raise ValueError(_job_details_failed(dataset_id, e)) from e
     if history_id and not in_history:
-        # Refused whether provenance failed or not: Galaxy never reads the history on
-        # the provenance route, so a provenance failure in hand is about something
-        # else, and the record has just said what is wrong with this question.
         raise ValueError(_not_in_history(dataset_id, history_id))
 
     if not job_id:
-        if provenance_error is not None:
-            # The fallback answered, and answered that it knows of no job. That says nothing
-            # about why provenance failed, and provenance is the lookup the caller asked
-            # for -- so the failure still in hand is the one to report. Telling them the
-            # dataset was not made by a job would bury a 500, a permission problem or a
-            # request that never completed under a sentence about something else.
-            raise ValueError(
-                _job_details_failed(dataset_id, provenance_error)
-            ) from provenance_error
         # The dataset is there and nothing says a job made it. Nothing failed over HTTP, so
         # there is no status here to read and none is guessed at from the text.
         raise ValueError(

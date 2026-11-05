@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "python/src/galaxy_mcp/server.py",
-  "caseCount": 288,
+  "caseCount": 287,
   "failureCaseCount": 100,
   "cases": [
     {
@@ -1575,15 +1575,15 @@
     },
     {
       "tool": "get_job_details",
-      "case": "from_provenance",
-      "note": "a history was named, so the provenance record answers with the job id",
+      "case": "in_the_history_named",
+      "note": "a history was named and the dataset's record puts it there, so its creating_job answers",
       "outcome": "success",
       "input": {
         "dataset_id": "d0000002",
         "history_id": "h0000"
       },
-      "envelope": "get_job_details/from_provenance.json",
-      "replies": "get_job_details/from_provenance.galaxy.json"
+      "envelope": "get_job_details/in_the_history_named.json",
+      "replies": "get_job_details/in_the_history_named.galaxy.json"
     },
     {
       "tool": "get_job_details",
@@ -1594,19 +1594,7 @@
         "dataset_id": "d0000002"
       },
       "envelope": "get_job_details/from_creating_job.json",
-      "replies": "get_job_details/from_creating_job.galaxy.json"
-    },
-    {
-      "tool": "get_job_details",
-      "case": "provenance_without_a_job_id",
-      "note": "provenance answered, but named no job, so the dataset is read anyway",
-      "outcome": "success",
-      "input": {
-        "dataset_id": "d0000002",
-        "history_id": "h0000"
-      },
-      "envelope": "get_job_details/provenance_without_a_job_id.json",
-      "replies": "get_job_details/provenance_without_a_job_id.galaxy.json"
+      "replies": "get_job_details/in_the_history_named.galaxy.json"
     },
     {
       "tool": "get_job_details",
@@ -2992,7 +2980,7 @@
     {
       "tool": "get_job_details",
       "case": "dataset_in_another_history",
-      "note": "provenance answers for a dataset wherever it is, since Galaxy never reads the history in that path, so the dataset's own record decides: it is in another history, which is refused before any job is read",
+      "note": "Galaxy reads a dataset by its id alone, so the dataset's own record decides: it is in another history, which is refused before any job is read",
       "outcome": "failure",
       "input": {
         "dataset_id": "d0003",
