@@ -1371,8 +1371,20 @@ describe("requestsResponseJson", () => {
     const tagged = '{"tags":{"1.0--h_0":{}}}';
     const out = requestsResponseJson(latin1(tagged), "text/plain");
     expect(out.text).toBe(tagged);
-    expect(new TextDecoder("iso-8859-1").decode(latin1(tagged))).not.toBe(tagged);
   });
+
+  // The test above only shows something if TextDecoder would have got it wrong, so this pins that
+  // premise. Node 22.13.0 to 22.22.0 decode windows-1252 as latin-1, which makes TextDecoder agree
+  // with Python here (nodejs/node#60888, fixed in 22.22.1 by nodejs/node#60893). CI runs 22.19.0,
+  // so that runtime skips this rather than fail on a Node bug that does not touch the code under
+  // test.
+  it.skipIf(new TextDecoder("iso-8859-1").decode(Uint8Array.of(0x80)) === "\u0080")(
+    "has a TextDecoder that maps the iso-8859-1 label to windows-1252",
+    () => {
+      const tagged = '{"tags":{"1.0--h\u0080_0":{}}}';
+      expect(new TextDecoder("iso-8859-1").decode(latin1(tagged))).not.toBe(tagged);
+    },
+  );
 
   it("falls through to the text when the sniffed codec cannot decode the bytes", () => {
     // No nulls, so guess_json_utf says utf-8; the bytes are not utf-8, so the strict decode
