@@ -53,7 +53,10 @@ class LiveMCPSession:
 
     def __enter__(self) -> LiveMCPSession:
         self._loop = asyncio.new_event_loop()
-        self._client = Client(mcp)
+        # The 2026-07-28 protocol era is sessionless: every request gets a fresh session
+        # id, so the session-scoped connection store this harness exists to exercise
+        # only works on the handshake era. Pin it rather than take FastMCP 4's default.
+        self._client = Client(mcp, mode="legacy")
         self._loop.run_until_complete(self._client.__aenter__())
         return self
 
@@ -98,9 +101,14 @@ class LiveMCPSession:
         content at all. This returns the `CallToolResult` the client session received,
         dumped the way the MCP SDK dumps it onto the wire -- by alias, in JSON mode, with
         None-valued fields left out -- so what a caller actually reads can be written down.
+
+        Unset fields are left out too: MCP SDK v2 models carry client-side defaults (such
+        as `resultType: "complete"`) that a handshake-era server never sends, and dumping
+        them would record a field the wire did not carry.
         """
         loop, client = self._require_open()
         result = loop.run_until_complete(client.call_tool_mcp(tool_name, arguments))
         return cast(
-            dict[str, Any], result.model_dump(by_alias=True, mode="json", exclude_none=True)
+            dict[str, Any],
+            result.model_dump(by_alias=True, mode="json", exclude_none=True, exclude_unset=True),
         )

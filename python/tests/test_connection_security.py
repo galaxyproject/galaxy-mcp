@@ -173,7 +173,7 @@ async def test_connect_schema_accepts_url_and_api_key():
     async with Client(server.mcp) as client:
         tools = await client.list_tools()
     connect_tool = next(tool for tool in tools if tool.name == "connect")
-    assert set(connect_tool.inputSchema["properties"]) == {"url", "api_key"}
+    assert set(connect_tool.input_schema["properties"]) == {"url", "api_key"}
 
 
 def test_disclosure_requests_over_http_cannot_fetch_or_poison_session(monkeypatch):
