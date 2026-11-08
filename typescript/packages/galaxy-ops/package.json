@@ -37,7 +37,7 @@
     "node": ">=22.19"
   },
   "scripts": {
-    "build": "tsup && rollup -c rollup.dts.config.mjs",
+    "build": "tsc --noEmit && tsup && rollup -c rollup.dts.config.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

@@ -1,7 +1,9 @@
 // Declarations are bundled here rather than by tsup: tsup calls the TypeScript
 // compiler API directly and TypeScript 7 no longer ships one. rollup-plugin-dts
 // falls back to @typescript/typescript6 for that API, while tsc 7 still does the
-// type checking. Options mirror what tsup's own dts build passed.
+// type checking. Options mirror what tsup's own dts build passed, but unlike tsup
+// this step does not fail on type errors, which is why the build script runs tsc
+// first.
 import { readFileSync } from "node:fs";
 import { dts } from "rollup-plugin-dts";
 
