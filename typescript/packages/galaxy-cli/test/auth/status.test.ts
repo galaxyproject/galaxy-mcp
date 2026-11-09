@@ -7,7 +7,7 @@ import { describe, it, expect, vi } from "vitest";
 import { statusCommand } from "../../src/auth/commands/status";
 import { createWhoami } from "../../src/auth/whoami";
 import { AuthError } from "../../src/auth/types";
-import { FAKE_TOKEN, HOST, OTHER, SOON, fakeLogin, harness } from "./harness";
+import { FAKE_TOKEN, HOST, OTHER, SOON, fakeLogin, harness, makeTokenUnreadable } from "./harness";
 
 const expiredLogin = () => fakeLogin({ expiresAt: "2026-11-06T09:00:00.000Z" });
 const twoLogins = () =>
@@ -20,7 +20,7 @@ describe("auth status", () => {
     expect(h.cap.out).toBe("");
     expect(h.cap.err).toContain("dev.galaxy.example.org");
     expect(h.cap.err).toContain("Logged in as aioue");
-    expect(h.cap.err).toMatch(/Storage\s+plaintext file \(readable only by you\)/);
+    expect(h.cap.err).toMatch(/Storage\s+system keyring/);
     expect(h.cap.err).toMatch(/Method\s+pasted API key/);
     expect(h.cap.err).toMatch(/Scopes\s+full access \(API key\)/);
     expect(h.cap.err).toMatch(/Expires\s+in 7h/);
@@ -283,7 +283,7 @@ describe("auth status", () => {
       expect(out[0]).toMatchObject({
         base_url: HOST,
         username: "aioue",
-        storage: "file",
+        storage: "keyring",
         method: "pasted",
         status: "expired",
       });
@@ -341,14 +341,57 @@ describe("auth status", () => {
     });
   });
 
-  // The record was listed and then another process logged out: there is no login to check, and
-  // saying so (not_logged_in, 77) beats printing a row with no token in it.
-  it("exits 77 when a login is removed between listing it and reading it", async () => {
-    const h = harness({ stored: [fakeLogin()] });
-    h.store.get = async () => null;
-    expect(await statusCommand({}, h.deps)).toBe(77);
-    expect(h.cap.err).toContain("was removed while this ran");
-    expect(h.whoamiCalls).toEqual([]);
+  // The record lists the login but its token cannot be read (the keyring is down, or the secret is
+  // gone). That host is reported as unavailable and the others are still checked: one unreadable
+  // token must not hide the rest.
+  describe("when a token cannot be read", () => {
+    it.each(["throw", "null"] as const)(
+      "reports that host, still checks the others, and exits 1 (%s)",
+      async (how) => {
+        const h = twoLogins();
+        makeTokenUnreadable(h, [HOST], how);
+        expect(await statusCommand({}, h.deps)).toBe(1);
+        expect(h.cap.err).toContain("dev.galaxy.example.org");
+        expect(h.cap.err).toContain("token unavailable:");
+        // No source is named for a token nobody can read, as an operation could not use it either.
+        expect(h.cap.err).toContain(
+          "Key used by operations: none (the stored token cannot be read)",
+        );
+        expect(h.cap.err).toContain("Key used by operations: stored login");
+        expect(h.cap.err).toContain("other.example.org");
+        expect(h.cap.err).toContain("Logged in as"); // the other host was still checked
+        expect(h.whoamiCalls.map((c) => c.baseUrl)).toEqual([OTHER]);
+      },
+    );
+
+    it("gives it a status value in --json, without a token, and exits 0 like any other --json run", async () => {
+      const h = twoLogins();
+      makeTokenUnreadable(h, [HOST]);
+      expect(await statusCommand({ json: true, showToken: true }, h.deps)).toBe(0);
+      const out = JSON.parse(h.cap.out) as {
+        base_url: string;
+        status: string;
+        error?: string;
+        key_source: string | null;
+        token?: string;
+      }[];
+      expect(out.map((o) => [o.base_url, o.status])).toEqual([
+        [HOST, "unavailable"],
+        [OTHER, "ok"],
+      ]);
+      expect(out[0]!.error).toContain("token unavailable:");
+      expect(out[0]!.key_source).toBeNull();
+      expect(out[1]!.key_source).toBe("stored");
+      expect(out[0]!.token).toBeUndefined();
+      expect(out[1]!.token).toBe(FAKE_TOKEN);
+    });
+
+    it("does the same with --host", async () => {
+      const h = twoLogins();
+      makeTokenUnreadable(h, [HOST]);
+      expect(await statusCommand({ host: HOST }, h.deps)).toBe(1);
+      expect(h.cap.err).toContain("token unavailable:");
+    });
   });
 
   // An expiry that cannot be parsed is treated as expired, never as no expiry: a token must not

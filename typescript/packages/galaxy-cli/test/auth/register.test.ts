@@ -99,7 +99,7 @@ describe("the auth commands", () => {
     expect(await warned("auth", "token")).toBe("");
   });
 
-  // Building the deps opens the credential store. `--help` and the operations
+  // Building the deps opens the credential store, and with it the keyring. `--help` and the operations
   // must never do that (register.ts calls `makeDeps` once per invocation of an `auth` command).
   it("do not build their deps for --help or for an operation", async () => {
     const makeAuthDeps = vi.fn(() => harness().deps);

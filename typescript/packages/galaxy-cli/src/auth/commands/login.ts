@@ -48,6 +48,11 @@ function adminWarning(host: string, who: WhoAmI): string | undefined {
     : undefined;
 }
 
+function storedMessage(storage: "keyring" | "file"): string {
+  const where = storage === "keyring" ? "the system keyring" : "a file readable only by you";
+  return `✓ Token stored in ${where} (no expiry)`;
+}
+
 /**
  * Store an API key read from stdin (`--with-token`).
  *
@@ -141,21 +146,22 @@ export async function loginCommand(opts: LoginOptions, deps: AuthDeps): Promise<
       expiresAt: null,
       obtainedAt: deps.now().toISOString(),
     };
-    // The write is atomic and short, so it is not interrupted; this is the last point to cancel.
+    // Last check before the write. The write itself can be interrupted too (a keyring unlock
+    // prompt can last a minute), so the signal goes to `put`, which cancels rather than falling
+    // back to the plaintext file.
     signal.throwIfAborted();
     const adminWarn = adminWarning(host, who);
     if (adminWarn) err(adminWarn);
-    // An admin key is unscoped: it is the whole server, not one user's data. A login is only ever
-    // kept in a plaintext file, so an admin key is refused unless `--insecure-storage` says that
-    // is acceptable. Nothing has been written yet, so refusing is clean.
-    if (who.isAdmin && !opts.insecureStorage)
-      throw new AuthError(
-        "denied",
-        `An admin key is the whole server, and the only place a login is kept is a plaintext file, so nothing was stored. Rerun with --insecure-storage to keep it in that file (readable only by you), or use GALAXY_API_KEY for this session.`,
-      );
-    await deps.store.put(login);
+    // An admin key is unscoped, so it is kept in the keyring or not at all: with no keyring,
+    // login refuses unless `--insecure-storage` says a plaintext file is acceptable.
+    const put = await deps.store.put(login, {
+      insecureStorage: opts.insecureStorage,
+      ...(who.isAdmin ? { requireKeyring: true } : {}),
+      signal,
+    });
+    if (put.warning) err(`! ${put.warning}`);
     err(`✓ Logged in to ${host} as ${sanitize(who.username)}`);
-    err("✓ Token stored in a file readable only by you (no expiry)");
+    err(storedMessage(put.storage));
     err("! This token has no expiry: it works until you revoke it in Galaxy's user preferences.");
     return 0;
   } catch (e) {

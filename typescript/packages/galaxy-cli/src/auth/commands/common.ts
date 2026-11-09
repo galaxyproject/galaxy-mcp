@@ -3,7 +3,13 @@ import { describeExpiry, formatExpiry, isExpired } from "../expiry";
 import { NoHostError } from "../host";
 import { wasAnswered } from "../network";
 import { sanitize } from "../sanitize";
-import { AuthError, type AuthDeps, type BaseUrl, type StoredLogin } from "../types";
+import {
+  AuthError,
+  type AuthDeps,
+  type BaseUrl,
+  type StoredLogin,
+  type StorageKind,
+} from "../types";
 
 export { sanitize };
 
@@ -74,6 +80,10 @@ export function formatTimeLeft(ms: number): string {
  */
 export function maskToken(token: string): string {
   return token.length > 12 ? `${"*".repeat(8)}${token.slice(-4)}` : "*".repeat(8);
+}
+
+export function describeStorage(kind: StorageKind): string {
+  return kind === "keyring" ? "system keyring" : "plaintext file (readable only by you)";
 }
 
 /**

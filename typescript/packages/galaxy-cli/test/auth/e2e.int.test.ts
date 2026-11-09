@@ -1,12 +1,14 @@
 /**
  * End to end: the built binary against the fake Galaxy, for what only the real binary shows:
  * the wiring in `deps.ts` and `index.ts`, real processes, real pipes, real files. One journey
- * runs as `gxy`; the rest are cases that need the binary. The config dir and HOME are temp
- * dirs, so nothing here touches the developer's real logins.
+ * runs as `gxy`; the rest are cases that need the binary. The config dir is a temp dir, the
+ * keyring is off (`GXY_NO_KEYRING`) and HOME is a temp dir too, so nothing here touches the
+ * developer's real logins.
  *
  * Every other auth test calls a command function in process, with fakes injected. That cannot
  * show the exit status a shell receives, a real SIGINT, a real EPIPE on a pipe whose reader has
- * gone, or `interactive` being decided from real terminals. The fake Galaxy is a real HTTP server because this binary is a separate
+ * gone, that tsup puts `keyring-child.js` beside the entries, or `interactive` being decided from
+ * real terminals. The fake Galaxy is a real HTTP server because this binary is a separate
  * process, and cannot see an in-process mock.
  *
  * The CLI is built here into a private cache directory, and galaxy-ops (which the binary
@@ -47,6 +49,11 @@ beforeAll(async () => {
   // ships corepack).
   await execa("tsup", [], { cwd: join(pkgDir, "..", "galaxy-ops"), preferLocal: true });
   await execa("tsup", ["--out-dir", outDir], { cwd: pkgDir, preferLocal: true });
+  // `outDir` is under node_modules, where Node does not look for a package.json, so a built file
+  // with no import or export statement is read as CommonJS on Node 22.19: `keyring-child.js`, which
+  // awaits at the top level, fails to parse. The package's own `dist` is next to a package.json
+  // that says "module", so this says the same. It goes in after the build, which empties `outDir`.
+  await writeFile(join(outDir, "package.json"), '{"type":"module"}\n');
   work = await mkdtemp(join(process.env.GXY_TEST_ROOT ?? tmpdir(), "gxy-e2e-"));
 }, 240_000);
 
@@ -110,6 +117,7 @@ const test = base.extend<{
       PATH: process.env.PATH ?? "",
       HOME: home,
       GXY_CONFIG_DIR: configDir,
+      GXY_NO_KEYRING: "1",
       ...extra,
     })),
   run: async ({ home, cliEnv, transcript }, use) =>
@@ -309,7 +317,7 @@ describe("auth, end to end", () => {
       });
     }, 30_000);
 
-    test("refuses an admin key, storing nothing, unless --insecure-storage says so", async ({
+    test("refuses an admin key, storing nothing, when there is no keyring to keep it in", async ({
       galaxy,
       run,
       configDir,
@@ -705,4 +713,147 @@ describe("auth, end to end", () => {
       }
     }, 60_000);
   });
+
+  // The keyring helper is a second built file (`keyring-child.js`, a second tsup entry beside
+  // `index.js`). Every other case turns the keyring off, so this is the one that would notice it
+  // missing from the build. The fake bus accepts the connection and never answers it, which is what
+  // blocks the native module for ever (keyring-node#156) and is why every keyring call runs in a
+  // child that is killed at the timeout.
+  describe.skipIf(process.platform !== "linux")(
+    "the real keyring helper, against a session bus that never answers",
+    () => {
+      test("reports that the keyring did not answer, within the timeout plus a margin, and exits", async ({
+        galaxy,
+        run,
+        configDir,
+        skip,
+      }) => {
+        const dir = await mkdtemp(join(process.env.GXY_TEST_ROOT ?? tmpdir(), "gxy-bus-"));
+        const sockets = new Set<Socket>();
+        const server = createServer((c) => {
+          sockets.add(c);
+          c.on("data", () => {});
+          c.on("error", () => {});
+        });
+        try {
+          const sock = join(dir, "bus.sock");
+          try {
+            await new Promise<void>((res, rej) => {
+              server.once("error", rej);
+              server.listen(sock, res);
+            });
+          } catch {
+            skip(); // no unix sockets here
+          }
+          // A login whose token lives in the keyring: the record is in hosts.yml, the token is not.
+          await mkdir(configDir, { mode: 0o700 });
+          await writeFile(
+            join(configDir, "hosts.yml"),
+            `hosts:\n  ${galaxy.baseUrl}:\n    username: fake-user\n    method: pasted\n    scopes: []\n    expires_at: null\n    obtained_at: "2026-01-01T00:00:00.000Z"\n    storage: keyring\n`,
+            { mode: 0o600 },
+          );
+          const t0 = Date.now();
+          const r = await run(["auth", "token"], {
+            env: { GXY_NO_KEYRING: "", DBUS_SESSION_BUS_ADDRESS: `unix:path=${sock}` },
+          });
+          expect(r.exitCode, r.stderr).toBe(77);
+          // Usually the timeout ("did not answer"). On a loaded machine the helper has been seen to
+          // end by itself just before it ("gave no usable answer"); both are the keyring being
+          // unavailable, which is what this test is about.
+          expect(r.stderr).toMatch(/did not answer|gave no usable answer/);
+          expect(r.stdout).toBe("");
+          expect(Date.now() - t0).toBeLessThan(5000 + 15_000); // the 5 s timeout, plus a loaded machine
+        } finally {
+          for (const c of sockets) c.destroy();
+          server.close();
+          await rm(dir, { recursive: true, force: true });
+        }
+      }, 40_000);
+
+      // `timeout`, a CI cancel or an agent signals gxy alone, not its process group as Ctrl-C at a
+      // terminal does, so the helper gets no signal of its own. Blocked on the bus, it would run
+      // for ever if gxy didn't take it down on the way out.
+      test.for(["SIGTERM", "SIGINT", "SIGHUP"] as const)(
+        "%s to gxy alone, mid keyring call: the helper goes too, and gxy dies of that signal",
+        { timeout: 20_000 },
+        async (sig, { galaxy, run, configDir, skip }) => {
+          const dir = await mkdtemp(join(process.env.GXY_TEST_ROOT ?? tmpdir(), "gxy-bus-"));
+          const sockets = new Set<Socket>();
+          const server = createServer((c) => {
+            sockets.add(c);
+            c.on("data", () => {});
+            c.on("error", () => {});
+          });
+          try {
+            const sock = join(dir, "bus.sock");
+            try {
+              await new Promise<void>((res, rej) => {
+                server.once("error", rej);
+                server.listen(sock, res);
+              });
+            } catch {
+              skip(); // no unix sockets here
+            }
+            await mkdir(configDir, { mode: 0o700 });
+            await writeFile(
+              join(configDir, "hosts.yml"),
+              `hosts:\n  ${galaxy.baseUrl}:\n    username: fake-user\n    method: pasted\n    scopes: []\n    expires_at: null\n    obtained_at: "2026-01-01T00:00:00.000Z"\n    storage: keyring\n`,
+              { mode: 0o600 },
+            );
+            const child = run(["auth", "token"], {
+              env: { GXY_NO_KEYRING: "", DBUS_SESSION_BUS_ADDRESS: `unix:path=${sock}` },
+            });
+            const gxyPid = child.pid!;
+            let helpers: number[] = [];
+            try {
+              // Well inside the 5 s the helper gets when stderr is not a terminal.
+              await vi.waitFor(
+                async () => {
+                  helpers = await childrenOf(gxyPid);
+                  expect(helpers).not.toEqual([]);
+                },
+                { timeout: 4_000, interval: 20 },
+              );
+              process.kill(gxyPid, sig);
+              const r = await child;
+              expect(r.signal, r.stderr).toBe(sig);
+              await vi.waitFor(
+                async () => {
+                  for (const h of helpers) expect(await isRunning(h), `helper ${h}`).toBe(false);
+                },
+                { timeout: 2_000, interval: 20 },
+              );
+            } finally {
+              for (const h of helpers) if (await isRunning(h)) process.kill(h, "SIGKILL");
+              child.kill("SIGKILL");
+              await child;
+            }
+          } finally {
+            for (const c of sockets) c.destroy();
+            server.close();
+            await rm(dir, { recursive: true, force: true });
+          }
+        },
+      );
+    },
+  );
 });
+
+/** The pids whose parent is `pid`, from /proc (Linux). */
+async function childrenOf(pid: number): Promise<number[]> {
+  const found: number[] = [];
+  for (const entry of await readdir("/proc")) {
+    if (!/^\d+$/.test(entry)) continue;
+    const stat = await readFile(`/proc/${entry}/stat`, "utf8").catch(() => "");
+    // "pid (comm) state ppid ...": comm may hold spaces and parentheses, so read after the last ")".
+    const ppid = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]);
+    if (ppid === pid) found.push(Number(entry));
+  }
+  return found;
+}
+
+/** Whether `pid` is still running. A zombie (killed, not yet reaped by whoever adopted it) is not. */
+async function isRunning(pid: number): Promise<boolean> {
+  const stat = await readFile(`/proc/${pid}/stat`, "utf8").catch(() => "");
+  return stat !== "" && stat.slice(stat.lastIndexOf(")") + 2, stat.lastIndexOf(")") + 3) !== "Z";
+}

@@ -18,8 +18,11 @@
  */
 export type BaseUrl = string & { readonly __brand: "BaseUrl" };
 
-/** Where a token is kept: `file` is `hosts.yml`, readable only by the owner. */
-export type StorageKind = "file";
+/**
+ * Where a token is kept. `file` is the plaintext fallback, readable only by the owner: gh falls
+ * back to its `hosts.yml` the same way, and like gh's `--insecure-storage` it can also be chosen.
+ */
+export type StorageKind = "keyring" | "file";
 
 /** How a token was obtained. */
 type LoginMethod = "pasted";
@@ -43,12 +46,35 @@ export interface StoredLogin {
 /** A stored login without its secret, safe to print or list. */
 export type LoginSummary = Omit<StoredLogin, "token"> & { storage: StorageKind };
 
+export interface PutResult {
+  storage: StorageKind;
+  /**
+   * Set when the keyring could not be used and the token went to the file instead, or when an
+   * earlier token could not be removed from the keyring and may remain there.
+   */
+  warning?: string;
+}
+
 export interface CredentialStore {
-  /** The login for this Galaxy, or null if there is no record of one. */
+  /**
+   * The login for this Galaxy, or null if there is no record of one. A record whose token
+   * cannot be fetched (the keyring is down, or has lost the secret) rejects instead of
+   * returning null: that is a login we cannot use, not "no login", and callers must not read
+   * it as a clean slate.
+   */
   get(baseUrl: BaseUrl): Promise<(StoredLogin & { storage: StorageKind }) | null>;
-  /** Store or replace the login for `login.baseUrl`. */
-  put(login: StoredLogin): Promise<void>;
-  /** Remove the login for this Galaxy. Returns false if there was none. */
+  /**
+   * Store or replace the login for `login.baseUrl`. `insecureStorage` skips the keyring.
+   * `requireKeyring` forbids the plaintext fallback: with no working keyring, nothing is
+   * stored and the call rejects with `AuthError("denied")`. It is set for admin tokens, which
+   * carry full, unscoped admin power (see `WhoAmI`), so a plaintext copy has to be asked for by
+   * name with `insecureStorage` and never arrives by fallback.
+   */
+  put(
+    login: StoredLogin,
+    opts?: { insecureStorage?: boolean; requireKeyring?: boolean; signal?: AbortSignal },
+  ): Promise<PutResult>;
+  /** Remove the login for this Galaxy from every place it is kept. Returns false if there was none. */
   delete(baseUrl: BaseUrl): Promise<boolean>;
   /** Every stored login, without tokens, sorted by base URL. */
   list(): Promise<LoginSummary[]>;
@@ -58,13 +84,17 @@ export interface CredentialStore {
  * Why an auth command failed. `exitCodeForAuthError` (`exit.ts`) turns each into a sysexits.h
  * code: `usage` and `ambiguous_host` are 64 (EX_USAGE: the command line is wrong or does not
  * say enough), `store` is 65 (EX_DATAERR: the credential file cannot be used as it is), `network`
- * is 69 (EX_UNAVAILABLE), `protocol` and `insecure` are 76 (EX_PROTOCOL: the address, or what its
- * server supplied, is not something this can use; plain http is 76 too, though the person typed
- * it, see `exitCodeForAuthError`), and `not_logged_in` and `denied` are 77 (EX_NOPERM: there is no
- * permission to do this).
+ * is 69 (EX_UNAVAILABLE), `unsupported`, `protocol` and `insecure` are 76 (EX_PROTOCOL: the address,
+ * or what its server supplied, is not something this can use; plain http is 76 too, though the
+ * person typed it, see `exitCodeForAuthError`), and `not_logged_in` and `denied` are 77 (EX_NOPERM:
+ * there is no permission to do this).
  */
 export type AuthErrorKind =
-  /** An admin key was refused: it goes in the plaintext file only when `--insecure-storage` says so. */
+  /** What `CombinedStore.delete` throws when the keyring will not confirm a secret is gone. */
+  | "unsupported"
+  /**
+   * `put` refused to keep an admin token in the plaintext file (`requireKeyring`).
+   */
   | "denied"
   /** No stored login for this Galaxy, or it has expired, or Galaxy rejected the token. */
   | "not_logged_in"

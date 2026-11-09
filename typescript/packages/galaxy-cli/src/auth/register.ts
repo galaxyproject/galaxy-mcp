@@ -12,7 +12,7 @@ import { exitQuietlyOnEpipe } from "./epipe";
 
 /**
  * Add the `auth` group. `makeDeps` is called per invocation, so `--help` and the other
- * commands never touch the store or the network.
+ * commands never touch the keyring or the network.
  */
 export function registerAuth(program: Command, makeDeps: (commandName: string) => AuthDeps): void {
   const commandName = program.name();
@@ -60,10 +60,7 @@ export function registerAuth(program: Command, makeDeps: (commandName: string) =
     .description("Store an API key read from stdin")
     .addOption(host())
     .option("--with-token", "read the API key from stdin")
-    .option(
-      "--insecure-storage",
-      "keep an admin key in the plaintext file (it is refused otherwise)",
-    )
+    .option("--insecure-storage", "store the token in a file instead of the system keyring")
     .action((o: LoginOptions) =>
       run(async (deps) => {
         // Ctrl-C aborts one signal that every step of the login takes (the probe, the prompt, the

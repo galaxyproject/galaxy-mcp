@@ -53,7 +53,7 @@ gxy auth logout                                                                #
 
 | Command | Does |
 | --- | --- |
-| `auth login` | store an API key read from stdin (`--with-token`, required); `--insecure-storage` allows an admin key |
+| `auth login` | store an API key read from stdin (`--with-token`, required); `--insecure-storage` keeps the token in `hosts.yml` instead of the system keyring |
 | `auth status` | show stored logins and check each one (`--json`, `--show-token`) |
 | `auth token` | print the token on stdout (`--json` for an object with its expiry) |
 | `auth env` | print `GALAXY_URL` and `GALAXY_API_KEY` assignments, for `eval` |
@@ -70,11 +70,11 @@ so.
 
 ### Where logins are kept
 
-Logins live in `hosts.yml` in the config directory (`$GXY_CONFIG_DIR`, else
-`$XDG_CONFIG_HOME/gxy`, else `~/.config/gxy`; a relative path in either variable is ignored), token
-and all, in plain text, readable only by you. A key that carries admin rights is the whole server,
-so `gxy auth login` refuses it and stores nothing (exit 77), unless you add `--insecure-storage` to
-put it in `hosts.yml`.
+Tokens live in the system keyring when there is one, otherwise in `hosts.yml` in the config
+directory (`$GXY_CONFIG_DIR`, else `$XDG_CONFIG_HOME/gxy`, else `~/.config/gxy`; a relative path in
+either variable is ignored), readable only by you. A token that carries admin rights is only ever
+stored in the system keyring: with no keyring, `gxy auth login` refuses and stores nothing, unless
+you add `--insecure-storage` to put it in `hosts.yml`.
 
 `gxy` refuses a `hosts.yml` that other users can write to (it would not know what they put in it),
 that is a symlink or belongs to someone else, and one it cannot make sense of rather than overwrite
@@ -86,10 +86,23 @@ rather than that you are not logged in. Each refusal exits 65 (not 77, which wou
 again, and that meets the same refusal), names the file and what to do, and changes nothing.
 
 If the credential store cannot be read (a corrupt `hosts.yml`, a config directory that is a
-symlink, a login a newer `gxy` wrote for the Galaxy in question), an operation with `--api-key`, a
+symlink, a login a newer `gxy` wrote for the Galaxy in question, a token in a system keyring that
+cannot be reached), an operation with `--api-key`, a
 profile key or `GALAXY_API_KEY` does not read it at all. One that has only a `.env` key still runs,
 with a warning on each run; any other fails, and the error names the problem. Fix or remove the
 store, or set `GXY_CONFIG_DIR` somewhere it can be read, to stop it.
+
+The system keyring is asked through a short-lived helper process that is killed if it does not
+answer, so a dead D-Bus costs at most one wait per command before the keyring is reported as
+unavailable: 5 seconds, or 60 when `gxy` is writing to a terminal, so that you have time to type a
+password into a keyring unlock prompt (it says "Waiting for the system keyring" when that is what
+it is doing). The warning when a token goes to `hosts.yml` instead says why. `GXY_NO_KEYRING=1`
+skips the keyring entirely. If the keyring cannot be read, `auth logout` still removes the stored
+record (it says the secret may remain in the keyring, and exits 1) and `auth status`
+reports that host as "token unavailable" and exits 1. Logging in again over a login that is in the
+keyring, when `gxy` cannot use the keyring to remove the old secret (`GXY_NO_KEYRING`, or a keyring
+that does not answer), stores the new login and warns that the old secret may remain, naming the
+entry (`gxy:<url>`) to remove with your keyring's own tool.
 
 ### Which key and which Galaxy an operation uses
 
@@ -149,8 +162,8 @@ lookup). In `auth login` each gives up after 15 seconds; `auth status` allows ea
 in all, and checks every stored login at once, printing them in stored order. Ctrl-C stops a check
 at once.
 
-`auth status` exits 1 when any login is not usable right now (expired,
-refused by Galaxy, or Galaxy did not answer), 0 when all are fine, and 77 when
+`auth status` exits 1 when any login is not usable right now (expired, its
+token unreadable, refused by Galaxy, or Galaxy did not answer), 0 when all are fine, and 77 when
 nothing is stored. With `--json` it exits 0 whenever it prints the list (each entry's `status` says
 how its check went); a failure before there is a list, such as an unreadable `hosts.yml`, still
 exits non-zero.
@@ -158,6 +171,7 @@ exits non-zero.
 | Variable | Does |
 | --- | --- |
 | `GXY_CONFIG_DIR` | Where `hosts.yml` lives (see above). A relative path is ignored, so the file does not follow the working directory |
+| `GXY_NO_KEYRING` | `1` never touches the system keyring: tokens go to `hosts.yml`, with a warning. Use it on a box whose keyring is broken or locked, to skip the wait. A login already stored in the keyring then cannot be read (`auth token` exits 77, `auth status` shows "token unavailable"), and `auth logout` removes its record but leaves the secret in the keyring |
 
 Behind a proxy, set `NODE_USE_ENV_PROXY=1` along with `HTTPS_PROXY` (and `NO_PROXY` for a Galaxy on
 your own network). Node's `fetch` ignores the proxy variables without it, and reads it only at

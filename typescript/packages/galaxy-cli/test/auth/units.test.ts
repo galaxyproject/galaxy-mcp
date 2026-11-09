@@ -214,7 +214,8 @@ describe("normalizeBaseUrl", () => {
     expect(() => normalizeBaseUrl(input)).toThrow(AuthError);
   });
 
-  // A password in the URL would be stored in `hosts.yml`, which is keyed by it.
+  // A password in the URL would be stored in `hosts.yml` and in the keyring's service name, which
+  // is built from this key.
   it("refuses userinfo, whatever the form", () => {
     expect(() => normalizeBaseUrl("https://user:pw@host.example")).toThrow(/credentials/);
     expect(() => normalizeBaseUrl("user@host.example")).toThrow(/credentials/);

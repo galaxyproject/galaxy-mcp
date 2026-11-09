@@ -4,10 +4,17 @@ import {
   type AuthDeps,
   type KeySourceId,
   type LoginSummary,
-  type StorageKind,
   type StoredLogin,
 } from "../types";
-import { fail, formatExpiry, formatTimeLeft, hostOf, maskToken, sanitize } from "./common";
+import {
+  fail,
+  formatExpiry,
+  formatTimeLeft,
+  hostOf,
+  maskToken,
+  describeStorage,
+  sanitize,
+} from "./common";
 import { abortReason } from "../abort";
 
 export interface StatusOptions {
@@ -41,10 +48,12 @@ function abortable<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
-type State = "ok" | "expired" | "invalid" | "error";
+/** `unavailable`: the record is there but its token cannot be read (keyring down, secret gone). */
+type State = "ok" | "expired" | "invalid" | "error" | "unavailable";
 
 interface Checked {
-  login: StoredLogin & { storage: StorageKind };
+  /** Without a token when it could not be read; `login` is then the record alone. */
+  login: LoginSummary & { token?: string };
   state: State;
   username: string;
   /** From the live check; undefined when the check did not run or did not say. */
@@ -55,8 +64,8 @@ interface Checked {
 /**
  * Check each stored login against its Galaxy and say what is wrong with any that fail.
  *
- * Exits 1 when any login is not usable right now (expired, refused by Galaxy, or Galaxy did
- * not answer) and 0 when all are: the command ran and reported on them, so
+ * Exits 1 when any login is not usable right now (expired, its token unreadable, refused by
+ * Galaxy, or Galaxy did not answer) and 0 when all are: the command ran and reported on them, so
  * this is not one of the sysexits failures. `--json` exits 0 whenever it prints the list, as gh's
  * does, and the outcome is the `status` of each entry; a failure before there is a list (an
  * unreadable `hosts.yml`, a bad `--host`) or Ctrl-C (130) is still non-zero. Nothing stored is 77
@@ -91,13 +100,23 @@ export async function statusCommand(opts: StatusOptions, deps: AuthDeps): Promis
     const now = deps.now();
     /** One host's check; `undefined` when Ctrl-C ended it. */
     const check = async (summary: LoginSummary): Promise<Checked | undefined> => {
-      const login = await deps.store.get(summary.baseUrl);
-      // Listed a moment ago, so it was removed between `list` and `get` (another gxy logging out).
-      if (!login)
-        throw new AuthError(
-          "not_logged_in",
-          `The stored login for ${hostOf(summary.baseUrl)} was removed while this ran.`,
-        );
+      // Each host on its own: one unreadable token must not hide the others.
+      let login: (StoredLogin & { storage: LoginSummary["storage"] }) | null = null;
+      let unreadable: string;
+      try {
+        login = await deps.store.get(summary.baseUrl);
+        unreadable = "the token is not in the store";
+      } catch (e) {
+        unreadable = e instanceof Error ? e.message : String(e);
+      }
+      if (!login) {
+        return {
+          login: summary,
+          state: "unavailable",
+          username: summary.username,
+          problem: `token unavailable: ${sanitize(unreadable)}`,
+        };
+      }
       // An expired token is not sent anywhere: the clock has already said no.
       const expiry = checkExpiry(login.expiresAt, now);
       if (expiry.state === "expired" || expiry.state === "unreadable") {
@@ -150,12 +169,19 @@ export async function statusCommand(opts: StatusOptions, deps: AuthDeps): Promis
     // and the flags or environment may send operations to another Galaxy altogether, in which case
     // no source is named for this one.
     const rows = checked.map((c) => {
-      const asked = deps.keySourceFor?.(c.login.baseUrl, c.login, stored);
+      const { token } = c.login;
+      const asked = deps.keySourceFor?.(
+        c.login.baseUrl,
+        token === undefined ? undefined : { ...c.login, token },
+        stored,
+      );
       const key: { id: KeySourceId | null; label: string } =
         asked ??
         (deps.env.GALAXY_API_KEY
           ? { id: "env", label: "GALAXY_API_KEY" }
-          : { id: "stored", label: "stored login" });
+          : token === undefined
+            ? { id: null, label: "none (the stored token cannot be read)" }
+            : { id: "stored", label: "stored login" });
       return { c, key };
     });
 
@@ -172,7 +198,7 @@ export async function statusCommand(opts: StatusOptions, deps: AuthDeps): Promis
         status: c.state,
         key_source: key.id,
         ...(c.problem ? { error: c.problem } : {}),
-        ...(opts.showToken ? { token: c.login.token } : {}),
+        ...(opts.showToken && c.login.token !== undefined ? { token: c.login.token } : {}),
       }));
       deps.io.stdout.write(`${JSON.stringify(out, null, 2)}\n`);
       return 0;
@@ -192,8 +218,10 @@ export async function statusCommand(opts: StatusOptions, deps: AuthDeps): Promis
       if (c.state === "ok") err(`  ✓ Logged in as ${sanitize(c.username)}`);
       else if (c.state === "expired")
         err(`  ✗ Login ${c.problem}. Run: ${deps.commandName} auth login --host ${l.baseUrl}`);
+      else if (c.state === "unavailable")
+        err(`  ✗ ${c.problem}. Run: ${deps.commandName} auth login --host ${l.baseUrl}`);
       else err(`  ✗ ${c.problem}`);
-      err("  Storage  plaintext file (readable only by you)");
+      err(`  Storage  ${describeStorage(l.storage)}`);
       err("  Method   pasted API key");
       err("  Scopes   full access (API key)");
       const expiry = checkExpiry(l.expiresAt, now);
@@ -205,19 +233,21 @@ export async function statusCommand(opts: StatusOptions, deps: AuthDeps): Promis
         err("  Expires  no expiry");
       }
       // Masked on stderr always: the secret itself, when asked for, goes to stdout.
-      err(`  Token    ${maskToken(l.token)}`);
+      err(`  Token    ${l.token === undefined ? "unavailable" : maskToken(l.token)}`);
       err(`  Key used by operations: ${sanitize(key.label)}`);
       if (c.isAdmin)
         err(
           `  ! This token carries full admin rights on ${hostOf(l.baseUrl)}. Treat it like a password.`,
         );
-      if (l.expiresAt === null)
+      if (l.expiresAt === null && l.token !== undefined)
         err(
           "  ! This token has no expiry: it works until you revoke it in Galaxy's user preferences.",
         );
     }
     if (opts.showToken) {
-      for (const c of checked) deps.io.stdout.write(`${c.login.baseUrl}\t${c.login.token}\n`);
+      for (const c of checked)
+        if (c.login.token !== undefined)
+          deps.io.stdout.write(`${c.login.baseUrl}\t${c.login.token}\n`);
     }
     return checked.some((c) => c.state !== "ok") ? 1 : 0;
   } catch (e) {

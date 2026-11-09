@@ -3,12 +3,21 @@
  * reached and each run's output read back. The real binary, a real SIGINT and real terminals are
  * in e2e.int.test.ts.
  */
+import { readFile } from "node:fs/promises";
 import { describe, it, expect, vi } from "vitest";
 import { loginCommand } from "../../src/auth/commands/login";
 import { markAnswered } from "../../src/auth/network";
 import { createWhoami } from "../../src/auth/whoami";
 import { AuthError } from "../../src/auth/types";
-import { FAKE_TOKEN, HOST, harness } from "./harness";
+import {
+  FAKE_TOKEN,
+  HOST,
+  REFUSED_WITHOUT_KEYRING,
+  FakeKeyring,
+  harness,
+  realStore,
+  useTempDir,
+} from "./harness";
 
 const HOST_ARG = "https://dev.galaxy.example.org";
 const never = <T>() => new Promise<T>(() => {});
@@ -123,6 +132,34 @@ describe("cancelling with Ctrl-C", () => {
     );
   });
 
+  // The keyring write is the one step that can last (an unlock prompt), and Ctrl-C kills its helper.
+  // That must cancel, not fall back to a plaintext token in hosts.yml with "Logged in".
+  describe("during the keyring write", () => {
+    const tmp = useTempDir("gxy-lg-");
+
+    it("exits 130, says Cancelled and stores nothing", async () => {
+      const h = harness({ stdinText: `${FAKE_TOKEN}\n` });
+      const kr = new FakeKeyring();
+      const { file, store } = realStore(tmp.path, kr);
+      h.deps.store = store;
+      const ac = new AbortController();
+      kr.set = async () => {
+        ac.abort();
+        throw new Error("helper killed by SIGINT");
+      };
+      expect(
+        await loginCommand({ host: HOST_ARG, withToken: true, signal: ac.signal }, h.deps),
+      ).toBe(130);
+      expect(h.cap.err).toContain("Cancelled.");
+      expect(h.cap.err).not.toContain("Logged in");
+      expect(h.cap.err).not.toContain("plain text");
+      expect(h.cap.err + h.cap.out).not.toContain(FAKE_TOKEN);
+      expect(h.cap.out).toBe("");
+      await expect(readFile(file.path, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+      expect(kr.data.size).toBe(0);
+    });
+  });
+
   it("while reading a piped key, before any whoami, leaving no listener on stdin", async () => {
     const h = harness(); // stdin stays open and empty
     const ac = new AbortController();
@@ -163,19 +200,20 @@ describe("login --with-token", () => {
     expect(h.cap.out).toBe("");
   });
 
-  it("says where the token went", async () => {
+  it("relays the store's warning and says where the token went", async () => {
     const h = harness({ stdinText: `${FAKE_TOKEN}\n` });
+    h.store.nextStorage = "file";
+    h.store.nextWarning = "No keyring here; the token went to a file.";
     expect(await loginCommand({ host: HOST_ARG, withToken: true }, h.deps)).toBe(0);
-    expect(h.cap.err).toContain("Token stored in a file readable only by you (no expiry)");
-    expect(h.store.logins.get(HOST)?.storage).toBe("file");
+    expect(h.cap.err).toContain("No keyring here; the token went to a file.");
+    expect(h.cap.err).toMatch(/stored in a file/);
+    expect(h.cap.err).toMatch(/no expiry/);
   });
 
-  it("with --insecure-storage, changes nothing for an ordinary key", async () => {
+  it("with --insecure-storage, keeps the token in the file", async () => {
     const h = harness({ stdinText: `${FAKE_TOKEN}\n` });
-    expect(
-      await loginCommand({ host: HOST_ARG, withToken: true, insecureStorage: true }, h.deps),
-    ).toBe(0);
-    expect(h.store.logins.get(HOST)?.token).toBe(FAKE_TOKEN);
+    await loginCommand({ host: HOST_ARG, withToken: true, insecureStorage: true }, h.deps);
+    expect(h.store.logins.get(HOST)?.storage).toBe("file");
   });
 
   // An explicit key beats a stored login for operations (config.ts), so a login stored now would
@@ -414,40 +452,60 @@ describe("login --with-token", () => {
   });
 });
 
-// An admin key is the whole server, and the only place a login is kept is a plaintext file, so
-// login refuses it with 77, after the warning, unless `--insecure-storage` asks for the file.
+// An admin token is never written to the plaintext file unless `--insecure-storage` asks for it
+// (login.ts), since a stolen one carries full admin rights. With no keyring it is refused with 77,
+// after the warning, rather than quietly saved to a file.
 describe("tokens that carry admin rights", () => {
   const admin = { username: "root", isAdmin: true };
 
-  it("get a warning, printed once, and the login is stored when --insecure-storage says so", async () => {
+  it("get a warning, printed once, and the login is still stored", async () => {
     const h = harness({ stdinText: `${FAKE_TOKEN}\n` });
     h.knobs.whoami = admin;
-    expect(
-      await loginCommand({ host: HOST_ARG, withToken: true, insecureStorage: true }, h.deps),
-    ).toBe(0);
+    expect(await loginCommand({ host: HOST_ARG, withToken: true }, h.deps)).toBe(0);
     expect(h.cap.err.match(/full admin rights on dev\.galaxy\.example\.org/g)).toHaveLength(1);
-    expect(h.store.logins.get(HOST)?.token).toBe(FAKE_TOKEN);
+    expect(h.store.logins.size).toBe(1);
+    // The admin put is what makes the store refuse a plaintext fallback.
+    expect(h.store.putCalls[0]!.opts).toMatchObject({ requireKeyring: true });
   });
 
   it("do not make an ordinary user's login warn", async () => {
     const h = harness({ stdinText: `${FAKE_TOKEN}\n` });
     await loginCommand({ host: HOST_ARG, withToken: true }, h.deps);
     expect(h.cap.err).not.toContain("admin rights");
+    expect(h.store.putCalls[0]!.opts?.requireKeyring).toBeUndefined();
   });
 
-  it("are refused with 77, after the warning, unless --insecure-storage says so", async () => {
+  it("are refused with 77, after the warning, when there is no keyring", async () => {
     const h = harness({ stdinText: `${FAKE_TOKEN}\n` });
+    h.store.keyringAvailable = false;
     h.knobs.whoami = admin;
     expect(await loginCommand({ host: HOST_ARG, withToken: true }, h.deps)).toBe(77);
-    expect(h.store.putCalls).toEqual([]);
     expect(h.store.logins.size).toBe(0);
     const warned = h.cap.err.indexOf("full admin rights");
     expect(warned).toBeGreaterThanOrEqual(0);
-    // The refusal names the way out and the alternative that stores nothing.
-    const refused = h.cap.err.search(/--insecure-storage.*GALAXY_API_KEY/s);
-    expect(refused).toBeGreaterThan(warned);
-    expect(h.cap.err).not.toContain("Logged in");
+    expect(h.cap.err.indexOf(REFUSED_WITHOUT_KEYRING)).toBeGreaterThan(warned);
     expect(h.cap.err).not.toContain(FAKE_TOKEN);
+  });
+
+  it("are kept in the file when --insecure-storage says so", async () => {
+    const h = harness({ stdinText: `${FAKE_TOKEN}\n` });
+    h.store.keyringAvailable = false;
+    h.knobs.whoami = admin;
+    expect(
+      await loginCommand({ host: HOST_ARG, withToken: true, insecureStorage: true }, h.deps),
+    ).toBe(0);
+    expect(h.store.logins.get(HOST)?.storage).toBe("file");
+    expect(h.store.putCalls[0]!.opts).toMatchObject({
+      insecureStorage: true,
+      requireKeyring: true,
+    });
+  });
+
+  it("do not stop an ordinary user falling back to the file", async () => {
+    const h = harness({ stdinText: `${FAKE_TOKEN}\n` });
+    h.store.keyringAvailable = false;
+    expect(await loginCommand({ host: HOST_ARG, withToken: true }, h.deps)).toBe(0);
+    expect(h.store.logins.size).toBe(1);
   });
 
   it("add their warning to a pasted key's own no-expiry warning", async () => {
@@ -458,7 +516,7 @@ describe("tokens that carry admin rights", () => {
 
     const root = harness({ stdinText: `${FAKE_TOKEN}\n` });
     root.knobs.whoami = admin;
-    await loginCommand({ host: HOST_ARG, withToken: true, insecureStorage: true }, root.deps);
+    await loginCommand({ host: HOST_ARG, withToken: true }, root.deps);
     expect(root.cap.err).toContain("admin rights");
     expect(root.cap.err).toContain("no expiry");
   });

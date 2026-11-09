@@ -32,7 +32,7 @@ export interface Sources {
   now?: Date;
   /** The directory `dotenv` was read from, for saying so. */
   dotenvDir?: string;
-  /** Set when the credential store could not be read (corrupt file). */
+  /** Set when the credential store could not be read (corrupt file, keyring locked). */
   storeProblem?: string;
 }
 
@@ -208,18 +208,22 @@ export function resolveConnection(flags: GlobalFlags, src: Sources, commandName 
 type KeySourceReport =
   | { id: KeySourceId }
   | { id: null; reason: "elsewhere"; galaxy: string }
-  | { id: null; reason: "ambiguous" | "refused" };
+  | { id: null; reason: "ambiguous" | "refused" | "unreadable" };
 
 /**
  * Which source an operation run now, with these flags and this environment, would take its key
- * from for this Galaxy, given its stored login (if any): what `auth status` shows. It runs the real
+ * from for this Galaxy, given its stored login: what `auth status` shows. It runs the real
  * resolver, so it names a source only when the operation would go to this Galaxy. An expired
  * login still counts as "stored": nothing else would be used for it either, and the operation says
  * why it fails. `src.storedBaseUrls` is every stored login, since several of them make an operation
  * that names no Galaxy ambiguous.
+ *
+ * `login` is undefined when its token cannot be read (a locked keyring), which is how an operation
+ * sees it too: it uses another key if it has one, and otherwise the report says "unreadable" where
+ * the stored login would have been the key.
  */
-export function keySourceFor(baseUrl: BaseUrl, flags: GlobalFlags, src: Sources, login?: StoredLogin): KeySourceReport {
-  const all: Sources = { ...src, storedBaseUrls: src.storedBaseUrls ?? [baseUrl], ...(login ? { storedLogin: login } : {}) };
+export function keySourceFor(baseUrl: BaseUrl, flags: GlobalFlags, src: Sources, login: StoredLogin | undefined): KeySourceReport {
+  const all: Sources = { ...src, storedBaseUrls: src.storedBaseUrls ?? [baseUrl] };
   let picked: { url: string };
   try {
     picked = pickOperationHost(flags, all);
@@ -234,9 +238,20 @@ export function keySourceFor(baseUrl: BaseUrl, flags: GlobalFlags, src: Sources,
   }
   if (normalised !== baseUrl) return { id: null, reason: "elsewhere", galaxy: picked.url };
   try {
-    return { id: resolveConnection(flags, all).keySource };
+    return { id: resolveConnection(flags, { ...all, ...(login ? { storedLogin: login } : {}) }).keySource };
   } catch (e) {
-    return e instanceof AuthError && e.kind === "not_logged_in" ? { id: "stored" } : { id: null, reason: "refused" };
+    if (e instanceof AuthError && e.kind === "not_logged_in") return { id: "stored" };
+    if (!login) {
+      // Nothing else would run. Was it the stored login that was wanted? Ask again with a stand-in
+      // for it (an empty token: only its place in the order is used).
+      const standIn: StoredLogin = { baseUrl, username: "", token: "", method: "pasted", scopes: [], expiresAt: null, obtainedAt: "" };
+      try {
+        if (resolveConnection(flags, { ...all, storedLogin: standIn }).keySource === "stored") return { id: null, reason: "unreadable" };
+      } catch {
+        // Refused for another reason too.
+      }
+    }
+    return { id: null, reason: "refused" };
   }
 }
 
@@ -257,6 +272,8 @@ export function describeKeyReport(report: KeySourceReport, flags: GlobalFlags = 
       return "none (several logins are stored, and operations need --url to say which)";
     case "refused":
       return "none (operations with these flags stop with an error)";
+    case "unreadable":
+      return "none (the stored token cannot be read)";
   }
 }
 
@@ -277,7 +294,7 @@ export function loadSources(): Sources {
 
 /**
  * Like `loadSources`, plus the stored login for the Galaxy these flags point at. The store
- * is only touched when no key outranking it is given, so a broken hosts.yml never
+ * is only touched when no key outranking it is given, so a broken keyring or hosts.yml never
  * gets in the way of `--api-key`, `--profile` or `GALAXY_API_KEY`.
  */
 export async function loadSourcesAsync(
@@ -288,7 +305,11 @@ export async function loadSourcesAsync(
   const now = opts.now ?? new Date();
   if (flags.apiKey || profileKeyOf(flags, src) || src.env.GALAXY_API_KEY) return { ...src, now };
   try {
-    const store = opts.store ?? createCredentialStore(src.env);
+    // An operation is run by a person at a terminal as often as by a script: with stderr on a
+    // terminal, a locked keyring may be unlocked at its prompt, as for `auth` (auth/deps.ts).
+    const store =
+      opts.store ??
+      createCredentialStore(src.env, undefined, undefined, { interactive: process.stderr.isTTY === true });
     const summaries = await store.list();
     const storedBaseUrls = summaries.map((s) => s.baseUrl);
     let target: BaseUrl | undefined;
