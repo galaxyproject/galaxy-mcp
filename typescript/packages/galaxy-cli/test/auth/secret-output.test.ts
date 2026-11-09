@@ -63,10 +63,13 @@ describe("when there is no usable login or the server fails", () => {
     h.deps.resolveHost = async () => HOST;
     return h;
   };
-  // Galaxy rejects the key.
+  // Every server call fails, whichever one the command makes: Galaxy rejects the key, discovery
+  // cannot reach it, and the revoke errors.
   const serverDown = () => {
     const h = harness({ stored: [fakeLogin()] });
     h.knobs.whoami = new AuthError("not_logged_in", "Galaxy rejected the key");
+    h.knobs.discoverError = new AuthError("network", "no route");
+    h.server.revokeError = new Error("boom");
     return h;
   };
 
@@ -75,18 +78,18 @@ describe("when there is no usable login or the server fails", () => {
     ["token --json", (h) => tokenCommand({ json: true }, h.deps)],
     ["env", (h) => envCommand({}, h.deps)],
     ["headers", (h) => headersCommand({}, h.deps)],
-    ["logout", (h) => logoutCommand({}, h.deps)],
   ];
   const withServer: [string, Run][] = [
     ["status", (h) => statusCommand({}, h.deps)],
     ["status --json", (h) => statusCommand({ json: true }, h.deps)],
+    ["logout", (h) => logoutCommand({}, h.deps)],
   ];
   const situations: [string, () => H][] = [
     ["an expired login", expiredLogin],
     ["no login", noLogin],
   ];
 
-  // token, env, headers and logout never talk to the server, so only the first two situations apply.
+  // token, env and headers never talk to the server, so only the first two situations apply.
   const matrix = [
     ...withoutServer.flatMap(([name, run]) =>
       situations.map(([what, make]) => [name, what, make, run] as const),
@@ -106,24 +109,26 @@ describe("when there is no usable login or the server fails", () => {
   });
 });
 
-// `login` never hands out a token, so its stdout must be empty as well as free of it. The three runs
-// are its three outcomes: a key succeeding, a key Galaxy refuses, and an admin key with no keyring to
-// hold it (which `requireKeyring` will not put in a file).
+// `login` never hands out a token, so its stdout must be empty as well as free of it. The four runs
+// are its four outcomes: the device flow succeeding, a pasted key succeeding, a pasted key Galaxy
+// refuses, and an admin key with no keyring to hold it (which `requireKeyring` will not put in a
+// file).
 describe("login", () => {
   it("never prints the token, whether it succeeds, is refused, or cannot store", async () => {
-    const stdinText = `${FAKE_TOKEN}\n`;
-    const accepted = harness({ stdinText });
-    const refused = harness({ stdinText });
+    const device = harness();
+    const pasted = harness({ stdinText: `${FAKE_TOKEN}\n` });
+    const refused = harness({ stdinText: `${FAKE_TOKEN}\n` });
     refused.knobs.whoami = new AuthError("not_logged_in", "Galaxy rejected the key");
-    const unstorable = harness({ stdinText });
+    const unstorable = harness();
     unstorable.store.keyringAvailable = false;
     unstorable.knobs.whoami = { username: "root", isAdmin: true };
 
-    await loginCommand({ host: HOST_ARG, withToken: true }, accepted.deps);
+    await loginCommand({ host: HOST_ARG }, device.deps);
+    await loginCommand({ host: HOST_ARG, withToken: true }, pasted.deps);
     await loginCommand({ host: HOST_ARG, withToken: true }, refused.deps);
-    await loginCommand({ host: HOST_ARG, withToken: true }, unstorable.deps);
+    await loginCommand({ host: HOST_ARG }, unstorable.deps);
 
-    for (const h of [accepted, refused, unstorable]) {
+    for (const h of [device, pasted, refused, unstorable]) {
       expect(h.cap.out).toBe("");
       expect(h.cap.err).not.toContain(FAKE_TOKEN);
     }

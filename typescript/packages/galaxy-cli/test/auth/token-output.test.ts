@@ -7,7 +7,7 @@ import { describe, it, expect } from "vitest";
 import { tokenCommand } from "../../src/auth/commands/token";
 import { envCommand, quoteFor } from "../../src/auth/commands/env";
 import { headersCommand } from "../../src/auth/commands/headers";
-import { DAY, FAKE_TOKEN, HOST, OTHER, SOON, fakeLogin, harness } from "./harness";
+import { DAY, FAKE_TOKEN, HOST, OTHER, fakeLogin, harness } from "./harness";
 
 type H = ReturnType<typeof harness>;
 const commands: [string, (h: H) => Promise<number>][] = [
@@ -26,7 +26,7 @@ describe("auth token", () => {
   });
 
   it("--json prints the versioned object", async () => {
-    const h = harness({ stored: [fakeLogin({ expiresAt: SOON })] });
+    const h = harness({ stored: [fakeLogin()] });
     await tokenCommand({ json: true }, h.deps);
     expect(h.cap.out.endsWith("\n")).toBe(true);
     expect(JSON.parse(h.cap.out)).toEqual({
@@ -34,12 +34,12 @@ describe("auth token", () => {
       base_url: HOST,
       token: FAKE_TOKEN,
       token_type: "x-api-key",
-      expires_at: SOON,
+      expires_at: "2026-11-06T18:42:00.000Z",
     });
   });
 
   it("--json has expires_at null for a pasted key", async () => {
-    const h = harness({ stored: [fakeLogin()] });
+    const h = harness({ stored: [fakeLogin({ method: "pasted", expiresAt: null, scopes: [] })] });
     await tokenCommand({ json: true }, h.deps);
     expect((JSON.parse(h.cap.out) as { expires_at?: unknown }).expires_at).toBeNull();
   });

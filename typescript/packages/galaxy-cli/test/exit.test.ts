@@ -103,7 +103,7 @@ describe("credential errors exit by kind", () => {
   });
 
   const host = (url: string, expires: string | null) =>
-    `  ${url}:\n    username: alice\n    method: pasted\n    scopes: []\n    expires_at: ${expires === null ? "null" : `"${expires}"`}\n    obtained_at: "2026-01-01T00:00:00.000Z"\n    storage: file\n    token: FAKE-TOKEN\n`;
+    `  ${url}:\n    username: alice\n    method: device\n    scopes: []\n    expires_at: ${expires === null ? "null" : `"${expires}"`}\n    obtained_at: "2026-01-01T00:00:00.000Z"\n    storage: file\n    token: FAKE-TOKEN\n`;
 
   async function run(hosts: string, file = `hosts:\n${hosts}`, argv: string[] = []) {
     await writeFile(join(tmp.path, "cfg", "hosts.yml"), file, { mode: 0o600 });
