@@ -1,8 +1,8 @@
 import { normalizeBaseUrl } from "./base-url";
 import { AuthError, type BaseUrl, type CredentialStore } from "./types";
 
-/** Nothing named and nothing stored. A `usage` error. */
-class NoHostError extends AuthError {
+/** Nothing named and nothing stored. A `usage` error for `login`; `requireLogin` reports it as not logged in. */
+export class NoHostError extends AuthError {
   constructor() {
     super("usage", "No Galaxy given and none logged in. Pass --host <url>.");
     this.name = "NoHostError";
@@ -24,8 +24,8 @@ interface PickHostInput {
   /**
    * `login` sends a key to the host it picks, so it never takes one from files in the working
    * directory or the home directory (`.env`, a profile): a repository must not be able to choose
-   * where your credentials go. Everything else only uses a host that must match a stored login to
-   * get a token, so the files are safe there.
+   * where your credentials go. Everything else (reading a stored token) only uses a host that must
+   * match a stored login to get a token, so the files are safe there.
    *
    * The Python galaxy-mcp server holds to the same line from the other side: its
    * `GALAXY_API_KEY` is only used with the `GALAXY_URL` it was configured with.

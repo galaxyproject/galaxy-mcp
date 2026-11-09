@@ -85,7 +85,7 @@ const KNOWN_FIELDS = new Set([
  * and the rename carries the temp file's mode over.
  *
  * Read-modify-write is not locked across processes: two simultaneous logins can lose one
- * update. This file is only written when a login is stored or removed, which is rare and interactive; that is
+ * update. This file is only written at login and logout, which are rare and interactive; that is
  * why it is accepted. (gh serialises its writes with a lock file.)
  */
 export class FileStore {
@@ -249,7 +249,7 @@ export class FileStore {
    * entry, not surface later as a `TypeError`, or as a file login with no token. What is not
    * recognised at all becomes an `unknown` entry (see `Doc`); what is recognised but wrong is
    * corrupt. An `expires_at` that is a string but not a date is let through here and judged by
-   * whoever uses it.
+   * `checkExpiry`, which treats it as expired.
    */
   private decode(url: string, raw: unknown): Entry {
     if (!isObject(raw)) throw this.corrupt(`entry for ${show(url)} is not a mapping`);
