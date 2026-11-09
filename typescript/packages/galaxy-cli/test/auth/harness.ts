@@ -153,7 +153,7 @@ export function harness(
       if (knobs.whoami instanceof AuthError) throw knobs.whoami;
       return knobs.whoami;
     },
-    // The real rule, over the fake store, so a host is picked here as the real commands pick it (host.ts).
+    // The real rule, over the fake store, so a host is picked here as operations pick it (host.ts).
     // `.env` and profiles are not in play: `ignoredLoginHost` is a canned answer, and the real
     // read of a working directory's `.env` is shown by e2e.int.test.ts.
     resolveHost: (explicit, purpose) =>

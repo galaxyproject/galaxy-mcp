@@ -18,8 +18,9 @@ export function createAuthDeps(
   return {
     store,
     whoami: createWhoami(),
-    // The global `--url` counts as the flag and `--profile` supplies its planemo URL; login
-    // ignores `.env` and the profile (see pickHost).
+    // The rule operations use (config.ts), so the two cannot pick different Galaxies. The global
+    // `--url` counts as the flag and `--profile` supplies its planemo URL; login ignores `.env`
+    // and the profile (see pickHost).
     resolveHost: (explicit, purpose) => {
       const g = globals();
       const src = loadSources();

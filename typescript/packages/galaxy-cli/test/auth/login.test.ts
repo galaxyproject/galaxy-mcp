@@ -178,6 +178,15 @@ describe("login --with-token", () => {
     expect(h.store.logins.get(HOST)?.token).toBe(FAKE_TOKEN);
   });
 
+  // An explicit key beats a stored login for operations (config.ts), so a login stored now would
+  // quietly go unused. The warning says so, and never repeats the value.
+  it("warns that GALAXY_API_KEY takes precedence, without printing it", async () => {
+    const h = harness({ env: { GALAXY_API_KEY: "irrelevant" }, stdinText: `${FAKE_TOKEN}\n` });
+    await loginCommand({ host: HOST_ARG, withToken: true }, h.deps);
+    expect(h.cap.err).toContain("GALAXY_API_KEY is set and will take precedence");
+    expect(h.cap.err).not.toContain("irrelevant");
+  });
+
   it.each([
     ["empty", ""],
     ["blank", "  \n"],

@@ -179,7 +179,7 @@ describe("normalizeBaseUrl", () => {
 
   // The result is a credential key and `resolveHost` normalises a stored key again, so it must be a
   // fixed point. A doubled `/api` once normalised to a single `/api`, and that to the bare host, so
-  // `token` and `logout` looked for a key that was never stored; a longer run of the idempotence
+  // `logout` and `status` looked for a key that was never stored; a longer run of the idempotence
   // property in properties.test.ts found it, and the examples pin it here. The last row shows
   // that only trailing segments go: a leading `/api` is part of the path.
   it.each([

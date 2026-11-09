@@ -20,8 +20,8 @@ import { AuthError, type BaseUrl } from "./types";
  * The key is exact: `https://x//galaxy` and `https://x/galaxy` are two keys, and `example.org.` (a
  * trailing dot) is not `example.org`. Nothing here guesses that they are the same Galaxy.
  *
- * A host named by `GALAXY_URL` is compared as `normalizeBaseUrl(url) === login.baseUrl`, so
- * `GALAXY_URL=https://X/api/` finds the login made with `--host x`.
+ * Operations (`config.ts`) compare `normalizeBaseUrl(url) === login.baseUrl` and send the key
+ * to the stored form, so `GALAXY_URL=https://X/api/` finds the login made with `--host x`.
  *
  * The Python server's `normalize_galaxy_url` refuses the same schemes, credentials, whitespace
  * and control characters; it refuses a query or fragment where this drops them, and has no

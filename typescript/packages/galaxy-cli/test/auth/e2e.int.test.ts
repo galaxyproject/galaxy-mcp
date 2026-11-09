@@ -200,7 +200,7 @@ async function expectTokenOnlyWhereAllowed(
 }
 
 describe("auth, end to end", () => {
-  test("logs in, hands out the token, logs out", async ({
+  test("logs in, hands out the token, runs an operation, logs out", async ({
     galaxy,
     run,
     configDir,
@@ -223,6 +223,15 @@ describe("auth, end to end", () => {
     const tok = await run(["auth", "token"]);
     expect(tok.exitCode).toBe(0);
     expect(tok.stdout.trim()).toBe(token);
+
+    // An existing operation uses the stored login with no flags.
+    const user = await run(["--format", "json", "get_user"]);
+    expect(user.exitCode, user.stderr).toBe(0);
+    expect(JSON.parse(user.stdout)).toMatchObject({
+      success: true,
+      data: { username: "fake-user" },
+    });
+    expect(galaxy.requestsTo("/api/users/current").at(-1)!.headers["x-api-key"]).toBe(token);
 
     // The binary identifies itself on every call of its own.
     for (const r of galaxy.requestsTo("/api/version"))
@@ -350,6 +359,7 @@ describe("auth, end to end", () => {
     expect(ambiguous.stdout).toBe("");
     expect(ambiguous.stderr).toContain(galaxy.baseUrl);
     expect(ambiguous.stderr).toContain(second.baseUrl);
+    expect((await run(["get_user"])).exitCode).toBe(64);
     expect((await run(["auth", "token", "--host", second.baseUrl])).stdout.trim()).toBe(
       second.issuedTokens()[0],
     );
@@ -404,6 +414,23 @@ describe("auth, end to end", () => {
       expect((await stat(path)).mode & 0o777).toBe(0o666);
     }, 30_000);
   });
+
+  // GALAXY_URL and GALAXY_API_KEY are the variables the Python galaxy-mcp server reads, and an
+  // explicit key has always won here (config.ts), so an environment that already works keeps working
+  // after a login is stored.
+  test("lets GALAXY_API_KEY override the stored login", async ({ galaxy, run, pasteLogin }) => {
+    expect((await pasteLogin(galaxy)).exitCode).toBe(0);
+    const seen = galaxy.requestsTo("/api/users/current").length;
+    const user = await run(["--format", "json", "get_user"], {
+      env: { GALAXY_URL: galaxy.baseUrl, GALAXY_API_KEY: "fake-env-key" },
+    });
+    expect(user.exitCode, user.stderr).toBe(0);
+    const keys = galaxy
+      .requestsTo("/api/users/current")
+      .slice(seen)
+      .map((r) => r.headers["x-api-key"]);
+    expect(keys).toEqual(["fake-env-key"]);
+  }, 60_000);
 
   test("lets `auth token | head -c1` end quietly with 0, when the output is more than the pipe holds", async ({
     galaxy,

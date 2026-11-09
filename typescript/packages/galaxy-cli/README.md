@@ -29,9 +29,9 @@ galaxy-cli get_workflow_input_template <workflowId>
 galaxy-cli invoke_workflow <workflowId> --inputs @inputs.json --history-name "WF run"
 ```
 
-Credentials resolve from (first match wins): `--url`/`--api-key` flags, the
-`GALAXY_URL`/`GALAXY_API_KEY` environment variables, a `.env` file in the current
-directory, or a planemo profile (`--profile <name>`). Output is a table by
+Credentials come from the `--url`/`--api-key` flags, the `GALAXY_URL`/`GALAXY_API_KEY`
+environment variables, a stored login (`gxy auth login`), a `.env` file in the current
+directory, or a planemo profile (`--profile <name>`); see "Which key and which Galaxy" below. Output is a table by
 default; `--format json` prints the full result envelope for scripting. Exit
 codes follow `sysexits.h` conventions (e.g. `77` for auth failures).
 
@@ -40,12 +40,12 @@ commands and their arguments.
 
 ## Logging in
 
-`gxy auth` keeps a login for a Galaxy and hands its token to scripts. `gxy` and `galaxy-cli` are the
-same program. Other commands do not use a stored login yet: set `GALAXY_URL` and `GALAXY_API_KEY` as
-before.
+`gxy auth` stores a login so you don't have to put an API key in a shell variable or a
+command line. `gxy` and `galaxy-cli` are the same program.
 
 ```bash
 printf %s "$KEY" | gxy auth login --host https://usegalaxy.org --with-token   # store an API key
+gxy get_user                                                                   # operations use the stored login, no flags
 gxy auth token                                                                 # print the stored token
 gxy auth logout                                                                # delete the stored login
 ```
@@ -81,14 +81,49 @@ logins from working; asking for that very Galaxy fails and says it was written b
 rather than that you are not logged in. Each refusal exits 65 (not 77, which would suggest logging in
 again, and that meets the same refusal), names the file and what to do, and changes nothing.
 
-### Which Galaxy the `auth` commands use
+If the credential store cannot be read (a corrupt `hosts.yml`, a config directory that is a
+symlink, a login a newer `gxy` wrote for the Galaxy in question), an operation with `--api-key`, a
+profile key or `GALAXY_API_KEY` does not read it at all. One that has only a `.env` key still runs,
+with a warning on each run; any other fails, and the error names the problem. Fix or remove the
+store, or set `GXY_CONFIG_DIR` somewhere it can be read, to stop it.
 
-`auth token` and `auth logout` pick their Galaxy by `--host` (the same as `--url`), then the
-`--profile` URL, then `GALAXY_URL` in the environment, then `GALAXY_URL` in `.env`, then the only
-stored login. They never use a key from `--api-key`, `GALAXY_API_KEY`, `.env` or a profile, and warn
-once on stderr if `--api-key` is given (and, for `auth login` only, `--profile`). `auth login` never
-takes its host from `.env` or a profile (a repository must not choose where your key goes): give
-`--host` or set `GALAXY_URL`.
+### Which key and which Galaxy an operation uses
+
+The key, first match wins: `--api-key`, then the key of the `--profile` you name, then
+`GALAXY_API_KEY` in the environment, then the stored login for the Galaxy being used, then
+`GALAXY_API_KEY` in `.env`. The command line beats the environment, which beats files, as in the
+aws CLI. Two things differ from before stored logins existed: a `--profile` with a key now beats
+`GALAXY_API_KEY` and a `.env` key (it used to rank below both), and a stored login ranks above a
+`.env` key. `--api-key` is deprecated (it shows in shell history).
+
+The Galaxy: `--url`, then the `--profile` URL (when the profile has a `galaxy_url`: a profile is a
+pair, so its key goes to its own Galaxy), then `GALAXY_URL` in the environment, then `GALAXY_URL` in
+`.env`, then the only stored login. Before stored logins existed, `GALAXY_URL` and the `.env` URL
+beat the profile's.
+
+A key that is not the stored login's is only ever sent to a Galaxy that something named, never to
+the only stored login by default: with a key and no Galaxy named, `gxy` stops with "No Galaxy
+credentials" and asks for the Galaxy. A profile's key goes to its own URL, or to the Galaxy you
+named with `--url` or `GALAXY_URL` when it has none, and never to one that a `.env` chose. A stored
+token is only sent to the host it was issued for: name another Galaxy with no key for it, and the
+error says which Galaxies you are logged in to and how to log in to that one.
+
+One case is unchanged from before stored logins existed: a key from `--api-key` or `GALAXY_API_KEY`
+is sent to whatever Galaxy is resolved, including one that only a `.env` names. So if you have
+`GALAXY_API_KEY` set and run `gxy` in a directory whose `.env` has a `GALAXY_URL`, that key goes to
+that Galaxy. The notice on stderr (`Using GALAXY_URL from <dir>/.env.`) is the only warning, and
+`--quiet` hides it.
+
+A `.env` comes with the directory you are in, often a clone of someone else's repository, so an
+operation that uses its `GALAXY_API_KEY` or its `GALAXY_URL` says so on stderr, naming the file, and
+says when a stored login outranked its key. `--quiet` silences both.
+
+The `auth` commands (except `login`) pick their Galaxy by this same order, so `gxy auth token` and
+`gxy get_user` cannot disagree about which Galaxy a set of flags and variables means; `--host` is
+the same as `--url`. They never use a key from
+`--api-key`, `GALAXY_API_KEY`, `.env` or a profile, and warn once on stderr if `--api-key` is given
+(and, for `auth login` only, `--profile`). `auth login` never takes its host from `.env` or a
+profile (a repository must not choose where your key goes): give `--host` or set `GALAXY_URL`.
 
 ### What is checked before a key is sent
 

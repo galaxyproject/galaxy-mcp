@@ -6,14 +6,14 @@ import {
   createGalaxyContext,
   type GalaxyContext,
 } from "@galaxyproject/galaxy-ops";
-import { resolveConnection, loadSources, type Connection } from "./config";
+import { resolveConnection, loadSourcesAsync, type Connection } from "./config";
 import { applyInputs } from "./flags-apply";
 import { buildInput, inCliNames, keptPositionals } from "./flags";
 import { render, type Format } from "./render";
-import { exitCodeFor, EX_USAGE, EX_SOFTWARE } from "./exit";
+import { exitCodeFor, exitCodeForAuthError, EX_USAGE, EX_SOFTWARE } from "./exit";
 import { registerAuth } from "./auth/register";
 import { createAuthDeps } from "./auth/deps";
-import type { AuthDeps } from "./auth/types";
+import { AuthError, type AuthDeps } from "./auth/types";
 
 export interface CliDeps {
   makeContext?: (conn: Connection, signal: AbortSignal) => GalaxyContext;
@@ -34,13 +34,13 @@ export function buildProgram(deps: CliDeps = {}): Command {
     .name(deps.invokedAs ?? "galaxy-cli")
     .description("Galaxy agent operations on the command line")
     .option("--url <url>", "Galaxy base URL")
-    .option("--api-key <key>", "Galaxy API key")
+    .option("--api-key <key>", "Galaxy API key (deprecated: use `auth login` or GALAXY_API_KEY)")
     .option("--profile <name>", "planemo profile name")
     .option("--format <fmt>", "output format: table|json|text", "table")
     .option("--quiet", "suppress status messages", false)
     .option("--timeout <ms>", "poll timeout for blocking ops");
 
-  // `auth` takes its Galaxy from the global --url/--profile too, read at run time.
+  // `auth` shares the operations' host rule, so it needs the global --url/--profile (read at run time).
   registerAuth(
     program,
     deps.makeAuthDeps ??
@@ -57,6 +57,14 @@ export function buildProgram(deps: CliDeps = {}): Command {
       const positionals = args.slice(0, -2) as (string | undefined)[];
       const globals = command.optsWithGlobals<{ url?: string; apiKey?: string; profile?: string; format: Format; quiet: boolean; timeout?: string }>();
 
+      // Still works, so a script that passes it keeps running; stderr, so `--format json` output
+      // stays parseable, and `--quiet` silences it for a wrapper that fails on any stderr.
+      if (globals.apiKey && !globals.quiet) {
+        console.error(
+          `Warning: --api-key is deprecated: the key is visible in shell history and process listings. Use \`${program.name()} auth login\` or set GALAXY_API_KEY instead.`,
+        );
+      }
+
       const parsed = buildInput(op.input, positionals, localOpts, keptPositionals(op.name));
       if (!parsed.success) {
         console.error(parsed.error.message);
@@ -64,13 +72,19 @@ export function buildProgram(deps: CliDeps = {}): Command {
         return;
       }
       // When a context factory is injected (tests), skip credential resolution entirely.
-      let conn: Connection = { baseUrl: "", apiKey: "" };
+      let conn: Connection = { baseUrl: "", apiKey: "", keySource: "flag" };
       if (!deps.makeContext) {
         try {
-          conn = resolveConnection({ url: globals.url, apiKey: globals.apiKey, profile: globals.profile }, loadSources());
+          const flags = { url: globals.url, apiKey: globals.apiKey, profile: globals.profile };
+          conn = resolveConnection(flags, await loadSourcesAsync(flags), program.name());
+          // A key was found but something is off (an unreadable store, an expired login with
+          // another key used instead): worth a line, not a failure.
+          if (conn.warning) console.error(`Warning: ${conn.warning}`);
+          if (conn.note && !globals.quiet) console.error(conn.note);
         } catch (e) {
           console.error((e as Error).message);
-          process.exitCode = EX_USAGE;
+          // An expired login is 77 and an ambiguous host 64, as for `auth`; anything else is a usage problem.
+          process.exitCode = e instanceof AuthError ? exitCodeForAuthError(e.kind) : EX_USAGE;
           return;
         }
       }

@@ -114,6 +114,9 @@ interface AuthIo {
   interactive: boolean;
 }
 
+/** Where an operation takes its key from: `--api-key`, `--profile`, `GALAXY_API_KEY`, a stored login, `.env`. */
+export type KeySourceId = "flag" | "profile" | "env" | "stored" | "dotenv";
+
 export interface AuthDeps {
   store: CredentialStore;
   /**
