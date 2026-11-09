@@ -100,6 +100,34 @@ describe("buildProgram", () => {
     expect(names.length).toBe(allOperations.length + 1);
   });
 
+  // A key on the command line is visible in shell history and process listings, so the warning points
+  // at the login instead and must not repeat the key it is warning about.
+  it("warns that --api-key is deprecated, pointing at `auth login`", async () => {
+    const run = await runCli(["--api-key", "fake-flag-key", "get_histories"], ctxFactory);
+    expect(run.stderr).toContain("--api-key is deprecated");
+    expect(run.stderr).toContain("galaxy-cli auth login");
+    expect(run.stderr).not.toContain("fake-flag-key");
+  });
+
+  it("honours --quiet for the --api-key warning, and says in --help that the flag is deprecated", async () => {
+    const run = await runCli(["--quiet", "--api-key", "fake-flag-key", "get_histories"], ctxFactory);
+    expect(run.stderr).not.toContain("deprecated");
+    const help = buildProgram({ makeContext: ctxFactory }).helpInformation();
+    expect(help).toMatch(/--api-key <key>\s+Galaxy API key \(deprecated: use `auth login` or GALAXY_API_KEY\)/);
+  });
+
+  it("exits 70 when an operation fails with a bug, and prints neither the key nor a response", async () => {
+    // A context without a client: the operation throws a TypeError, which is not a Galaxy error.
+    // That is a bug in the CLI, so it exits 70 (EX_SOFTWARE) and prints the stack. Neither the stack
+    // nor stdout may carry the key or a response.
+    const secret = "fake-key-must-not-appear";
+    const run = await runCli(["get_histories"], () => ({ baseUrl: "https://g.example", apiKey: secret }) as unknown as ReturnType<typeof createGalaxyContext>);
+    expect(run.exitCode).toBe(70);
+    expect(run.stderr).toContain("TypeError");
+    expect(run.stdout).toBe("");
+    expect(run.stdout + run.stderr).not.toContain(secret);
+  });
+
   it("says in --help what an op needs from the server", () => {
     const program = buildProgram({ makeContext: ctxFactory });
     const described = new Map(program.commands.map((c) => [c.name(), c.description()]));
