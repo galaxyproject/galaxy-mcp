@@ -14,12 +14,19 @@ import { exitCodeFor, EX_USAGE, EX_SOFTWARE } from "./exit";
 
 export interface CliDeps {
   makeContext?: (conn: Connection, signal: AbortSignal) => GalaxyContext;
+  /**
+   * The name the program prints in usage: `gxy` or `galaxy-cli`. Each name has its own entry file
+   * (`gxy.ts`, `index.ts`) that passes it, because the name a person typed is not available at run
+   * time: pnpm and Windows shims run `node dist/<file>.js`, so `process.argv[1]` is the file and
+   * never the command.
+   */
+  invokedAs?: string;
 }
 
 export function buildProgram(deps: CliDeps = {}): Command {
   const program = new Command();
   program
-    .name("galaxy-cli")
+    .name(deps.invokedAs ?? "galaxy-cli")
     .description("Galaxy agent operations on the command line")
     .option("--url <url>", "Galaxy base URL")
     .option("--api-key <key>", "Galaxy API key")
