@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, it, expect, vi } from "vitest";
-import { loadSources, loadSourcesAsync, resolveConnection, type GlobalFlags, type Sources } from "../src/config";
+import { describeKeyReport, describeKeySource, keySourceFor, loadSources, loadSourcesAsync, resolveConnection, type GlobalFlags, type Sources } from "../src/config";
 import { normalizeBaseUrl } from "../src/auth/base-url";
 import { AuthError, type StoredLogin } from "../src/auth/types";
 import { DAY, FAKE_TOKEN, FakeStore, fakeLogin, useTempDir } from "./auth/harness";
@@ -289,6 +289,53 @@ describe("resolveConnection: keys and hosts", () => {
     it("says nothing when no .env was involved, or a higher source overrode it", () => {
       expect(run({}, dir).note).toBeUndefined();
       expect(run({ url, apiKey: "FLAG" }, dir, { dotenv: { GALAXY_URL: "https://dot.example" } }).note).toBeUndefined();
+    });
+  });
+
+  // What `auth status` shows is what an operation run with the same flags and environment would do for
+  // that Galaxy: a source only when the operation would go there and run.
+  describe("keySourceFor (what auth status shows)", () => {
+    const s = (...parts: Partial<Sources>[]): Sources => ({ ...merge(...parts), storedBaseUrls: [url] });
+    const here = { env: { GALAXY_URL: url } };
+    const other = "https://other.example.org";
+    it("names the source an operation would use for that Galaxy", () => {
+      expect(keySourceFor(url, {}, s(), stored.valid)).toEqual({ id: "stored" });
+      expect(keySourceFor(url, {}, s(here, keys.env), stored.valid)).toEqual({ id: "env" });
+      expect(keySourceFor(url, { apiKey: "K" }, s(here, keys.env), stored.valid)).toEqual({ id: "flag" });
+      expect(keySourceFor(url, { profile: "p" }, s(here, keys.env, keys.profile), stored.valid)).toEqual({ id: "profile" });
+      expect(keySourceFor(url, {}, s(keys.dotenv), stored.valid)).toEqual({ id: "stored" });
+      expect(keySourceFor(url, {}, s(here, keys.dotenv), stored.expired)).toEqual({ id: "dotenv" });
+      expect(keySourceFor(url, {}, s(), stored.expired)).toEqual({ id: "stored" }); // nothing else would be used either
+    });
+    it("names none when the flags or environment send operations to another Galaxy", () => {
+      const elsewhere = { id: null, reason: "elsewhere", galaxy: other };
+      const profile = { profiles: { p: { galaxy_url: other, galaxy_user_key: "PROFKEY" } } };
+      expect(keySourceFor(url, { profile: "p" }, s(profile), stored.valid)).toEqual(elsewhere);
+      expect(keySourceFor(url, { url: other }, s(), stored.valid)).toEqual(elsewhere);
+      expect(keySourceFor(url, { url: other, apiKey: "K" }, s(), stored.valid)).toEqual(elsewhere);
+      expect(keySourceFor(url, {}, s({ env: { GALAXY_URL: other } }), stored.valid)).toEqual(elsewhere);
+      expect(keySourceFor(url, {}, s({ dotenv: { GALAXY_URL: other } }, keys.dotenv), stored.valid)).toEqual(elsewhere);
+      // The same Galaxy, however it is spelt, is this one.
+      expect(keySourceFor(url, { url: "https://GALAXY.example.org/" }, s(), stored.valid)).toEqual({ id: "stored" });
+    });
+    it("names none when the operation would not run: a key and no Galaxy named, several logins and none named", () => {
+      expect(keySourceFor(url, {}, s(keys.env), stored.valid)).toEqual({ id: null, reason: "refused" });
+      expect(keySourceFor(url, { apiKey: "K" }, s(), stored.valid)).toEqual({ id: null, reason: "refused" });
+      // A profile key with no galaxy_url, and a Galaxy that only `.env` names, is refused.
+      expect(keySourceFor(url, { profile: "p" }, s(keys.profile, { dotenv: { GALAXY_URL: url } }), stored.valid)).toEqual({ id: null, reason: "refused" });
+      const two: Sources = { ...merge(), storedBaseUrls: [url, normalizeBaseUrl(other)] };
+      expect(keySourceFor(url, {}, two, stored.valid)).toEqual({ id: null, reason: "ambiguous" });
+      expect(keySourceFor(url, { url }, two, stored.valid)).toEqual({ id: "stored" });
+    });
+    it("labels them", () => {
+      expect(describeKeySource("profile", { profile: "prod" })).toBe("--profile prod");
+      expect(describeKeySource("flag")).toBe("--api-key");
+      expect(describeKeySource("dotenv")).toBe(".env");
+      expect(describeKeyReport({ id: "env" })).toBe("GALAXY_API_KEY");
+      expect(describeKeyReport({ id: null, reason: "elsewhere", galaxy: `${other}/galaxy` })).toBe("none (operations go to other.example.org with these flags)");
+      expect(describeKeyReport({ id: null, reason: "elsewhere", galaxy: "not a url" })).toBe("none (operations go to another Galaxy with these flags)");
+      expect(describeKeyReport({ id: null, reason: "ambiguous" })).toMatch(/^none \(several logins are stored/);
+      expect(describeKeyReport({ id: null, reason: "refused" })).toMatch(/^none \(operations with these flags stop/);
     });
   });
 

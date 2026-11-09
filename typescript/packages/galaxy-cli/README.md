@@ -45,6 +45,7 @@ command line. `gxy` and `galaxy-cli` are the same program.
 
 ```bash
 printf %s "$KEY" | gxy auth login --host https://usegalaxy.org --with-token   # store an API key
+gxy auth status                                                                # stored logins, checked against Galaxy
 gxy get_user                                                                   # operations use the stored login, no flags
 gxy auth token                                                                 # print the stored token
 gxy auth logout                                                                # delete the stored login
@@ -53,7 +54,10 @@ gxy auth logout                                                                #
 | Command | Does |
 | --- | --- |
 | `auth login` | store an API key read from stdin (`--with-token`, required); `--insecure-storage` allows an admin key |
+| `auth status` | show stored logins and check each one (`--json`, `--show-token`) |
 | `auth token` | print the token on stdout (`--json` for an object with its expiry) |
+| `auth env` | print `GALAXY_URL` and `GALAXY_API_KEY` assignments, for `eval` |
+| `auth headers` | print `{"x-api-key": ...}` as JSON, for an MCP `headersHelper` |
 | `auth logout` | delete the stored login; a pasted API key is not revoked |
 
 Create an API key in Galaxy's user preferences and pipe it in:
@@ -118,11 +122,19 @@ A `.env` comes with the directory you are in, often a clone of someone else's re
 operation that uses its `GALAXY_API_KEY` or its `GALAXY_URL` says so on stderr, naming the file, and
 says when a stored login outranked its key. `--quiet` silences both.
 
-The `auth` commands (except `login`) pick their Galaxy by this same order, so `gxy auth token` and
+`gxy auth status` shows, for each login, which of these an operation run with the same flags and
+environment would use for that Galaxy (`--api-key`, `--profile <name>`, `GALAXY_API_KEY`,
+`stored login` or `.env`), says at the top when something outranks the stored logins, and reports the
+same as `key_source` in `--json` (`flag`, `profile`, `env`, `stored`, `dotenv`). When an operation
+with those flags would go to another Galaxy (a `--profile` or `GALAXY_URL` that names one), or would
+stop with an error (a key and no Galaxy named, or several logins and none named), it names no
+source: the line says `none` and why, and `key_source` is `null`.
+
+The `auth` commands (except `login`) pick their Galaxy by this same order, so `gxy auth status` and
 `gxy get_user` cannot disagree about which Galaxy a set of flags and variables means; `--host` is
 the same as `--url`. They never use a key from
 `--api-key`, `GALAXY_API_KEY`, `.env` or a profile, and warn once on stderr if `--api-key` is given
-(and, for `auth login` only, `--profile`). `auth login` never takes its host from `.env` or a
+(and, for `auth login` only, `--profile`); `auth status` does not warn, as it reports on them. `auth login` never takes its host from `.env` or a
 profile (a repository must not choose where your key goes): give `--host` or set `GALAXY_URL`.
 
 ### What is checked before a key is sent
@@ -132,8 +144,16 @@ and it never follows a redirect with a key attached: a redirect is reported as a
 with the place it points to. Plain `http://` is refused (exit 76) for any host but this machine
 (`localhost`, `127.0.0.0/8`, `::1`), because a token would cross the network in the clear.
 
-`auth login` checks a Galaxy with two requests (a version probe, then the user lookup), and each
-gives up after 15 seconds. Ctrl-C stops a check at once.
+`auth login` and `auth status` check a Galaxy with two requests (a version probe, then the user
+lookup). In `auth login` each gives up after 15 seconds; `auth status` allows each Galaxy 10 seconds
+in all, and checks every stored login at once, printing them in stored order. Ctrl-C stops a check
+at once.
+
+`auth status` exits 1 when any login is not usable right now (expired,
+refused by Galaxy, or Galaxy did not answer), 0 when all are fine, and 77 when
+nothing is stored. With `--json` it exits 0 whenever it prints the list (each entry's `status` says
+how its check went); a failure before there is a list, such as an unreadable `hosts.yml`, still
+exits non-zero.
 
 | Variable | Does |
 | --- | --- |
@@ -149,6 +169,41 @@ switch off certificate checks.
 
 ```bash
 printf %s "$KEY" | NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://proxy.example.org:3128 NO_PROXY=localhost gxy auth login --host https://galaxy.example.org --with-token
+```
+
+### Keeping tokens away from agents
+
+`gxy auth env` puts the token in the environment of every process started from that shell,
+and `gxy auth token` prints it where a transcript can keep it. Agents should run
+`gxy <operation>` and let it read the stored login, rather than handling tokens themselves.
+In Claude Code you can say so in `.claude/settings.json`:
+
+```json
+{
+  "permissions": {
+    "deny": ["Bash(gxy auth token*)", "Bash(gxy auth env*)", "Read(~/.config/gxy/**)"]
+  }
+}
+```
+
+These rules match the command text; they are not a sandbox. A different spelling of the
+same command, or a script that runs it, is not caught.
+
+### Galaxy's MCP endpoint
+
+To give Claude Code the stored login for a Galaxy's `/api/mcp` endpoint without putting a key
+in the config file:
+
+```json
+{
+  "mcpServers": {
+    "galaxy": {
+      "type": "http",
+      "url": "https://usegalaxy.org/api/mcp",
+      "headersHelper": "gxy auth headers"
+    }
+  }
+}
 ```
 
 ## Documentation

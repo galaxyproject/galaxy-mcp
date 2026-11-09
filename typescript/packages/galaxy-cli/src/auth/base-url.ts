@@ -14,7 +14,7 @@ import { AuthError, type BaseUrl } from "./types";
  * fixed point (`normalizeBaseUrl(normalizeBaseUrl(u)) === normalizeBaseUrl(u)`), which matters
  * because the result is a credential key and `resolveHost` normalises a stored key again: with
  * one `/api` stripped per pass, `.../api/api` would be stored under one key and looked up by
- * `logout` and `token` under another. A segment that merely contains `api` (`/apiary`) is a
+ * `logout` and `status` under another. A segment that merely contains `api` (`/apiary`) is a
  * different Galaxy and stays.
  *
  * The key is exact: `https://x//galaxy` and `https://x/galaxy` are two keys, and `example.org.` (a

@@ -10,7 +10,7 @@ export interface TokenOptions {
  * Print the stored token, and nothing else on stdout, so `$(gxy auth token)` is the token.
  *
  * Like `gh auth token` it prints with no terminal check and no confirmation: a refusal would
- * break the scripts that are what it is for, and those have no terminal.
+ * break the scripts and `headersHelper` runs that are what it is for, and those have no terminal.
  * `token_type` in the JSON says which header carries the value, `x-api-key`: that is what
  * galaxy-ops sends, and Galaxy's API also reads `Authorization: Bearer` when no key is given.
  */

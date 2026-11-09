@@ -1,5 +1,5 @@
 import { exitCodeForAuthError, EX_SOFTWARE } from "../../exit";
-import { describeExpiry, isExpired } from "../expiry";
+import { describeExpiry, formatExpiry, isExpired } from "../expiry";
 import { NoHostError } from "../host";
 import { wasAnswered } from "../network";
 import { sanitize } from "../sanitize";
@@ -54,9 +54,32 @@ export function hostOf(baseUrl: string): string {
   }
 }
 
+export { isExpired, formatExpiry };
+
+/** "7h 58m", "2d 3h", "12m", "under a minute". */
+export function formatTimeLeft(ms: number): string {
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 1) return "under a minute";
+  const d = Math.floor(mins / 1440);
+  const h = Math.floor((mins % 1440) / 60);
+  const m = mins % 60;
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+/**
+ * Keep the last four characters so a person can tell tokens apart; hide the rest. A token of
+ * twelve or fewer is hidden whole, so the four shown are never a large share of one.
+ */
+export function maskToken(token: string): string {
+  return token.length > 12 ? `${"*".repeat(8)}${token.slice(-4)}` : "*".repeat(8);
+}
+
 /**
  * The stored, unexpired login for the host a command means, or an AuthError that says
- * how to log in. No network: `token` is called by scripts, so it answers from the store.
+ * how to log in. No network: `token`, `env` and `headers` are called by helpers (a Claude Code
+ * `headersHelper` gets ten seconds), so they answer from the store and leave checking to `status`.
  */
 export async function requireLogin(deps: AuthDeps, explicitHost?: string): Promise<StoredLogin> {
   let baseUrl: BaseUrl;
@@ -77,7 +100,7 @@ export async function requireLogin(deps: AuthDeps, explicitHost?: string): Promi
 }
 
 /** `requireLogin` for a Galaxy the caller has already settled on. */
-async function requireLoginAt(deps: AuthDeps, baseUrl: BaseUrl): Promise<StoredLogin> {
+export async function requireLoginAt(deps: AuthDeps, baseUrl: BaseUrl): Promise<StoredLogin> {
   const login = await deps.store.get(baseUrl);
   const hint = `${deps.commandName} auth login --host ${baseUrl}`;
   if (!login) throw new AuthError("not_logged_in", `Not logged in to ${baseUrl}. Run: ${hint}`);

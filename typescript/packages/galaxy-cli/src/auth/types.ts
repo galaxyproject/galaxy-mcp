@@ -138,6 +138,18 @@ export interface AuthDeps {
    * design; lets it say so when that differs from the host it uses. Absent means none.
    */
   ignoredLoginHost?(): { source: "dotenv" | "profile"; url: string } | undefined;
+  /**
+   * Which source an operation run now would take its key from for this Galaxy (`config.ts`'s
+   * order, with the flags and environment of this run), with the text to show for it. `id` is
+   * null when the operation would go to another Galaxy or would not run, and the label says so.
+   * `stored` is every stored login's base URL. Absent means a stored login, or `GALAXY_API_KEY`
+   * when it is set.
+   */
+  keySourceFor?(
+    baseUrl: BaseUrl,
+    login: StoredLogin | undefined,
+    stored: readonly BaseUrl[],
+  ): { id: KeySourceId | null; label: string };
   now(): Date;
   env: Record<string, string | undefined>;
   io: AuthIo;

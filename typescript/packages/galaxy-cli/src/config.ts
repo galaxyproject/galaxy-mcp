@@ -57,6 +57,22 @@ function pickOperationHost(flags: GlobalFlags, src: Sources): { url: string; sou
   });
 }
 
+/** What `--api-key`, `--profile`, `GALAXY_API_KEY`, a stored login and `.env` are called in output. */
+export function describeKeySource(id: KeySourceId, flags: GlobalFlags = {}): string {
+  switch (id) {
+    case "flag":
+      return "--api-key";
+    case "profile":
+      return `--profile ${flags.profile ?? ""}`.trim();
+    case "env":
+      return "GALAXY_API_KEY";
+    case "stored":
+      return "stored login";
+    case "dotenv":
+      return ".env";
+  }
+}
+
 /** The key of the `--profile` planemo profile, if one is named and has one. */
 function profileKeyOf(flags: GlobalFlags, src: Sources): string | undefined {
   const prof = flags.profile ? src.profiles[flags.profile] : undefined;
@@ -183,6 +199,65 @@ export function resolveConnection(flags: GlobalFlags, src: Sources, commandName 
   }
   if (dotenvKey) return sendTo(dotenvKey, "dotenv", src.storeProblem);
   throw noCredentials();
+}
+
+/**
+ * What `auth status` says about the key for one Galaxy: the source an operation would take it from,
+ * or why it names none (the operation would go to another Galaxy, or would not run).
+ */
+type KeySourceReport =
+  | { id: KeySourceId }
+  | { id: null; reason: "elsewhere"; galaxy: string }
+  | { id: null; reason: "ambiguous" | "refused" };
+
+/**
+ * Which source an operation run now, with these flags and this environment, would take its key
+ * from for this Galaxy, given its stored login (if any): what `auth status` shows. It runs the real
+ * resolver, so it names a source only when the operation would go to this Galaxy. An expired
+ * login still counts as "stored": nothing else would be used for it either, and the operation says
+ * why it fails. `src.storedBaseUrls` is every stored login, since several of them make an operation
+ * that names no Galaxy ambiguous.
+ */
+export function keySourceFor(baseUrl: BaseUrl, flags: GlobalFlags, src: Sources, login?: StoredLogin): KeySourceReport {
+  const all: Sources = { ...src, storedBaseUrls: src.storedBaseUrls ?? [baseUrl], ...(login ? { storedLogin: login } : {}) };
+  let picked: { url: string };
+  try {
+    picked = pickOperationHost(flags, all);
+  } catch {
+    return { id: null, reason: "ambiguous" };
+  }
+  let normalised: string | undefined;
+  try {
+    normalised = normalizeBaseUrl(picked.url);
+  } catch {
+    normalised = undefined;
+  }
+  if (normalised !== baseUrl) return { id: null, reason: "elsewhere", galaxy: picked.url };
+  try {
+    return { id: resolveConnection(flags, all).keySource };
+  } catch (e) {
+    return e instanceof AuthError && e.kind === "not_logged_in" ? { id: "stored" } : { id: null, reason: "refused" };
+  }
+}
+
+/** `describeKeySource`, or for a Galaxy with no source named the reason, as `auth status` words it. */
+export function describeKeyReport(report: KeySourceReport, flags: GlobalFlags = {}): string {
+  if (report.id) return describeKeySource(report.id, flags);
+  switch (report.reason) {
+    case "elsewhere": {
+      let host = "another Galaxy";
+      try {
+        host = new URL(report.galaxy).host;
+      } catch {
+        // Not a URL: operations would fail on it, but all that is shown here is that it is not this one.
+      }
+      return `none (operations go to ${host} with these flags)`;
+    }
+    case "ambiguous":
+      return "none (several logins are stored, and operations need --url to say which)";
+    case "refused":
+      return "none (operations with these flags stop with an error)";
+  }
 }
 
 /** The stored login, if it is for this very Galaxy: compared as normalised, never as typed. */

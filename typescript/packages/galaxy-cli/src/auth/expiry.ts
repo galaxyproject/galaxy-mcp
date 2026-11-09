@@ -2,7 +2,7 @@ import { sanitize } from "./sanitize";
 
 /**
  * A login counts as expired this long before `expiresAt`, so a token that passes the check
- * here still has time to do its job. `auth token` checks once and hands the
+ * here still has time to do its job. `auth token`, `env` and `headers` check once and hand the
  * token over, and the server sees it later: without the margin a token with a second left
  * would be handed out as good and refused on arrival.
  */

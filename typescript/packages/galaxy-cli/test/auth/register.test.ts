@@ -26,9 +26,16 @@ function contained(command: Command): Command {
 // tested is the registration (which command, which option reaches it, when deps are built), not the
 // commands' behaviour, which their own files cover.
 describe("the auth commands", () => {
-  it("are the three subcommands of `auth`", () => {
+  it("are the six subcommands of `auth`", () => {
     const auth = buildProgram().commands.find((c) => c.name() === "auth")!;
-    expect(auth.commands.map((c) => c.name()).sort()).toEqual(["login", "logout", "token"]);
+    expect(auth.commands.map((c) => c.name()).sort()).toEqual([
+      "env",
+      "headers",
+      "login",
+      "logout",
+      "status",
+      "token",
+    ]);
   });
 
   it("run through the injected deps, with the program's name, and set the exit code", async () => {
@@ -55,8 +62,19 @@ describe("the auth commands", () => {
     expect(await warned("--quiet")).toBe("");
   });
 
+  // `status` reports on the key operations would use, `--api-key` included, so it is not told the flag is ignored.
+  it("do not warn that --api-key is ignored for status, which reports on it", async () => {
+    const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      await run(["--api-key", "fake-flag-key", "auth", "status"]);
+      expect(write.mock.calls.map((c) => String(c[0])).join("")).toBe("");
+    } finally {
+      write.mockRestore();
+    }
+  });
+
   // A login never takes its host from a profile, so `--profile` does nothing there; the other
-  // subcommands do use it (to find the host), so they stay quiet.
+  // subcommands do use it (host, and which key `status` reports), so they stay quiet.
   it("warn once that the global --profile is ignored by login only, and not with --quiet", async () => {
     const warned = async (...argv: string[]) => {
       const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
@@ -118,6 +136,21 @@ describe("the auth commands", () => {
 });
 
 describe("options", () => {
+  it("--host, --json and --show-token reach status", async () => {
+    const { h } = await run(["auth", "status", "--host", HOST_ARG, "--json", "--show-token"]);
+    expect((JSON.parse(h.cap.out) as { token?: string }[])[0]?.token).toBe(FAKE_TOKEN);
+  });
+
+  it("--shell reaches env, and a value that is not a shell is refused", async () => {
+    const { h } = await run(["auth", "env", "--shell", "fish"]);
+    expect(h.cap.out).toContain("set -gx GALAXY_API_KEY");
+
+    const program = contained(buildProgram({ makeAuthDeps: () => harness().deps }));
+    await expect(
+      program.parseAsync(["node", "gxy", "auth", "env", "--shell", "csh"]),
+    ).rejects.toThrow();
+  });
+
   it("--with-token and --insecure-storage reach login", async () => {
     const h = harness({ stdinText: `${FAKE_TOKEN}\n` });
     const { code } = await run(

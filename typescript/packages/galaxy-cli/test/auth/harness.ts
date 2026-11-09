@@ -99,8 +99,9 @@ export function useTempDir(prefix = "gxy-test-"): { readonly path: string } {
 /**
  * What a command wrote, kept as two strings. Commands write through `deps.io` and never to
  * `console`, so nothing needs spying on and each run's output is its own. stdout and stderr stay
- * apart because that split is the contract: stdout is what a script consumes (a token, `--json`)
- * and stderr is everything a person reads, so most tests assert that one of them is empty.
+ * apart because that split is the contract: stdout is what a script consumes (a token, `env`
+ * exports, headers, `--json`) and stderr is everything a person reads, so most tests assert that
+ * one of them is empty.
  */
 export class Capture {
   out = "";

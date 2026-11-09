@@ -40,11 +40,15 @@ export function buildProgram(deps: CliDeps = {}): Command {
     .option("--quiet", "suppress status messages", false)
     .option("--timeout <ms>", "poll timeout for blocking ops");
 
-  // `auth` shares the operations' host rule, so it needs the global --url/--profile (read at run time).
+  // `auth` shares the operations' host rule, so it needs the global --url and --profile, and
+  // --api-key for the key `status` reports (all read at run time).
   registerAuth(
     program,
     deps.makeAuthDeps ??
-      ((name) => createAuthDeps(name, () => program.opts<{ url?: string; profile?: string }>())),
+      ((name) =>
+        createAuthDeps(name, () =>
+          program.opts<{ url?: string; apiKey?: string; profile?: string }>(),
+        )),
   );
 
   for (const op of allOperations) {
