@@ -1,0 +1,75 @@
+import type { Command } from "commander";
+import { Option } from "commander";
+import type { AuthDeps } from "./types";
+import { loginCommand, type LoginOptions } from "./commands/login";
+import { EX_SOFTWARE } from "../exit";
+
+/**
+ * Add the `auth` group. `makeDeps` is called per invocation, so `--help` and the other
+ * commands never touch the store or the network.
+ */
+export function registerAuth(program: Command, makeDeps: (commandName: string) => AuthDeps): void {
+  const commandName = program.name();
+  const auth = program
+    .command("auth")
+    .description("Log in to a Galaxy and manage stored credentials");
+  // `--api-key` belongs to the operations; `auth` takes its key from the store or from stdin.
+  // Without this it would be dropped without a word, by someone who thinks it was used.
+  // `--profile` is the same for `login` alone: the other subcommands use it to find the host, but
+  // a login never takes its host from a profile, so there it would be dropped just as silently.
+  auth.hook("preAction", (_auth, action) => {
+    const g = program.opts<{ apiKey?: string; profile?: string; quiet?: boolean }>();
+    if (g.quiet) return;
+    if (g.apiKey) {
+      process.stderr.write(`Warning: --api-key is ignored by \`${commandName} auth\` commands.\n`);
+    }
+    if (g.profile && action.name() === "login") {
+      process.stderr.write(
+        `Warning: --profile is ignored by \`${commandName} auth login\`: it only uses --host or GALAXY_URL from the environment.\n`,
+      );
+    }
+  });
+  const host = () =>
+    new Option("--host <url>", "Galaxy base URL (default: GALAXY_URL, or the only stored login)");
+
+  const run = async (fn: (deps: AuthDeps) => Promise<number>): Promise<void> => {
+    let deps: AuthDeps;
+    try {
+      deps = makeDeps(commandName);
+    } catch (e) {
+      // Building the wiring failed before anything the person typed was looked at, so this is
+      // the CLI's fault: 70 (EX_SOFTWARE), not a usage error.
+      process.stderr.write(`${(e as Error).message}\n`);
+      process.exitCode = EX_SOFTWARE;
+      return;
+    }
+    process.exitCode = await fn(deps);
+  };
+
+  auth
+    .command("login")
+    .description("Store an API key read from stdin")
+    .addOption(host())
+    .option("--with-token", "read the API key from stdin")
+    .option(
+      "--insecure-storage",
+      "keep an admin key in the plaintext file (it is refused otherwise)",
+    )
+    .action((o: LoginOptions) =>
+      run(async (deps) => {
+        // Ctrl-C aborts one signal that every step of the login takes (the probe, the prompt, the
+        // whoami call), so it ends with "Cancelled." and 130. `once`, so a second Ctrl-C falls
+        // through to Node's default and ends the process.
+        const ac = new AbortController();
+        const onSig = () => {
+          ac.abort();
+        };
+        process.once("SIGINT", onSig);
+        try {
+          return await loginCommand({ ...o, signal: ac.signal }, deps);
+        } finally {
+          process.removeListener("SIGINT", onSig);
+        }
+      }),
+    );
+}

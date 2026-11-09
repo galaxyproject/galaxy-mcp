@@ -89,7 +89,7 @@ const KNOWN_FIELDS = new Set([
  * why it is accepted. (gh serialises its writes with a lock file.)
  */
 export class FileStore {
-  /** Entries already warned about, so a store that reads twice warns once. */
+  /** Entries already warned about, so a command that reads twice warns once. */
   private readonly warned = new Set<string>();
 
   constructor(
@@ -143,7 +143,7 @@ export class FileStore {
     );
   }
 
-  /** Warn once per entry and file, however many times the store is read. */
+  /** Warn once per entry and file, however many times a command reads the store. */
   private warnSkipped(url: string, why: string): void {
     const key = `${this.path}\0${url}`;
     if (this.warned.has(key)) return;
