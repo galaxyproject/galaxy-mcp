@@ -30,7 +30,7 @@ function recordingContext(asked: string[]) {
     createGalaxyContext({
       baseUrl: "https://g.example",
       apiKey: "K",
-      fetchImpl: (async (input: RequestInfo | URL) => {
+      fetchImpl: (async (input: Request | string | URL) => {
         const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         asked.push(url);
         const body = url.includes("/api/version") ? { version_major: "26.1", version_minor: "26.1.1" } : [];

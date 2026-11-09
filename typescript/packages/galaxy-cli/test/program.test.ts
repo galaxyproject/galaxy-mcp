@@ -42,7 +42,7 @@ function invocationsContext(asked: string[]) {
     createGalaxyContext({
       baseUrl: "https://g.example",
       apiKey: "K",
-      fetchImpl: (async (input: RequestInfo | URL) => {
+      fetchImpl: (async (input: Request | string | URL) => {
         const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         asked.push(url);
         const body = url.includes("/api/invocations/")
@@ -66,7 +66,7 @@ function recordingContext(asked: string[], body: unknown = []) {
     createGalaxyContext({
       baseUrl: "https://g.example",
       apiKey: "K",
-      fetchImpl: (async (input: RequestInfo | URL) => {
+      fetchImpl: (async (input: Request | string | URL) => {
         const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         asked.push(url);
         const payload = url.includes("/api/version")
@@ -239,7 +239,7 @@ describe("buildProgram", () => {
       createGalaxyContext({
         baseUrl: "https://g.example",
         apiKey: "K",
-        fetchImpl: (async (input: RequestInfo | URL) => {
+        fetchImpl: (async (input: Request | string | URL) => {
           const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
           asked.push(url);
           const body = url.includes("get_content_as_text")
