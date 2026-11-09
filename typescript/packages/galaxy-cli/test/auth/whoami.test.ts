@@ -5,7 +5,9 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import { createWhoami, probeGalaxy } from "../../src/auth/whoami";
+import { discover } from "../../src/auth/oauth";
 import { wasAnswered } from "../../src/auth/network";
+import { withUserAgent } from "../../src/auth/user-agent";
 import { startFakeGalaxy, useFakeGalaxies, type FakeGalaxy } from "../support/fake-galaxy";
 import type { BaseUrl } from "../../src/auth/types";
 import { version } from "../../package.json";
@@ -284,15 +286,26 @@ describe("network and TLS failures", () => {
   });
 });
 
-// So a Galaxy admin can tell `gxy` from other clients in their logs (user-agent.ts). The expected value is
+// So a Galaxy admin can tell `gxy` from a browser in their logs (user-agent.ts). The expected value is
 // built from package.json, not from the constant under test, so a change to the string's shape fails.
 describe("User-Agent", () => {
-  it("is gxy/<package version> (galaxy-cli) on whoami and the probe", async () => {
+  it("is gxy/<package version> (galaxy-cli) on whoami, the probe and every OAuth call", async () => {
     const token = galaxy.issueToken();
     await createWhoami()(base(), token);
+    const server = await discover(base(), { fetch: withUserAgent() });
+    const pending = await server.startDeviceLogin();
+    galaxy.approve(pending.userCode);
+    await pending.waitForApproval();
+    await server.revoke(token);
 
     const paths = galaxy.requests.map((r) => new URL(r.url, "http://x").pathname);
-    for (const expected of ["/api/version", "/api/users/current"]) {
+    for (const expected of [
+      "/api/version",
+      "/api/users/current",
+      "/oauth/device_authorization",
+      "/oauth/token",
+      "/oauth/revoke",
+    ]) {
       expect(paths).toContain(expected);
     }
     for (const r of galaxy.requests)

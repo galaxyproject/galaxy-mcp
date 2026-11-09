@@ -29,6 +29,7 @@
     "@galaxyproject/galaxy-ops": "workspace:*",
     "@napi-rs/keyring": "^2.1.2",
     "commander": "^14.0.0",
+    "openid-client": "^6.8.9",
     "yaml": "^2.6.0",
     "zod": "^4.6.7"
   },

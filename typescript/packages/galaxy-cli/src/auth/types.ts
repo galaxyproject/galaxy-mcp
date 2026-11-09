@@ -7,6 +7,9 @@
  * the real implementations are wired together in one place (`deps.ts`).
  */
 
+/** The OAuth client id this CLI presents. Galaxy registers it as a public client (no secret). */
+export const CLIENT_ID = "galaxy-cli";
+
 /**
  * A Galaxy's base URL in the form logins are keyed by: scheme, host, port and path
  * prefix, without a trailing slash or query (`https://usegalaxy.org`,
@@ -80,27 +83,71 @@ export interface CredentialStore {
   list(): Promise<LoginSummary[]>;
 }
 
+/** What the server returned when the user approved. */
+export interface TokenGrant {
+  accessToken: string;
+  /** Seconds, as sent; absent when the server gave no expiry. */
+  expiresIn?: number;
+  /** Granted scopes (the token response's `scope`, split on spaces); may be fewer than requested. */
+  scopes: string[];
+}
+
+/** A device login in progress: what to show the user, and the wait for their approval. */
+export interface PendingDeviceLogin {
+  userCode: string;
+  verificationUri: string;
+  /** When the code stops working. */
+  expiresAt: Date;
+  /**
+   * Poll the token endpoint until the user approves, denies or the code expires,
+   * honouring `interval` and `slow_down`. Rejects with an `AuthError`.
+   */
+  waitForApproval(signal?: AbortSignal): Promise<TokenGrant>;
+}
+
+/** A Galaxy that issues tokens through the device flow (found by RFC 8414 discovery). */
+export interface AuthServer {
+  readonly issuer: string;
+  /** False when the metadata lists no device endpoint (the instance has the device flow off). */
+  readonly supportsDeviceFlow: boolean;
+  /** False when the metadata lists no revocation endpoint. */
+  readonly supportsRevocation: boolean;
+  /** `signal` cancels the code request only; `waitForApproval` takes its own. */
+  startDeviceLogin(scopes?: string[], signal?: AbortSignal): Promise<PendingDeviceLogin>;
+  /**
+   * RFC 7009. Resolves when the server accepted the request. `signal` is the caller's own limit on
+   * this call.
+   */
+  revoke(token: string, signal?: AbortSignal): Promise<void>;
+}
+
 /**
  * Why an auth command failed. `exitCodeForAuthError` (`exit.ts`) turns each into a sysexits.h
  * code: `usage` and `ambiguous_host` are 64 (EX_USAGE: the command line is wrong or does not
  * say enough), `store` is 65 (EX_DATAERR: the credential file cannot be used as it is), `network`
  * is 69 (EX_UNAVAILABLE), `unsupported`, `protocol` and `insecure` are 76 (EX_PROTOCOL: the address,
  * or what its server supplied, is not something this can use; plain http is 76 too, though the
- * person typed it, see `exitCodeForAuthError`), and `not_logged_in` and `denied` are 77 (EX_NOPERM:
- * there is no permission to do this).
+ * person typed it, see `exitCodeForAuthError`), and `not_logged_in`, `denied` and `expired` are 77
+ * (EX_NOPERM: there is no permission to do this).
  */
 export type AuthErrorKind =
-  /** What `CombinedStore.delete` throws when the keyring will not confirm a secret is gone. */
+  /**
+   * The Galaxy publishes no OAuth metadata, or has the device flow switched off. Also what
+   * `CombinedStore.delete` throws when the keyring will not confirm a secret is gone.
+   */
   | "unsupported"
   /**
-   * `put` refused to keep an admin token in the plaintext file (`requireKeyring`).
+   * `put` refused to keep an admin token in the plaintext file (`requireKeyring`), or the person
+   * said no on the approval page.
    */
   | "denied"
+  /** The user code expired before anyone approved it. */
+  | "expired"
   /** No stored login for this Galaxy, or it has expired, or Galaxy rejected the token. */
   | "not_logged_in"
   /** Several stored logins and no way to tell which Galaxy was meant. */
   | "ambiguous_host"
-  /** Plain http to a host other than loopback, or an address that is not a Galaxy. */
+  /** Plain http to a host other than loopback, or an issuer, endpoint or approval page that is not this Galaxy's. */
   | "insecure"
   /**
    * `hosts.yml` cannot be used as it is, and nothing was changed: it is corrupt, a symlink,
@@ -108,7 +155,7 @@ export type AuthErrorKind =
    * message says which, and what to do about it.
    */
   | "store"
-  /** The server answered, but not as a Galaxy does. */
+  /** The server answered, but not as the RFCs say it should. */
   | "protocol"
   /** The server could not be reached. */
   | "network"
@@ -130,7 +177,7 @@ export class AuthError extends Error {
 export interface WhoAmI {
   username: string;
   email?: string;
-  /** Galaxy's `is_admin`. An admin's token carries full, unscoped admin power. */
+  /** Galaxy's `is_admin`. An admin's token carries full, unscoped admin power until scopes exist. */
   isAdmin?: boolean;
 }
 

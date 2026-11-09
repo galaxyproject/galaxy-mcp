@@ -206,7 +206,7 @@ function mapFailure(e: unknown, baseUrl: string): AuthError {
   const err = e as { kind?: string; status?: number; http?: { status: number | null } };
   const status = err.status ?? err.http?.status;
   if ((err.kind === "connection" && status === undefined) || status === null) {
-    // Names NODE_EXTRA_CA_CERTS / NODE_USE_ENV_PROXY.
+    // Names NODE_EXTRA_CA_CERTS / NODE_USE_ENV_PROXY, as the OAuth calls do.
     return new AuthError("network", describeNetworkError(e as Error, baseUrl), { cause: e });
   }
   if (typeof status === "number") {

@@ -8,10 +8,11 @@ const WITH_NEWLINES = new RegExp(`[\\u0000-\\u0009\\u000b-\\u001f\\u007f-\\u009f
 /**
  * Make a server-supplied string safe to print on a terminal.
  *
- * A hostile or compromised server controls error texts and usernames. An escape sequence in one
- * of them can retitle the window, clear the screen over a warning, or (in some terminals) type
- * into the prompt. So every C0 control (ESC, BEL, CR, LF, tab ...), DEL and every C1 control
- * (which includes the 8-bit CSI, `\u009b`) is removed, not escaped, because nothing legitimate in these fields needs one. What follows an ESC is left
+ * A hostile or compromised server controls `user_code`, `verification_uri`, error texts and
+ * usernames. An escape sequence in one of them can retitle the window, clear the screen over a
+ * warning, or (in some terminals) type into the prompt. So every C0 control (ESC, BEL, CR, LF,
+ * tab ...), DEL and every C1 control (which includes the 8-bit CSI, `\u009b`) is removed, not
+ * escaped, because nothing legitimate in these fields needs one. What follows an ESC is left
  * behind as inert text: `\u001b[2J` becomes `[2J`.
  *
  * Unicode format characters (Cf) go too: bidi overrides and isolates, zero-width spaces and
