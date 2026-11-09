@@ -179,6 +179,7 @@ export async function discover(
       algorithm: "oauth2",
       [client.customFetch]: guardedFetch(baseFetch, options.signal),
       // The library applies this to every request; `guardedFetch` narrows it to loopback URLs.
+      // eslint-disable-next-line @typescript-eslint/no-deprecated -- deprecated only to make a security-sensitive option stand out, and here it is gated on loopback
       ...(loopback ? { execute: [client.allowInsecureRequests] } : {}),
     });
   } catch (err) {
@@ -226,6 +227,7 @@ export async function discover(
   const scoped = (signal: AbortSignal | undefined): client.Configuration => {
     const c = new client.Configuration(meta, clientId, undefined, client.None());
     c[client.customFetch] = guardedFetch(baseFetch, signal);
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- as above: gated on loopback, and `guardedFetch` narrows it
     if (loopback) client.allowInsecureRequests(c);
     return c;
   };

@@ -106,4 +106,5 @@ try {
 }
 // Exit from the write callback, not straight after the write: the Node docs warn that stdout
 // writes can be asynchronous and that `process.exit()` skips whatever is still pending.
+// eslint-disable-next-line n/no-process-exit -- the helper must end here, and only after the write callback
 process.stdout.write(JSON.stringify(reply), () => process.exit(0));

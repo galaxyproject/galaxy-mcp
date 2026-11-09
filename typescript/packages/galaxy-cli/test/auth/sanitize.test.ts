@@ -10,6 +10,7 @@ const HOST_ARG = "https://dev.galaxy.example.org";
 // Our own multi-line output keeps its newlines; everything else a terminal could act on must go.
 // The ranges are written out here, apart from `sanitize`'s own patterns, so the check does not
 // share a mistake with the code it checks.
+// eslint-disable-next-line no-control-regex -- control characters are what this test looks for
 const CONTROL_EXCEPT_NEWLINE = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/;
 
 describe("sanitize", () => {

@@ -16,6 +16,7 @@ const seen = new WeakSet<object>();
  */
 export function exitQuietlyOnEpipe(
   streams: { stdout: NodeJS.WritableStream; stderr: NodeJS.WritableStream } = process,
+  // eslint-disable-next-line n/no-process-exit -- ending the process is what this function exists to do
   exit: (code: number) => void = (code) => process.exit(code),
 ): void {
   const watch = (stream: NodeJS.WritableStream, onEpipe: () => void) => {

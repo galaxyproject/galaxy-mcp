@@ -93,6 +93,7 @@ export function isRawCapable(stdin: NodeJS.ReadableStream): stdin is RawStdin {
  * (`ESC O x`, which the same keys send in application mode). Bracketed paste is never switched on
  * here, so a paste arrives as plain text and needs nothing of its own.
  */
+// eslint-disable-next-line no-control-regex -- matching ESC is the point: this strips escape sequences
 const KEY_SEQUENCES = /\x1b(?:\[[0-9;?]*[\x20-\x2f]*[\x40-\x7e]|O[\x40-\x7e])/g;
 
 /**

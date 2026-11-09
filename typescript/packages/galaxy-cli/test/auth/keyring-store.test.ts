@@ -479,6 +479,7 @@ describe.skipIf(process.platform !== "linux")("real child against a bus that nev
           server.listen(sock, res);
         });
       } catch {
+        // eslint-disable-next-line vitest/no-disabled-tests -- a skip decided at run time, not a disabled test
         ctx.skip(); // no unix sockets here; reported as skipped, not as a pass
       }
       // The store runs in a separate process, so a hang shows as a process that never exits (the 8 s

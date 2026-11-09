@@ -481,6 +481,7 @@ describe("server text in errors is sanitised", () => {
     const server = await discover(galaxy.baseUrl as BaseUrl);
     const e = await authErrorOf(server.startDeviceLogin());
     expect(e.message).toContain("bad]0;pwnedthing");
+    // eslint-disable-next-line no-control-regex -- the assertion is that no control character is left
     expect(e.message).not.toMatch(/[\u0000-\u001f\u007f-\u009f]/);
   });
 });
