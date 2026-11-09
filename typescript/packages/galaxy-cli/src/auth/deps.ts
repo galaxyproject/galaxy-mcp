@@ -14,7 +14,12 @@ export function createAuthDeps(
 ): AuthDeps {
   const env = process.env;
   const interactive = isTty(process.stdin) && isTty(process.stderr);
-  const store = createCredentialStore(env);
+  // The keyring's unlock prompt is a dialog (or a pinentry) that a person can answer whatever stdin
+  // is, so what decides whether to wait for one is whether they can see the "waiting" notice:
+  // stderr. `gxy auth login --with-token` with a piped key still gets the long wait.
+  const store = createCredentialStore(env, undefined, undefined, {
+    interactive: isTty(process.stderr),
+  });
   const now = () => new Date();
   return {
     store,
