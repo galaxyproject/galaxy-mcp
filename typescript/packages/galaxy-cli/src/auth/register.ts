@@ -2,7 +2,10 @@ import type { Command } from "commander";
 import { Option } from "commander";
 import type { AuthDeps } from "./types";
 import { loginCommand, type LoginOptions } from "./commands/login";
+import { tokenCommand, type TokenOptions } from "./commands/token";
+import { logoutCommand, type LogoutOptions } from "./commands/logout";
 import { EX_SOFTWARE, EX_USAGE } from "../exit";
+import { exitQuietlyOnEpipe } from "./epipe";
 
 /**
  * Add the `auth` group. `makeDeps` is called per invocation, so `--help` and the other
@@ -49,6 +52,7 @@ export function registerAuth(program: Command, makeDeps: (commandName: string) =
 
   const run = async (fn: (deps: AuthDeps) => Promise<number>): Promise<void> => {
     if (refused) return;
+    exitQuietlyOnEpipe();
     let deps: AuthDeps;
     try {
       deps = makeDeps(commandName);
@@ -88,4 +92,17 @@ export function registerAuth(program: Command, makeDeps: (commandName: string) =
         }
       }),
     );
+
+  auth
+    .command("token")
+    .description("Print the stored token (stdout)")
+    .addOption(host())
+    .option("--json", "print a JSON object with the token and its expiry")
+    .action((o: TokenOptions) => run((deps) => tokenCommand(o, deps)));
+
+  auth
+    .command("logout")
+    .description("Delete the stored login; a pasted API key is not revoked")
+    .addOption(host())
+    .action((o: LogoutOptions) => run((deps) => logoutCommand(o, deps)));
 }

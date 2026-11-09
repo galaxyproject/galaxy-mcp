@@ -2,14 +2,14 @@ import { describe, it, expect, vi } from "vitest";
 import type { Command } from "commander";
 import { createGalaxyContext } from "@galaxyproject/galaxy-ops";
 import { buildProgram } from "../../src/program";
-import { FAKE_TOKEN, HOST, harness } from "./harness";
+import { FAKE_TOKEN, HOST, fakeLogin, harness } from "./harness";
 
 const HOST_ARG = "https://dev.galaxy.example.org";
 const loginArgv = ["auth", "login", "--host", HOST_ARG, "--with-token"];
 /** A harness whose stdin holds the key `login --with-token` reads. */
 const loggingIn = () => harness({ stdinText: `${FAKE_TOKEN}\n` });
 
-async function run(argv: string[], h = loggingIn()) {
+async function run(argv: string[], h = harness({ stored: [fakeLogin()] })) {
   process.exitCode = 0;
   const makeAuthDeps = vi.fn(() => h.deps);
   await buildProgram({ makeAuthDeps, invokedAs: "gxy" }).parseAsync(["node", "gxy", ...argv]);
@@ -29,15 +29,15 @@ function contained(command: Command): Command {
 // tested is the registration (which command, which option reaches it, when deps are built), not the
 // commands' behaviour, which their own files cover.
 describe("the auth commands", () => {
-  it("are the one subcommand of `auth`: login", () => {
+  it("are the three subcommands of `auth`", () => {
     const auth = buildProgram().commands.find((c) => c.name() === "auth")!;
-    expect(auth.commands.map((c) => c.name())).toEqual(["login"]);
+    expect(auth.commands.map((c) => c.name()).sort()).toEqual(["login", "logout", "token"]);
   });
 
   it("run through the injected deps, with the program's name, and set the exit code", async () => {
-    const { h, code, makeAuthDeps } = await run(loginArgv);
+    const { h, code, makeAuthDeps } = await run(["auth", "token"]);
     expect(makeAuthDeps).toHaveBeenCalledWith("gxy");
-    expect(h.store.logins.has(HOST)).toBe(true);
+    expect(h.cap.out).toBe(`${FAKE_TOKEN}\n`);
     expect(code).toBe(0);
   });
 
@@ -48,7 +48,7 @@ describe("the auth commands", () => {
     const refusal = async (argv: string[]) => {
       const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
       try {
-        const result = await run(argv);
+        const result = await run(argv, loggingIn());
         return { ...result, text: write.mock.calls.map((c) => String(c[0])).join("") };
       } finally {
         write.mockRestore();
@@ -91,6 +91,40 @@ describe("the auth commands", () => {
     });
   });
 
+  // The other auth commands: `--profile` finds their host (an unknown name is refused by
+  // `requireProfile`, not here), and `--api-key` is ignored by all of them, so it is refused too.
+  describe("refuse --api-key for the commands that never use it", () => {
+    it.each([["token"], ["logout"]])(
+      "auth %s: exit 64, nothing run, even with --quiet",
+      async (cmd) => {
+        const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+        try {
+          for (const quiet of [[], ["--quiet"]]) {
+            write.mockClear();
+            const { h, code, makeAuthDeps } = await run([...quiet, "--api-key", "K", "auth", cmd]);
+            expect(code).toBe(64);
+            expect(write.mock.calls.map((c) => String(c[0])).join("")).toBe(
+              `--api-key does not apply to \`gxy auth ${cmd}\`.\n`,
+            );
+            expect(makeAuthDeps).not.toHaveBeenCalled();
+            expect(h.cap.out).toBe("");
+            expect(h.store.logins.size).toBe(1); // the stored login is still there
+          }
+        } finally {
+          write.mockRestore();
+        }
+      },
+    );
+
+    it("leave --profile to token and logout, which use it to find the host", async () => {
+      for (const cmd of ["token", "logout"]) {
+        const { code, makeAuthDeps } = await run(["--profile", "p", "auth", cmd]);
+        expect(code).toBe(0);
+        expect(makeAuthDeps).toHaveBeenCalled();
+      }
+    });
+  });
+
   // Building the deps opens the credential store. `--help` and the operations
   // must never do that (register.ts calls `makeDeps` once per invocation of an `auth` command).
   it("do not build their deps for --help or for an operation", async () => {
@@ -119,7 +153,7 @@ describe("the auth commands", () => {
       makeAuthDeps: () => {
         throw new Error("nope");
       },
-    }).parseAsync(["node", "gxy", ...loginArgv]);
+    }).parseAsync(["node", "gxy", "auth", "token"]);
     expect(process.exitCode).toBe(70);
     expect(err.mock.calls.flat().join("")).toContain("nope");
     err.mockRestore();
