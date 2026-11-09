@@ -337,7 +337,8 @@ describe("buildProgram", () => {
 /**
  * The name `auth` prints in its hints is the one the entry file passes (`dist/gxy.js` is `gxy`,
  * `dist/index.js` is `galaxy-cli`), so a `galaxy-cli` user is never told to run `gxy`. It is not read
- * from `process.argv[1]`: pnpm and Windows shims run the entry file, never the command name.
+ * from `process.argv[1]`: pnpm and Windows shims run the entry file, never the command name. The
+ * built entries are checked end to end in `auth/e2e.int.test.ts`.
  */
 describe("the program name", () => {
   it("is galaxy-cli unless the entry says otherwise", () => {
