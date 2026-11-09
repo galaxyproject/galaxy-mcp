@@ -85,7 +85,7 @@ describe("a rejected argument is a usage error, not an outage", () => {
   });
 });
 
-/** The real credential path of an operation (no makeContext), against a temp config dir. */
+/** The real credential path of an operation (no makeContext), against a temp config dir and no keyring. */
 describe("credential errors exit by kind", () => {
   const tmp = useTempDir("gxy-exit-");
   beforeEach(async () => {
