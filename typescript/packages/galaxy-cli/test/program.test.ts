@@ -333,6 +333,18 @@ describe("buildProgram", () => {
 });
 
 /**
+ * The name the program prints in usage is the one the entry file passes (`dist/gxy.js` is `gxy`,
+ * `dist/index.js` is `galaxy-cli`). It is not read from `process.argv[1]`: pnpm and Windows shims
+ * run the entry file, never the command name.
+ */
+describe("the program name", () => {
+  it("is galaxy-cli unless the entry says otherwise", () => {
+    expect(buildProgram().name()).toBe("galaxy-cli");
+    expect(buildProgram({ invokedAs: "gxy" }).name()).toBe("gxy");
+  });
+});
+
+/**
  * The names this surface gives an op's inputs.
  *
  * The MCP server advertises the same parameters under the Python spelling (see
