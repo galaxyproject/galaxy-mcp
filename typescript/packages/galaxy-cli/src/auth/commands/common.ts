@@ -1,7 +1,9 @@
 import { exitCodeForAuthError, EX_SOFTWARE } from "../../exit";
+import { describeExpiry, isExpired } from "../expiry";
+import { NoHostError } from "../host";
 import { wasAnswered } from "../network";
 import { sanitize } from "../sanitize";
-import { AuthError, type AuthDeps } from "../types";
+import { AuthError, type AuthDeps, type BaseUrl, type StoredLogin } from "../types";
 
 export { sanitize };
 
@@ -50,4 +52,40 @@ export function hostOf(baseUrl: string): string {
   } catch {
     return baseUrl;
   }
+}
+
+/**
+ * The stored, unexpired login for the host a command means, or an AuthError that says
+ * how to log in. No network: `token` is called by scripts, so it answers from the store.
+ */
+export async function requireLogin(deps: AuthDeps, explicitHost?: string): Promise<StoredLogin> {
+  let baseUrl: BaseUrl;
+  try {
+    baseUrl = await deps.resolveHost(explicitHost);
+  } catch (e) {
+    // Nothing stored and nothing named is "not logged in" here (77), not a usage error: the
+    // caller is a helper that needs a token, and the fix is to log in.
+    if (e instanceof NoHostError)
+      throw new AuthError(
+        "not_logged_in",
+        `Not logged in; run ${deps.commandName} auth login --host <url>`,
+        { cause: e },
+      );
+    throw e;
+  }
+  return requireLoginAt(deps, baseUrl);
+}
+
+/** `requireLogin` for a Galaxy the caller has already settled on. */
+async function requireLoginAt(deps: AuthDeps, baseUrl: BaseUrl): Promise<StoredLogin> {
+  const login = await deps.store.get(baseUrl);
+  const hint = `${deps.commandName} auth login --host ${baseUrl}`;
+  if (!login) throw new AuthError("not_logged_in", `Not logged in to ${baseUrl}. Run: ${hint}`);
+  if (login.expiresAt !== null && isExpired(login.expiresAt, deps.now())) {
+    throw new AuthError(
+      "not_logged_in",
+      `Your login to ${baseUrl} ${describeExpiry(login.expiresAt, deps.now())}. Run: ${hint}`,
+    );
+  }
+  return login;
 }

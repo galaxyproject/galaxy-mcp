@@ -2,14 +2,11 @@ import { describe, it, expect, vi } from "vitest";
 import type { Command } from "commander";
 import { createGalaxyContext } from "@galaxyproject/galaxy-ops";
 import { buildProgram } from "../../src/program";
-import { FAKE_TOKEN, HOST, harness } from "./harness";
+import { FAKE_TOKEN, HOST, fakeLogin, harness } from "./harness";
 
 const HOST_ARG = "https://dev.galaxy.example.org";
-const loginArgv = ["auth", "login", "--host", HOST_ARG, "--with-token"];
-/** A harness whose stdin holds the key `login --with-token` reads. */
-const loggingIn = () => harness({ stdinText: `${FAKE_TOKEN}\n` });
 
-async function run(argv: string[], h = loggingIn()) {
+async function run(argv: string[], h = harness({ stored: [fakeLogin()] })) {
   process.exitCode = 0;
   const makeAuthDeps = vi.fn(() => h.deps);
   await buildProgram({ makeAuthDeps, invokedAs: "gxy" }).parseAsync(["node", "gxy", ...argv]);
@@ -29,15 +26,15 @@ function contained(command: Command): Command {
 // tested is the registration (which command, which option reaches it, when deps are built), not the
 // commands' behaviour, which their own files cover.
 describe("the auth commands", () => {
-  it("are the one subcommand of `auth`: login", () => {
+  it("are the three subcommands of `auth`", () => {
     const auth = buildProgram().commands.find((c) => c.name() === "auth")!;
-    expect(auth.commands.map((c) => c.name())).toEqual(["login"]);
+    expect(auth.commands.map((c) => c.name()).sort()).toEqual(["login", "logout", "token"]);
   });
 
   it("run through the injected deps, with the program's name, and set the exit code", async () => {
-    const { h, code, makeAuthDeps } = await run(loginArgv);
+    const { h, code, makeAuthDeps } = await run(["auth", "token"]);
     expect(makeAuthDeps).toHaveBeenCalledWith("gxy");
-    expect(h.store.logins.has(HOST)).toBe(true);
+    expect(h.cap.out).toBe(`${FAKE_TOKEN}\n`);
     expect(code).toBe(0);
   });
 
@@ -47,7 +44,7 @@ describe("the auth commands", () => {
     const warned = async (...argv: string[]) => {
       const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
       try {
-        await run(["--api-key", "fake-flag-key", ...argv, ...loginArgv]);
+        await run(["--api-key", "fake-flag-key", ...argv, "auth", "token"]);
         return write.mock.calls.map((c) => String(c[0])).join("");
       } finally {
         write.mockRestore();
@@ -58,13 +55,16 @@ describe("the auth commands", () => {
     expect(await warned("--quiet")).toBe("");
   });
 
-  // A login never takes its host from a profile, so `--profile` does nothing there, and saying so
-  // is better than letting someone think it picked the Galaxy.
-  it("warn once that the global --profile is ignored by login, and not with --quiet", async () => {
+  // A login never takes its host from a profile, so `--profile` does nothing there; the other
+  // subcommands do use it (to find the host), so they stay quiet.
+  it("warn once that the global --profile is ignored by login only, and not with --quiet", async () => {
     const warned = async (...argv: string[]) => {
       const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
       try {
-        await run(["--profile", "p", ...argv]);
+        await run(
+          ["--profile", "p", ...argv],
+          harness({ stored: [fakeLogin()], stdinText: `${FAKE_TOKEN}\n` }),
+        );
         return write.mock.calls.map((c) => String(c[0])).join("");
       } finally {
         write.mockRestore();
@@ -72,8 +72,13 @@ describe("the auth commands", () => {
     };
     const warning =
       "Warning: --profile is ignored by `gxy auth login`: it only uses --host or GALAXY_URL from the environment.\n";
-    expect(await warned(...loginArgv)).toContain(warning);
-    expect(await warned("--quiet", ...loginArgv)).not.toContain("--profile");
+    expect(await warned("auth", "login", "--host", "https://g.example", "--with-token")).toContain(
+      warning,
+    );
+    expect(
+      await warned("--quiet", "auth", "login", "--host", "https://g.example", "--with-token"),
+    ).not.toContain("--profile");
+    expect(await warned("auth", "token")).toBe("");
   });
 
   // Building the deps opens the credential store. `--help` and the operations
@@ -104,7 +109,7 @@ describe("the auth commands", () => {
       makeAuthDeps: () => {
         throw new Error("nope");
       },
-    }).parseAsync(["node", "gxy", ...loginArgv]);
+    }).parseAsync(["node", "gxy", "auth", "token"]);
     expect(process.exitCode).toBe(70);
     expect(err.mock.calls.flat().join("")).toContain("nope");
     err.mockRestore();
@@ -114,8 +119,11 @@ describe("the auth commands", () => {
 
 describe("options", () => {
   it("--with-token and --insecure-storage reach login", async () => {
-    const h = loggingIn();
-    const { code } = await run([...loginArgv, "--insecure-storage"], h);
+    const h = harness({ stdinText: `${FAKE_TOKEN}\n` });
+    const { code } = await run(
+      ["auth", "login", "--host", HOST_ARG, "--with-token", "--insecure-storage"],
+      h,
+    );
     expect(code).toBe(0);
     expect(h.store.logins.get(HOST)).toMatchObject({ method: "pasted", storage: "file" });
   });

@@ -40,23 +40,29 @@ commands and their arguments.
 
 ## Logging in
 
-`gxy auth` keeps a login for a Galaxy. `gxy` and `galaxy-cli` are the same program. Other commands
-do not use a stored login yet: set `GALAXY_URL` and `GALAXY_API_KEY` as before.
+`gxy auth` keeps a login for a Galaxy and hands its token to scripts. `gxy` and `galaxy-cli` are the
+same program. Other commands do not use a stored login yet: set `GALAXY_URL` and `GALAXY_API_KEY` as
+before.
 
 ```bash
 printf %s "$KEY" | gxy auth login --host https://usegalaxy.org --with-token   # store an API key
+gxy auth token                                                                 # print the stored token
+gxy auth logout                                                                # delete the stored login
 ```
 
 | Command | Does |
 | --- | --- |
 | `auth login` | store an API key read from stdin (`--with-token`, required); `--insecure-storage` allows an admin key |
+| `auth token` | print the token on stdout (`--json` for an object with its expiry) |
+| `auth logout` | delete the stored login; a pasted API key is not revoked |
 
 Create an API key in Galaxy's user preferences and pipe it in:
 `printf %s "$KEY" | gxy auth login --host <url> --with-token`. At a terminal, `--with-token` asks
 for the key without echoing it. If stdin is a terminal but stderr is redirected, where the prompt
 would go unseen, it refuses (exit 64) and asks you to pipe the key in. `gxy auth login` without
-`--with-token` says the same and exits 64. A stored key keeps working until you revoke it in
-Galaxy's user preferences, and `auth login` says so.
+`--with-token` says the same and exits 64. `auth logout` only forgets a key, because it may be in use
+elsewhere: it keeps working until you revoke it in Galaxy's user preferences, and `auth logout` says
+so.
 
 ### Where logins are kept
 
@@ -75,13 +81,14 @@ logins from working; asking for that very Galaxy fails and says it was written b
 rather than that you are not logged in. Each refusal exits 65 (not 77, which would suggest logging in
 again, and that meets the same refusal), names the file and what to do, and changes nothing.
 
-### Which Galaxy `auth login` uses
+### Which Galaxy the `auth` commands use
 
-`auth login` picks its Galaxy by `--host` (the same as `--url`), then `GALAXY_URL` in the
-environment, then the only stored login. It never takes its host from `.env` or a profile (a
-repository must not choose where your key goes): give `--host` or set `GALAXY_URL`. It never uses a
-key from `--api-key`, `GALAXY_API_KEY`, `.env` or a profile, and warns once on stderr if `--api-key`
-or `--profile` is given.
+`auth token` and `auth logout` pick their Galaxy by `--host` (the same as `--url`), then the
+`--profile` URL, then `GALAXY_URL` in the environment, then `GALAXY_URL` in `.env`, then the only
+stored login. They never use a key from `--api-key`, `GALAXY_API_KEY`, `.env` or a profile, and warn
+once on stderr if `--api-key` is given (and, for `auth login` only, `--profile`). `auth login` never
+takes its host from `.env` or a profile (a repository must not choose where your key goes): give
+`--host` or set `GALAXY_URL`.
 
 ### What is checked before a key is sent
 

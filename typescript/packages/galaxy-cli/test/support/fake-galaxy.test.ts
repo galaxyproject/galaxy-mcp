@@ -1,7 +1,8 @@
 /**
- * The fake's own behaviour, so the tests that rely on it can rely on it. The whoami tests rely on
- * it refusing an unknown key the way Galaxy does. A fake that stopped answering 200 for a stranger
- * would let those tests pass without proving anything.
+ * The fake's own behaviour, so the tests that rely on it can rely on it. The end-to-end logout
+ * asks the fake whether a token still works, and the login tests rely on it refusing an unknown
+ * key the way Galaxy does. A fake that stopped answering 200 for a stranger would let those tests
+ * pass without proving anything.
  */
 import { describe, expect, it } from "vitest";
 import { useFakeGalaxies } from "./fake-galaxy";

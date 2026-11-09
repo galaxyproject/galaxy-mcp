@@ -44,8 +44,8 @@ const AUTH_MAP: Record<AuthErrorKind, number> = {
   // code covers it wherever the address came from.
   protocol: EX_PROTOCOL,
   insecure: EX_PROTOCOL,
-  // As `auth` for an operation: there is no credential Galaxy would take, whether it rejected the
-  // key or an admin key was refused (`--insecure-storage` allows it).
+  // As `auth` for an operation: there is no credential Galaxy would take, whether none is stored,
+  // it ran out, or an admin key was refused (`--insecure-storage` allows it).
   not_logged_in: EX_NOPERM,
   denied: EX_NOPERM,
   // `hosts.yml` is the input that cannot be used (corrupt, loose, a link, another user's, or a login

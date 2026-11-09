@@ -13,8 +13,10 @@
  * - `/api/version` answers the version, or a redirect or an HTML page for the checks that run
  *   before a key is sent anywhere
  *
- * It is a real HTTP server, not a stubbed `fetch`, because the redirects, connection resets and
- * timing that the client must survive are only real when there is a socket.
+ * It is a real HTTP server, not a stubbed `fetch`, for two reasons. The built binary in
+ * e2e.int.test.ts is a separate process and cannot see anything mocked in this one. And the
+ * redirects, connection resets and timing that the client must survive are only real when
+ * there is a socket.
  *
  * Everything a test needs to steer is a method on the returned object, and every request is
  * recorded in `requests`. Tokens are obviously fake (`fake-access-token-N`).
@@ -32,15 +34,22 @@ export interface Approval {
   email?: string;
   /** Make `/api/users/current` report `is_admin: true` for this token. */
   admin?: boolean;
+  /** Issue this literal string as the token (a canary a test can search for). */
+  accessToken?: string;
 }
 
-/** One request as the server received it. */
+/**
+ * One request as the server received it. The body is kept so a test can show where a token went
+ * (in a URL, in a header, in a body), not only that a request was made.
+ */
 export interface RecordedRequest {
   method: string;
   /** Path and query as sent. */
   url: string;
   /** Lower-cased header names. */
   headers: Record<string, string | string[] | undefined>;
+  /** Raw body. */
+  body: string;
 }
 
 /**
@@ -71,6 +80,10 @@ export interface FakeGalaxy {
   setUsersCurrentStatus(status: number | null): void;
   /** Issue a token `/api/users/current` will know. */
   issueToken(options?: Approval): string;
+  /** Tokens issued so far, in order. */
+  issuedTokens(): string[];
+  /** Whether this token would be accepted by `/api/users/current`. */
+  isTokenValid(token: string): boolean;
   close(): Promise<void>;
 }
 
@@ -97,7 +110,7 @@ export async function startFakeGalaxy(): Promise<FakeGalaxy> {
   let usersCurrentStatus: number | null = null;
 
   const mint = (a: Approval): string => {
-    const token = `fake-access-token-${tokens.size + 1}`;
+    const token = a.accessToken ?? `fake-access-token-${tokens.size + 1}`;
     tokens.set(token, {
       username: a.username ?? "fake-user",
       email: a.email ?? "fake-user@example.org",
@@ -106,11 +119,15 @@ export async function startFakeGalaxy(): Promise<FakeGalaxy> {
     return token;
   };
 
-  const handle = (req: IncomingMessage, res: ServerResponse) => {
+  const handle = async (req: IncomingMessage, res: ServerResponse) => {
+    const chunks: Buffer[] = [];
+    for await (const c of req) chunks.push(c as Buffer);
+    const body = Buffer.concat(chunks).toString("utf8");
     requests.push({
       method: req.method ?? "GET",
       url: req.url ?? "",
       headers: { ...req.headers },
+      body,
     });
 
     const path = new URL(req.url ?? "/", "http://x").pathname;
@@ -170,12 +187,10 @@ export async function startFakeGalaxy(): Promise<FakeGalaxy> {
   };
 
   const server = createServer((req, res) => {
-    try {
-      handle(req, res);
-    } catch (err) {
+    handle(req, res).catch((err: unknown) => {
       res.writeHead(500);
       res.end(String(err));
-    }
+    });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -193,6 +208,8 @@ export async function startFakeGalaxy(): Promise<FakeGalaxy> {
       else redirects.set(suffix, { location, status });
     },
     issueToken: (approval = {}) => mint(approval),
+    issuedTokens: () => [...tokens.keys()],
+    isTokenValid: (token) => tokens.has(token),
     close: () =>
       new Promise<void>((resolve, reject) => {
         server.closeAllConnections();

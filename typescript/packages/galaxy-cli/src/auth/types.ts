@@ -66,7 +66,7 @@ export interface CredentialStore {
 export type AuthErrorKind =
   /** An admin key was refused: it goes in the plaintext file only when `--insecure-storage` says so. */
   | "denied"
-  /** Galaxy rejected the token, or answered as the anonymous user. */
+  /** No stored login for this Galaxy, or it has expired, or Galaxy rejected the token. */
   | "not_logged_in"
   /** Several stored logins and no way to tell which Galaxy was meant. */
   | "ambiguous_host"
@@ -106,7 +106,7 @@ export interface WhoAmI {
 
 interface AuthIo {
   stdin: NodeJS.ReadableStream;
-  /** Machine-readable output only. */
+  /** Machine-readable output only: a token, a JSON object. */
   stdout: { write(s: string): void };
   /** Everything meant for a person. */
   stderr: { write(s: string): void };

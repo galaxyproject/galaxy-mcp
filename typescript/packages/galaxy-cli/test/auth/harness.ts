@@ -1,8 +1,8 @@
 /**
  * The fakes for running an `auth` command in process. A command is a function over `AuthDeps`, so
  * a test hands it in-memory stand-ins for the store, the server, the clock and the terminal, steers
- * each one, and reads back what the command did to it. What only a real socket can show belongs
- * in `test/support/fake-galaxy.ts`, not here.
+ * each one, and reads back what the command did to it. What only a real process, pipe or socket can
+ * show belongs in `e2e.int.test.ts` and `test/support/fake-galaxy.ts`, not here.
  */
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -22,12 +22,15 @@ import {
   type WhoAmI,
 } from "../../src/auth/types";
 
-/** The clock every harness runs on, so a stored time does not depend on when the suite runs. */
+/** The clock every harness runs on, so "expires in 7h" does not depend on when the suite runs. */
 export const DAY = "2026-11-06T10:44:00.000Z";
 export const HOST: BaseUrl = normalizeBaseUrl("https://dev.galaxy.example.org");
 export const OTHER: BaseUrl = normalizeBaseUrl("https://other.example.org");
 /** Obviously fake. */
 export const FAKE_TOKEN = "fake-token-0123456789abcdef";
+
+/** About eight hours after `DAY`: for tests that need a login with an expiry (`expiresAt: SOON`). */
+export const SOON = "2026-11-06T18:42:00.000Z";
 
 /** A stored pasted-key login for `HOST`, with no expiry; `over` replaces any field. */
 export function fakeLogin(over: Partial<StoredLogin> = {}): StoredLogin {
@@ -96,8 +99,8 @@ export function useTempDir(prefix = "gxy-test-"): { readonly path: string } {
 /**
  * What a command wrote, kept as two strings. Commands write through `deps.io` and never to
  * `console`, so nothing needs spying on and each run's output is its own. stdout and stderr stay
- * apart because that split is the contract: stdout is what a script consumes and stderr is
- * everything a person reads, so most tests assert that stdout is empty.
+ * apart because that split is the contract: stdout is what a script consumes (a token, `--json`)
+ * and stderr is everything a person reads, so most tests assert that one of them is empty.
  */
 export class Capture {
   out = "";
@@ -151,7 +154,8 @@ export function harness(
       return knobs.whoami;
     },
     // The real rule, over the fake store, so a host is picked here as the real commands pick it (host.ts).
-    // `.env` and profiles are not in play: `ignoredLoginHost` is a canned answer.
+    // `.env` and profiles are not in play: `ignoredLoginHost` is a canned answer, and the real
+    // read of a working directory's `.env` is shown by e2e.int.test.ts.
     resolveHost: (explicit, purpose) =>
       resolveHost({
         explicit,

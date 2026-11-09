@@ -46,8 +46,8 @@ export function createAuthDeps(
       stdin: process.stdin,
       stdout: process.stdout,
       stderr: process.stderr,
-      // stdin and stderr, not stdout: every prompt goes to stderr and is answered on stdin, so
-      // stdout can be redirected without switching prompts off.
+      // stdin and stderr, not stdout: every prompt goes to stderr and is answered on stdin, and
+      // stdout is left free to be piped (`gxy auth token | ...`) without switching prompts off.
       // The key prompt of `login --with-token` looks at stdin alone, and refuses when stdin is a
       // terminal and this is false (stderr redirected), so the key never falls through to an echoing read (login.ts).
       interactive,

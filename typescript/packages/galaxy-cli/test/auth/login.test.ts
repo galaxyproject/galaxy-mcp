@@ -1,6 +1,7 @@
 /**
  * `login` as a command, in process: fakes for the store and the terminal, so every branch can be
- * reached and each run's output read back.
+ * reached and each run's output read back. The real binary, a real SIGINT and real terminals are
+ * in e2e.int.test.ts.
  */
 import { describe, it, expect, vi } from "vitest";
 import { loginCommand } from "../../src/auth/commands/login";
@@ -74,7 +75,8 @@ describe("naming the Galaxy", () => {
 // The caller hands `loginCommand` an `AbortSignal` (commands do not touch process signals), and
 // every step either takes it or is raced against it. Each test cancels at a different step, since
 // each is a different place to be left holding something: a terminal in raw mode, a key about to be
-// written. 130 is 128 plus SIGINT's 2, the shell's code for a Ctrl-C.
+// written. 130 is 128 plus SIGINT's 2, the shell's code for a Ctrl-C. A real SIGINT is in
+// e2e.int.test.ts.
 describe("cancelling with Ctrl-C", () => {
   const expectCancelled = (h: ReturnType<typeof harness>, code: number) => {
     expect(code).toBe(130);
