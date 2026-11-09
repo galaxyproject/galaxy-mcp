@@ -1,6 +1,10 @@
 /**
- * The types of the credential store: what a stored login is, and the interface a credential
- * store implements.
+ * The seams between the parts of `auth`: where a login is kept, how one is obtained
+ * from Galaxy, and what the commands are given to do their work.
+ *
+ * Every command takes an `AuthDeps` rather than reaching for the filesystem, the
+ * network, the clock or the terminal itself, so each one can be tested with fakes and
+ * the real implementations are wired together in one place (`deps.ts`).
  */
 
 /**
@@ -51,12 +55,22 @@ export interface CredentialStore {
 }
 
 /**
- * Why a Galaxy URL or the credential file was refused: `usage` is a URL the person can fix (it is
- * not a URL, or has credentials in it), `insecure` is plain http to a host other than this
- * machine, `store` is a `hosts.yml` (or a login in it) that cannot be used as it is.
+ * Why an auth command failed. `exitCodeForAuthError` (`exit.ts`) turns each into a sysexits.h
+ * code: `usage` and `ambiguous_host` are 64 (EX_USAGE: the command line is wrong or does not
+ * say enough), `store` is 65 (EX_DATAERR: the credential file cannot be used as it is), `network`
+ * is 69 (EX_UNAVAILABLE), `protocol` and `insecure` are 76 (EX_PROTOCOL: the address, or what its
+ * server supplied, is not something this can use; plain http is 76 too, though the person typed
+ * it, see `exitCodeForAuthError`), and `not_logged_in` and `denied` are 77 (EX_NOPERM: there is no
+ * permission to do this).
  */
 export type AuthErrorKind =
-  /** Plain http to a host other than loopback. */
+  /** An admin key was refused: it goes in the plaintext file only when `--insecure-storage` says so. */
+  | "denied"
+  /** Galaxy rejected the token, or answered as the anonymous user. */
+  | "not_logged_in"
+  /** Several stored logins and no way to tell which Galaxy was meant. */
+  | "ambiguous_host"
+  /** Plain http to a host other than loopback, or an address that is not a Galaxy. */
   | "insecure"
   /**
    * `hosts.yml` cannot be used as it is, and nothing was changed: it is corrupt, a symlink,
@@ -64,15 +78,66 @@ export type AuthErrorKind =
    * message says which, and what to do about it.
    */
   | "store"
-  /** A URL or argument the user can fix. */
+  /** The server answered, but not as a Galaxy does. */
+  | "protocol"
+  /** The server could not be reached. */
+  | "network"
+  /** A flag or argument the user can fix. */
   | "usage";
 
 export class AuthError extends Error {
   constructor(
     readonly kind: AuthErrorKind,
     message: string,
+    options?: { cause?: unknown },
   ) {
-    super(message);
+    super(message, options);
     this.name = "AuthError";
   }
+}
+
+/** The user Galaxy says a token belongs to. */
+export interface WhoAmI {
+  username: string;
+  email?: string;
+  /** Galaxy's `is_admin`. An admin's token carries full, unscoped admin power. */
+  isAdmin?: boolean;
+}
+
+interface AuthIo {
+  stdin: NodeJS.ReadableStream;
+  /** Machine-readable output only. */
+  stdout: { write(s: string): void };
+  /** Everything meant for a person. */
+  stderr: { write(s: string): void };
+  /** stdin and stderr are both terminals, so it is safe to prompt. */
+  interactive: boolean;
+}
+
+export interface AuthDeps {
+  store: CredentialStore;
+  /**
+   * Ask Galaxy whose token this is (`GET /api/users/current` through galaxy-ops' `get_user`).
+   * Rejects with `AuthError("not_logged_in")` when Galaxy refuses the token or answers with
+   * the anonymous user (no username), which is what it does for a session without a valid key.
+   */
+  whoami(baseUrl: BaseUrl, token: string, signal?: AbortSignal): Promise<WhoAmI>;
+  /**
+   * Which Galaxy a command means: `--host`/`--url`, the `--profile` URL, `GALAXY_URL` (env, then
+   * `.env`), then the only stored login (see `pickHost`). With `purpose: "login"` the
+   * `.env` and profile are never consulted, so a repository cannot choose where a key goes.
+   * Rejects with `AuthError("ambiguous_host")` listing the stored hosts when several are stored
+   * and none was named, and `AuthError("usage")` when none is stored.
+   */
+  resolveHost(explicit?: string, purpose?: "login"): Promise<BaseUrl>;
+  /**
+   * The Galaxy named by `.env` (`GALAXY_URL`) or the selected profile, which `login` ignores by
+   * design; lets it say so when that differs from the host it uses. Absent means none.
+   */
+  ignoredLoginHost?(): { source: "dotenv" | "profile"; url: string } | undefined;
+  now(): Date;
+  env: Record<string, string | undefined>;
+  io: AuthIo;
+  /** The name the user typed (`gxy` or `galaxy-cli`), for messages like "run gxy auth login". */
+  commandName: string;
 }
