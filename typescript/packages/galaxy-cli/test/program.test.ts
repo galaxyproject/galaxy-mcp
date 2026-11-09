@@ -95,7 +95,9 @@ describe("buildProgram", () => {
     const names = program.commands.map((c) => c.name());
     expect(names).toContain("get_histories");
     expect(names).toContain("create_history");
-    expect(names.length).toBe(allOperations.length);
+    // the `auth` group is the one command that is not an operation
+    expect(names).toContain("auth");
+    expect(names.length).toBe(allOperations.length + 1);
   });
 
   it("says in --help what an op needs from the server", () => {
@@ -333,9 +335,9 @@ describe("buildProgram", () => {
 });
 
 /**
- * The name the program prints in usage is the one the entry file passes (`dist/gxy.js` is `gxy`,
- * `dist/index.js` is `galaxy-cli`). It is not read from `process.argv[1]`: pnpm and Windows shims
- * run the entry file, never the command name.
+ * The name `auth` prints in its hints is the one the entry file passes (`dist/gxy.js` is `gxy`,
+ * `dist/index.js` is `galaxy-cli`), so a `galaxy-cli` user is never told to run `gxy`. It is not read
+ * from `process.argv[1]`: pnpm and Windows shims run the entry file, never the command name.
  */
 describe("the program name", () => {
   it("is galaxy-cli unless the entry says otherwise", () => {
