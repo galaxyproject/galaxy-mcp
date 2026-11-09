@@ -28,8 +28,8 @@ export function exitCodeFor(kind?: GalaxyErrorKind): number {
 
 /**
  * Exit codes for `auth` failures, by kind (docs: "Exit codes"), the same sysexits an operation
- * gets for the same kind of trouble, so a script handles both alike. Ctrl-C (130) is decided in
- * the commands, not here.
+ * gets for the same kind of trouble, so a script handles both alike. Ctrl-C (130) and `status`
+ * finding a bad login (1) are decided in the commands, not here.
  */
 const AUTH_MAP: Record<AuthErrorKind, number> = {
   // The person can fix the command line; with several stored logins, by naming one.

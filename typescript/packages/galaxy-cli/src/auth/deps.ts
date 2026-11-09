@@ -1,4 +1,4 @@
-import { loadSources, requireProfile } from "../config";
+import { describeKeyReport, keySourceFor, loadSources, requireProfile } from "../config";
 import { resolveHost } from "./host";
 import { createCredentialStore } from "./store";
 import type { AuthDeps } from "./types";
@@ -10,11 +10,12 @@ const isTty = (stream: { isTTY?: boolean }): boolean => stream.isTTY === true;
 /** The real wiring of `auth`, built once per invocation (so `--help` never touches any of it). */
 export function createAuthDeps(
   commandName: string,
-  globals: () => { url?: string; profile?: string } = () => ({}),
+  globals: () => { url?: string; apiKey?: string; profile?: string } = () => ({}),
 ): AuthDeps {
   const env = process.env;
   const interactive = isTty(process.stdin) && isTty(process.stderr);
   const store = createCredentialStore(env);
+  const now = () => new Date();
   return {
     store,
     whoami: createWhoami(),
@@ -34,19 +35,32 @@ export function createAuthDeps(
         store,
       });
     },
+    // The same refusal `resolveHost` makes, for `status`, which lists logins without resolving a host.
+    checkProfile: () => {
+      requireProfile(globals(), loadSources());
+    },
+    // What an operation would use for this Galaxy, by the one order in config.ts. The global
+    // `--url`, `--api-key` and `--profile` count: they are what `gxy <operation>` would be given.
+    keySourceFor: (baseUrl, login, stored) => {
+      const g = globals();
+      const flags = { url: g.url, apiKey: g.apiKey, profile: g.profile };
+      const src = { ...loadSources(), storedBaseUrls: [...stored], now: now() };
+      const report = keySourceFor(baseUrl, flags, src, login);
+      return { id: report.id, label: describeKeyReport(report, flags) };
+    },
     ignoredLoginHost: () => {
       const src = loadSources();
       const dotenv = src.dotenv.GALAXY_URL;
       return dotenv ? { source: "dotenv", url: dotenv } : undefined;
     },
-    now: () => new Date(),
+    now,
     env,
     io: {
       stdin: process.stdin,
       stdout: process.stdout,
       stderr: process.stderr,
       // stdin and stderr, not stdout: every prompt goes to stderr and is answered on stdin, and
-      // stdout is left free to be piped (`gxy auth token | ...`) without switching prompts off.
+      // stdout is left free to be piped (`eval "$(gxy auth env)"`) without switching prompts off.
       // The key prompt of `login --with-token` looks at stdin alone, and refuses when stdin is a
       // terminal and this is false (stderr redirected), so the key never falls through to an echoing read (login.ts).
       interactive,

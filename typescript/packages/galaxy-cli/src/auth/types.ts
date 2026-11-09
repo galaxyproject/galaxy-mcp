@@ -134,10 +134,27 @@ export interface AuthDeps {
    */
   resolveHost(explicit?: string, purpose?: "login"): Promise<BaseUrl>;
   /**
+   * Throws `AuthError("usage")` when `--profile` names a profile that is not in `~/.planemo.yml`.
+   * For a command that can run without resolving a host (`status` lists every login), so it
+   * does not report on a profile that does not exist. Absent means there is no profile to check.
+   */
+  checkProfile?(): void;
+  /**
    * The Galaxy named by `.env` (`GALAXY_URL`), which `login` ignores by design; lets it say so
    * when that differs from the host it uses. Absent means none.
    */
   ignoredLoginHost?(): { source: "dotenv"; url: string } | undefined;
+  /**
+   * Which source an operation run now would take its key from for this Galaxy (`config.ts`'s
+   * order, with the flags and environment of this run), with the text to show for it. `id` is
+   * null when the operation would go to another Galaxy or would not run, and the label says so.
+   * `stored` is every stored login's base URL.
+   */
+  keySourceFor(
+    baseUrl: BaseUrl,
+    login: StoredLogin | undefined,
+    stored: readonly BaseUrl[],
+  ): { id: KeySourceId | null; label: string };
   now(): Date;
   env: Record<string, string | undefined>;
   io: AuthIo;
