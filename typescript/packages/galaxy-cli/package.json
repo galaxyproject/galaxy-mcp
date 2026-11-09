@@ -23,7 +23,10 @@
     "build": "tsup",
     "test": "vitest run",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
-    "test:fast": "vitest run --exclude '**/*.int.test.ts'"
+    "test:fast": "vitest run --exclude '**/*.int.test.ts'",
+    "lint": "eslint",
+    "format": "prettier --write \"src/auth/**/*.ts\" \"test/auth/**/*.ts\" \"test/support/**/*.ts\" eslint.config.js",
+    "format:check": "prettier --check \"src/auth/**/*.ts\" \"test/auth/**/*.ts\" \"test/support/**/*.ts\" eslint.config.js"
   },
   "dependencies": {
     "@galaxyproject/galaxy-ops": "workspace:*",
@@ -35,9 +38,15 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@vitest/eslint-plugin": "^1.6.28",
+    "eslint": "^10.13.0",
+    "eslint-plugin-n": "^18.5.0",
+    "eslint-plugin-regexp": "^3.3.1",
     "execa": "^9.5.0",
     "fast-check": "^4.10.2",
+    "prettier": "^3.9.10",
     "tsup": "^8.3.0",
+    "typescript-eslint": "^8.72.0",
     "vitest": "^5.1.0",
     "typescript": "^6.0.0"
   }

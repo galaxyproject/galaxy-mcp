@@ -116,6 +116,7 @@ describe("saying why the keyring was not used", () => {
   it("does not let the keyring's own text drive the terminal", async () => {
     kr.set = () => Promise.reject(new Error("locked\u001b[2J\u0007"));
     const w = (await store.put(fakeLogin())).warning ?? "";
+    // eslint-disable-next-line no-control-regex -- the assertion is that no control character is left
     expect(w).not.toMatch(/[\u0000-\u001f]/);
     expect(w).toContain("locked[2J");
   });

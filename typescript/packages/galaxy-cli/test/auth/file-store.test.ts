@@ -455,6 +455,7 @@ describe("entries this build does not recognise", () => {
     await s.list();
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("x.example[2J");
+    // eslint-disable-next-line no-control-regex -- the assertion is that no control character is left
     expect(warnings[0]).not.toMatch(/[\u0000-\u001f]/);
   });
 
