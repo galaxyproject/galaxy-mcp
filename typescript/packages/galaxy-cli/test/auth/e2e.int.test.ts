@@ -732,7 +732,10 @@ describe("auth, end to end", () => {
       expect(other.stdout + other.stderr).not.toContain(token);
 
       // With no server named, the one stored login is not handed to whoever asked, even with --host.
-      for (const args of [["auth", "headers"], ["auth", "headers", "--host", galaxy.baseUrl]]) {
+      for (const args of [
+        ["auth", "headers"],
+        ["auth", "headers", "--host", galaxy.baseUrl],
+      ]) {
         const unnamed = await run(args);
         expect(unnamed.exitCode, unnamed.stderr).toBe(77);
         expect(unnamed.stdout).toBe("");

@@ -116,6 +116,7 @@ describe("saying why the keyring was not used", () => {
   it("does not let the keyring's own text drive the terminal", async () => {
     kr.set = () => Promise.reject(new Error("locked\u001b[2J\u0007"));
     const w = (await store.put(fakeLogin())).warning ?? "";
+    // eslint-disable-next-line no-control-regex -- the assertion is that no control character is left
     expect(w).not.toMatch(/[\u0000-\u001f]/);
     expect(w).toContain("locked[2J");
   });
@@ -195,7 +196,9 @@ describe("replacing a login", () => {
       await store.put(fakeLogin());
       const before = await readFile(file.path, "utf8");
       const off = new CombinedStore(file, new KeyringStore(noKeyringBackend, 50));
-      const err = (await off.put(fakeLogin({ token: SECOND_TOKEN }), { insecureStorage }).catch((e: unknown) => e)) as Error;
+      const err = (await off
+        .put(fakeLogin({ token: SECOND_TOKEN }), { insecureStorage })
+        .catch((e: unknown) => e)) as Error;
       expect(err).toMatchObject({ kind: "usage" });
       expect(err.message).toBe(
         `The login for ${HOST} (user aioue) keeps its token in the system keyring, which GXY_NO_KEYRING switches off, so nothing was stored: replacing it now would leave that token behind. Rerun without GXY_NO_KEYRING.`,

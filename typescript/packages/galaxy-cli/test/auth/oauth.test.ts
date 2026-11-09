@@ -249,7 +249,7 @@ describe("device login", () => {
     const e = await authErrorOf(pending.waitForApproval());
     expect(e.kind).toBe("protocol");
     // The client library already rejects a negative one; zero is ours.
-    if (value === 0) expect(e.message).toContain("unusable expires_in");
+    expect(e.message).toContain(value === 0 ? "unusable expires_in" : "");
     expect(e.message).not.toContain(galaxy.issuedTokens()[0]!);
   });
 
@@ -520,6 +520,7 @@ describe("server text in errors is sanitised", () => {
     const server = await discover(galaxy.baseUrl as BaseUrl);
     const e = await authErrorOf(server.startDeviceLogin());
     expect(e.message).toContain("bad]0;pwnedthing");
+    // eslint-disable-next-line no-control-regex -- the assertion is that no control character is left
     expect(e.message).not.toMatch(/[\u0000-\u001f\u007f-\u009f]/);
   });
 });

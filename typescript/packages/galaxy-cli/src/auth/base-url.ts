@@ -40,6 +40,7 @@ import { AuthError, type BaseUrl } from "./types";
  * machine.
  */
 export function normalizeBaseUrl(input: string): BaseUrl {
+  // eslint-disable-next-line no-control-regex -- control characters are exactly what this refuses
   if (/[\u0000-\u001f\u007f-\u009f]/.test(input))
     throw new AuthError("usage", "The Galaxy URL contains a control character.");
   const raw = input.trim();

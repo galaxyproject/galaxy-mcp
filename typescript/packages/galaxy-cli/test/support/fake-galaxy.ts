@@ -464,8 +464,10 @@ export async function startFakeGalaxy(options: FakeGalaxyOptions = {}): Promise<
 
     if (method === "GET" && local === "/api/version") {
       if (versionMode === "redirect")
-        return void (res.writeHead(302, { location: "https://elsewhere.example/api/version" }),
-        res.end());
+        return void (
+          res.writeHead(302, { location: "https://elsewhere.example/api/version" }),
+          res.end()
+        );
       if (versionMode === "html") {
         res.writeHead(200, { "content-type": "text/html" });
         return void res.end("<html>Please log in</html>");

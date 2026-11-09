@@ -133,7 +133,13 @@ describe("the auth commands", () => {
       try {
         for (const quiet of [[], ["--quiet"]]) {
           write.mockClear();
-          const { h, code, makeAuthDeps } = await run([...quiet, "--profile", "p", "auth", "headers"]);
+          const { h, code, makeAuthDeps } = await run([
+            ...quiet,
+            "--profile",
+            "p",
+            "auth",
+            "headers",
+          ]);
           expect(code).toBe(64);
           expect(write.mock.calls.map((c) => String(c[0])).join("")).toBe(
             "--profile does not apply to `gxy auth headers`: it takes its Galaxy from CLAUDE_CODE_MCP_SERVER_URL.\n",
@@ -197,7 +203,7 @@ describe("the auth commands", () => {
     // `headers` takes its Galaxy only from the server Claude Code names, so --profile is refused
     // outright, as for login.
     ["headers", ["auth", "headers"], "does not apply to `gxy auth headers`"],
-  ])("refuse an unknown --profile for auth %s with exit 64", async (cmd, argv, message) => {
+  ])("refuse an unknown --profile for auth %s with exit 64", async (_cmd, argv, message) => {
     const h = harness({ stored: [fakeLogin()], stdinText: `${FAKE_TOKEN}\n` });
     const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     process.exitCode = 0;
@@ -205,10 +211,13 @@ describe("the auth commands", () => {
     try {
       const program = buildProgram({
         invokedAs: "gxy",
-        makeAuthDeps: (name) => ({
-          ...h.deps,
-          resolveHost: createAuthDeps(name, () => program.opts()).resolveHost,
-        }),
+        makeAuthDeps: (name) => {
+          const real = createAuthDeps(name, () => program.opts());
+          return {
+            ...h.deps,
+            resolveHost: (explicit, purpose) => real.resolveHost(explicit, purpose),
+          };
+        },
       });
       await program.parseAsync(["node", "gxy", "--profile", "typo", ...argv]);
       printed = write.mock.calls.map((c) => String(c[0])).join("");
@@ -222,7 +231,7 @@ describe("the auth commands", () => {
     expect(h.cap.out).toBe("");
     expect(h.whoamiCalls).toEqual([]);
     expect(await h.store.list()).toHaveLength(1); // still only the seeded login
-    if (cmd === "login") expect(h.stdin.readableLength).toBeGreaterThan(0);
+    expect(h.stdin.readableLength).toBeGreaterThan(0); // the key on stdin was never read
   });
 
   // `status` lists every stored login and resolves no host unless `--host` is given, so it needs the
