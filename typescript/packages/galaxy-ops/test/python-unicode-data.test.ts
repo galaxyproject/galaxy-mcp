@@ -189,7 +189,8 @@ describe("pyLower is the interpreter's lower()", () => {
       }
     }
     expect(wrong).toEqual([]);
-  });
+    // 4.5 million pyLower calls: about 1.7 s on a quiet machine, over the 5 s default under load.
+  }, 20_000);
 
   it("on the strings that interpreter was actually asked to lowercase", () => {
     const wrong: string[] = [];
