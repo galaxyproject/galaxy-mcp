@@ -107,8 +107,8 @@ describe("when there is no usable login or the server fails", () => {
 });
 
 // `login` never hands out a token, so its stdout must be empty as well as free of it. The three runs
-// are its three outcomes: a key succeeding, a key Galaxy refuses, and an admin key that login refuses
-// to put in a file without `--insecure-storage`.
+// are its three outcomes: a key succeeding, a key Galaxy refuses, and an admin key with no keyring to
+// hold it (which `requireKeyring` will not put in a file).
 describe("login", () => {
   it("never prints the token, whether it succeeds, is refused, or cannot store", async () => {
     const stdinText = `${FAKE_TOKEN}\n`;
@@ -116,6 +116,7 @@ describe("login", () => {
     const refused = harness({ stdinText });
     refused.knobs.whoami = new AuthError("not_logged_in", "Galaxy rejected the key");
     const unstorable = harness({ stdinText });
+    unstorable.store.keyringAvailable = false;
     unstorable.knobs.whoami = { username: "root", isAdmin: true };
 
     await loginCommand({ host: HOST_ARG, withToken: true }, accepted.deps);
