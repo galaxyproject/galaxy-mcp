@@ -20,7 +20,7 @@ function rootCause(err: Error): Error {
 }
 
 /** Whether a failed request died on certificate or TLS trouble: retrying cannot fix that. */
-function isTlsError(err: Error): boolean {
+export function isTlsError(err: Error): boolean {
   const cause = rootCause(err);
   const code = codeOf(cause);
   if (code !== undefined && TLS_CODES.test(code)) return true;
