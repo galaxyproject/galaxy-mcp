@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import type { Command } from "commander";
 import { createGalaxyContext } from "@galaxyproject/galaxy-ops";
 import { buildProgram } from "../../src/program";
+import { parseScopes } from "../../src/auth/register";
 import { FAKE_TOKEN, HOST, fakeLogin, harness } from "./harness";
 
 const HOST_ARG = "https://dev.galaxy.example.org";
@@ -151,6 +152,15 @@ describe("options", () => {
     ).rejects.toThrow();
   });
 
+  it("--scopes accumulates across uses, commas and spaces, and reaches the device flow", async () => {
+    const h = harness();
+    await run(
+      ["auth", "login", "--host", HOST_ARG, "--scopes", "a", "--scopes", "b,c", "--scopes", "a d"],
+      h,
+    );
+    expect(h.server.startedWith).toEqual([["a", "b", "c", "d"]]);
+  });
+
   it("--with-token and --insecure-storage reach login", async () => {
     const h = harness({ stdinText: `${FAKE_TOKEN}\n` });
     const { code } = await run(
@@ -159,5 +169,28 @@ describe("options", () => {
     );
     expect(code).toBe(0);
     expect(h.store.logins.get(HOST)).toMatchObject({ method: "pasted", storage: "file" });
+  });
+
+  it("--no-browser stops login offering to open one", async () => {
+    const offered = async (extra: string[]) => {
+      const h = harness({ interactive: true });
+      await run(["auth", "login", "--host", HOST_ARG, ...extra], h);
+      return h.cap.err.includes("Press Enter");
+    };
+    expect(await offered([])).toBe(true);
+    expect(await offered(["--no-browser"])).toBe(false);
+  });
+});
+
+describe("parseScopes", () => {
+  it("splits on commas and whitespace", () => {
+    expect(parseScopes("a,b")).toEqual(["a", "b"]);
+    expect(parseScopes("a b")).toEqual(["a", "b"]);
+    expect(parseScopes("a, b  c")).toEqual(["a", "b", "c"]);
+  });
+
+  it("adds to what was given before, in order, without repeats", () => {
+    expect(parseScopes("b", parseScopes("a"))).toEqual(["a", "b"]);
+    expect(parseScopes("b c,a", ["a", "b"])).toEqual(["a", "b", "c"]);
   });
 });

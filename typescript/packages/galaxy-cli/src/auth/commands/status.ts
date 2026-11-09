@@ -227,8 +227,10 @@ export async function statusCommand(opts: StatusOptions, deps: AuthDeps): Promis
         err(`  ✗ ${c.problem}. Run: ${deps.commandName} auth login --host ${l.baseUrl}`);
       else err(`  ✗ ${c.problem}`);
       err(`  Storage  ${describeStorage(l.storage)}`);
-      err("  Method   pasted API key");
-      err("  Scopes   full access (API key)");
+      err(`  Method   ${l.method === "device" ? "device login" : "pasted API key"}`);
+      err(
+        `  Scopes   ${l.scopes.length ? sanitize(l.scopes.join(" ")) : l.method === "pasted" ? "full access (API key)" : "server default"}`,
+      );
       const expiry = checkExpiry(l.expiresAt, now);
       if (expiry.state === "valid") {
         err(

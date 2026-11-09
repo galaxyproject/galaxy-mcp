@@ -174,6 +174,8 @@ export interface FakeGalaxy {
   setMetadataOverrides(fields: Record<string, unknown> | null): void;
   /** Make `/api/users/current` answer this status with an empty JSON body; `null` restores it. */
   setUsersCurrentStatus(status: number | null): void;
+  /** Make `/api/users/current` never answer, so a test can cancel a login while its whoami is out. */
+  hangUsersCurrent(on: boolean): void;
   /** Issue a token as a finished device login would, without running the flow. */
   issueToken(options?: Approval): string;
   /** Tokens issued so far, in order, revoked or not. */
@@ -250,6 +252,7 @@ export async function startFakeGalaxy(options: FakeGalaxyOptions = {}): Promise<
   let tokenFault: Parameters<FakeGalaxy["failTokenPolls"]>[1] = { reset: true };
   let metadataOverrides: Record<string, unknown> = {};
   let usersCurrentStatus: number | null = null;
+  let usersCurrentHang = false;
 
   const metadata = () => ({
     issuer: metadataMode === "wrong-issuer" ? "https://not-this-galaxy.example" : baseUrl,
@@ -472,6 +475,7 @@ export async function startFakeGalaxy(options: FakeGalaxyOptions = {}): Promise<
     }
 
     if (method === "GET" && local === "/api/users/current") {
+      if (usersCurrentHang) return;
       if (usersCurrentStatus !== null) {
         json(res, usersCurrentStatus, {});
         return;
@@ -550,6 +554,7 @@ export async function startFakeGalaxy(options: FakeGalaxyOptions = {}): Promise<
     },
     setMetadataOverrides: (f) => void (metadataOverrides = f ?? {}),
     setUsersCurrentStatus: (c) => void (usersCurrentStatus = c),
+    hangUsersCurrent: (on) => void (usersCurrentHang = on),
     setRedirect(suffix, location, status = 302) {
       if (location === null) redirects.delete(suffix);
       else redirects.set(suffix, { location, status });

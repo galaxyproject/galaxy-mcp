@@ -15,7 +15,7 @@ import { abortReason } from "./abort";
 import { trustedVerificationUri } from "./verification-uri";
 
 export interface DiscoverOptions {
-  /** OAuth client id to present. Default `CLIENT_ID`. */
+  /** OAuth client id to present. Default `CLIENT_ID`; callers feed `GXY_OAUTH_CLIENT_ID` here. */
   clientId?: string;
   /** Replaces `fetch` for every request (tests, proxies). */
   fetch?: typeof fetch;

@@ -22,7 +22,7 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { createServer, type Socket } from "node:net";
 import { fileURLToPath } from "node:url";
-import { startFakeGalaxy, type FakeGalaxy } from "../support/fake-galaxy";
+import { startFakeGalaxy, type Approval, type FakeGalaxy } from "../support/fake-galaxy";
 
 const pkgDir = fileURLToPath(new URL("../..", import.meta.url));
 // Built into a private directory inside the package (so `galaxy-ops` still resolves from
@@ -89,12 +89,16 @@ interface Seen {
 const test = base.extend<{
   home: string;
   configDir: string;
-  galaxyWith: () => Promise<FakeGalaxy>;
+  galaxyWith: (options?: Parameters<typeof startFakeGalaxy>[0]) => Promise<FakeGalaxy>;
   galaxy: FakeGalaxy;
   transcript: Seen[];
   cliEnv: (extra?: Record<string, string>) => Record<string, string>;
   run: Run;
-  pasteLogin: (g: FakeGalaxy) => Promise<Login>;
+  deviceLogin: (
+    g: FakeGalaxy,
+    approval?: Approval | "expire",
+    opts?: { env?: Record<string, string>; cwd?: string; noHost?: boolean },
+  ) => Promise<Login>;
 }>({
   home: async ({ onTestFinished }, use) => {
     const dir = await mkdtemp(join(work!, "home-"));
@@ -103,15 +107,15 @@ const test = base.extend<{
   },
   configDir: async ({ home }, use) => use(join(home, "config")),
   galaxyWith: async ({ onTestFinished }, use) =>
-    use(async () => {
-      const g = await startFakeGalaxy();
+    use(async (options) => {
+      const g = await startFakeGalaxy(options);
       onTestFinished(() => g.close());
       return g;
     }),
   galaxy: async ({ galaxyWith }, use) => use(await galaxyWith()),
   transcript: async ({}, use) => use([]),
   // The whole environment the binary sees (`extendEnv: false` in `run`): nothing of the
-  // developer's `GALAXY_*` or proxy settings reaches it.
+  // developer's `GALAXY_*`, proxy or `BROWSER` settings reaches it.
   cliEnv: async ({ home, configDir }, use) =>
     use((extra = {}) => ({
       PATH: process.env.PATH ?? "",
@@ -140,11 +144,42 @@ const test = base.extend<{
       void child.then((r) => transcript.push({ args, stdout: r.stdout, stderr: r.stderr }));
       return child;
     }),
-  /** Log in to `g` with a key it has just issued, piped in on stdin; the key is `g.issuedTokens().at(-1)`. */
-  pasteLogin: async ({ run }, use) =>
-    use((g) =>
-      run(["auth", "login", "--host", g.baseUrl, "--with-token"], { input: `${g.issueToken()}\n` }),
-    ),
+  /**
+   * Start a device login, approve its code on the fake while the CLI polls, and wait for it.
+   * The child never outlives the call, whatever happens in between. The code to approve is the
+   * one that is new on the fake, so a second login to the same Galaxy approves its own code and
+   * not the first one's.
+   */
+  deviceLogin: async ({ run }, use) =>
+    use(async (g, approval = {}, opts = {}) => {
+      const before = new Set(g.pendingCodes());
+      const child = run(
+        opts.noHost ? ["auth", "login"] : ["auth", "login", "--host", g.baseUrl],
+        opts,
+      );
+      try {
+        let code: string | undefined;
+        await vi.waitFor(
+          () => {
+            code = g.pendingCodes().find((c) => !before.has(c));
+            if (!code) throw new Error("the CLI never asked for a device code");
+          },
+          { timeout: 15_000, interval: 20 },
+        );
+        if (approval === "expire") g.expire(code!);
+        else g.approve(code!, { expiresIn: 3600, ...approval });
+        const result = await child;
+        // The device code is the secret the CLI polls with: it must never be shown to anyone.
+        for (const deviceCode of g.deviceCodes()) {
+          expect(result.stdout, "stdout").not.toContain(deviceCode);
+          expect(result.stderr, "stderr").not.toContain(deviceCode);
+        }
+        return result;
+      } finally {
+        child.kill();
+        await child;
+      }
+    }),
 });
 
 // The canary: a token no other value in the run resembles, so finding it anywhere is finding the secret.
@@ -174,8 +209,9 @@ async function filesHolding(root: string, needle: string): Promise<string[]> {
  * own tests see only what a command wrote to its streams, so a leak to a file or a URL is
  * invisible to them. The canary is the token, so one string search answers each place:
  * - on disk, in `files` (paths under `home`) and nowhere else under HOME, whatever the file is called;
- * - on the wire, in an `x-api-key` or `authorization` header: never in a URL (which proxies and
- *   logs keep), another header or any body, and never on the version probe;
+ * - on the wire, in an `x-api-key` or `authorization` header, or in the body of a revocation: never
+ *   in a URL (which proxies and logs keep), another header or another body, and never on the
+ *   version probe;
  * - on screen, only for the commands whose job is to print it: `auth token`, `env` and `headers`,
  *   and only on stdout.
  */
@@ -199,7 +235,9 @@ async function expectTokenOnlyWhereAllowed(
       if (!probe && (name === "x-api-key" || name === "authorization")) continue;
       expect([value].flat().join("\n"), `${what}, header ${name}`).not.toContain(token);
     }
-    expect(r.body, `${what}, body`).not.toContain(token);
+    // A revocation carries the token in its body (RFC 7009 §2.1); no other request has a reason to.
+    if (!new URL(r.url, "http://x").pathname.endsWith("/oauth/revoke"))
+      expect(r.body, `${what}, body`).not.toContain(token);
   }
   for (const seen of where.transcript) {
     const prints =
@@ -213,16 +251,15 @@ describe("auth, end to end", () => {
   test("logs in, shows it, hands out the token, runs an operation, logs out", async ({
     galaxy,
     run,
+    deviceLogin,
     configDir,
     home,
     transcript,
   }) => {
-    const token = galaxy.issueToken({ accessToken: CANARY });
-    const login = await run(["auth", "login", "--host", galaxy.baseUrl, "--with-token"], {
-      input: `${token}\n`,
-    });
+    const login = await deviceLogin(galaxy, { accessToken: CANARY });
     expect(login.exitCode, login.stderr).toBe(0);
     expect(login.stderr).toContain("Logged in to");
+    const token = galaxy.issuedTokens()[0]!;
     expect(token).toBe(CANARY);
     expect(login.stdout + login.stderr).not.toContain(token);
 
@@ -262,8 +299,10 @@ describe("auth, end to end", () => {
     expect(galaxy.requestsTo("/api/users/current").at(-1)!.headers["x-api-key"]).toBe(token);
 
     // The binary identifies itself on every call of its own.
-    for (const r of galaxy.requestsTo("/api/version"))
-      expect(r.headers["user-agent"], r.url).toMatch(/^gxy\//);
+    for (const suffix of ["/api/version", "/oauth/device_authorization", "/oauth/token"]) {
+      for (const r of galaxy.requestsTo(suffix))
+        expect(r.headers["user-agent"], r.url).toMatch(/^gxy\//);
+    }
 
     // Logged in: the token is in the one file that holds logins, and nowhere else.
     await expectTokenOnlyWhereAllowed(token, {
@@ -275,8 +314,7 @@ describe("auth, end to end", () => {
 
     const out = await run(["auth", "logout"]);
     expect(out.exitCode, out.stderr).toBe(0);
-    // A pasted key is forgotten here, not revoked: Galaxy still accepts it.
-    expect(galaxy.isTokenValid(token)).toBe(true);
+    expect(galaxy.isTokenValid(token)).toBe(false);
     expect(await readFile(join(configDir, "hosts.yml"), "utf8")).not.toContain(galaxy.baseUrl);
     // Logged out: it is gone from every file under HOME, not only from the one we know about.
     await expectTokenOnlyWhereAllowed(token, { home, files: [], galaxy, transcript });
@@ -284,6 +322,20 @@ describe("auth, end to end", () => {
     expect(gone.exitCode).toBe(77); // EX_NOPERM: nothing stored, so not logged in
     expect(gone.stdout).toBe("");
   }, 90_000);
+
+  test("presents the client id from GXY_OAUTH_CLIENT_ID", async ({ galaxyWith, deviceLogin }) => {
+    const galaxy = await galaxyWith({ clientId: "fake-other-client" });
+    const login = await deviceLogin(
+      galaxy,
+      {},
+      { env: { GXY_OAUTH_CLIENT_ID: "fake-other-client" } },
+    );
+    expect(login.exitCode, login.stderr).toBe(0);
+    // The fake accepts only that id, on each of these, so the login above succeeding shows it was sent.
+    for (const suffix of ["/oauth/device_authorization", "/oauth/token"]) {
+      expect(galaxy.requestsTo(suffix)[0]!.form.client_id).toBe("fake-other-client");
+    }
+  }, 30_000);
 
   describe("login --with-token", () => {
     test("stores an API key read from stdin", async ({ galaxy, run, home, transcript }) => {
@@ -363,23 +415,34 @@ describe("auth, end to end", () => {
     }, 30_000);
   });
 
-  // The way in is `--with-token`, spelled with whichever name was run: 64 is EX_USAGE.
+  // 76 is EX_PROTOCOL, "remote error in protocol" (exit.ts): Galaxy answered, but not with a device
+  // flow. The way out is the hint, a pasted key, spelled with whichever name was run.
   test.for(NAMES)(
-    "login without --with-token, as %s, exits 64 and says to use it under its own name",
+    "as %s, exits 76 and points at --with-token under its own name when the device flow is off",
     { timeout: 30_000 },
     async (name, { galaxy, run }) => {
+      galaxy.setDeviceFlow(false);
       const login = await run(["auth", "login", "--host", galaxy.baseUrl], { name });
-      expect(login.exitCode).toBe(64);
-      expect(login.stderr).toContain(`${name} auth login needs --with-token`);
-      expect(login.stderr).toContain(`${name} auth login --host <url> --with-token`);
-      expect(galaxy.requests).toEqual([]);
+      expect(login.exitCode).toBe(76);
+      expect(login.stderr).toContain(`${name} auth login --host ${galaxy.baseUrl} --with-token`);
     },
   );
 
-  test("asks which Galaxy when two are stored", async ({ galaxy, galaxyWith, run, pasteLogin }) => {
+  test("exits 77 when the code expires", async ({ galaxy, deviceLogin }) => {
+    const login = await deviceLogin(galaxy, "expire");
+    expect(login.exitCode, login.stderr).toBe(77);
+    expect(login.stderr).toMatch(/expired/);
+  }, 30_000);
+
+  test("asks which Galaxy when two are stored", async ({
+    galaxy,
+    galaxyWith,
+    run,
+    deviceLogin,
+  }) => {
     const second = await galaxyWith();
-    expect((await pasteLogin(galaxy)).exitCode).toBe(0);
-    expect((await pasteLogin(second)).exitCode).toBe(0);
+    expect((await deviceLogin(galaxy)).exitCode).toBe(0);
+    expect((await deviceLogin(second)).exitCode).toBe(0);
     const ambiguous = await run(["auth", "token"]);
     // 64 is EX_USAGE, not 77: the command line did not say which Galaxy, so the caller can fix it
     // by saying so (--host, or GALAXY_URL), and nothing is wrong with either login.
@@ -446,8 +509,8 @@ describe("auth, end to end", () => {
   // GALAXY_URL and GALAXY_API_KEY are the variables the Python galaxy-mcp server reads, and an
   // explicit key has always won here (config.ts), so an environment that already works keeps working
   // after a login is stored.
-  test("lets GALAXY_API_KEY override the stored login", async ({ galaxy, run, pasteLogin }) => {
-    expect((await pasteLogin(galaxy)).exitCode).toBe(0);
+  test("lets GALAXY_API_KEY override the stored login", async ({ galaxy, run, deviceLogin }) => {
+    expect((await deviceLogin(galaxy)).exitCode).toBe(0);
     const seen = galaxy.requestsTo("/api/users/current").length;
     const user = await run(["--format", "json", "get_user"], {
       env: { GALAXY_URL: galaxy.baseUrl, GALAXY_API_KEY: "fake-env-key" },
@@ -465,9 +528,9 @@ describe("auth, end to end", () => {
   test("status names the key operations would use for a login, or none when they go elsewhere", async ({
     galaxy,
     run,
-    pasteLogin,
+    deviceLogin,
   }) => {
-    expect((await pasteLogin(galaxy)).exitCode).toBe(0);
+    expect((await deviceLogin(galaxy)).exitCode).toBe(0);
     const keySource = async (args: string[], env?: Record<string, string>) => {
       const r = await run([...args, "auth", "status", "--json"], env ? { env } : {});
       return (JSON.parse(r.stdout) as { key_source: string | null }[])[0]!.key_source;
@@ -488,9 +551,9 @@ describe("auth, end to end", () => {
     test("hands out the token for the Galaxy the server URL names, and refuses any other", async ({
       galaxy,
       run,
-      pasteLogin,
+      deviceLogin,
     }) => {
-      expect((await pasteLogin(galaxy)).exitCode).toBe(0);
+      expect((await deviceLogin(galaxy)).exitCode).toBe(0);
       const token = galaxy.issuedTokens()[0]!;
 
       const matching = await run(["auth", "headers"], {
@@ -546,8 +609,8 @@ describe("auth, end to end", () => {
     expect(await readFile(errFile, "utf8")).toBe("");
   }, 60_000);
 
-  // `login` sends a key to the host it picks, so a `.env` in a cloned repository must not be able
-  // to choose it (`forLogin` in host.ts). Each case points a
+  // `login` sends a key, or asks a person to approve a code, to the host it picks, so a `.env` in a
+  // cloned repository must not be able to choose it (`forLogin` in host.ts). Each case points a
   // `.env` at a real decoy Galaxy and then checks the decoy's request log is empty: "never
   // contacted" is shown by what the decoy received, not by what the command printed.
   describe("login never takes its host from a .env in the working directory", () => {
@@ -575,11 +638,56 @@ describe("auth, end to end", () => {
         code: "ENOENT",
       });
     }, 30_000);
+
+    test("the device flow goes to the stored login, says it ignored the .env, and never contacts the .env's Galaxy", async ({
+      galaxy,
+      galaxyWith,
+      deviceLogin,
+      home,
+    }) => {
+      const decoy = await galaxyWith();
+      expect((await deviceLogin(galaxy)).exitCode).toBe(0);
+      const cwd = await cwdWithDotenv(home, decoy.baseUrl);
+      const seen = galaxy.requests.length;
+      const login = await deviceLogin(galaxy, {}, { cwd, noHost: true });
+      expect(login.exitCode, login.stderr).toBe(0);
+      expect(login.stderr).toContain("Ignoring GALAXY_URL from .env");
+      expect(galaxy.requests.length).toBeGreaterThan(seen);
+      expect(decoy.requests).toEqual([]);
+    }, 60_000);
   });
 
   // The command tests abort an `AbortController`; only a real process shows that a real SIGINT
   // reaches it. 130 is 128 plus SIGINT's 2, the shell's convention for a Ctrl-C.
   describe("Ctrl-C", () => {
+    test('aborts the wait for approval: exit 130, "Cancelled.", nothing stored, and the process is gone', async ({
+      galaxy,
+      run,
+      configDir,
+    }) => {
+      const child = run(["auth", "login", "--host", galaxy.baseUrl]);
+      try {
+        await vi.waitFor(
+          () => {
+            if (galaxy.pendingCodes().length === 0)
+              throw new Error("the CLI never asked for a device code");
+          },
+          { timeout: 15_000, interval: 20 },
+        );
+        child.kill("SIGINT");
+        const r = await child;
+        expect(r.signal).toBeUndefined(); // handled, not killed by the signal
+        expect(r.exitCode).toBe(130);
+        expect(r.stderr).toContain("Cancelled.");
+        await expect(readFile(join(configDir, "hosts.yml"), "utf8")).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+      } finally {
+        child.kill();
+        await child;
+      }
+    }, 30_000);
+
     // The key is read from stdin, where a real SIGINT is not a character in raw mode but a signal,
     // and the read must end with it: no key was ever read, so nothing is stored and nothing lingers.
     test("aborts the wait for a key on stdin with --with-token: exit 130, nothing stored, and the process is gone", async ({
@@ -610,6 +718,49 @@ describe("auth, end to end", () => {
           code: "ENOENT",
         });
         expect(child.exitCode).toBe(130); // the process has exited, not been killed by the harness
+      } finally {
+        child.kill();
+        await child;
+      }
+    }, 30_000);
+
+    // A Ctrl-C after approval must still take the token back (B1): the revocation cannot share the
+    // login's signal. The fake never answers `whoami`, so the cancel lands while it is out, with the
+    // token already issued.
+    test("after approval revokes the token it was given: exit 130, the token no longer works, nothing stored", async ({
+      galaxy,
+      run,
+      configDir,
+    }) => {
+      const child = run(["auth", "login", "--host", galaxy.baseUrl]);
+      try {
+        await vi.waitFor(
+          () => {
+            if (galaxy.pendingCodes().length === 0)
+              throw new Error("the CLI never asked for a device code");
+          },
+          { timeout: 15_000, interval: 20 },
+        );
+        galaxy.hangUsersCurrent(true);
+        galaxy.approve(galaxy.pendingCodes()[0]!, { expiresIn: 3600 });
+        await vi.waitFor(
+          () => {
+            if (galaxy.requestsTo("/api/users/current").length === 0)
+              throw new Error("whoami never started");
+          },
+          { timeout: 15_000, interval: 20 },
+        );
+        child.kill("SIGINT");
+        const r = await child;
+        expect(r.signal).toBeUndefined();
+        expect(r.exitCode).toBe(130);
+        expect(r.stderr).toContain("Cancelled; the token");
+        const [token] = galaxy.issuedTokens();
+        expect(token).toBeDefined();
+        expect(galaxy.isTokenValid(token!), "the token Galaxy issued was revoked").toBe(false);
+        await expect(readFile(join(configDir, "hosts.yml"), "utf8")).rejects.toMatchObject({
+          code: "ENOENT",
+        });
       } finally {
         child.kill();
         await child;
@@ -666,12 +817,39 @@ describe("auth, end to end", () => {
   // pseudo-terminal shows it: the in-process login tests fake a terminal with a flag, so nothing else
   // sees this wiring. util-linux `script` gives the binary one without a native addon (`node-pty`
   // would need building). Only util-linux's `script` is used, because the BSD one takes different arguments.
+  // On a terminal the CLI offers to open the page (when it can: `$BROWSER` here), and Enter does it.
   const scriptProbe = spawnSync("script", ["--version"], { encoding: "utf8" });
   const hasScript =
     process.platform === "linux" &&
     scriptProbe.error === undefined &&
     /util-linux/.test(scriptProbe.stdout);
   describe.skipIf(!hasScript)("on a terminal (a pseudo-terminal from `script`)", () => {
+    const OFFER = "Press Enter to open that page in your browser";
+
+    /**
+     * A `$BROWSER` that records its argument count and arguments, one per line, in a file. It is
+     * written to a `.part` file and renamed, so a reader never sees half of it, and `opened()` is
+     * `null` until the launcher has run.
+     */
+    async function browserStub(home: string) {
+      const path = join(home, "stub-browser");
+      const argvFile = join(home, "stub-browser.argv");
+      await writeFile(
+        path,
+        `#!/bin/sh\nprintf '%s\\n' "$#" "$@" > "${argvFile}.part" && mv "${argvFile}.part" "${argvFile}"\n`,
+      );
+      await chmod(path, 0o755);
+      return {
+        path,
+        argvFile,
+        opened: () =>
+          readFile(argvFile, "utf8").then(
+            (t) => t.split("\n").slice(0, -1),
+            () => null,
+          ),
+      };
+    }
+
     /**
      * `script` runs `command` with a terminal for stdin, stdout and stderr, and exits with its status
      * (`-e`; `-q` drops its banner and the typescript file is /dev/null). All three streams are the
@@ -689,6 +867,99 @@ describe("auth, end to end", () => {
       });
     }
     const quoted = (...args: string[]) => args.map((a) => JSON.stringify(a)).join(" ");
+
+    test("shows the code and offers the browser, and Enter opens the verification page as one argument", async ({
+      galaxy,
+      home,
+      cliEnv,
+    }) => {
+      const stub = await browserStub(home);
+      const child = onTerminal(
+        quoted(process.execPath, bins.gxy, "auth", "login", "--host", galaxy.baseUrl),
+        home,
+        cliEnv({ BROWSER: stub.path }),
+      );
+      let screen = "";
+      child.stdout.on("data", (d: Buffer) => (screen += d.toString()));
+      try {
+        await vi.waitFor(
+          () => {
+            expect(screen).toContain(OFFER);
+          },
+          { timeout: 15_000, interval: 20 },
+        );
+        const [code] = galaxy.pendingCodes();
+        expect(screen).toContain(`One-time code: ${code}`);
+        expect(await stub.opened(), "nothing opens before Enter").toBeNull();
+
+        child.stdin.write("\n");
+        await vi.waitFor(
+          async () => {
+            expect(await stub.opened()).not.toBeNull();
+          },
+          {
+            timeout: 15_000,
+            interval: 20,
+          },
+        );
+        expect(await stub.opened()).toEqual(["1", `${galaxy.baseUrl}/oauth/device`]);
+
+        galaxy.approve(code!, { expiresIn: 3600 });
+        const r = await child;
+        expect(r.exitCode, screen).toBe(0);
+        expect(r.stdout).toContain("Logged in to");
+        for (const deviceCode of galaxy.deviceCodes()) expect(r.stdout).not.toContain(deviceCode);
+      } finally {
+        child.kill();
+        await child;
+      }
+    }, 60_000);
+
+    // The offer needs both streams to be terminals: this is what tells `gxy auth login | tee` and
+    // `gxy auth login 2>log` from a person at a keyboard, so neither may wait for Enter.
+    test.for(["stdin is a pipe", "stderr goes to a file"] as const)(
+      "offers nothing, and opens nothing, when %s",
+      { timeout: 60_000 },
+      async (why, { galaxy, home, cliEnv, deviceLogin }) => {
+        const stub = await browserStub(home);
+        const codeIsPending = () =>
+          vi.waitFor(
+            () => {
+              expect(galaxy.pendingCodes()).not.toEqual([]);
+            },
+            { timeout: 15_000, interval: 20 },
+          );
+        let screen: string;
+        let exitCode: number | undefined;
+        let detail = "";
+        if (why === "stdin is a pipe") {
+          const r = await deviceLogin(galaxy, {}, { env: { BROWSER: stub.path } });
+          exitCode = r.exitCode;
+          detail = r.stderr;
+          screen = r.stderr;
+        } else {
+          const errFile = join(home, "login-stderr");
+          const command = `${quoted(process.execPath, bins.gxy, "auth", "login", "--host", galaxy.baseUrl)} 2>${JSON.stringify(errFile)}`;
+          const child = onTerminal(command, home, cliEnv({ BROWSER: stub.path }));
+          try {
+            await codeIsPending();
+            child.stdin.write("\n"); // were it offered, this would open the page
+            galaxy.approve(galaxy.pendingCodes()[0]!, { expiresIn: 3600 });
+            exitCode = (await child).exitCode;
+          } finally {
+            child.kill();
+            await child;
+          }
+          screen = await readFile(errFile, "utf8");
+          detail = screen;
+        }
+        expect(exitCode, detail).toBe(0);
+        expect(screen).toContain("One-time code:");
+        expect(screen).toContain("Logged in to");
+        expect(screen).not.toContain(OFFER);
+        expect(await stub.opened()).toBeNull();
+      },
+    );
 
     // With a terminal on stdin the key is typed, and the prompt for it goes to stderr. Read as a
     // pipe the typed key would be echoed on the screen and into scrollback, so with stderr
@@ -749,7 +1020,7 @@ describe("auth, end to end", () => {
           await mkdir(configDir, { mode: 0o700 });
           await writeFile(
             join(configDir, "hosts.yml"),
-            `hosts:\n  ${galaxy.baseUrl}:\n    username: fake-user\n    method: pasted\n    scopes: []\n    expires_at: null\n    obtained_at: "2026-01-01T00:00:00.000Z"\n    storage: keyring\n`,
+            `hosts:\n  ${galaxy.baseUrl}:\n    username: fake-user\n    method: device\n    scopes: []\n    expires_at: null\n    obtained_at: "2026-01-01T00:00:00.000Z"\n    storage: keyring\n`,
             { mode: 0o600 },
           );
           const t0 = Date.now();

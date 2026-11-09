@@ -7,7 +7,7 @@ import { describe, it, expect, vi } from "vitest";
 import { statusCommand } from "../../src/auth/commands/status";
 import { createWhoami } from "../../src/auth/whoami";
 import { AuthError } from "../../src/auth/types";
-import { FAKE_TOKEN, HOST, OTHER, SOON, fakeLogin, harness, makeTokenUnreadable } from "./harness";
+import { FAKE_TOKEN, HOST, OTHER, fakeLogin, harness, makeTokenUnreadable } from "./harness";
 
 const expiredLogin = () => fakeLogin({ expiresAt: "2026-11-06T09:00:00.000Z" });
 const twoLogins = () =>
@@ -15,14 +15,14 @@ const twoLogins = () =>
 
 describe("auth status", () => {
   it("shows a live check, storage, method, scopes, time left and a masked token, on stderr", async () => {
-    const h = harness({ stored: [fakeLogin({ expiresAt: SOON })] });
+    const h = harness({ stored: [fakeLogin()] });
     expect(await statusCommand({}, h.deps)).toBe(0);
     expect(h.cap.out).toBe("");
     expect(h.cap.err).toContain("dev.galaxy.example.org");
     expect(h.cap.err).toContain("Logged in as aioue");
     expect(h.cap.err).toMatch(/Storage\s+system keyring/);
-    expect(h.cap.err).toMatch(/Method\s+pasted API key/);
-    expect(h.cap.err).toMatch(/Scopes\s+full access \(API key\)/);
+    expect(h.cap.err).toMatch(/Method\s+device login/);
+    expect(h.cap.err).toMatch(/Scopes\s+histories:read tools:run/);
     expect(h.cap.err).toMatch(/Expires\s+in 7h/);
     // The token is masked: only its last four characters show.
     expect(h.cap.err).not.toContain(FAKE_TOKEN);
@@ -40,7 +40,7 @@ describe("auth status", () => {
   });
 
   it("says 'no expiry' and 'pasted' for a pasted key", async () => {
-    const h = harness({ stored: [fakeLogin()] });
+    const h = harness({ stored: [fakeLogin({ method: "pasted", scopes: [], expiresAt: null })] });
     await statusCommand({}, h.deps);
     expect(h.cap.err).toMatch(/Expires\s+no expiry/);
     expect(h.cap.err).toMatch(/Method\s+pasted API key/);
@@ -284,7 +284,7 @@ describe("auth status", () => {
         base_url: HOST,
         username: "aioue",
         storage: "keyring",
-        method: "pasted",
+        method: "device",
         status: "expired",
       });
       expect(h.cap.out).not.toContain(FAKE_TOKEN);

@@ -17,12 +17,15 @@ import { CombinedStore } from "../../src/auth/store";
 import {
   AuthError,
   type AuthDeps,
+  type AuthServer,
   type BaseUrl,
   type CredentialStore,
   type LoginSummary,
+  type PendingDeviceLogin,
   type PutResult,
   type StorageKind,
   type StoredLogin,
+  type TokenGrant,
   type WhoAmI,
 } from "../../src/auth/types";
 
@@ -33,18 +36,15 @@ export const OTHER: BaseUrl = normalizeBaseUrl("https://other.example.org");
 /** Obviously fake. */
 export const FAKE_TOKEN = "fake-token-0123456789abcdef";
 
-/** About eight hours after `DAY`: for tests that need a login with an expiry (`expiresAt: SOON`). */
-export const SOON = "2026-11-06T18:42:00.000Z";
-
-/** A stored pasted-key login for `HOST`, with no expiry; `over` replaces any field. */
+/** A stored device login for `HOST` that expires about eight hours after `DAY`; `over` replaces any field. */
 export function fakeLogin(over: Partial<StoredLogin> = {}): StoredLogin {
   return {
     baseUrl: HOST,
     username: "aioue",
     token: FAKE_TOKEN,
-    method: "pasted",
-    scopes: [],
-    expiresAt: null,
+    method: "device",
+    scopes: ["histories:read", "tools:run"],
+    expiresAt: "2026-11-06T18:42:00.000Z",
     obtainedAt: DAY,
     ...over,
   };
@@ -172,6 +172,72 @@ export function realStore(
 }
 
 /**
+ * A device login waiting for approval. `outcome` is what `waitForApproval` ends with: a grant, an
+ * `AuthError` it throws, or `"hang"`, which stays pending until the caller's signal aborts, as the
+ * real wait does on Ctrl-C. The user code is the example RFC 8628 §3.2 gives.
+ */
+export class FakePending implements PendingDeviceLogin {
+  userCode = "WDJB-MJHT";
+  verificationUri = "https://dev.galaxy.example.org/login/device";
+  expiresAt: Date;
+  outcome: TokenGrant | AuthError | "hang" = {
+    accessToken: FAKE_TOKEN,
+    expiresIn: 28_680,
+    scopes: ["histories:read"],
+  };
+  constructor(now: Date) {
+    this.expiresAt = new Date(now.getTime() + (14 * 60 + 52) * 1000);
+  }
+  async waitForApproval(signal?: AbortSignal): Promise<TokenGrant> {
+    if (this.outcome === "hang") {
+      return new Promise((_, reject) => {
+        signal?.addEventListener(
+          "abort",
+          () => {
+            reject(new Error("aborted"));
+          },
+          { once: true },
+        );
+        if (signal?.aborted) reject(new Error("aborted"));
+      });
+    }
+    if (this.outcome instanceof AuthError) throw this.outcome;
+    return this.outcome;
+  }
+}
+
+/**
+ * An `AuthServer` that records instead of speaking OAuth. `startedWith` holds the scopes each
+ * device login asked for (`undefined` when it sent none, which is not the same as `[]`), and
+ * `revoked` the tokens it was asked to revoke, so a test can show a token was taken back or was
+ * left alone. `revokeError` makes a revoke fail. The real protocol is tested against the fake
+ * Galaxy in oauth.test.ts.
+ */
+export class FakeServer implements AuthServer {
+  issuer: string;
+  supportsDeviceFlow = true;
+  supportsRevocation = true;
+  startedWith: (string[] | undefined)[] = [];
+  revoked: string[] = [];
+  revokeError: Error | undefined;
+  pending: FakePending;
+  constructor(baseUrl: string, now: Date) {
+    this.issuer = baseUrl;
+    this.pending = new FakePending(now);
+  }
+  async startDeviceLogin(scopes?: string[]) {
+    this.startedWith.push(scopes);
+    return this.pending;
+  }
+  async revoke(token: string, signal?: AbortSignal) {
+    // As the real one does: a revocation handed a signal that has already aborted never goes out.
+    if (signal?.aborted) throw new Error("revocation aborted before it was sent");
+    if (this.revokeError) throw this.revokeError;
+    this.revoked.push(token);
+  }
+}
+
+/**
  * What a command wrote, kept as two strings. Commands write through `deps.io` and never to
  * `console`, so nothing needs spying on and each run's output is its own. stdout and stderr stay
  * apart because that split is the contract: stdout is what a script consumes (a token, `env`
@@ -188,12 +254,18 @@ export class Capture {
 export interface Harness {
   deps: AuthDeps;
   store: FakeStore;
+  server: FakeServer;
   cap: Capture;
   stdin: PassThrough;
+  /** The URLs the command asked the browser opener to open. */
+  opened: string[];
   /** Each live check, with the token it was made with, so a test can show one was skipped. */
   whoamiCalls: { baseUrl: string; token: string }[];
-  /** What a test flips after building: the live check's answer (or its `AuthError`). */
-  knobs: { whoami: WhoAmI | AuthError };
+  /**
+   * What a test flips after building: the live check's answer (or its `AuthError`), whether a
+   * browser can open, and discovery failing.
+   */
+  knobs: { whoami: WhoAmI | AuthError; browserAvailable: boolean; discoverError?: AuthError };
 }
 
 /**
@@ -219,11 +291,20 @@ export function harness(
   if (opts.stdinText !== undefined) {
     stdin.end(opts.stdinText);
   }
+  const server = new FakeServer(HOST, now());
+  const opened: string[] = [];
   const whoamiCalls: { baseUrl: string; token: string }[] = [];
-  const knobs: Harness["knobs"] = { whoami: { username: "aioue", email: "a@example.org" } };
+  const knobs: Harness["knobs"] = {
+    whoami: { username: "aioue", email: "a@example.org" },
+    browserAvailable: true,
+  };
   const env = { ...(opts.hostFromEnv ? { GALAXY_URL: opts.hostFromEnv } : {}), ...opts.env };
   const deps: AuthDeps = {
     store,
+    async discover() {
+      if (knobs.discoverError) throw knobs.discoverError;
+      return server;
+    },
     async whoami(baseUrl, token) {
       whoamiCalls.push({ baseUrl, token });
       if (knobs.whoami instanceof AuthError) throw knobs.whoami;
@@ -241,12 +322,17 @@ export function harness(
         forLogin: purpose === "login",
       }),
     ignoredLoginHost: () => opts.ignoredLoginHost,
+    async openBrowser(url) {
+      opened.push(url);
+      return true;
+    },
+    canOpenBrowser: () => knobs.browserAvailable,
     now,
     env,
     io: { stdin, stdout: cap.stdout, stderr: cap.stderr, interactive: opts.interactive ?? false },
     commandName: "gxy",
   };
-  return { deps, store, cap, stdin, whoamiCalls, knobs };
+  return { deps, store, server, cap, stdin, opened, whoamiCalls, knobs };
 }
 
 /**

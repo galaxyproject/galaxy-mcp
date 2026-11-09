@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { loginCommand } from "../../src/auth/commands/login";
+import { logoutCommand } from "../../src/auth/commands/logout";
 import { statusCommand } from "../../src/auth/commands/status";
 import { sanitize } from "../../src/auth/sanitize";
 import { AuthError } from "../../src/auth/types";
-import { FAKE_TOKEN, fakeLogin, harness } from "./harness";
+import { fakeLogin, harness } from "./harness";
 
 const HOST_ARG = "https://dev.galaxy.example.org";
 // Our own multi-line output keeps its newlines; everything else a terminal could act on must go.
@@ -56,20 +57,23 @@ describe("server text is sanitised before a command prints it", () => {
   const EVIL = "\u001b]0;pwned\u0007\u001b[2J";
   const STRIPPED = "]0;pwned[2J";
 
-  it("login: the username", async () => {
-    const h = harness({ stdinText: `${FAKE_TOKEN}\n` });
+  it("login: the user code, the page and the username", async () => {
+    const h = harness();
+    h.server.pending.userCode = `AB${EVIL}CD`;
+    h.server.pending.verificationUri = `https://dev.galaxy.example.org/${EVIL}device`;
     h.knobs.whoami = { username: `evil${EVIL}user`, email: "e@example.org" };
-    expect(await loginCommand({ host: HOST_ARG, withToken: true }, h.deps)).toBe(0);
+    expect(await loginCommand({ host: HOST_ARG }, h.deps)).toBe(0);
     expect(h.cap.err).not.toMatch(CONTROL_EXCEPT_NEWLINE);
+    expect(h.cap.err).toContain(`AB${STRIPPED}CD`);
     expect(h.cap.err).toContain(`as evil${STRIPPED}user`);
   });
 
   // 76 is sysexits' EX_PROTOCOL, the code for a `protocol` error: the server's answer was one the
   // flow cannot use. The error's own text quotes the server, and it must come out clean too.
   it("login: an error that quotes the server", async () => {
-    const h = harness({ stdinText: `${FAKE_TOKEN}\n` });
-    h.knobs.whoami = new AuthError("protocol", `refused: ${EVIL}`);
-    expect(await loginCommand({ host: HOST_ARG, withToken: true }, h.deps)).toBe(76);
+    const h = harness();
+    h.knobs.discoverError = new AuthError("protocol", `refused: ${EVIL}`);
+    expect(await loginCommand({ host: HOST_ARG }, h.deps)).toBe(76);
     expect(h.cap.err).not.toMatch(CONTROL_EXCEPT_NEWLINE);
   });
 
@@ -85,5 +89,13 @@ describe("server text is sanitised before a command prints it", () => {
     h.knobs.whoami = { username: `u${EVIL}x` };
     await statusCommand({ json: true }, h.deps);
     expect((JSON.parse(h.cap.out) as { username?: string }[])[0]?.username).toBe(`u${STRIPPED}x`);
+  });
+
+  it("logout: the text of a failed revocation", async () => {
+    const h = harness({ stored: [fakeLogin()] });
+    h.server.revokeError = new Error(`no${EVIL}pe`);
+    await logoutCommand({}, h.deps);
+    expect(h.cap.err).not.toMatch(CONTROL_EXCEPT_NEWLINE);
+    expect(h.cap.err).toContain(`no${STRIPPED}pe`);
   });
 });

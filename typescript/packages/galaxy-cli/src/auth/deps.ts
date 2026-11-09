@@ -1,7 +1,10 @@
 import { describeKeyReport, keySourceFor, loadSources } from "../config";
+import { openBrowser, canOpenBrowser } from "./browser";
 import { resolveHost } from "./host";
+import { discover } from "./oauth";
 import { createCredentialStore } from "./store";
 import type { AuthDeps } from "./types";
+import { withUserAgent } from "./user-agent";
 import { createWhoami } from "./whoami";
 
 /** `isTTY` is typed `boolean` but is `undefined` at runtime when the stream is a pipe or a file. */
@@ -21,8 +24,18 @@ export function createAuthDeps(
     interactive: isTty(process.stderr),
   });
   const now = () => new Date();
+  const fetchWithUa = withUserAgent();
   return {
     store,
+    // `GXY_OAUTH_CLIENT_ID` replaces the public client id `galaxy-cli`, for testing `login`
+    // against other servers. The signal cancels discovery only: the calls on the server it returns
+    // take their own (a Ctrl-C must not reach the revocation of a token it came too late to stop).
+    discover: (baseUrl, signal) =>
+      discover(baseUrl, {
+        clientId: env.GXY_OAUTH_CLIENT_ID || undefined,
+        fetch: fetchWithUa,
+        signal,
+      }),
     whoami: createWhoami(),
     // The rule operations use (config.ts), so the two cannot pick different Galaxies. The global
     // `--url` counts as the flag and `--profile` supplies its planemo URL; login ignores `.env`
@@ -56,6 +69,8 @@ export function createAuthDeps(
       const profile = profileName ? src.profiles[profileName]?.galaxy_url : undefined;
       return profile ? { source: "profile", url: profile } : undefined;
     },
+    openBrowser: (url) => openBrowser(url, env),
+    canOpenBrowser: () => canOpenBrowser(env),
     now,
     env,
     io: {

@@ -11,6 +11,16 @@ import { EX_SOFTWARE } from "../exit";
 import { exitQuietlyOnEpipe } from "./epipe";
 
 /**
+ * `--scopes a,b`, `--scopes "a b"` or `--scopes a --scopes b`: every use adds to the list,
+ * in order, without repeats. Commander hands each use the list so far; a parser that ignored
+ * `previous` would keep only the last `--scopes`, and a login would ask for less than was typed.
+ */
+export function parseScopes(value: string, previous: string[] = []): string[] {
+  const added = value.split(/[,\s]+/).filter(Boolean);
+  return [...new Set([...previous, ...added])];
+}
+
+/**
  * Add the `auth` group. `makeDeps` is called per invocation, so `--help` and the other
  * commands never touch the keyring or the network.
  */
@@ -57,15 +67,23 @@ export function registerAuth(program: Command, makeDeps: (commandName: string) =
 
   auth
     .command("login")
-    .description("Store an API key read from stdin")
+    .description("Log in with the device flow, or store an API key from stdin")
     .addOption(host())
-    .option("--with-token", "read the API key from stdin")
+    .option(
+      "--scopes <list>",
+      "scopes to request, comma- or space-separated (default: the server's)",
+      parseScopes,
+    )
+    .option("--no-browser", "do not offer to open the approval page in a browser")
+    .option("--with-token", "read an existing API key from stdin instead of the device flow")
     .option("--insecure-storage", "store the token in a file instead of the system keyring")
     .action((o: LoginOptions) =>
       run(async (deps) => {
-        // Ctrl-C aborts one signal that every step of the login takes (the probe, the prompt, the
-        // whoami call), so it ends with "Cancelled." and 130. `once`, so a second Ctrl-C falls
-        // through to Node's default and ends the process.
+        // Ctrl-C aborts one signal that every step of the login takes (discovery, the code
+        // request, the prompts, the poll), so it ends with "Cancelled." and 130. A code or token
+        // the server issued at that very moment is taken back by `login` itself with its own
+        // bounded call; one issued too late to see expires on its own. `once`, so a second
+        // Ctrl-C falls through to Node's default and ends the process.
         const ac = new AbortController();
         const onSig = () => {
           ac.abort();
@@ -125,7 +143,7 @@ export function registerAuth(program: Command, makeDeps: (commandName: string) =
 
   auth
     .command("logout")
-    .description("Delete the stored login; a pasted API key is not revoked")
+    .description("Revoke the token where possible and delete the stored login")
     .addOption(host())
     .action((o: LogoutOptions) => run((deps) => logoutCommand(o, deps)));
 }

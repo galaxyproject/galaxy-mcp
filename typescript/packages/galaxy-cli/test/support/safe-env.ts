@@ -34,6 +34,10 @@ for (const name of [
   "GALAXY_URL",
   "GALAXY_API_KEY",
   "CLAUDE_CODE_MCP_SERVER_URL",
+  "GXY_OAUTH_CLIENT_ID",
+  "BROWSER",
+  "DISPLAY",
+  "WAYLAND_DISPLAY",
   ...LEAKY_ENV,
 ]) {
   Reflect.deleteProperty(process.env, name);

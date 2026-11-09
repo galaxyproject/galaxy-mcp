@@ -27,8 +27,8 @@ export type BaseUrl = string & { readonly __brand: "BaseUrl" };
  */
 export type StorageKind = "keyring" | "file";
 
-/** How a token was obtained. */
-type LoginMethod = "pasted";
+/** How a token was obtained, which decides whether `logout` can revoke it on the server. */
+type LoginMethod = "device" | "pasted";
 
 /** One login to one Galaxy, as stored. */
 export interface StoredLogin {
@@ -116,7 +116,8 @@ export interface AuthServer {
   startDeviceLogin(scopes?: string[], signal?: AbortSignal): Promise<PendingDeviceLogin>;
   /**
    * RFC 7009. Resolves when the server accepted the request. `signal` is the caller's own limit on
-   * this call.
+   * this call (see `withDeadline`): the signal that cancelled a login must not be passed here, or
+   * the token it minted could not be taken back.
    */
   revoke(token: string, signal?: AbortSignal): Promise<void>;
 }
@@ -137,8 +138,8 @@ export type AuthErrorKind =
    */
   | "unsupported"
   /**
-   * `put` refused to keep an admin token in the plaintext file (`requireKeyring`), or the person
-   * said no on the approval page.
+   * The user denied the request on the approval page, or `put` refused to keep an admin token
+   * in the plaintext file (`requireKeyring`).
    */
   | "denied"
   /** The user code expired before anyone approved it. */
@@ -197,6 +198,11 @@ export type KeySourceId = "flag" | "profile" | "env" | "stored" | "dotenv";
 export interface AuthDeps {
   store: CredentialStore;
   /**
+   * RFC 8414 discovery against the Galaxy at `baseUrl`. Rejects with an `AuthError`. `signal`
+   * cancels discovery only: each later call on the server takes its own.
+   */
+  discover(baseUrl: BaseUrl, signal?: AbortSignal): Promise<AuthServer>;
+  /**
    * Ask Galaxy whose token this is (`GET /api/users/current` through galaxy-ops' `get_user`).
    * Rejects with `AuthError("not_logged_in")` when Galaxy refuses the token or answers with
    * the anonymous user (no username), which is what it does for a session without a valid key.
@@ -227,6 +233,10 @@ export interface AuthDeps {
     login: StoredLogin | undefined,
     stored: readonly BaseUrl[],
   ): { id: KeySourceId | null; label: string };
+  /** Open a URL in the user's browser. Resolves false when there is no browser to open. */
+  openBrowser(url: string): Promise<boolean>;
+  /** Whether `openBrowser` has any chance (a display exists). Absent means "assume yes". */
+  canOpenBrowser?(): boolean;
   now(): Date;
   env: Record<string, string | undefined>;
   io: AuthIo;

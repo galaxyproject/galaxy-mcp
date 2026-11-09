@@ -74,6 +74,12 @@ export function formatTimeLeft(ms: number): string {
   return `${m}m`;
 }
 
+/** "14:52" */
+export function formatCountdown(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
 /**
  * Keep the last four characters so a person can tell tokens apart; hide the rest. A token of
  * twelve or fewer is hidden whole, so the four shown are never a large share of one.

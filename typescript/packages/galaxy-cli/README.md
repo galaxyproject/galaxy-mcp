@@ -44,29 +44,40 @@ commands and their arguments.
 command line. `gxy` and `galaxy-cli` are the same program.
 
 ```bash
-printf %s "$KEY" | gxy auth login --host https://usegalaxy.org --with-token   # store an API key
-gxy auth status                                                                # stored logins, checked against Galaxy
-gxy get_user                                                                   # operations use the stored login, no flags
-gxy auth token                                                                 # print the stored token
-gxy auth logout                                                                # delete the stored login
+gxy auth login --host https://usegalaxy.org   # device flow: approve a one-time code in your browser
+gxy auth status                               # stored logins, checked against Galaxy
+gxy get_user                                  # operations use the stored login, no flags
+gxy auth token                                # print the stored token
+gxy auth logout                               # revoke the token and delete it
 ```
 
 | Command | Does |
 | --- | --- |
-| `auth login` | store an API key read from stdin (`--with-token`, required); `--insecure-storage` keeps the token in `hosts.yml` instead of the system keyring |
+| `auth login` | device flow, or `--with-token` to read a key from stdin; `--scopes`, `--no-browser`, `--insecure-storage` |
 | `auth status` | show stored logins and check each one (`--json`, `--show-token`) |
 | `auth token` | print the token on stdout (`--json` for an object with its expiry) |
 | `auth env` | print `GALAXY_URL` and `GALAXY_API_KEY` assignments, for `eval` |
 | `auth headers` | print `{"x-api-key": ...}` as JSON, for an MCP `headersHelper` |
-| `auth logout` | delete the stored login; a pasted API key is not revoked |
+| `auth logout` | revoke the token where the server allows it (waiting at most 5 seconds), and delete the stored login |
 
-Create an API key in Galaxy's user preferences and pipe it in:
+If the Galaxy has the device flow switched off (`gxy` says it "does not offer device login yet"
+and prints the command to use), or you already have a key, pipe it in:
 `printf %s "$KEY" | gxy auth login --host <url> --with-token`. At a terminal, `--with-token` asks
 for the key without echoing it. If stdin is a terminal but stderr is redirected, where the prompt
-would go unseen, it refuses (exit 64) and asks you to pipe the key in. `gxy auth login` without
-`--with-token` says the same and exits 64. `auth logout` only forgets a key, because it may be in use
-elsewhere: it keeps working until you revoke it in Galaxy's user preferences, and `auth logout` says
-so.
+would go unseen, it refuses (exit 64) and asks you to pipe the key in. `auth logout` does not revoke
+a pasted API key, because it may be in use elsewhere: it keeps working until you revoke it in
+Galaxy's user preferences, and `auth logout` says so.
+
+Ctrl-C while `gxy auth login` waits for approval cancels it (exit 130). If you cancel after Galaxy
+has already issued the token, `gxy` revokes it and says so. One gap can't be closed from this side:
+a code or token that Galaxy issues at the very moment you cancel never reaches `gxy`, so it can't be
+revoked, and it expires on its own.
+
+On a terminal, `gxy auth login` offers to open the approval page when you press Enter. It tries
+`$BROWSER` first (a colon-separated list of commands, with `%s` standing for the URL; quotes group a
+command or argument that has spaces, but no shell is involved, so use a wrapper script for anything
+more), then the system's opener. A launcher that exits with an error straight away counts as
+failed, and a browser that needs a terminal (lynx, w3m) can't be used.
 
 ### Where logins are kept
 
@@ -162,7 +173,8 @@ lookup). In `auth login` each gives up after 15 seconds; `auth status` allows ea
 in all, and checks every stored login at once, printing them in stored order. Ctrl-C stops a check
 at once.
 
-`auth status` exits 1 when any login is not usable right now (expired, its
+A login counts as expired a minute before its expiry time, so a token that passes `auth token`
+has time to do its job. `auth status` exits 1 when any login is not usable right now (expired, its
 token unreadable, refused by Galaxy, or Galaxy did not answer), 0 when all are fine, and 77 when
 nothing is stored. With `--json` it exits 0 whenever it prints the list (each entry's `status` says
 how its check went); a failure before there is a list, such as an unreadable `hosts.yml`, still
@@ -171,6 +183,7 @@ exits non-zero.
 | Variable | Does |
 | --- | --- |
 | `GXY_CONFIG_DIR` | Where `hosts.yml` lives (see above). A relative path is ignored, so the file does not follow the working directory |
+| `GXY_OAUTH_CLIENT_ID` | The OAuth client id presented to the Galaxy during login (default `galaxy-cli`), for a Galaxy that registers clients by name |
 | `GXY_NO_KEYRING` | `1` never touches the system keyring: tokens go to `hosts.yml`, with a warning. Use it on a box whose keyring is broken or locked, to skip the wait. A login already stored in the keyring then cannot be read (`auth token` exits 77, `auth status` shows "token unavailable"), and `auth logout` removes its record but leaves the secret in the keyring |
 
 Behind a proxy, set `NODE_USE_ENV_PROXY=1` along with `HTTPS_PROXY` (and `NO_PROXY` for a Galaxy on
