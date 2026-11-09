@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { loginCommand } from "../../src/auth/commands/login";
+import { statusCommand } from "../../src/auth/commands/status";
 import { sanitize } from "../../src/auth/sanitize";
 import { AuthError } from "../../src/auth/types";
-import { FAKE_TOKEN, harness } from "./harness";
+import { FAKE_TOKEN, fakeLogin, harness } from "./harness";
 
 const HOST_ARG = "https://dev.galaxy.example.org";
 // Our own multi-line output keeps its newlines; everything else a terminal could act on must go.
@@ -70,5 +71,19 @@ describe("server text is sanitised before a command prints it", () => {
     h.knobs.whoami = new AuthError("protocol", `refused: ${EVIL}`);
     expect(await loginCommand({ host: HOST_ARG, withToken: true }, h.deps)).toBe(76);
     expect(h.cap.err).not.toMatch(CONTROL_EXCEPT_NEWLINE);
+  });
+
+  it("status: the stored username and the text of a failed check", async () => {
+    const h = harness({ stored: [fakeLogin({ username: `st${EVIL}ored` })] });
+    h.knobs.whoami = new AuthError("not_logged_in", `bad${EVIL}key`);
+    await statusCommand({}, h.deps);
+    expect(h.cap.err).not.toMatch(CONTROL_EXCEPT_NEWLINE);
+  });
+
+  it("status --json: the username Galaxy reports", async () => {
+    const h = harness({ stored: [fakeLogin()] });
+    h.knobs.whoami = { username: `u${EVIL}x` };
+    await statusCommand({ json: true }, h.deps);
+    expect((JSON.parse(h.cap.out) as { username?: string }[])[0]?.username).toBe(`u${STRIPPED}x`);
   });
 });

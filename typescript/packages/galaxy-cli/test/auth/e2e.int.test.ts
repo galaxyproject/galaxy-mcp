@@ -168,7 +168,8 @@ async function filesHolding(root: string, needle: string): Promise<string[]> {
  * - on disk, in `files` (paths under `home`) and nowhere else under HOME, whatever the file is called;
  * - on the wire, in an `x-api-key` or `authorization` header: never in a URL (which proxies and
  *   logs keep), another header or any body, and never on the version probe;
- * - on screen, only for the command whose job is to print it: `auth token`, and only on stdout.
+ * - on screen, only for the commands whose job is to print it: `auth token`, `env` and `headers`,
+ *   and only on stdout.
  */
 async function expectTokenOnlyWhereAllowed(
   token: string,
@@ -193,14 +194,15 @@ async function expectTokenOnlyWhereAllowed(
     expect(r.body, `${what}, body`).not.toContain(token);
   }
   for (const seen of where.transcript) {
-    const prints = seen.args[0] === "auth" && seen.args[1] === "token";
+    const prints =
+      seen.args[0] === "auth" && ["token", "env", "headers"].includes(seen.args[1] ?? "");
     if (!prints) expect(seen.stdout, `stdout of ${seen.args.join(" ")}`).not.toContain(token);
     expect(seen.stderr, `stderr of ${seen.args.join(" ")}`).not.toContain(token);
   }
 }
 
 describe("auth, end to end", () => {
-  test("logs in, hands out the token, runs an operation, logs out", async ({
+  test("logs in, shows it, hands out the token, runs an operation, logs out", async ({
     galaxy,
     run,
     configDir,
@@ -220,9 +222,27 @@ describe("auth, end to end", () => {
     expect((await stat(configDir)).mode & 0o777).toBe(0o700);
     expect((await stat(join(configDir, "hosts.yml"))).mode & 0o777).toBe(0o600);
 
+    const status = await run(["auth", "status"]);
+    expect(status.exitCode, status.stderr).toBe(0);
+    expect(status.stderr).toContain("Logged in as fake-user");
+    expect(status.stdout + status.stderr).not.toContain(token);
+
+    const json = await run(["auth", "status", "--json"]);
+    expect((JSON.parse(json.stdout) as unknown[])[0]).toMatchObject({
+      base_url: galaxy.baseUrl,
+      username: "fake-user",
+      status: "ok",
+    });
+
     const tok = await run(["auth", "token"]);
     expect(tok.exitCode).toBe(0);
     expect(tok.stdout.trim()).toBe(token);
+
+    const env = await run(["auth", "env"]);
+    expect(env.stdout).toContain(`GALAXY_URL='${galaxy.baseUrl}'`);
+    expect(env.stdout).toContain(`GALAXY_API_KEY='${token}'`);
+
+    expect(JSON.parse((await run(["auth", "headers"])).stdout)).toEqual({ "x-api-key": token });
 
     // An existing operation uses the stored login with no flags.
     const user = await run(["--format", "json", "get_user"]);
@@ -335,6 +355,17 @@ describe("auth, end to end", () => {
     }, 30_000);
   });
 
+  test(
+    "env with a shell that does not exist exits 64, the usage code",
+    { timeout: 30_000 },
+    async ({ run }) => {
+      const bad = await run(["auth", "env", "--shell", "csh"]);
+      expect(bad.exitCode).toBe(64);
+      expect(bad.stdout).toBe("");
+      expect(bad.stderr).toContain('Unknown shell "csh"');
+    },
+  );
+
   // The way in is `--with-token`, spelled with whichever name was run: 64 is EX_USAGE.
   test.for(NAMES)(
     "login without --with-token, as %s, exits 64 and says to use it under its own name",
@@ -366,6 +397,23 @@ describe("auth, end to end", () => {
       expect(galaxy.requests).toEqual([]);
     }
     expect(await readdir(configDir).catch(() => [])).toEqual([]);
+  }, 90_000);
+
+  // `status` resolves no host without `--host`, so the unknown profile has to be caught on its own.
+  test("refuses an unknown --profile for `auth status`, with or without --host", async ({
+    galaxy,
+    run,
+    pasteLogin,
+  }) => {
+    expect((await pasteLogin(galaxy)).exitCode).toBe(0);
+    galaxy.requests.length = 0;
+    for (const extra of [[], ["--host", galaxy.baseUrl], ["--json"]]) {
+      const r = await run(["--profile", "typo", "auth", "status", ...extra]);
+      expect(r.exitCode).toBe(64);
+      expect(r.stdout).toBe("");
+      expect(r.stderr).toContain("Unknown --profile typo: no such profile in ~/.planemo.yml");
+    }
+    expect(galaxy.requests).toEqual([]);
   }, 90_000);
 
   test("asks which Galaxy when two are stored", async ({ galaxy, galaxyWith, run, pasteLogin }) => {
@@ -492,6 +540,54 @@ describe("auth, end to end", () => {
       .map((r) => r.headers["x-api-key"]);
     expect(keys).toEqual(["fake-env-key"]);
   }, 60_000);
+
+  // `status` runs the operations' own resolver with the flags and environment it was given, so the key it
+  // names is the key a `get_user` would send, and it names none for a Galaxy that `get_user` would not use.
+  test("status names the key operations would use for a login, or none when they go elsewhere", async ({
+    galaxy,
+    run,
+    pasteLogin,
+  }) => {
+    expect((await pasteLogin(galaxy)).exitCode).toBe(0);
+    const keySource = async (args: string[], env?: Record<string, string>) => {
+      const r = await run([...args, "auth", "status", "--json"], env ? { env } : {});
+      return (JSON.parse(r.stdout) as { key_source: string | null }[])[0]!.key_source;
+    };
+    expect(await keySource([])).toBe("stored");
+    expect(
+      await keySource([], { GALAXY_URL: galaxy.baseUrl, GALAXY_API_KEY: "fake-env-key" }),
+    ).toBe("env");
+    expect(await keySource(["--url", "https://other.example.org"])).toBeNull();
+    expect(await keySource([], { GALAXY_URL: "https://other.example.org" })).toBeNull();
+    const text = await run(["--url", "https://other.example.org", "auth", "status"]);
+    expect(text.stderr).toContain(
+      "Key used by operations: none (operations go to other.example.org",
+    );
+  }, 60_000);
+
+  describe("headers for Claude Code's MCP server", () => {
+    test("hands out the token for the Galaxy the server URL names, and refuses any other", async ({
+      galaxy,
+      run,
+      pasteLogin,
+    }) => {
+      expect((await pasteLogin(galaxy)).exitCode).toBe(0);
+      const token = galaxy.issuedTokens()[0]!;
+
+      const matching = await run(["auth", "headers"], {
+        env: { CLAUDE_CODE_MCP_SERVER_URL: `${galaxy.baseUrl}/api/mcp` },
+      });
+      expect(matching.exitCode, matching.stderr).toBe(0);
+      expect(JSON.parse(matching.stdout)).toEqual({ "x-api-key": token });
+
+      const other = await run(["auth", "headers"], {
+        env: { CLAUDE_CODE_MCP_SERVER_URL: "https://other.example.org/api/mcp" },
+      });
+      expect(other.exitCode).toBe(77);
+      expect(other.stdout).toBe("");
+      expect(other.stdout + other.stderr).not.toContain(token);
+    }, 60_000);
+  });
 
   test("lets `auth token | head -c1` end quietly with 0, when the output is more than the pipe holds", async ({
     galaxy,
