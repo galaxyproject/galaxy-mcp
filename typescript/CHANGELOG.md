@@ -4,6 +4,21 @@
 `@galaxyproject/galaxy-mcp` share a version and are published together, so one
 entry covers all three; where something only affects one surface, it says which.
 
+## Unreleased
+
+### galaxy-cli keeps tokens in the OS keyring (#221)
+
+`gxy auth login` now stores the token in the operating system's keyring (Secret Service on Linux,
+the platform keyring elsewhere), through `@napi-rs/keyring` run in a child process, and keeps only
+the login's details in `hosts.yml`. Where there is no keyring it falls back to the plaintext
+`hosts.yml`, with a warning. `GXY_NO_KEYRING` skips the keyring.
+
+`--insecure-storage` now applies to any token, and an admin token goes in the keyring or, with no
+keyring, only with `--insecure-storage`.
+
+`gxy auth status` reports a login whose token cannot be read as `token unavailable` (`status:
+"unavailable"` in `--json`), and a Ctrl-C during the check ends it with "Cancelled." and 130.
+
 ## 0.6.0 (2026-11-10)
 
 ### galaxy-cli installs a `gxy` command (#214)
