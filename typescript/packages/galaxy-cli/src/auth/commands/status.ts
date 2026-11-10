@@ -107,6 +107,8 @@ export async function statusCommand(opts: StatusOptions, deps: AuthDeps): Promis
         login = await deps.store.get(summary.baseUrl);
         unreadable = "the token is not in the store";
       } catch (e) {
+        // Ctrl-C while the keyring was being read ends the helper, and that is not "unavailable".
+        if (opts.signal?.aborted) return undefined;
         unreadable = e instanceof Error ? e.message : String(e);
       }
       if (!login) {
@@ -162,7 +164,10 @@ export async function statusCommand(opts: StatusOptions, deps: AuthDeps): Promis
     // All at once, so N unreachable Galaxies cost one timeout and not N; `checked` keeps the order
     // of `summaries`, which is the order the report is printed in.
     const results = await Promise.all(summaries.map((summary) => check(summary)));
-    if (results.includes(undefined)) return EX_INTERRUPTED;
+    if (results.includes(undefined)) {
+      err("Cancelled.");
+      return EX_INTERRUPTED;
+    }
     const checked = results as Checked[];
     // What an operation run now would use for each Galaxy: a login on the list is not always the key
     // in use (config.ts ranks `--api-key`, `--profile` and `GALAXY_API_KEY` above it, `.env` below),

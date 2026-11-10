@@ -310,6 +310,19 @@ describe("auth status", () => {
       expect(h.cap.out).toBe("");
     });
 
+    it("is cancelled, not unavailable, when Ctrl-C ends a keyring read", async () => {
+      const h = harness({ stored: [fakeLogin()] });
+      const ac = new AbortController();
+      h.store.get = async () => {
+        ac.abort();
+        throw new AuthError("not_logged_in", "the keyring helper was ended");
+      };
+      expect(await statusCommand({ signal: ac.signal }, h.deps)).toBe(130);
+      expect(h.cap.err).toContain("Cancelled.");
+      expect(h.cap.err).not.toContain("unavailable");
+      expect(h.cap.out).toBe("");
+    });
+
     it("includes the token only with --show-token", async () => {
       const h = harness({ stored: [fakeLogin()] });
       await statusCommand({ json: true, showToken: true }, h.deps);
