@@ -17,13 +17,13 @@ A login (the Galaxy's address, who it is for and an API key) is kept in `hosts.y
 `$XDG_CONFIG_HOME/gxy`, else `~/.config/gxy`, readable only by the user. A file that other users
 can write to, or an entry that a different version of `gxy` wrote, is refused rather than trusted.
 
-### `gxy auth login --with-token` (#216), `token` and `logout`
+### `gxy auth login --with-token` (#216), `token` and `logout` (#218)
 
 `gxy auth login --with-token` reads an API key from stdin (piped, or typed without echo at a
 terminal), checks with the Galaxy that it works and stores it. `gxy auth token` prints the stored
 token and `gxy auth logout` deletes the login. Ctrl-C at any point cancels and stores nothing.
 
-### galaxy-cli operations use stored logins, and `--api-key` is deprecated
+### galaxy-cli operations use stored logins, and `--api-key` is deprecated (#219)
 
 With no flag or variable naming a key or a Galaxy, an operation finds both in the stored logins.
 The key order is now `--api-key`, `--profile`, `GALAXY_API_KEY`, the stored login, then `.env`'s
@@ -34,7 +34,7 @@ from a stored login goes only to a Galaxy that something named, and an operation
 key or Galaxy says so on stderr (`--quiet` silences it). `--api-key` still works but is deprecated,
 since the key shows in the process list.
 
-### `gxy auth status`, `env` and `headers`
+### `gxy auth status`, `env` and `headers` (#220)
 
 `gxy auth status` lists the stored logins, checked against each Galaxy, and says which key an
 operation run with the same flags and environment would use (`key_source` in `--json`). `gxy auth
