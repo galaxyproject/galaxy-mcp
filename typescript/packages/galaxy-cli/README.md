@@ -68,7 +68,9 @@ would go unseen, it refuses (exit 64) and asks you to pipe the key in. `auth log
 a pasted API key, because it may be in use elsewhere: it keeps working until you revoke it in
 Galaxy's user preferences, and `auth logout` says so.
 
-Ctrl-C while `gxy auth login` waits for approval cancels it (exit 130). If you cancel after Galaxy
+Ctrl-C while `gxy auth login` waits for approval cancels it (exit 130); SIGTERM and SIGHUP do the
+same, ending with 143 and 129. `gxy auth logout` stops waiting for the revocation on any of them,
+still deletes the stored login and says the token was not revoked. If you cancel after Galaxy
 has already issued the token, `gxy` revokes it and says so. One gap can't be closed from this side:
 a code or token that Galaxy issues at the very moment you cancel never reaches `gxy`, so it can't be
 revoked, and it expires on its own.
@@ -176,7 +178,9 @@ except `auth status`, which reports on the key an operation would use, `--api-ke
 never takes its host from `.env` or a profile (a repository must not choose where your key goes):
 give `--host` or set `GALAXY_URL`. `--profile` and `--api-key` do not apply to it, so it refuses
 either one with the same usage error before it reads stdin, asks or sends anything: pipe the key in
-with `--with-token`.
+with `--with-token`. When nothing names a Galaxy and a person is at the terminal, `auth login` asks "Galaxy URL (for example
+https://usegalaxy.org):" instead. Without a terminal, or with `--with-token` (stdin is for the key), it
+still stops with a usage error (exit 64).
 
 ### What is checked before a key is sent
 
