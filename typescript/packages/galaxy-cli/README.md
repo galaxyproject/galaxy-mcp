@@ -159,7 +159,10 @@ The `auth` commands (except `login`) pick their Galaxy by this same order, so `g
 the same as `--url`. They never use a key from
 `--api-key`, `GALAXY_API_KEY`, `.env` or a profile, and warn once on stderr if `--api-key` is given
 (and, for `auth login` only, `--profile`); `auth status` does not warn, as it reports on them. `auth login` never takes its host from `.env` or a
-profile (a repository must not choose where your key goes): give `--host` or set `GALAXY_URL`.
+profile (a repository must not choose where your key goes): give `--host` or set `GALAXY_URL`. When nothing
+names a Galaxy and a person is at the terminal, `auth login` asks "Galaxy URL (for example
+https://usegalaxy.org):" instead. Without a terminal, or with `--with-token` (stdin is for the key), it
+still stops with a usage error (exit 64).
 
 ### What is checked before a key is sent
 

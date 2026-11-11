@@ -80,10 +80,10 @@ export function registerAuth(program: Command, makeDeps: (commandName: string) =
     .action((o: LoginOptions) =>
       run(async (deps) => {
         // Ctrl-C aborts one signal that every step of the login takes (discovery, the code
-        // request, the prompts, the poll), so it ends with "Cancelled." and 130. A code or token
+        // request, the prompts, the poll), so it ends with "Cancelled." and 130. A token
         // the server issued at that very moment is taken back by `login` itself with its own
-        // bounded call; one issued too late to see expires on its own. `once`, so a second
-        // Ctrl-C falls through to Node's default and ends the process.
+        // bounded call; a code, or a token issued too late to see, expires on its own. `once`,
+        // so a second Ctrl-C falls through to Node's default and ends the process.
         const ac = new AbortController();
         const onSig = () => {
           ac.abort();
