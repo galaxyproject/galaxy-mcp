@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "python/src/galaxy_mcp/server.py",
-  "caseCount": 287,
-  "failureCaseCount": 99,
+  "caseCount": 293,
+  "failureCaseCount": 103,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -2243,6 +2243,44 @@
       "replies": "import_workflow_from_iwc/imported.galaxy.json"
     },
     {
+      "tool": "extract_workflow_from_history",
+      "case": "jobs_and_inputs",
+      "note": "two jobs, a dataset and a collection named by hid, one of them as the digits a command line hands over; Galaxy's record carries no step count, so none is invented",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0001",
+        "workflow_name": "Per-sample QC",
+        "job_ids": [
+          "j0000001",
+          "j0000002"
+        ],
+        "dataset_hids": [
+          3,
+          "4"
+        ],
+        "collection_hids": [
+          12
+        ]
+      },
+      "envelope": "extract_workflow_from_history/jobs_and_inputs.json",
+      "replies": "extract_workflow_from_history/jobs_and_inputs.galaxy.json"
+    },
+    {
+      "tool": "extract_workflow_from_history",
+      "case": "jobs_only_with_a_step_count",
+      "note": "nothing named but a job, and a reply that does carry number_of_steps",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0001",
+        "workflow_name": "One step",
+        "job_ids": [
+          "j0000001"
+        ]
+      },
+      "envelope": "extract_workflow_from_history/jobs_only_with_a_step_count.json",
+      "replies": "extract_workflow_from_history/jobs_only_with_a_step_count.galaxy.json"
+    },
+    {
       "tool": "get_page_revision",
       "case": "content_editor_from_the_server",
       "note": "the revision carries its own editable markdown",
@@ -2690,6 +2728,39 @@
       },
       "envelope": "get_collection_details/permission_denied.json",
       "replies": "get_collection_details/permission_denied.galaxy.json"
+    },
+    {
+      "tool": "extract_workflow_from_history",
+      "case": "hid_is_not_a_collection",
+      "note": "Galaxy's own 400 for what was named, quoted by format_error with the history and the name",
+      "outcome": "failure",
+      "input": {
+        "history_id": "h0001",
+        "workflow_name": "QC",
+        "job_ids": [
+          "j0000001"
+        ],
+        "collection_hids": [
+          12
+        ]
+      },
+      "envelope": "extract_workflow_from_history/hid_is_not_a_collection.json",
+      "replies": "extract_workflow_from_history/hid_is_not_a_collection.galaxy.json"
+    },
+    {
+      "tool": "extract_workflow_from_history",
+      "case": "history_not_accessible",
+      "note": "and a status that is not about what was named",
+      "outcome": "failure",
+      "input": {
+        "history_id": "h0000403",
+        "workflow_name": "QC",
+        "job_ids": [
+          "j0000001"
+        ]
+      },
+      "envelope": "extract_workflow_from_history/history_not_accessible.json",
+      "replies": "extract_workflow_from_history/history_not_accessible.galaxy.json"
     },
     {
       "tool": "create_history",
@@ -3246,6 +3317,33 @@
       },
       "envelope": "import_workflow_from_iwc/refused_by_galaxy.json",
       "replies": "import_workflow_from_iwc/refused_by_galaxy.galaxy.json"
+    },
+    {
+      "tool": "extract_workflow_from_history",
+      "case": "nothing_named",
+      "note": "an extraction naming no job and no input, which Galaxy would store as an empty workflow",
+      "outcome": "failure",
+      "input": {
+        "history_id": "h0001",
+        "workflow_name": "empty"
+      },
+      "envelope": "extract_workflow_from_history/nothing_named.json",
+      "replies": "get_invocations/malformed_id.galaxy.json"
+    },
+    {
+      "tool": "extract_workflow_from_history",
+      "case": "encoded_id_where_a_hid_belongs",
+      "note": "Galaxy's dataset_ids are hids; an encoded id there is refused here, with the value quoted",
+      "outcome": "failure",
+      "input": {
+        "history_id": "h0001",
+        "workflow_name": "QC",
+        "dataset_hids": [
+          "f2db41e1fa331b3e"
+        ]
+      },
+      "envelope": "extract_workflow_from_history/encoded_id_where_a_hid_belongs.json",
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "list_workflows",

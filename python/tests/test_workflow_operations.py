@@ -3,6 +3,7 @@ Test workflow-related operations
 """
 
 import inspect
+import re
 from unittest.mock import Mock, patch
 
 import pytest
@@ -19,6 +20,7 @@ from galaxy_mcp.server import (
 
 from .test_helpers import (
     cancel_workflow_invocation_fn,
+    extract_workflow_from_history_fn,
     get_invocations_fn,
     get_iwc_workflows_fn,
     get_workflow_details_fn,
@@ -1197,3 +1199,112 @@ class TestInvocationOutcome:
     )
     def test_outcome(self, state, job_states, outcome):
         assert _invocation_outcome(state, job_states) == outcome
+
+
+class TestExtractWorkflowFromHistory:
+    """POST /api/workflows with from_history_id, through bioblend.
+
+    Galaxy's form (webapps/galaxy/api/workflows.py, create) decodes job_ids itself and
+    hands dataset_ids / dataset_collection_ids to workflow/extract.py, which reads them
+    with int(): they are hids, which is what bioblend's parameter names say.
+    """
+
+    STORED = {
+        "model_class": "StoredWorkflow",
+        "id": "wf42",
+        "latest_workflow_id": "lw7",
+        "name": "Per-sample QC",
+        "published": False,
+        "deleted": False,
+        "url": "/api/workflows/wf42",
+    }
+
+    def test_extracts_with_jobs_and_hids(self, mock_galaxy_instance):
+        mock_galaxy_instance.workflows.extract_workflow_from_history.return_value = self.STORED
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = extract_workflow_from_history_fn(
+                "h1",
+                " Per-sample QC ",
+                job_ids=["j1", "j2"],
+                dataset_hids=[3, "4"],
+                collection_hids=["12"],
+            )
+
+        mock_galaxy_instance.workflows.extract_workflow_from_history.assert_called_once_with(
+            "h1",
+            "Per-sample QC",
+            job_ids=["j1", "j2"],
+            dataset_hids=[3, 4],
+            dataset_collection_hids=[12],
+        )
+        assert result.success is True
+        assert result.data["workflow_id"] == "wf42"
+        assert result.data["name"] == "Per-sample QC"
+        # StoredWorkflow.to_dict carries no step count, so none is invented.
+        assert result.data["number_of_steps"] is None
+        assert result.data["steps_requested"] == {
+            "tool_steps": 2,
+            "dataset_inputs": 2,
+            "collection_inputs": 1,
+        }
+        assert result.data["history_id"] == "h1"
+        assert result.data["job_ids"] == ["j1", "j2"]
+        assert result.data["dataset_hids"] == [3, 4]
+        assert result.data["collection_hids"] == [12]
+        assert result.data["workflow"] == self.STORED
+        assert "get_workflow_input_template with workflow_id 'wf42'" in result.data["next_steps"]
+        assert result.message == (
+            "Extracted workflow 'Per-sample QC' (id wf42) from history h1: 2 tool step(s) "
+            "from the listed jobs, 2 dataset input(s) and 1 collection input(s). "
+            + result.data["next_steps"]
+        )
+
+    def test_reports_a_step_count_galaxy_sends(self, mock_galaxy_instance):
+        mock_galaxy_instance.workflows.extract_workflow_from_history.return_value = {
+            **self.STORED,
+            "number_of_steps": 3,
+        }
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = extract_workflow_from_history_fn("h1", "x", job_ids=["j1"])
+        assert result.data["number_of_steps"] == 3
+
+    @pytest.mark.parametrize(
+        ("kwargs", "sentence"),
+        [
+            ({}, "Nothing to extract"),
+            ({"job_ids": []}, "Nothing to extract"),
+            ({"job_ids": ["j1", " "]}, "job_ids must be encoded job ids"),
+            (
+                {"dataset_hids": ["f2db41e1fa331b3e"]},
+                "dataset_hids must be history item numbers (hid, a positive integer such as 3), "
+                'got "f2db41e1fa331b3e"',
+            ),
+            ({"collection_hids": [0]}, "collection_hids must be history item numbers"),
+            ({"dataset_hids": [True]}, "dataset_hids must be history item numbers"),
+        ],
+    )
+    def test_refuses_before_anything_is_sent(self, mock_galaxy_instance, kwargs, sentence):
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError, match=re.escape(sentence)) as refused:
+                extract_workflow_from_history_fn("h1", "QC", **kwargs)
+        assert str(refused.value).endswith("Nothing was sent to Galaxy.")
+        mock_galaxy_instance.workflows.extract_workflow_from_history.assert_not_called()
+
+    def test_refuses_an_empty_name(self, mock_galaxy_instance):
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError, match="workflow_name must not be empty"):
+                extract_workflow_from_history_fn("h1", "  ", job_ids=["j1"])
+        mock_galaxy_instance.workflows.extract_workflow_from_history.assert_not_called()
+
+    def test_words_galaxys_refusal_with_the_history_and_the_name(self, mock_galaxy_instance):
+        mock_galaxy_instance.workflows.extract_workflow_from_history.side_effect = Exception(
+            "hid 12 does not appear to be a collection"
+        )
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError) as failed:
+                extract_workflow_from_history_fn("h1", "QC", job_ids=["j1"], collection_hids=[12])
+        assert str(failed.value) == (
+            "Extract workflow from history failed: hid 12 does not appear to be a collection. "
+            "Context: history_id=h1, workflow_name=QC"
+        )

@@ -12,9 +12,15 @@
     "search_iwc_workflows",
     "get_iwc_workflow_details",
     "import_workflow_from_iwc",
-    "recommend_iwc_workflows"
+    "recommend_iwc_workflows",
+    "extract_workflow_from_history"
   ],
-  "uncovered": [],
+  "uncovered": [
+    {
+      "tool": "extract_workflow_from_history",
+      "reason": "No live scenario yet: extracting needs a history holding finished jobs whose ids and hids the scenario reads back, and none has been written or run against the test Galaxy. The golden envelopes pin its answer and its refusals on both servers until one is."
+    }
+  ],
   "scenarios": [
     {
       "id": "workflows.list.by_name_paged",

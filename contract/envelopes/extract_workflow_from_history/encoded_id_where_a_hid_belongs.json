@@ -1,0 +1,14 @@
+{
+  "$comment": "A failed tool call from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `result` is the CallToolResult the MCP wire carries, dumped the way the SDK dumps it (by alias, JSON mode, None-valued fields left out). `sentence` is the same text with FastMCP's own wrapper removed, which is what the tool itself said.",
+  "outcome": "failure",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Error calling tool 'extract_workflow_from_history': dataset_hids must be history item numbers (hid, a positive integer such as 3), got \"f2db41e1fa331b3e\". get_history_contents lists each item's hid. Nothing was sent to Galaxy."
+      }
+    ],
+    "isError": true
+  },
+  "sentence": "dataset_hids must be history item numbers (hid, a positive integer such as 3), got \"f2db41e1fa331b3e\". get_history_contents lists each item's hid. Nothing was sent to Galaxy."
+}

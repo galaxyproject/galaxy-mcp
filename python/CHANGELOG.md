@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `extract_workflow_from_history` turns jobs already run in a history into a stored
+  workflow (`POST /api/workflows` with `from_history_id`), so a chain of tools can be invoked
+  on other inputs with `invoke_workflow` instead of being re-run sample by sample. `job_ids`
+  are encoded job ids and become the tool steps; `dataset_hids` and `collection_hids` are
+  history item numbers, not ids -- Galaxy's form calls them `dataset_ids` and reads them as
+  hids -- and become the inputs. An encoded id where a hid belongs, or an extraction that
+  names nothing, is refused before anything is sent.
 - `get_page` answers with `content_hash`, the hash Galaxy's page assistant uses over the
   editable source. Galaxy neither returns nor checks it; it is computed from the page as
   Galaxy sent it.
