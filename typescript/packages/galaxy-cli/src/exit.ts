@@ -38,7 +38,7 @@ const AUTH_MAP: Record<AuthErrorKind, number> = {
   // As `connection` for an operation: no answer from the Galaxy.
   network: EX_UNAVAILABLE,
   // As `version`: a Galaxy that cannot be used for login as it is. `unsupported` is one with no
-  // device flow; `insecure` is one that cannot be reached safely: plain http to a host that is not
+  // device flow, or a keyring that will not confirm a secret is gone; `insecure` is one that cannot be reached safely: plain http to a host that is not
   // this machine, which is refused before anything is sent, or an issuer or endpoints that are not
   // itself. That is 76 and not 64 even for a typed `--host http://...`: it is the Galaxy's address
   // that is refused, whoever wrote it, and one code covers it wherever the address came from.
