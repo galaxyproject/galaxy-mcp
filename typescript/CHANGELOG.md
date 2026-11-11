@@ -69,6 +69,22 @@ keyring, only with `--insecure-storage`.
 `gxy auth status` reports a login whose token cannot be read as `token unavailable` (`status:
 "unavailable"` in `--json`), and a Ctrl-C during the check ends it with "Cancelled." and 130.
 
+### galaxy-cli logs in with the device flow (#224)
+
+`gxy auth login` now uses the device flow (RFC 8628) by default: it shows a code and a page to
+approve it on, and stores the token it is given. `--with-token` still reads a pasted key from stdin.
+`--scopes` asks for particular scopes, `--no-browser` does not try to open the page, and
+`GXY_OAUTH_CLIENT_ID` sets the client id presented to the Galaxy.
+
+Like `--with-token`, it takes its Galaxy only from `--host`, `--url` or `GALAXY_URL` in the
+environment, never from a stored login, `.env` or a profile: the token it gets is a new one, and goes
+only where you named. With no Galaxy named and a person at the terminal, `login` asks for the Galaxy
+URL (it suggests nothing); otherwise it exits 64 naming `--host`.
+
+`gxy auth logout` revokes a device login where the server allows it. A Galaxy with no device login
+ends `login` with exit 76 and a hint to use `--with-token`. `gxy auth status` shows `device login`
+and the scopes that were granted.
+
 ### galaxy-cli: a `.env` URL is only used with the `.env` key
 
 Behaviour change. A `GALAXY_URL` from a `.env` file in the current directory is now only used with

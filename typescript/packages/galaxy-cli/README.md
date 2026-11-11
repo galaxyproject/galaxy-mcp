@@ -68,7 +68,9 @@ would go unseen, it refuses (exit 64) and asks you to pipe the key in. `auth log
 a pasted API key, because it may be in use elsewhere: it keeps working until you revoke it in
 Galaxy's user preferences, and `auth logout` says so.
 
-Ctrl-C while `gxy auth login` waits for approval cancels it (exit 130). If you cancel after Galaxy
+Ctrl-C while `gxy auth login` waits for approval cancels it (exit 130); SIGTERM and SIGHUP do the
+same, ending with 143 and 129. `gxy auth logout` stops waiting for the revocation on any of them,
+still deletes the stored login and says the token was not revoked. If you cancel after Galaxy
 has already issued the token, `gxy` revokes it and says so. One gap can't be closed from this side:
 a code or token that Galaxy issues at the very moment you cancel never reaches `gxy`, so it can't be
 revoked, and it expires on its own.

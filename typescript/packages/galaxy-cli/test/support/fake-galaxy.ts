@@ -49,7 +49,7 @@ export interface FakeGalaxyOptions {
   interval?: number;
   /** Seconds a user code lives. Default 600. */
   deviceExpiresIn?: number;
-  /** Start with no `revocation_endpoint` in the metadata. */
+  /** Whether the metadata lists a `revocation_endpoint`. Default true. */
   revocationEndpoint?: boolean;
   /** The one `client_id` the server knows. Default `galaxy-cli`; any other is `invalid_client`. */
   clientId?: string;
