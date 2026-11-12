@@ -171,6 +171,14 @@ const CASES: Case[] = [
     route: "/invocations",
     body: `{"inputs":{},"inputs_by":"step_index","parameters":{${PROTO}},"parameters_normalized":false,"allow_tool_state_corrections":false}`,
   },
+  {
+    tool: "import_workflow",
+    param: "definition",
+    args: `{"definition":{"name":"wf",${PROTO},"steps":{}}}`,
+    answers: [VERSION, ["/api/workflows", { id: "w1", name: "wf" }]],
+    route: "/api/workflows",
+    body: `{"workflow":{"name":"wf",${PROTO},"steps":{}},"fill_defaults":false}`,
+  },
 ];
 
 describe("a key at the top level of an object-valued parameter", () => {
@@ -392,6 +400,11 @@ describe("a key at the top level of an object-valued parameter", () => {
         'A JSON object string is accepted too.",' +
         `"anyOf":[{"anyOf":[{${open}},{"type":"string"}]},{"type":"null"}]}`,
     );
+    expect(schemaOf("import_workflow", "definition")).toBe(
+      '{"anyOf":[{' + open + '},{"type":"string"}],"description":"The workflow as Galaxy\'s native .ga ' +
+        "dict or a Format2 (gxformat2) dict, the same as a JSON object string, or Format2 YAML text " +
+        '(class: GalaxyWorkflow). Embedded user-defined tools are created if the user is allowed to."}',
+    );
     // And they are required exactly where they were.
     const required = (tool: string) =>
       (tools.find((t) => t.name === tool)!.inputSchema.required as string[]) ?? [];
@@ -399,6 +412,7 @@ describe("a key at the top level of an object-valued parameter", () => {
     expect(required("run_tool")).toEqual(["tool_id", "history_id", "inputs"]);
     expect(required("run_user_tool")).toEqual(["history_id", "tool_uuid", "inputs"]);
     expect(required("invoke_workflow")).toEqual(["workflow_id"]);
+    expect(required("import_workflow")).toEqual(["definition"]);
 
     await client.close();
     await server.close();

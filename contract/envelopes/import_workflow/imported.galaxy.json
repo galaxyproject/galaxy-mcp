@@ -4,13 +4,13 @@
   "routes": [
     {
       "method": "POST",
-      "path": "/api/workflows/upload",
+      "path": "/api/workflows",
       "query": {},
       "status": 200,
       "headers": {},
       "body": {
-        "id": "wf000009",
-        "name": "Workflow 0",
+        "id": "wf000010",
+        "name": "Concatenate",
         "owner": "curator",
         "number_of_steps": 2,
         "published": false,
@@ -19,19 +19,31 @@
       }
     },
     {
-      "method": "POST",
-      "path": "/api/workflows",
-      "query": {},
+      "method": "GET",
+      "path": "/api/workflows/wf000010/download",
+      "query": {
+        "style": "ga"
+      },
       "status": 200,
       "headers": {},
       "body": {
-        "id": "wf000009",
-        "name": "Workflow 0",
-        "owner": "curator",
-        "number_of_steps": 2,
-        "published": false,
-        "deleted": false,
-        "model_class": "StoredWorkflow"
+        "a_galaxy_workflow": "true",
+        "format-version": "0.1",
+        "name": "Concatenate",
+        "steps": {
+          "0": {
+            "id": 0,
+            "type": "data_input",
+            "tool_id": null,
+            "errors": null
+          },
+          "1": {
+            "id": 1,
+            "type": "tool",
+            "tool_id": "cat1",
+            "errors": null
+          }
+        }
       }
     }
   ]

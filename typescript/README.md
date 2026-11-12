@@ -420,7 +420,7 @@ sides under different names.
 | `list_workflows` | List stored workflows; optional name + published filter |
 | `get_workflow_details` | One stored workflow by id (name, steps, inputs) |
 | `get_workflow_input_template` | A ready-to-fill input template + run guide, at a given stored version (call before `invoke_workflow`) |
-| `import_workflow` *(write)* | Import a workflow from its `.ga` or Format2 definition |
+| `import_workflow` *(write)* | Import a workflow from its `.ga` or Format2 definition (object, JSON or Format2 YAML text); `fillDefaults` has Galaxy complete the tool state, and `missing_tools` names the tools this Galaxy does not have |
 | `invoke_workflow` *(write)* | Invoke a workflow with inputs/parameters (validates inputs first) |
 | `get_invocations` | One invocation by id (state, steps), or the invocations of a workflow or history; pages with `limit` (at most 100, Galaxy's cap) + `offset`, sorts by `create_time` or `update_time`, and `includeTerminal: false` keeps only the ones still running |
 | `cancel_workflow_invocation` *(write)* | Cancel a running workflow invocation |

@@ -8,8 +8,12 @@ entry covers all three; where something only affects one surface, it says which.
 
 ### import_workflow, and allow_tool_state_corrections on invoke_workflow
 
-`import_workflow` imports a workflow from its `.ga` or Format2 definition, given as an object or
-a JSON object string, with `POST /api/workflows` (galaxyproject/galaxy-mcp#228).
+`import_workflow` imports a workflow from its `.ga` or Format2 definition, given as an object, a
+JSON object string or Format2 YAML text, with `POST /api/workflows` (galaxyproject/galaxy-mcp#228).
+`fillDefaults` (`fill_defaults` on the wire, default false) is passed through, and the result
+carries `missing_tools`: the tools the stored workflow uses that this Galaxy does not have, read
+back from its export. `json-object.ts` now holds `coerceJsonObject` and the object-or-string
+schema both workflow ops use.
 `invoke_workflow` takes `allowToolStateCorrections` (`allow_tool_state_corrections` on the wire)
 and now always sends it, false by default, as bioblend does for the Python server.
 

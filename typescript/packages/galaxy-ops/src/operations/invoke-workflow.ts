@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { httpError, GalaxyValidationError } from "../errors";
-import { jsonObject } from "../json-object";
+import { coerceJsonObject, jsonObjectOrString, type JsonObjectArg } from "../json-object";
 import { legacyGet } from "../legacy";
 import { validateInputs, buildWorkflowInputTemplate, type DatatypesMapping } from "../workflow-inputs";
 import { resolveWorkflowSlots } from "./get-workflow-input-template";
@@ -120,8 +120,7 @@ const DEFAULT_INPUTS_BY = "step_index";
 const DEFAULT_PARAMETERS_NORMALIZED = false;
 const DEFAULT_ALLOW_TOOL_STATE_CORRECTIONS = false;
 
-/** An object argument, or the JSON string some MCP clients send instead. */
-const jsonObjectArg = z.union([jsonObject(), z.string()]);
+const jsonObjectArg = jsonObjectOrString();
 
 const input = {
   workflowId: z.string().describe("Encoded stored-workflow id (hexadecimal hash)"),
@@ -161,8 +160,6 @@ const input = {
     ),
 };
 
-type JsonObjectArg = Record<string, unknown> | string;
-
 type In = {
   workflowId: string;
   inputs?: JsonObjectArg | null;
@@ -173,48 +170,6 @@ type In = {
   parametersNormalized?: boolean;
   allowToolStateCorrections?: boolean;
 };
-
-/**
- * Accept a nested argument as an object or as the JSON string clients serialize
- * it to. A blank string means "not supplied"; anything that is not a JSON object
- * fails here, naming the field, rather than obscurely deeper in.
- */
-export function coerceJsonObject(
-  value: JsonObjectArg | null | undefined,
-  name: string,
-): Record<string, unknown> | undefined {
-  if (value == null) return undefined;
-  if (typeof value !== "string") {
-    // The schema catches this on the MCP and CLI paths; a direct caller has nothing
-    // in front of it, and a bare array reaching the POST body fails obscurely.
-    if (typeof value !== "object" || Array.isArray(value)) {
-      throw new GalaxyValidationError(
-        `${name} must be a JSON object (a mapping) or a JSON object string, but got ${describeJson(value)}.`,
-      );
-    }
-    return value;
-  }
-  if (!value.trim()) return undefined;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(value);
-  } catch (err) {
-    throw new GalaxyValidationError(
-      `${name} must be a JSON object string or an object, but got invalid JSON: ${(err as Error).message}`,
-    );
-  }
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new GalaxyValidationError(
-      `${name} must be a JSON object (a mapping), but the string parsed to ${describeJson(parsed)}.`,
-    );
-  }
-  return parsed as Record<string, unknown>;
-}
-
-function describeJson(value: unknown): string {
-  if (value === null) return "null";
-  return Array.isArray(value) ? "an array" : `a ${typeof value}`;
-}
 
 async function run(i: In, ctx: GalaxyContext): Promise<InvokeWorkflowResult> {
   const inputs = coerceJsonObject(i.inputs, "inputs");

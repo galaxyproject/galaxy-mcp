@@ -1,0 +1,18 @@
+{
+  "data": {
+    "id": "wf000011",
+    "name": "Trim",
+    "owner": "curator",
+    "number_of_steps": 2,
+    "published": false,
+    "deleted": false,
+    "model_class": "StoredWorkflow",
+    "missing_tools": [
+      "toolshed.g2.bx.psu.edu/repos/iuc/fastp/fastp/1.0.1+galaxy3"
+    ]
+  },
+  "success": true,
+  "message": "Imported workflow 'Trim', but this Galaxy does not have 1 of its tools (toolshed.g2.bx.psu.edu/repos/iuc/fastp/fastp/1.0.1+galaxy3); invoking it fails until they are installed",
+  "count": null,
+  "pagination": null
+}

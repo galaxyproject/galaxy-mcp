@@ -1033,7 +1033,12 @@
                 "type": "string"
               }
             ],
-            "description": "The workflow as Galaxy's native .ga dict or a Format2 (gxformat2) dict, or\nthe same as a JSON object string. Embedded user-defined tools are created if the\nuser is allowed to. The stored workflow takes the name the definition gives it."
+            "description": "The workflow as Galaxy's native .ga dict or a Format2 (gxformat2) dict, the\nsame as a JSON object string, or Format2 YAML text (class: GalaxyWorkflow).\nEmbedded user-defined tools are created if the user is allowed to."
+          },
+          "fill_defaults": {
+            "default": false,
+            "type": "boolean",
+            "description": "Have Galaxy fill each tool parameter the definition leaves unset with\nits default while storing it, so the stored workflow carries complete tool state;\nwithout it, running the workflow may need allow_tool_state_corrections on\ninvoke_workflow for those parameters."
           }
         },
         "required": [

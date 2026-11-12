@@ -367,9 +367,9 @@
         "tool": "import_workflow",
         "param": null,
         "kind": "missing-builtin-tool",
-        "observed": "python=write (tag) params=[definition type=anyOf<object|string> required=true default=none]",
+        "observed": "python=write (tag) params=[definition type=anyOf<object|string> required=true default=none; fill_defaults type=boolean required=false default=false]",
         "status": "intentional",
-        "reason": "Only here: POST /api/workflows with a definition the agent holds, .ga or Format2. Galaxy's server can import only from IWC (import_workflow_from_iwc); a workflow an agent wrote, such as a Foundry conversion, has no way in there."
+        "reason": "Only here: POST /api/workflows with a definition the agent holds, .ga or Format2 (as a dict, JSON text or YAML text), and fill_defaults passed through. Galaxy's server can import only from IWC (import_workflow_from_iwc); a workflow an agent wrote, such as a Foundry conversion, has no way in there."
       },
       {
         "tool": "invoke_workflow",
