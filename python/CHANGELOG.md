@@ -56,7 +56,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so the connection is kept for the whole server process. Over HTTP nothing ties one call
   to the next, so `connect()` with a URL or key is refused there: sign in through OAuth,
   or set `GALAXY_URL` and `GALAXY_API_KEY` on the server. Clients on the older handshake
-  protocols see no change. The TypeScript server has no `connect` tool and was never
+  protocols see no change, except against a server running stateless HTTP
+  (`FASTMCP_STATELESS_HTTP`): it issues no sessions, so `connect()` with a URL or key is
+  refused there too, where before it reported success and later calls quietly used the
+  server's own `GALAXY_URL`. The TypeScript server has no `connect` tool and was never
   affected.
 
 ### Fixed
