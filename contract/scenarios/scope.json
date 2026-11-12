@@ -1,0 +1,170 @@
+{
+  "$comment": "The per-session scope (GALAXY_MCP_SCOPE_*), live on both servers. Like smoke it owns no tools: the scope is not a tool but a setting every tool is held to, so each scenario starts its own server pair with `server_env` naming its fixture histories. Nothing here depends on what else the account holds -- which is the point: on an account with many histories the scoped listing must still be exactly the scenario's own.",
+  "pack": "scope",
+  "tools": [],
+  "uncovered": [],
+  "scenarios": [
+    {
+      "id": "scope.session.limits",
+      "note": "One scoped session over three histories of the scenario's own -- A writable, B read-only, C not granted. The server says what the session may touch; a tool runs in A; B can be read and not written; C cannot be read; the listings show A and B and nothing else of the account; a history the session creates can be used and deleted, and A, which it did not create, cannot be deleted. Refusals are checked against Galaxy's own record to have changed nothing.",
+      "requires": {"tools": ["cat1"]},
+      "fixtures": [
+        {"as": "a", "history": {"name": "${run.tag}-scope-a"}},
+        {"as": "b", "history": {"name": "${run.tag}-scope-b"}},
+        {"as": "c", "history": {"name": "${run.tag}-scope-c"}},
+        {"as": "da", "dataset": {"history": "${a.id}", "content": "a\n", "name": "a.txt"}},
+        {"as": "db", "dataset": {"history": "${b.id}", "content": "b\n", "name": "b.txt"}}
+      ],
+      "server_env": {
+        "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "${a.id}",
+        "GALAXY_MCP_SCOPE_READ_HISTORIES": "${b.id}"
+      },
+      "steps": [
+        {
+          "call": "get_server_info",
+          "expect": [
+            {"path": "data.scope.writable_history_ids", "equals": ["${a.id}"]},
+            {"path": "data.scope.readable_history_ids", "equals": ["${a.id}", "${b.id}"]},
+            {"path": "data.scope.created_history_ids", "equals": []},
+            {"path": "data.scope.create_allowed", "equals": true},
+            {"path": "data.scope.destructive", "equals": "created"},
+            {"path": "data.scope.blocked_operations", "equals": []},
+            {"path": "message", "contains": "This session is scoped. It may read histories: ${a.id}, ${b.id}; write to: ${a.id}. It may create histories, and use the ones it creates. It may delete only histories it created itself."}
+          ],
+          "parity": "none",
+          "parity_note": "The message starts with the server's URL, which Python reports with a trailing slash (the two get_server_info rows smoke cites); those rows trim the end of the message, and here the slash is in the middle. The scope itself is asserted in full on each server."
+        },
+        {
+          "call": "run_tool",
+          "args": {"history_id": "${a.id}", "tool_id": "cat1", "inputs": {"input1": {"src": "hda", "id": "${da.id}"}}},
+          "expect": [
+            {"path": "message", "equals": "Started tool 'cat1' in history '${a.id}'"},
+            {"path": "data.outputs.0.history_id", "equals": "${a.id}"}
+          ],
+          "save": {"job_a": "data.jobs.0.id"}
+        },
+        {"wait": {"job": "${job_a}", "state": "ok"}},
+        {
+          "call": "get_history_contents",
+          "args": {"history_id": "${b.id}"},
+          "expect": [
+            {"path": "data.history_id", "equals": "${b.id}"},
+            {"path": "data.contents", "length": {"eq": 1}},
+            {"path": "data.contents", "has_item": {"id": "${db.id}"}}
+          ]
+        },
+        {
+          "call": "run_tool",
+          "args": {"history_id": "${b.id}", "tool_id": "cat1", "inputs": {"input1": {"src": "hda", "id": "${db.id}"}}},
+          "outcome": "failure",
+          "expect": [
+            {"path": "failure.kind", "equals": "tool"},
+            {"path": "failure.sentence", "equals": "history_id '${b.id}' is read-only in this run and run_tool changes it. Histories this run may write: ${a.id}; read-only: ${b.id}. Nothing was sent to Galaxy."}
+          ]
+        },
+        {
+          "verify": {"history": "${b.id}"},
+          "expect": [{"path": "count", "equals": 1}]
+        },
+        {
+          "call": "get_history_details",
+          "args": {"history_id": "${c.id}"},
+          "outcome": "failure",
+          "expect": [
+            {"path": "failure.kind", "equals": "tool"},
+            {"path": "failure.sentence", "equals": "history_id '${c.id}' is outside this run's scope. Histories this run may read: ${a.id}, ${b.id}. Nothing was sent to Galaxy."}
+          ]
+        },
+        {
+          "call": "get_history_contents",
+          "args": {"history_id": "${c.id}"},
+          "outcome": "failure",
+          "expect": [{"path": "failure.sentence", "contains": "is outside this run's scope"}]
+        },
+        {
+          "call": "get_histories",
+          "expect": [
+            {"path": "data", "length": {"eq": 2}},
+            {"path": "data", "has_item": {"id": "${a.id}"}},
+            {"path": "data", "has_item": {"id": "${b.id}"}},
+            {"path": "count", "equals": 2},
+            {"path": "message", "equals": "Retrieved 2 histories"}
+          ]
+        },
+        {
+          "call": "list_history_ids",
+          "expect": [
+            {"path": "data", "length": {"eq": 2}},
+            {"path": "data", "has_item": {"id": "${a.id}", "name": "${run.tag}-scope-a"}},
+            {"path": "data", "has_item": {"id": "${b.id}", "name": "${run.tag}-scope-b"}},
+            {"path": "pagination.total_items", "equals": 2},
+            {"path": "message", "equals": "Found 2 of 2 histories"}
+          ]
+        },
+        {
+          "call": "create_history",
+          "args": {"history_name": "${run.tag}-scope-made"},
+          "creates": {"history": "data.id"},
+          "expect": [{"path": "data.name", "equals": "${run.tag}-scope-made"}],
+          "save": {"made": "data.id"}
+        },
+        {
+          "call": "run_tool",
+          "args": {"history_id": "${made}", "tool_id": "cat1", "inputs": {"input1": {"src": "hda", "id": "${da.id}"}}},
+          "expect": [
+            {"path": "message", "equals": "Started tool 'cat1' in history '${made}'"},
+            {"path": "data.outputs.0.history_id", "equals": "${made}"}
+          ],
+          "save": {"job_made": "data.jobs.0.id"}
+        },
+        {"wait": {"job": "${job_made}", "state": "ok"}},
+        {
+          "call": "get_server_info",
+          "expect": [
+            {"path": "data.scope.writable_history_ids", "equals": ["${a.id}", "${made}"]},
+            {"path": "data.scope.created_history_ids", "equals": ["${made}"]}
+          ],
+          "parity": "none",
+          "parity_note": "As the first step: the URL's trailing slash sits in the middle of the scoped message."
+        },
+        {
+          "call": "get_histories",
+          "expect": [
+            {"path": "data", "length": {"eq": 3}},
+            {"path": "data", "has_item": {"id": "${made}"}}
+          ]
+        },
+        {
+          "call": "update_history",
+          "args": {"history_id": "${a.id}", "deleted": true},
+          "outcome": "failure",
+          "expect": [
+            {"path": "failure.kind", "equals": "tool"},
+            {"path": "failure.sentence", "equals": "update_history would delete history_id '${a.id}', which this run may not delete. This run may delete only histories it created itself: ${made}. Nothing was sent to Galaxy."}
+          ]
+        },
+        {
+          "verify": {"history": "${a.id}"},
+          "expect": [{"path": "deleted", "equals": false}]
+        },
+        {
+          "call": "update_history",
+          "args": {"history_id": "${made}", "deleted": true},
+          "expect": [{"path": "data.deleted", "equals": true}]
+        },
+        {
+          "verify": {"history": "${made}"},
+          "expect": [{"path": "deleted", "equals": true}]
+        },
+        {
+          "call": "get_user",
+          "expect": [
+            {"path": "data", "keys_equal": ["id", "username"]},
+            {"path": "data.id", "equals": "${galaxy.user.id}"}
+          ],
+          "parity": "exact"
+        }
+      ]
+    }
+  ]
+}

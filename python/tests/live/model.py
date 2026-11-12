@@ -415,6 +415,9 @@ def _both_servers() -> list[ServerName]:
     return ["python", "typescript"]
 
 
+SERVER_ENV_NAME = re.compile(r"^GALAXY_MCP_[A-Z0-9_]+$")
+
+
 class Scenario(_Strict):
     id: str = Field(pattern=ID_PATTERN)
     note: str = Field(min_length=1)
@@ -423,6 +426,11 @@ class Scenario(_Strict):
     requires: Requires = Field(default_factory=Requires)
     divergences: list[str] = Field(default_factory=list)
     fixtures: list[Fixture] = Field(default_factory=list)
+    # Extra environment for the servers under test, for behaviour that is configured at
+    # startup rather than per call. Values may reference fixtures, so a scenario that sets
+    # any gets a server process of its own, started after its fixtures exist and stopped
+    # when it ends; every other scenario shares the session's one process, as before.
+    server_env: dict[str, str] = Field(default_factory=dict)
     steps: list[Step] = Field(min_length=1)
     timeout: float = 600
 
@@ -434,6 +442,11 @@ class Scenario(_Strict):
             raise ValueError(f"{self.id}: fixture names used twice: {sorted(dupes)}")
         if not self.servers:
             raise ValueError(f"{self.id}: servers must not be empty")
+        # Only the servers' own settings: the connection and the process environment the
+        # harness builds from nothing stay the harness's.
+        bad = sorted(k for k in self.server_env if not SERVER_ENV_NAME.match(k))
+        if bad:
+            raise ValueError(f"{self.id}: server_env may only set GALAXY_MCP_* variables: {bad}")
         return self
 
 
