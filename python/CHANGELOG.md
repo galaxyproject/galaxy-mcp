@@ -25,6 +25,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- An optional scope for a session, read from `GALAXY_MCP_SCOPE_WRITE_HISTORIES`,
+  `GALAXY_MCP_SCOPE_READ_HISTORIES`, `GALAXY_MCP_SCOPE_CREATED_ONLY`,
+  `GALAXY_MCP_SCOPE_ALLOW_CREATE`, `GALAXY_MCP_SCOPE_DESTRUCTIVE` and
+  `GALAXY_MCP_SCOPE_BLOCKED_TOOLS`. A scoped server refuses a history outside the scope, a
+  write to a read-only history, a blocked tool and a delete of a history the session did not
+  create before anything is sent; refuses rather than returns a record from another history;
+  narrows the history, job and invocation listings; cuts `get_user` to id and username;
+  remembers which ids it returned as what and refuses one passed as another kind; and
+  reports the scope from `get_server_info`. Histories the session creates join its writable
+  set. Every tool is held to it by one wrapper where tools are registered, from the
+  classification in `galaxy_mcp/scope.py`, which `contract/scope.json` is generated from and
+  the TypeScript server is tested against. Unset, nothing changes.
 - `get_page` answers with `content_hash`, the hash Galaxy's page assistant uses over the
   editable source. Galaxy neither returns nor checks it; it is computed from the page as
   Galaxy sent it.

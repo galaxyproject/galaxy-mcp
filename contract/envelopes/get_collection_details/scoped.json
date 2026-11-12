@@ -1,0 +1,32 @@
+{
+  "data": {
+    "collection_id": "c0c1",
+    "history_content_type": "dataset_collection",
+    "collection": {
+      "id": "c0c1",
+      "name": "pairs",
+      "collection_type": "list",
+      "element_count": 1,
+      "populated": true,
+      "state": "ok"
+    },
+    "elements": [
+      {
+        "element_index": 0,
+        "element_identifier": "s1",
+        "element_type": "hda",
+        "object_id": "dd04",
+        "name": "s1",
+        "state": "ok",
+        "extension": "txt",
+        "file_size": null
+      }
+    ],
+    "elements_truncated": false,
+    "note": "Use get_dataset_details(object_id) to get full details for individual datasets in this collection."
+  },
+  "success": true,
+  "message": "Retrieved collection 'pairs'",
+  "count": 1,
+  "pagination": null
+}

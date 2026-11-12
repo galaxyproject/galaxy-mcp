@@ -6,6 +6,37 @@ entry covers all three; where something only affects one surface, it says which.
 
 ## Unreleased
 
+### A per-run scope for agent hosts
+
+On both servers: the Python server enforces the same scope from the same variables, and
+`contract/scope.json` plus the scoped envelope goldens hold the two to one classification, one
+set of sentences and one record of what a session remembers.
+
+`createGalaxyContext` takes a `scope` -- the histories a run may read and write, the ones it
+may only read, and the operations it may not call -- and the registry holds every operation to
+it in one place: a history argument outside the scope, a blocked operation, and a write that
+would land in Galaxy's current history are refused before anything is sent; a dataset,
+collection, job or invocation that turns out to belong to another history is refused rather
+than returned, and cancelling an invocation, downloading a dataset or reading a job's logs
+looks the owner up first; the history, job and invocation listings answer with the scoped
+histories' rows; and `get_user` answers with `id` and `username` only. A scoped context also
+remembers which ids the run has seen as what (`ctx.handles`, a bounded Map filled by the ops
+through `recordHandles`) and refuses an id passed as a kind it was never returned as. Two new
+error kinds carry the refusals, `out_of_scope` (CLI exit 77) and `handle_kind_mismatch` (exit
+64); `GalaxyErrorKind` gaining members is a change for a caller switching on it exhaustively.
+Each op declares which parameters carry an id (`ids`) and how a scoped run treats it
+(`scope`), and the registry refuses to register an op that takes a parameter spelled like a
+known id parameter without classifying it. A history the session creates joins the histories
+it may use (`includeCreated`, default true; `allowCreate: false` refuses creating); deleting a
+history is tighter than writing to it -- by default only a history the session created
+(`destructive: "created" | "writable"`). `get_server_info` reports the scope under
+`data.scope` and in its message, only when one is set. `galaxy-mcp` and `galaxy-cli` build the
+scope from `GALAXY_MCP_SCOPE_WRITE_HISTORIES`, `..._READ_HISTORIES`, `..._CREATED_ONLY`,
+`..._ALLOW_CREATE`, `..._DESTRUCTIVE` and `..._BLOCKED_TOOLS`, and refuse to start on a value
+they cannot read. Without a `scope`, nothing changes: no check runs,
+nothing is recorded, every result is what it was. See "Scoping a context to a run" in the
+README for what is and is not covered.
+
 ### galaxy-mcp serves Streamable HTTP
 
 `galaxy-mcp --transport streamable-http` (or `GALAXY_MCP_TRANSPORT=streamable-http`) serves the

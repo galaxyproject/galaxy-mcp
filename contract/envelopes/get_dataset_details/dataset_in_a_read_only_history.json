@@ -1,0 +1,16 @@
+{
+  "data": {
+    "dataset": {
+      "id": "dd02",
+      "name": "x",
+      "state": "new",
+      "history_id": "bbbb0002",
+      "creating_job": "e002"
+    },
+    "dataset_id": "dd02"
+  },
+  "success": true,
+  "message": "Retrieved details for dataset 'x'",
+  "count": null,
+  "pagination": null
+}

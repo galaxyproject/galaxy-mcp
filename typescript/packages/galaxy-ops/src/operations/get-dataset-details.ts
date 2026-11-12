@@ -3,6 +3,7 @@ import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { httpError, GalaxyValidationError } from "../errors";
 import { pyGet, pyStr } from "../python-values";
+import { historyIdOf, recordHandles } from "../scope";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
 
@@ -200,6 +201,9 @@ async function run(i: In, ctx: GalaxyContext): Promise<DatasetDetailsResult> {
   const includePreview = i.includePreview ?? true;
   const previewLines = i.previewLines ?? DEFAULT_PREVIEW_LINES;
   const payload = dataset as Record<string, unknown>;
+  recordHandles(ctx, "hda", [payload.id]);
+  recordHandles(ctx, "history", [payload.history_id]);
+  recordHandles(ctx, "job", [payload.creating_job]);
   const wrapped: DatasetDetailsResult = { dataset: payload, dataset_id: i.datasetId };
   if (!includePreview || payload.state !== "ok") return wrapped;
 
@@ -220,6 +224,10 @@ export const getDatasetDetailsOp: Operation<typeof input, DatasetDetailsResult> 
     "while the read counts decoded characters -- read it as what Galaxy said, not as a " +
     "statement about how much of the dataset this is.",
   input,
+  ids: { datasetId: "hda" },
+  // A dataset belongs to a history, and only the record says which: a scoped run is refused
+  // the record, preview included, when that history is not one it may read.
+  scope: { owner: (d) => historyIdOf(d.dataset) },
   run,
   project: (d) => ({
     // server.py, get_dataset_details: the dataset's own name through dict.get, so a

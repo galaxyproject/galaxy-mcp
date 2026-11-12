@@ -1,0 +1,31 @@
+{
+  "data": {
+    "outputs": [
+      {
+        "id": "f001",
+        "hid": 1,
+        "name": "out",
+        "state": "new",
+        "history_id": "dddd0004"
+      }
+    ],
+    "output_collections": [
+      {
+        "id": "c0f1"
+      }
+    ],
+    "jobs": [
+      {
+        "id": "e001",
+        "state": "new",
+        "tool_id": "cat1",
+        "tool_version": "1.0.0"
+      }
+    ],
+    "implicit_collections": []
+  },
+  "success": true,
+  "message": "Started tool 'cat1' in history 'dddd0004'",
+  "count": null,
+  "pagination": null
+}

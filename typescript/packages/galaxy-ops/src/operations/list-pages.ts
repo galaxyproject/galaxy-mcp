@@ -75,6 +75,7 @@ export const listPagesOp: Operation<typeof input, PageSummary[]> = {
     "Pass historyId to list only that history's notebooks. The history filter is what needs " +
     "26.1: an older server ignores it and answers with every page instead of that history's.",
   input,
+  ids: { historyId: "history" },
   requires: { galaxy: ">=26.1" },
   run,
   project: (pages, i, facts) => ({

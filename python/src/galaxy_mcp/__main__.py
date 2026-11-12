@@ -46,8 +46,11 @@ def run() -> None:
     if args.discovery_mode:
         os.environ["GALAXY_MCP_DISCOVERY_MODE"] = args.discovery_mode
 
-    from . import server
+    from . import scope, server
     from .http_security import HTTPStartupError
+
+    if scope.config_error is not None:
+        parser.error(scope.config_error)
 
     selected = (args.transport or os.environ.get("GALAXY_MCP_TRANSPORT") or "stdio").lower()
     if selected in {"streamable-http", "sse"}:

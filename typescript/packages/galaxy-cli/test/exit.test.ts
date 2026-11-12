@@ -11,6 +11,8 @@ describe("exitCodeFor", () => {
     expect(exitCodeFor("version")).toBe(76);
     expect(exitCodeFor("tool_request_rejected")).toBe(65);
     expect(exitCodeFor("job_failed")).toBe(70);
+    expect(exitCodeFor("out_of_scope")).toBe(77);
+    expect(exitCodeFor("handle_kind_mismatch")).toBe(64);
     expect(exitCodeFor("unknown")).toBe(70);
   });
   it("exposes usage + software constants", () => {

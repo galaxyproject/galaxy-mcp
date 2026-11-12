@@ -9,6 +9,8 @@ export type GalaxyErrorKind =
   | "version"
   | "tool_request_rejected"
   | "job_failed"
+  | "out_of_scope"
+  | "handle_kind_mismatch"
   | "unknown";
 
 export class GalaxyError extends Error {
@@ -65,6 +67,28 @@ export class GalaxyConnectionError extends GalaxyError {
  */
 export class GalaxyVersionError extends GalaxyError {
   readonly kind = "version" as const;
+}
+
+/**
+ * The call is outside what the host allowed this run: a history it may not touch, an
+ * operation it may not call, or a record that turned out to belong to another history.
+ *
+ * Its own kind because none of the others tells the truth here either: the argument may be a
+ * perfectly good id, the server would have answered, and the host is the one who decides --
+ * so a retry cannot help and neither can a different spelling. Refused before anything is sent
+ * where the argument says enough, and after the read where only the record could say.
+ */
+export class GalaxyScopeError extends GalaxyError {
+  readonly kind = "out_of_scope" as const;
+}
+
+/**
+ * An id passed as one kind of thing after an earlier call in this run returned it as another:
+ * a job id where a dataset id belongs. Galaxy's ids carry no type, so the only thing that can
+ * say is the run's own memory, and the caller has to pick the id it meant.
+ */
+export class GalaxyHandleKindError extends GalaxyError {
+  readonly kind = "handle_kind_mismatch" as const;
 }
 
 /** tool_request.state === 'failed' -- the request couldn't even expand. */

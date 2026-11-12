@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { GalaxyConnectionError, GalaxyNotFoundError, GalaxyValidationError } from "../errors";
+import { historyIdOf } from "../scope";
 import { isEncodedId, isThisRecord, notAGalaxyId, notThatRecord } from "./encoded-id";
 import { jobLookupFailure, jobNotFoundSentence } from "./jobs-common";
 import { logEnds } from "./log-ends";
@@ -75,6 +76,16 @@ export const getJobLogsOp: Operation<typeof input, JobLogs> = {
     "many of how many bytes were omitted, so a cut field carries at most logBytes of the log " +
     "plus that line.",
   input,
+  ids: { jobId: "job" },
+  // The logs carry no history, so under a scope the job is read first and refused before its
+  // logs are, when it belongs to a history the run may not read. Not an id, not a request.
+  scope: {
+    ownerOf: async (i, ctx) => {
+      if (!isEncodedId(i.jobId)) return undefined;
+      const { data } = await ctx.client.GET("/api/jobs/{job_id}", { params: { path: { job_id: i.jobId } } });
+      return isThisRecord(data, i.jobId) ? historyIdOf(data) : undefined;
+    },
+  },
   run,
   // server.py, get_job_logs: the job that was asked about. Nothing is said about how much
   // was there -- data carries exactly the present fields, and Galaxy always answers stdout

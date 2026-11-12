@@ -32,6 +32,7 @@ from mcp.server.auth.middleware.auth_context import get_access_token
 from pydantic import BaseModel, Field
 from starlette.requests import Request
 
+from galaxy_mcp import scope as _scope
 from galaxy_mcp.auth import (
     GalaxyOAuthProvider,
     SessionSecretRequiredError,
@@ -1036,6 +1037,31 @@ if auth_provider:
     mcp: FastMCP = FastMCP("Galaxy", auth=auth_provider, **_mcp_kwargs)
 else:
     mcp = FastMCP("Galaxy", **_mcp_kwargs)
+
+# An optional scope for the session, from GALAXY_MCP_SCOPE_*. Unset, the server is
+# unscoped, as before; unreadable, the command line refuses to start with the variable's
+# name (``__main__``) and every tool refuses to run -- never a silent fall back to
+# unrestricted.
+_scope.configure_from_env(os.environ)
+
+# Every tool is registered through here, so every tool is held to the scope by the one
+# wrapper in scope.py -- including when it is called as a function rather than over MCP.
+_register_tool = mcp.tool
+
+
+def _scoped_tool(*args: Any, **kwargs: Any) -> Any:
+    def scoped(fn: Callable[..., Any]) -> Any:
+        guarded = _scope.guard(
+            kwargs.get("name") or fn.__name__, fn, lambda: ensure_connected()["gi"]
+        )
+        return _register_tool(**kwargs)(guarded)
+
+    if args and callable(args[0]):
+        return scoped(args[0])
+    return scoped
+
+
+mcp.tool = _scoped_tool  # type: ignore[method-assign]
 
 _original_http_app = FastMCP.http_app
 
@@ -2587,7 +2613,7 @@ def get_histories(
         # two counted two matches where one history matched. Fetching the matches and
         # windowing them here is also one request rather than two, because the count
         # this tool has to report was already an unpaged fetch of the same thing.
-        matching = gi.histories.get_histories(name=name) or []
+        matching = _scope.visible_histories(gi.histories.get_histories(name=name) or [])
 
         # If pagination is used, describe the window
         if limit is not None:
@@ -2656,7 +2682,7 @@ def list_history_ids(limit: int = 100, offset: int = 0) -> GalaxyResult:
         # to count costs more than the single unpaged fetch it already did, so slice
         # here instead: one call, an exact total, and no window that can disagree
         # with the count taken beside it.
-        histories = gi.histories.get_histories()
+        histories = _scope.visible_histories(gi.histories.get_histories())
         simplified = [{"id": h["id"], "name": h.get("name", "Unnamed")} for h in histories or []]
         return _budgeted_page(
             simplified,
@@ -3520,6 +3546,7 @@ def get_collection_details(collection_id: str, max_elements: int = 100) -> Galax
         # Limit elements to max_elements
         elements_to_return = raw_elements[:max_elements]
         elements_truncated = total_element_count > max_elements
+        _scope.note_collection(collection_info, elements_to_return)
 
         normalized_elements = []
         for idx, element in enumerate(elements_to_return):

@@ -53,6 +53,9 @@ export const createPageOp: Operation<typeof input, PageDetail> = {
     "Create a markdown page. With historyId it is a notebook attached to that history; " +
     "without one it is a standalone report, which requires a title and a unique slug.",
   input,
+  // Absent, the page is a standalone report rather than a write to any history, so a scoped
+  // run may leave it out; given, it has to be a history the run may write.
+  ids: { historyId: "history" },
   requires: { galaxy: ">=26.1" },
   readOnly: false,
   run,

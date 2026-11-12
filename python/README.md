@@ -174,6 +174,52 @@ docker run --rm -it -p 127.0.0.1:8000:8000 \
 
 See [USAGE_EXAMPLES.md](USAGE_EXAMPLES.md) for detailed tool usage patterns.
 
+### Scoping a session to its histories
+
+A host that launches the server for one agent task can confine that session to the
+histories it was given. The scope is read from the environment at startup; the agent cannot
+set it, and reads it from `get_server_info`. With none of these set, nothing changes.
+
+| Variable | Meaning |
+| --- | --- |
+| `GALAXY_MCP_SCOPE_WRITE_HISTORIES` | Comma-separated encoded history ids the session may read and change |
+| `GALAXY_MCP_SCOPE_READ_HISTORIES` | Comma-separated encoded history ids it may read but not change |
+| `GALAXY_MCP_SCOPE_CREATED_ONLY=1` | No pre-existing history may be written: only the ones the session creates |
+| `GALAXY_MCP_SCOPE_ALLOW_CREATE=0` | The session may not create histories (default: it may, and may then use them) |
+| `GALAXY_MCP_SCOPE_DESTRUCTIVE=writable` | Any writable history may be deleted (default `created`: only histories the session created) |
+| `GALAXY_MCP_SCOPE_BLOCKED_TOOLS` | Comma-separated tool names refused outright |
+
+```json
+{
+  "mcpServers": {
+    "galaxy": {
+      "command": "uvx",
+      "args": ["galaxy-mcp"],
+      "env": {
+        "GALAXY_URL": "https://usegalaxy.org/",
+        "GALAXY_API_KEY": "your-api-key",
+        "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "f2db41e1fa331b3e",
+        "GALAXY_MCP_SCOPE_READ_HISTORIES": "1cd8e2f6b131e891"
+      }
+    }
+  }
+}
+```
+
+A value that cannot be read stops the server at startup with the variable's name; it never
+falls back to unscoped. Under a scope a history argument outside it, a write to a read-only
+history, a blocked tool and a delete of a history the session did not create are refused
+before anything is sent to Galaxy; a dataset, collection, job or invocation that belongs to
+another history is refused rather than returned; `get_histories`, `list_history_ids`,
+`list_jobs` and `get_invocations` list the session's histories' rows only; `get_user` answers
+with `id` and `username`; and an id passed as a different kind than an earlier call returned
+it as (a job id as `dataset_id`) is refused. The scope is per process: over stdio that is one
+session, and the HTTP transports share it -- and its record of created histories -- across
+their clients, whichever Galaxy account each is signed in as. `connect` is not restricted;
+block it by name if the session must not change server. The TypeScript server reads the same
+variables and answers the same way, word for word; the rules in full are in
+[its README](../typescript/README.md#scoping-a-context-to-a-run).
+
 ### Tool discovery mode (experimental)
 
 Galaxy MCP registers one `@mcp.tool` per operation. The client fetches that catalog once per session, but it carries every one of those definitions into the model's context on each turn -- expensive for agents that only ever use a handful. `--discovery-mode code` (also honored via `GALAXY_MCP_DISCOVERY_MODE=code`) collapses the catalog into three meta-tools:

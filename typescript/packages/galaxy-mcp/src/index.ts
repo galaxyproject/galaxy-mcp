@@ -1,7 +1,7 @@
 import type { AddressInfo } from "node:net";
 import { parseArgs } from "node:util";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { createGalaxyContext } from "@galaxyproject/galaxy-ops";
+import { allOperations, createGalaxyContext, scopeFromEnv, type OperationScope } from "@galaxyproject/galaxy-ops";
 import { httpConfig, startHttpServer } from "./http.js";
 import { buildServer } from "./server.js";
 
@@ -38,10 +38,19 @@ if (!baseUrl || !apiKey) {
   process.exit(1);
 }
 
+// An optional scope for the session, from GALAXY_MCP_SCOPE_*. Unset, the server is unscoped,
+// as before; unreadable, it does not start -- never a silent fall back to unrestricted.
+let scope: OperationScope | undefined;
+try {
+  scope = scopeFromEnv(process.env, allOperations.map((op) => op.name));
+} catch (error) {
+  fail((error as Error).message);
+}
+
 const transport = (args.transport ?? process.env.GALAXY_MCP_TRANSPORT ?? "stdio").toLowerCase();
 if (transport === "stdio") {
-  await buildServer(createGalaxyContext({ baseUrl, apiKey })).connect(new StdioServerTransport());
-  console.error("galaxy-mcp: connected on stdio");
+  await buildServer(createGalaxyContext({ baseUrl, apiKey, scope })).connect(new StdioServerTransport());
+  console.error(`galaxy-mcp: connected on stdio${scope ? " (scoped)" : ""}`);
 } else if (transport === "streamable-http") {
   let config;
   try {
@@ -50,7 +59,7 @@ if (transport === "stdio") {
     fail((error as Error).message);
   }
   // One context for every request, so the Galaxy version it probes is fetched once.
-  const ctx = createGalaxyContext({ baseUrl, apiKey });
+  const ctx = createGalaxyContext({ baseUrl, apiKey, scope });
   let httpServer;
   try {
     httpServer = await startHttpServer({ ...config, newServer: () => buildServer(ctx, { allowLocalFiles: config.allowLocalFiles }) });

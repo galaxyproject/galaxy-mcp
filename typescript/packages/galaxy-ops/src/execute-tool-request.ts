@@ -1,6 +1,7 @@
 import type { components } from "./bindings";
 import type { GalaxyContext } from "./context";
 import { classifyHttp, ToolRequestRejectedError } from "./errors";
+import { recordHandles, recordRefs } from "./scope";
 import { waitForJob, type JobDetail } from "./wait";
 
 export type ToolRequestDetail = components["schemas"]["ToolRequestDetailedModel"];
@@ -53,6 +54,7 @@ export async function executeToolRequest(
   });
   if (submit.error || !submit.data) throw classifyHttp(submit.response.status, submit.error);
   const toolRequestId = submit.data.tool_request_id;
+  recordHandles(ctx, "tool_request", [toolRequestId]);
 
   // Step 4: poll /state until != 'new'. ToolRequestState has NO success state.
   const state = await pollRequestState(toolRequestId, ctx);
@@ -66,6 +68,8 @@ export async function executeToolRequest(
   const detail = await fetchDetail(toolRequestId, ctx);
   const jobRefs = (detail.jobs ?? []) as Array<{ src: "job"; id: string }>;
   const implicitCollections = (detail.implicit_collections ?? []) as ImplicitCollectionRef[];
+  recordRefs(ctx, jobRefs);
+  recordRefs(ctx, implicitCollections);
 
   // Step 6: wait each job to terminal. Success is DERIVED FROM JOBS, never ToolRequest.state.
   const jobs: JobDetail[] = [];

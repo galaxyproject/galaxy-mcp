@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { GalaxyValidationError, httpError } from "../errors";
+import { recordHandles } from "../scope";
 import { paginationInfo, shrinkPaged, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
@@ -145,6 +146,10 @@ async function run(i: In, ctx: GalaxyContext): Promise<HistoryContents> {
   if (error || !data) throw httpError(response, error);
   const body = data as { contents?: Row[]; stats?: { total_matches?: number } };
   const items = (body.contents ?? []).map(withContentType) as ContentItem[];
+  const ofType = (type: string) =>
+    (items as Row[]).filter((r) => r.history_content_type === type).map((r) => (r as { id?: unknown }).id);
+  recordHandles(ctx, "hda", ofType("dataset"));
+  recordHandles(ctx, "hdca", ofType("dataset_collection"));
   return {
     items,
     pagination: paginationInfo({
@@ -162,6 +167,7 @@ export const getHistoryContentsOp: Operation<typeof input, HistoryContents> = {
   domain: "histories",
   summary: "List the datasets and collections in a history, one page at a time.",
   input,
+  ids: { historyId: "history" },
   run,
   // This tool's data is an object rather than the bare page: the Python tool names
   // the history the contents came from beside them, and a caller holding one page
