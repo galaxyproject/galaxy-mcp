@@ -29,6 +29,7 @@ from dotenv import find_dotenv, load_dotenv
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_context
 from mcp.server.auth.middleware.auth_context import get_access_token
+from mcp.types.version import HANDSHAKE_PROTOCOL_VERSIONS
 from pydantic import BaseModel, Field
 from starlette.requests import Request
 
@@ -145,11 +146,59 @@ def _make_thread_safe(gi: GalaxyInstance) -> GalaxyInstance:
     return gi
 
 
-def _get_current_session_id() -> str | None:
+# Stands in for the session id on a sessionless connection that only the operator can reach.
+_PROCESS_CONNECTION_KEY = "process"
+
+
+def _is_sessionless(ctx: Any) -> bool:
+    """True when the request came over a protocol era with no session to key on.
+
+    The 2026-07-28 era mints a fresh session id for every request, so a connection stored
+    under it is gone by the next call. Anything outside the handshake eras counts as
+    sessionless, which keeps an unknown future revision from silently dropping state.
+    """
     try:
-        return get_context().session_id
+        request_context = ctx.request_context
+    except Exception:
+        return False
+    version = getattr(request_context, "protocol_version", None) if request_context else None
+    return version is not None and version not in HANDSHAKE_PROTOCOL_VERSIONS
+
+
+def _sessionless_remote_request() -> bool:
+    """True when a sessionless request could have come from someone other than the operator.
+
+    Nothing on such a request identifies its client from one call to the next, so there is
+    no safe place to keep a connection made with connect().
+    """
+    try:
+        ctx = get_context()
+    except Exception:
+        return False
+    if not _is_sessionless(ctx):
+        return False
+    return ctx.transport in ("sse", "streamable-http") or remote_caller_possible()
+
+
+def _get_current_session_id() -> str | None:
+    """The key the current caller's connect() connection is stored under.
+
+    Handshake-era connections key on the MCP session. A sessionless (2026-07-28) request
+    over stdio or in-memory has exactly one client, the operator, so it shares one
+    process-wide key. A sessionless request that may be remote gets no key at all.
+    """
+    try:
+        ctx = get_context()
     except Exception:
         return None
+    if not _is_sessionless(ctx):
+        try:
+            return ctx.session_id
+        except Exception:
+            return None
+    if _sessionless_remote_request():
+        return None
+    return _PROCESS_CONNECTION_KEY
 
 
 def _get_session_connection(session_id: str) -> SessionGalaxyConnection | None:
@@ -1433,6 +1482,16 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
                 },
                 success=True,
                 message=f"Connected to Galaxy at {state['url']} via {state['source']}",
+            )
+
+        # Validating here and keeping nothing would report success, then let the next call
+        # quietly run against the operator's GALAXY_URL instead.
+        if (url or api_key or not state["connected"]) and _sessionless_remote_request():
+            raise _ConnectRefusedError(
+                "connect() cannot keep a Galaxy connection for this client: it speaks the "
+                "sessionless 2026-07-28 MCP protocol over HTTP, so nothing ties one call to the "
+                "next. Sign in through OAuth if this server offers it, or ask the server "
+                "operator to set GALAXY_URL and GALAXY_API_KEY."
             )
 
         if session_id and not url and not api_key and not state["connected"]:

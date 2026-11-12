@@ -53,9 +53,10 @@ class LiveMCPSession:
 
     def __enter__(self) -> LiveMCPSession:
         self._loop = asyncio.new_event_loop()
-        # The 2026-07-28 protocol era is sessionless: every request gets a fresh session
-        # id, so the session-scoped connection store this harness exists to exercise
-        # only works on the handshake era. Pin it rather than take FastMCP 4's default.
+        # Pinned to the handshake era rather than FastMCP 4's default: the contract envelopes
+        # are recorded from these results, and a 2026-07-28 result also carries
+        # `_meta.serverInfo` and `resultType`, which the TypeScript server's results do not.
+        # Both eras' connection handling is covered in tests/test_session_scope.py.
         self._client = Client(mcp, mode="legacy")
         self._loop.run_until_complete(self._client.__aenter__())
         return self
