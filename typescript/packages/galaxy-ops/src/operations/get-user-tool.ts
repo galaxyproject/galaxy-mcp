@@ -5,8 +5,13 @@ import { GalaxyNotFoundError, httpError } from "../errors";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
+type UserToolResponse = GetJson<"/api/unprivileged_tools/{uuid}">;
+/** Galaxy 26.1 added these; a 26.0 server leaves them out, so callers must not assume them. */
+type AddedIn261 = "representation_errors" | "representation_status";
+
 /** One user-defined tool, as GET /api/unprivileged_tools/{uuid} answers it. */
-export type UserToolRecord = GetJson<"/api/unprivileged_tools/{uuid}">;
+export type UserToolRecord = Omit<UserToolResponse, AddedIn261> &
+  Partial<Pick<UserToolResponse, AddedIn261>>;
 
 const USER_TOOL_UUID_HEX = /^[0-9a-fA-F]{32}$/;
 
