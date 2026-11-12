@@ -5,6 +5,7 @@ import { legacyPost } from "../legacy";
 import { pyGet, pyStr, pyTypeName } from "../python-values";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
+import { userToolSecurityDiagnostics } from "../user-tool-security";
 
 /** Hand-typed: created user-defined tool record from POST /api/unprivileged_tools. */
 export interface CreatedUserTool {
@@ -19,7 +20,7 @@ const REQUIRED_FIELDS = ["class", "id", "version", "name", "shell_command", "con
 
 const input = {
   representation: jsonObject().describe(
-    "a GalaxyUserTool representation: {class:'GalaxyUserTool', id, version, name, shell_command, container:'<image>'}",
+    "a GalaxyUserTool representation; free-form text must be serialized into a data configfile, not interpolated into shell or script source",
   ),
 };
 type In = { representation: Record<string, unknown> };
@@ -40,6 +41,14 @@ function validate(rep: Record<string, unknown>): void {
     throw new GalaxyConnectionError(
       `container must be a string (e.g. 'python:3.12-slim'), ` +
         `got ${pyTypeName(rep["container"])}: ${pyStr(rep["container"])}`,
+      400,
+    );
+  }
+  const diagnostics = userToolSecurityDiagnostics(rep);
+  const diagnostic = diagnostics[0];
+  if (diagnostic !== undefined) {
+    throw new GalaxyConnectionError(
+      `Unsafe user tool at ${diagnostic.path} [${diagnostic.code}]: ${diagnostic.message}`,
       400,
     );
   }

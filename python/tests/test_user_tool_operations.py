@@ -12,6 +12,7 @@ import requests
 from galaxy_mcp.server import _shape_biocontainer_recommendation
 
 from .test_helpers import (
+    create_user_tool_fn,
     delete_user_tool_fn,
     galaxy_state,
     get_user_tool_fn,
@@ -19,6 +20,46 @@ from .test_helpers import (
     recommend_biocontainer_fn,
     run_user_tool_fn,
 )
+
+
+class TestCreateUserToolSecurity:
+    def test_rejects_direct_text_without_posting(self, mock_galaxy_instance):
+        representation = {
+            "class": "GalaxyUserTool",
+            "id": "unsafe",
+            "version": "0.1.0",
+            "name": "Unsafe",
+            "container": "busybox",
+            "shell_command": "printf '%s' '$(inputs.label)'",
+            "inputs": [{"name": "label", "type": "text"}],
+        }
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError, match="dynamic_tool.unsafe_text_interpolation"):
+                create_user_tool_fn(representation)
+        mock_galaxy_instance.make_post_request.assert_not_called()
+
+    def test_accepts_serialized_text(self, mock_galaxy_instance):
+        representation = {
+            "class": "GalaxyUserTool",
+            "id": "safe",
+            "version": "0.1.0",
+            "name": "Safe tool",
+            "container": "busybox",
+            "shell_command": "python script.py params.json",
+            "inputs": [{"name": "label", "type": "text"}],
+            "configfiles": [
+                {
+                    "name": "params",
+                    "filename": "params.json",
+                    "content": '{"label": $(JSON.stringify(inputs.label))}',
+                }
+            ],
+        }
+        mock_galaxy_instance.url = "http://localhost:8080/api"
+        mock_galaxy_instance.make_post_request.return_value = {"uuid": "abc"}
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = create_user_tool_fn(representation)
+        assert result.success is True
 
 
 class TestRunUserTool:
