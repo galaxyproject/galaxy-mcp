@@ -100,8 +100,7 @@ def _history_ids(name: str, value: str | None) -> list[str]:
     for item in ids:
         if not _ENCODED_ID.match(item):
             raise ScopeConfigError(
-                f"{name} must be a comma-separated list of encoded history ids; "
-                f"'{item}' is not one"
+                f"{name} must be a comma-separated list of encoded history ids; '{item}' is not one"
             )
     return ids
 
@@ -291,9 +290,8 @@ def _allowance(scope: Scope, access: str, created: list[str]) -> str:
     if access == "read":
         return f"Histories this run may read: {_list(allowed_histories(scope, 'read', created))}"
     read_only = scope.read_only_history_ids
-    return (
-        f"Histories this run may write: {_list(allowed_histories(scope, 'write', created))}"
-        + (f"; read-only: {_list(read_only)}" if read_only else "")
+    return f"Histories this run may write: {_list(allowed_histories(scope, 'write', created))}" + (
+        f"; read-only: {_list(read_only)}" if read_only else ""
     )
 
 
@@ -543,7 +541,7 @@ TOOLS: dict[str, dict[str, Any]] = {
 }
 
 
-class _Refused(ValueError):
+class _RefusedError(ValueError):
     """A refusal of the scope's own. A ValueError, so FastMCP words it like any other."""
 
 
@@ -653,7 +651,11 @@ def _record(  # noqa: PLR0912 -- one flat table of strategies
         for content_type, handle in (("dataset", "hda"), ("dataset_collection", "hdca")):
             state.record_handles(
                 handle,
-                [_dict(r).get("id") for r in rows if _dict(r).get("history_content_type") == content_type],
+                [
+                    _dict(r).get("id")
+                    for r in rows
+                    if _dict(r).get("history_content_type") == content_type
+                ],
             )
     elif kind == "dataset":
         record = _dict(d.get("dataset"))
@@ -669,7 +671,11 @@ def _record(  # noqa: PLR0912 -- one flat table of strategies
         for element_type, handle in (("hda", "hda"), ("dataset_collection", "hdca")):
             state.record_handles(
                 handle,
-                [_dict(e).get("object_id") for e in elements if _dict(e).get("element_type") == element_type],
+                [
+                    _dict(e).get("object_id")
+                    for e in elements
+                    if _dict(e).get("element_type") == element_type
+                ],
             )
     elif kind == "job":
         job = _dict(d.get("job"))
@@ -775,27 +781,27 @@ def _before(
     scope = state.scope
     access = spec["access"]
     if tool in scope.blocked_operations:
-        raise _Refused(blocked_sentence(tool))
+        raise _RefusedError(blocked_sentence(tool))
     created = state.created_histories()
     destroys = "destroys" in spec and _DESTROYS[spec["destroys"]](args)
     for param, kind in spec.get("ids", {}).items():
         for value in _id_values(args.get(param)):
             seen = state.kinds_of(value)
             if seen and kind not in seen:
-                raise _Refused(kind_mismatch_sentence(param, value, seen, kind))
+                raise _RefusedError(kind_mismatch_sentence(param, value, seen, kind))
             if kind != "history":
                 continue
             if not history_allowed(scope, value, access, created):
-                raise _Refused(
+                raise _RefusedError(
                     history_out_of_scope_sentence(tool, param, value, scope, access, created)
                 )
             if destroys and not history_deletable(scope, value, created):
-                raise _Refused(not_deletable_sentence(tool, param, value, scope, created))
+                raise _RefusedError(not_deletable_sentence(tool, param, value, scope, created))
     for names in spec.get("requires", []):
         if not any(_id_values(args.get(name)) for name in names):
-            raise _Refused(missing_param_sentence(tool, names, scope, created))
+            raise _RefusedError(missing_param_sentence(tool, names, scope, created))
     if "creates" in spec and _CREATES[spec["creates"]](args) and not create_allowed(scope):
-        raise _Refused(create_not_allowed_sentence(tool))
+        raise _RefusedError(create_not_allowed_sentence(tool))
     if "ownerOf" in spec:
         try:
             owner = _lookup_owner(spec["ownerOf"], args, get_gi())
@@ -804,7 +810,7 @@ def _before(
             owner = None
         if owner and not history_allowed(scope, owner, access, created):
             noun, record_id = _record_noun(spec, args)
-            raise _Refused(
+            raise _RefusedError(
                 owner_out_of_scope_sentence(
                     tool, noun, record_id, owner, scope, access, "before", created
                 )
@@ -825,7 +831,7 @@ def _after(
         owner = _owner_after(spec["owner"], result.data)
         if owner and not history_allowed(scope, owner, access, created):
             noun, record_id = _record_noun(spec, args)
-            raise _Refused(
+            raise _RefusedError(
                 owner_out_of_scope_sentence(
                     tool, noun, record_id, owner, scope, access, "after", created
                 )
@@ -872,9 +878,13 @@ def guard(tool: str, fn: F, get_gi: Callable[[], Any]) -> F:
             raise RuntimeError(
                 f'tool "{tool}" takes "{param}" but galaxy_mcp.scope.TOOLS declares no id for it'
             )
-    for param in list(spec.get("ids", {})) + [n for names in spec.get("requires", []) for n in names]:
+    for param in list(spec.get("ids", {})) + [
+        n for names in spec.get("requires", []) for n in names
+    ]:
         if param not in signature.parameters:
-            raise RuntimeError(f'galaxy_mcp.scope.TOOLS names "{param}", which "{tool}" does not take')
+            raise RuntimeError(
+                f'galaxy_mcp.scope.TOOLS names "{param}", which "{tool}" does not take'
+            )
 
     @functools.wraps(fn)
     def guarded(*args: Any, **kwargs: Any) -> Any:

@@ -62,7 +62,9 @@ def sentences() -> dict[str, str]:
             "cancel_workflow_invocation", "invocation", "ee", "b2", _SCOPE, "write", "before", []
         ),
         "kind_mismatch": s.kind_mismatch_sentence("dataset_id", "ee", ["job"], "hda"),
-        "kind_mismatch_two": s.kind_mismatch_sentence("collection_id", "ee", ["job", "hda"], "hdca"),
+        "kind_mismatch_two": s.kind_mismatch_sentence(
+            "collection_id", "ee", ["job", "hda"], "hdca"
+        ),
         "summary_note": s.scope_summary(state)["note"],
     }
 

@@ -73,7 +73,10 @@ class TestSettings:
                 "GALAXY_MCP_SCOPE_DESTRUCTIVE must be 'created' or 'writable' (got 'all')",
             ),
             (
-                {"GALAXY_MCP_SCOPE_WRITE_HISTORIES": "a1", "GALAXY_MCP_SCOPE_ALLOW_CREATE": "maybe"},
+                {
+                    "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "a1",
+                    "GALAXY_MCP_SCOPE_ALLOW_CREATE": "maybe",
+                },
                 "GALAXY_MCP_SCOPE_ALLOW_CREATE must be 1 or 0 (got 'maybe')",
             ),
             (
@@ -86,7 +89,10 @@ class TestSettings:
             ),
             ({"GALAXY_MCP_SCOPE_DESTRUCTIVE": "writable"}, "a scope needs histories"),
             (
-                {"GALAXY_MCP_SCOPE_WRITE_HISTORIES": "a1", "GALAXY_MCP_SCOPE_BLOCKED_TOOLS": "nope"},
+                {
+                    "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "a1",
+                    "GALAXY_MCP_SCOPE_BLOCKED_TOOLS": "nope",
+                },
                 "GALAXY_MCP_SCOPE_BLOCKED_TOOLS names unknown tools: nope",
             ),
         ],

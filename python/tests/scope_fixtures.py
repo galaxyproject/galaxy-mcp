@@ -39,7 +39,9 @@ ScopedCase = tuple[
 ]
 
 
-def scope_cases(route: Callable[..., dict[str, Any]], version_route: dict[str, Any]) -> list[ScopedCase]:
+def scope_cases(
+    route: Callable[..., dict[str, Any]], version_route: dict[str, Any]
+) -> list[ScopedCase]:
     out: list[ScopedCase] = []
 
     def ok(tool, name, note, inp, call, routes, **scope):  # type: ignore[no-untyped-def]
@@ -105,7 +107,13 @@ def scope_cases(route: Callable[..., dict[str, Any]], version_route: dict[str, A
         [
             route(
                 "/api/datasets/dd02",
-                {"id": "dd02", "name": "x", "state": "new", "history_id": B, "creating_job": "e002"},
+                {
+                    "id": "dd02",
+                    "name": "x",
+                    "state": "new",
+                    "history_id": B,
+                    "creating_job": "e002",
+                },
             )
         ],
     )
@@ -186,7 +194,11 @@ def scope_cases(route: Callable[..., dict[str, Any]], version_route: dict[str, A
         "with the destructive rule set to writable, a writable history may be deleted",
         {"history_id": A, "deleted": True},
         lambda: update_history_fn(A, deleted=True),
-        [route(f"/api/histories/{A}", {"id": A, "name": "assigned", "deleted": True}, method="PUT")],
+        [
+            route(
+                f"/api/histories/{A}", {"id": A, "name": "assigned", "deleted": True}, method="PUT"
+            )
+        ],
         env={**ENV, "GALAXY_MCP_SCOPE_DESTRUCTIVE": "writable"},
     )
     refused(
@@ -250,7 +262,12 @@ def scope_cases(route: Callable[..., dict[str, Any]], version_route: dict[str, A
                 f"/api/histories/{B}/contents",
                 {
                     "contents": [
-                        {"id": "dd03", "name": "reads", "history_content_type": "dataset", "hid": 1},
+                        {
+                            "id": "dd03",
+                            "name": "reads",
+                            "history_content_type": "dataset",
+                            "hid": 1,
+                        },
                         {
                             "id": "c0c1",
                             "name": "pairs",
@@ -286,7 +303,12 @@ def scope_cases(route: Callable[..., dict[str, Any]], version_route: dict[str, A
                             "element_index": 0,
                             "element_identifier": "s1",
                             "element_type": "hda",
-                            "object": {"id": "dd04", "name": "s1", "state": "ok", "file_ext": "txt"},
+                            "object": {
+                                "id": "dd04",
+                                "name": "s1",
+                                "state": "ok",
+                                "file_ext": "txt",
+                            },
                         }
                     ],
                 },
