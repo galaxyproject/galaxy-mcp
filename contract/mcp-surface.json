@@ -1,7 +1,7 @@
 {
   "$comment": "Generated snapshot of the Galaxy MCP tool surface -- do not edit by hand. Regenerate with `uv run python -m tests.surface_manifest`.",
   "source": "python/src/galaxy_mcp/server.py",
-  "toolCount": 49,
+  "toolCount": 50,
   "tools": [
     {
       "name": "cancel_workflow_invocation",
@@ -178,7 +178,7 @@
           "representation": {
             "additionalProperties": true,
             "type": "object",
-            "description": "The tool definition as a dictionary matching the\nGalaxyUserTool schema. Required fields:\n- class: \"GalaxyUserTool\" (exactly this string)\n- id: tool identifier (lowercase, no spaces, 3-255 chars)\n- version: version string (e.g. \"0.1.0\")\n- name: display name shown in Galaxy tool menu\n- container: container image as a STRING, NOT a dict (a common\n  mistake). Prefer a real biocontainer over a bare image -- a bare\n  image like \"python:3.12-slim\" ships no third-party libraries (it\n  cannot `import pandas`). If the recommend_biocontainer tool is\n  available it resolves a verified image for you; otherwise use a\n  known-good biocontainer tag.\n- shell_command: the command to execute, with $(inputs.name.path)\n  for data inputs and $(inputs.name) for parameter inputs\n- inputs: list of input dicts, each with \"name\" and \"type\"\n  (type can be: \"data\", \"integer\", \"float\", \"text\", \"boolean\")\n- outputs: list of output dicts, each with \"name\", \"type\": \"data\",\n  \"format\" (e.g. \"tabular\", \"vcf\", \"bed\"), and \"from_work_dir\""
+            "description": "The tool definition as a dictionary matching the\nGalaxyUserTool schema. Required fields:\n- class: \"GalaxyUserTool\" (exactly this string)\n- id: tool identifier (lowercase, no spaces, 3-255 chars)\n- version: version string (e.g. \"0.1.0\")\n- name: display name shown in Galaxy tool menu\n- container: container image as a STRING, NOT a dict (a common\n  mistake). Prefer a real biocontainer over a bare image -- a bare\n  image like \"python:3.12-slim\" ships no third-party libraries (it\n  cannot `import pandas`). If the recommend_biocontainer tool is\n  available it resolves a verified image for you; otherwise use a\n  known-good biocontainer tag.\n- shell_command: the command to execute, with $(inputs.name.path)\n  for data inputs and $(inputs.name) for typed or fixed parameter\n  inputs. Never interpolate free-form text into shell or script\n  source; serialize it with JSON.stringify into a configfile and\n  read it as data.\n- inputs: list of input dicts, each with \"name\" and \"type\"\n  (type can be: \"data\", \"integer\", \"float\", \"text\", \"boolean\")\n- outputs: list of output dicts, each with \"name\", \"type\": \"data\",\n  \"format\" (e.g. \"tabular\", \"vcf\", \"bed\"), and \"from_work_dir\""
           }
         },
         "required": [
@@ -249,6 +249,36 @@
         },
         "required": [
           "dataset_id"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "evaluate_user_tool_preflight",
+      "tags": [
+        "extended",
+        "jobs",
+        "read",
+        "tools"
+      ],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "tool_uuid": {
+            "type": "string"
+          },
+          "job_id": {
+            "type": "string"
+          },
+          "safety_factor": {
+            "default": 1.5,
+            "type": "number"
+          }
+        },
+        "required": [
+          "tool_uuid",
+          "job_id"
         ],
         "type": "object"
       }

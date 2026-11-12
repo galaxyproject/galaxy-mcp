@@ -54,6 +54,7 @@ from galaxy_mcp.http_security import (
     require_local_files,
 )
 from galaxy_mcp.middleware import ToolVisibilityMiddleware
+from galaxy_mcp.resource_preflight import evaluate_resource_preflight
 from galaxy_mcp.tool_inputs import (
     SHAPE_HINT,
     USER_TOOL_SHAPE_HINT,
@@ -5590,6 +5591,64 @@ def run_user_tool(history_id: str, tool_uuid: str, inputs: dict[str, Any]) -> Ga
         raise ValueError(
             format_error("Run user tool", e, {"history_id": history_id, "tool_uuid": tool_uuid})
         ) from e
+
+
+@mcp.tool(tags={"tools", "jobs", "read", "extended"})
+def evaluate_user_tool_preflight(
+    tool_uuid: str,
+    job_id: str,
+    safety_factor: float = 1.5,
+) -> GalaxyResult:
+    """Evaluate a completed UDT test run and recommend resources.
+
+    Compares available peak-memory and runtime metrics with the UDT resource block.
+    Recommendations apply only to the tested workload.
+    """
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+    if not _is_encoded_id(job_id):
+        raise ValueError(_not_a_galaxy_id("Job", job_id, "list_jobs()"))
+    try:
+        tool_response = gi.make_get_request(f"{gi.url}/unprivileged_tools/{tool_uuid}")
+        tool_response.raise_for_status()
+        tool_info = tool_response.json()
+        tool_id = tool_info.get("tool_id")
+        if not tool_id:
+            raise ValueError(f"No user-defined tool found with UUID '{tool_uuid}'")
+
+        job_response = gi.make_get_request(f"{gi.url}/jobs/{job_id}")
+        job_response.raise_for_status()
+        job = job_response.json()
+        if not _is_this_record(job, job_id):
+            raise ValueError(_not_that_record("job", job_id))
+        if job.get("tool_id") != tool_id:
+            raise ValueError(f"Job '{job_id}' did not run user-defined tool '{tool_uuid}'")
+
+        metrics_response = gi.make_get_request(f"{gi.url}/jobs/{job_id}/metrics")
+        metrics_response.raise_for_status()
+        metrics = metrics_response.json()
+        if not isinstance(metrics, list):
+            raise ValueError(f"Galaxy returned invalid metrics for job '{job_id}'")
+    except Exception as e:
+        raise ValueError(
+            format_error(
+                "Evaluate user tool preflight", e, {"tool_uuid": tool_uuid, "job_id": job_id}
+            )
+        ) from e
+    report = evaluate_resource_preflight(
+        tool_info.get("representation") or {},
+        job,
+        metrics,
+        safety_factor,
+    )
+    return GalaxyResult(
+        data=report,
+        success=True,
+        message=(
+            f"Evaluated resource preflight for user-defined tool '{tool_uuid}' "
+            f"from job '{job_id}'"
+        ),
+    )
 
 
 # ==================== Pages (notebooks and reports) ====================

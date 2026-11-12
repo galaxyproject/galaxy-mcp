@@ -1,0 +1,35 @@
+{
+  "data": {
+    "job_id": "0123456789abcdef",
+    "state": "ok",
+    "observed": {
+      "peak_memory_bytes": 838860800.0,
+      "runtime_seconds": 240.0,
+      "oom_events": 0
+    },
+    "declared": {
+      "ram_min": 512.0,
+      "ram_max": 4096.0,
+      "timelimit": 300.0
+    },
+    "recommendation": {
+      "ram_min": 1200,
+      "timelimit": 360
+    },
+    "safety_factor": 1.5,
+    "warnings": [
+      {
+        "code": "ram_min_underestimated",
+        "message": "Declare ram_min of at least 1200 MiB for the tested scale."
+      },
+      {
+        "code": "timelimit_underestimated",
+        "message": "Declare timelimit of at least 360 seconds for the tested scale."
+      }
+    ]
+  },
+  "success": true,
+  "message": "Evaluated resource preflight for user-defined tool '61d15277-a911-45ef-aa66-5385146578cc' from job '0123456789abcdef'",
+  "count": null,
+  "pagination": null
+}

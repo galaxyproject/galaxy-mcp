@@ -33,6 +33,7 @@ import "./get-user-tool";
 import "./create-user-tool";
 import "./delete-user-tool";
 import "./run-user-tool";
+import "./evaluate-user-tool-preflight";
 import "./get-tool-input-template";
 import "./get-workflow-input-template";
 import "./invoke-workflow";
