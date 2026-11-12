@@ -1528,6 +1528,13 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
         # Validating here and keeping nothing would report success, then let the next call
         # quietly run against the operator's GALAXY_URL instead.
         if (url or api_key or not state["connected"]) and _untracked_remote_request():
+            if state.get("source") == "oauth":
+                raise _ConnectRefusedError(
+                    f"This client is already signed in through OAuth to {state['url']}; "
+                    "call connect() without a URL or API key to use that connection. A "
+                    "different Galaxy URL or key cannot be kept for this client, since nothing "
+                    "on its HTTP requests ties one call to the next."
+                )
             raise _ConnectRefusedError(
                 "connect() cannot keep a Galaxy connection for this client: nothing on its "
                 "HTTP requests ties one call to the next (it speaks the sessionless 2026-07-28 "

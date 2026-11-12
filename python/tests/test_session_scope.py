@@ -139,10 +139,14 @@ async def test_sessionless_http_connect_does_not_hand_back_the_operators_galaxy(
         connected = await client.call_tool_mcp(
             "connect", {"url": GALAXY_URL, "api_key": "caller-key"}
         )
+        user = await client.call_tool_mcp("get_user", {})
 
     assert connected.is_error
     assert "sessionless 2026-07-28" in _text(connected)
     caller_galaxy.assert_not_called()
+    # The caller was told no, so answering as the operator afterwards is the server's
+    # ordinary unauthenticated-HTTP behaviour, not a connection it claimed to have made.
+    assert user.structured_content["data"] == OPERATOR
 
 
 @pytest.mark.asyncio
@@ -215,7 +219,7 @@ async def test_sessionless_http_oauth_resolves_each_request_from_its_token(
     assert bob.structured_content["data"] == {"username": "bob-key"}
     assert reused.structured_content["data"]["auth"] == "oauth"
     assert replaced.is_error
-    assert "sessionless 2026-07-28" in _text(replaced)
+    assert "already signed in through OAuth" in _text(replaced)
     # No token must not fall back to the operator's GALAXY_API_KEY.
     assert nobody.is_error
     assert "Not connected to Galaxy" in _text(nobody)
@@ -309,6 +313,21 @@ async def test_sessionless_call_that_may_be_remote_gets_no_process_connection(
     assert connected.is_error
     assert "sessionless 2026-07-28" in _text(connected)
     assert server._session_connections == {}
+
+
+@pytest.mark.asyncio
+async def test_sessionless_http_transport_alone_is_enough_to_refuse(monkeypatch, caller_galaxy):
+    # The transport fastmcp records for the request decides it, even if nothing else marked
+    # the process as serving HTTP.
+    monkeypatch.setattr(server, "remote_caller_possible", lambda: False)
+    async with asgi_client(server.mcp, mode="auto") as client:
+        connected = await client.call_tool_mcp(
+            "connect", {"url": GALAXY_URL, "api_key": "caller-key"}
+        )
+
+    assert connected.is_error
+    assert "sessionless 2026-07-28" in _text(connected)
+    caller_galaxy.assert_not_called()
 
 
 @pytest.mark.parametrize(
