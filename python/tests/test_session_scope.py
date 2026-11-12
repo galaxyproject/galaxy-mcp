@@ -18,9 +18,12 @@ from unittest.mock import Mock, patch
 
 import pytest
 from fastmcp import Client
-from fastmcp.utilities.tests import asgi_client
+from fastmcp.utilities.tests import asgi_client, asgi_server
 
+from galaxy_mcp import auth as auth_module
 from galaxy_mcp import server
+from galaxy_mcp.auth import GalaxyOAuthProvider
+from galaxy_mcp.client import GalaxyInstance
 
 from .mcp_session import LiveMCPSession
 
@@ -154,19 +157,140 @@ async def test_sessionless_http_connect_without_arguments_reuses_the_operators_g
     assert connected.structured_content["data"]["user"] == OPERATOR
 
 
-@pytest.mark.asyncio
-async def test_sessionless_http_oauth_resolves_from_the_token(monkeypatch, caller_galaxy):
-    credentials = SimpleNamespace(galaxy_url=GALAXY_URL)
-    # Only its public routes are consulted when the app is built; nothing here is OAuth.
-    provider = Mock(get_login_paths=lambda _base: [], get_resource_metadata_paths=lambda _b: [])
+@pytest.fixture
+def oauth_provider(monkeypatch):
+    provider = GalaxyOAuthProvider(
+        base_url="https://mcp.test",
+        galaxy_url=GALAXY_URL,
+        session_secret="session-scope-test-secret",
+        client_registry_path=None,
+    )
+    monkeypatch.setattr(auth_module, "_AUTH_PROVIDER", provider)
     monkeypatch.setattr(server, "auth_provider", provider)
-    monkeypatch.setattr(server, "get_active_session", lambda _get: (credentials, "token-key"))
+    return provider
 
+
+def _access_token(provider: GalaxyOAuthProvider, username: str) -> str:
+    galaxy = {"url": GALAXY_URL, "api_key": f"{username}-key", "username": username}
+    issued = provider._issue_tokens(
+        client_id=f"{username}-client", scopes=["galaxy:full"], galaxy_payload=galaxy
+    )
+    return issued.access_token
+
+
+@pytest.mark.asyncio
+async def test_sessionless_http_oauth_resolves_each_request_from_its_token(
+    monkeypatch, oauth_provider, operator_galaxy
+):
+    # The SDK's bearer middleware is what hands get_access_token the request's token; the
+    # server here is built without it, so that one hop is stood in for. Everything after
+    # it -- decrypting the token and building a client from the key inside -- is real.
+    presented: dict[str, str | None] = {"token": None}
+    monkeypatch.setattr(
+        server,
+        "get_access_token",
+        lambda: SimpleNamespace(token=presented["token"]) if presented["token"] else None,
+    )
+
+    def galaxy_for(*, url, key, user_agent):
+        gi = Mock(spec=GalaxyInstance)
+        gi.users = Mock()
+        gi.users.get_current_user.return_value = {"username": key}
+        return gi
+
+    with patch.object(server, "GalaxyInstance", side_effect=galaxy_for):
+        async with asgi_client(server.mcp, mode="auto") as client:
+            presented["token"] = _access_token(oauth_provider, "alice")
+            alice = await client.call_tool_mcp("get_user", {})
+            reused = await client.call_tool_mcp("connect", {})
+            replaced = await client.call_tool_mcp(
+                "connect", {"url": GALAXY_URL, "api_key": "someone-elses-key"}
+            )
+            presented["token"] = _access_token(oauth_provider, "bob")
+            bob = await client.call_tool_mcp("get_user", {})
+            presented["token"] = None
+            nobody = await client.call_tool_mcp("get_user", {})
+
+    assert alice.structured_content["data"] == {"username": "alice-key"}
+    assert bob.structured_content["data"] == {"username": "bob-key"}
+    assert reused.structured_content["data"]["auth"] == "oauth"
+    assert replaced.is_error
+    assert "sessionless 2026-07-28" in _text(replaced)
+    # No token must not fall back to the operator's GALAXY_API_KEY.
+    assert nobody.is_error
+    assert "Not connected to Galaxy" in _text(nobody)
+    assert server._session_connections == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("arguments", [{}, {"url": "", "api_key": ""}])
+async def test_sessionless_http_connect_with_nothing_to_reuse_is_refused(caller_galaxy, arguments):
     async with asgi_client(server.mcp, mode="auto") as client:
-        user = await client.call_tool_mcp("get_user", {})
+        connected = await client.call_tool_mcp("connect", arguments)
 
-    assert not user.is_error, _text(user)
-    assert user.structured_content["data"] == CALLER
+    # An empty URL is turned away by URL validation before this check; either way nothing
+    # is validated and nothing is kept.
+    assert connected.is_error
+    caller_galaxy.assert_not_called()
+    assert server._session_connections == {}
+
+
+@pytest.mark.asyncio
+async def test_stateless_handshake_http_connect_is_refused(caller_galaxy, operator_galaxy):
+    # Without a server-issued session, fastmcp keys a handshake-era request on the client's
+    # own mcp-session-id header, or a fresh id per request: connect() used to report
+    # success and every later call then ran against the operator's Galaxy.
+    async with (
+        asgi_server(server.mcp, stateless_http=True) as running,
+        running.client(mode="legacy") as client,
+    ):
+        connected = await client.call_tool_mcp(
+            "connect", {"url": GALAXY_URL, "api_key": "caller-key"}
+        )
+
+    assert connected.is_error
+    assert "stateless HTTP" in _text(connected)
+    caller_galaxy.assert_not_called()
+    assert server._session_connections == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("transport", "http_app_kwargs"),
+    [("sse", {}), ("http", {"stateless_http": True})],
+)
+async def test_no_client_chosen_session_id_reaches_the_process_connection(
+    caller_galaxy, transport, http_app_kwargs
+):
+    # The operator connects over a local sessionless client first, then the same process
+    # starts serving HTTP. A remote caller naming any session id it likes, the
+    # process connection's printed name included, must not get the operator's Galaxy.
+    async with Client(server.mcp, mode="auto") as local:
+        await local.call_tool_mcp("connect", {"url": GALAXY_URL, "api_key": "caller-key"})
+    assert server._PROCESS_CONNECTION_KEY in server._session_connections
+
+    for chosen in ("process", repr(server._PROCESS_CONNECTION_KEY)):
+        async with (
+            asgi_server(server.mcp, transport=transport, **http_app_kwargs) as running,
+            running.client(mode="legacy", headers={"mcp-session-id": chosen}) as client,
+        ):
+            user = await client.call_tool_mcp("get_user", {})
+
+        assert user.is_error, _text(user)
+        assert "Not connected to Galaxy" in _text(user)
+
+
+@pytest.mark.asyncio
+async def test_building_the_http_app_ends_process_wide_connections(caller_galaxy):
+    # Served by `fastmcp run` or mounted in a host app, the process takes remote callers
+    # without run_http_server ever being called.
+    server.mcp.http_app()
+    async with Client(server.mcp, mode="auto") as client:
+        connected = await client.call_tool_mcp(
+            "connect", {"url": GALAXY_URL, "api_key": "caller-key"}
+        )
+
+    assert connected.is_error
     assert server._session_connections == {}
 
 
