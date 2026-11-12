@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `import_workflow` imports a workflow from its definition: a `.ga` or Format2 dict, or
+  the same as a JSON object string. Until now the only way in was
+  `import_workflow_from_iwc`, so a workflow an agent wrote could not be run through the
+  server (#228).
+- `invoke_workflow` takes `allow_tool_state_corrections`, Galaxy's own flag for running a
+  workflow whose steps carry upgrade messages, such as a parameter left unset that Galaxy
+  fills with its default. It defaults to false, as before (#228).
 - `get_page` answers with `content_hash`, the hash Galaxy's page assistant uses over the
   editable source. Galaxy neither returns nor checks it; it is computed from the page as
   Galaxy sent it.

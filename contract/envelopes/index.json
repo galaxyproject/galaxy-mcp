@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "python/src/galaxy_mcp/server.py",
-  "caseCount": 287,
-  "failureCaseCount": 99,
+  "caseCount": 290,
+  "failureCaseCount": 101,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -2243,6 +2243,22 @@
       "replies": "import_workflow_from_iwc/imported.galaxy.json"
     },
     {
+      "tool": "import_workflow",
+      "case": "imported",
+      "note": "a .ga definition POSTed to Galaxy",
+      "outcome": "success",
+      "input": {
+        "definition": {
+          "a_galaxy_workflow": "true",
+          "name": "Workflow 0",
+          "format-version": "0.1",
+          "steps": {}
+        }
+      },
+      "envelope": "import_workflow/imported.json",
+      "replies": "import_workflow/imported.galaxy.json"
+    },
+    {
       "tool": "get_page_revision",
       "case": "content_editor_from_the_server",
       "note": "the revision carries its own editable markdown",
@@ -3248,6 +3264,20 @@
       "replies": "import_workflow_from_iwc/refused_by_galaxy.galaxy.json"
     },
     {
+      "tool": "import_workflow",
+      "case": "refused_by_galaxy",
+      "note": "the import refused, which is a bioblend write",
+      "outcome": "failure",
+      "input": {
+        "definition": {
+          "name": "Workflow 0",
+          "steps": {}
+        }
+      },
+      "envelope": "import_workflow/refused_by_galaxy.json",
+      "replies": "import_workflow/refused_by_galaxy.galaxy.json"
+    },
+    {
       "tool": "list_workflows",
       "case": "limit_above_the_ceiling",
       "note": "the page ceiling, with the advice to use offset that a pageable tool gets",
@@ -3348,6 +3378,17 @@
       },
       "envelope": "get_dataset_details/is_a_collection.json",
       "replies": "get_dataset_details/is_a_collection.galaxy.json"
+    },
+    {
+      "tool": "import_workflow",
+      "case": "empty_definition",
+      "note": "an empty object is no workflow, so nothing is posted",
+      "outcome": "failure",
+      "input": {
+        "definition": {}
+      },
+      "envelope": "import_workflow/empty_definition.json",
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "get_workflow_input_template",

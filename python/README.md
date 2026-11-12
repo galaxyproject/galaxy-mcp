@@ -295,7 +295,8 @@ the same Galaxy tools API as a catalog tool.
 - `list_workflows`: Stored workflows, optionally filtered by name or published state; 50 per page
 - `get_workflow_details`: One workflow's steps and inputs, at a given version
 - `get_workflow_input_template`: A ready-to-fill input template plus a run guide, at a given version; call this before `invoke_workflow`
-- `invoke_workflow`: Run a workflow, validating the inputs against its steps first
+- `import_workflow`: Import a workflow from its `.ga` or Format2 definition
+- `invoke_workflow`: Run a workflow, validating the inputs against its steps first; `allow_tool_state_corrections` lets Galaxy fill in tool state it would otherwise refuse
 - `get_invocations`: Invocations, by invocation, workflow, or history; pages with `limit` (at most 100, Galaxy's cap) and `offset`, sorts by `create_time` or `update_time`, and `include_terminal=False` keeps only the ones still running
 - `cancel_workflow_invocation`: Cancel a running invocation
 

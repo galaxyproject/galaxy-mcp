@@ -4750,6 +4750,38 @@ def import_workflow_from_iwc(trs_id: str) -> GalaxyResult:
         raise ValueError(f"Failed to import workflow from IWC: {str(e)}") from e
 
 
+@mcp.tool(tags={"workflows", "write", "extended"})
+def import_workflow(definition: dict[str, Any] | str) -> GalaxyResult:
+    """
+    Import a workflow from its definition into the user's Galaxy instance
+
+    Args:
+        definition: The workflow as Galaxy's native .ga dict or a Format2 (gxformat2) dict, or
+            the same as a JSON object string. Embedded user-defined tools are created if the
+            user is allowed to. The stored workflow takes the name the definition gives it.
+
+    Returns:
+        GalaxyResult with the imported workflow information in data field. The workflow is
+        private.
+    """
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+
+    workflow = _coerce_optional_json_dict(definition, "definition")
+    if not workflow:
+        raise ValueError("definition must be a workflow object (a .ga or Format2 dict)")
+
+    try:
+        imported = gi.workflows.import_workflow_dict(workflow)
+        return GalaxyResult(
+            data=imported,
+            success=True,
+            message=f"Imported workflow '{imported.get('name')}'",
+        )
+    except Exception as e:
+        raise ValueError(f"Failed to import workflow: {str(e)}") from e
+
+
 @mcp.tool(tags={"workflows", "read", "extended"})
 def list_workflows(
     name: str | None = None,
@@ -5004,6 +5036,7 @@ def invoke_workflow(
     history_name: str | None = None,
     inputs_by: str = "step_index",
     parameters_normalized: bool = False,
+    allow_tool_state_corrections: bool = False,
 ) -> GalaxyResult:
     """
     Invoke (run) a workflow with specified inputs and parameters
@@ -5022,6 +5055,9 @@ def invoke_workflow(
         inputs_by: How to identify workflow inputs - 'step_index', 'step_uuid', 'name', or
                   'step_index|step_uuid' (recommended; matches get_workflow_input_template)
         parameters_normalized: Whether parameters are already in normalized format
+        allow_tool_state_corrections: Let Galaxy fill in or correct tool state it would
+            otherwise refuse with "Workflow step has upgrade messages", e.g. a parameter a
+            workflow written outside the editor leaves unset
 
     Returns:
         GalaxyResult with workflow invocation information including invocation ID in data field
@@ -5072,6 +5108,7 @@ def invoke_workflow(
             history_name=history_name,
             inputs_by=resolved_inputs_by,
             parameters_normalized=parameters_normalized,
+            allow_tool_state_corrections=allow_tool_state_corrections,
         )
         return GalaxyResult(
             data=invocation,

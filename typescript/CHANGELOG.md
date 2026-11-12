@@ -6,6 +6,13 @@ entry covers all three; where something only affects one surface, it says which.
 
 ## Unreleased
 
+### import_workflow, and allow_tool_state_corrections on invoke_workflow
+
+`import_workflow` imports a workflow from its `.ga` or Format2 definition, given as an object or
+a JSON object string, with `POST /api/workflows` (galaxyproject/galaxy-mcp#228).
+`invoke_workflow` takes `allowToolStateCorrections` (`allow_tool_state_corrections` on the wire)
+and now always sends it, false by default, as bioblend does for the Python server.
+
 ### galaxy-mcp serves Streamable HTTP
 
 `galaxy-mcp --transport streamable-http` (or `GALAXY_MCP_TRANSPORT=streamable-http`) serves the

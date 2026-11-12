@@ -161,7 +161,7 @@ const CASES: Case[] = [
     args: `{"workflow_id":"w1","inputs":{${PROTO}}}`,
     answers: [VERSION, ["/invocations", { id: "i1", state: "new" }]],
     route: "/invocations",
-    body: `{"inputs":{${PROTO}},"inputs_by":"step_index","parameters":{},"parameters_normalized":false}`,
+    body: `{"inputs":{${PROTO}},"inputs_by":"step_index","parameters":{},"parameters_normalized":false,"allow_tool_state_corrections":false}`,
   },
   {
     tool: "invoke_workflow",
@@ -169,7 +169,7 @@ const CASES: Case[] = [
     args: `{"workflow_id":"w1","params":{${PROTO}}}`,
     answers: [VERSION, ["/invocations", { id: "i1", state: "new" }]],
     route: "/invocations",
-    body: `{"inputs":{},"inputs_by":"step_index","parameters":{${PROTO}},"parameters_normalized":false}`,
+    body: `{"inputs":{},"inputs_by":"step_index","parameters":{${PROTO}},"parameters_normalized":false,"allow_tool_state_corrections":false}`,
   },
 ];
 

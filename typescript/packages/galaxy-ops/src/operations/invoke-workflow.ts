@@ -118,6 +118,7 @@ export type InvokeWorkflowResult = InvocationResult | InvocationResult[];
 
 const DEFAULT_INPUTS_BY = "step_index";
 const DEFAULT_PARAMETERS_NORMALIZED = false;
+const DEFAULT_ALLOW_TOOL_STATE_CORRECTIONS = false;
 
 /** An object argument, or the JSON string some MCP clients send instead. */
 const jsonObjectArg = z.union([jsonObject(), z.string()]);
@@ -152,6 +153,12 @@ const input = {
     .boolean()
     .default(DEFAULT_PARAMETERS_NORMALIZED)
     .describe("Whether legacy parameters are already normalized (indexed by order_index)"),
+  allowToolStateCorrections: z
+    .boolean()
+    .default(DEFAULT_ALLOW_TOOL_STATE_CORRECTIONS)
+    .describe(
+      "Let Galaxy fill in or correct tool state it would otherwise refuse with 'Workflow step has upgrade messages', e.g. a parameter a workflow written outside the editor leaves unset",
+    ),
 };
 
 type JsonObjectArg = Record<string, unknown> | string;
@@ -164,6 +171,7 @@ type In = {
   historyName?: string | null;
   inputsBy?: string;
   parametersNormalized?: boolean;
+  allowToolStateCorrections?: boolean;
 };
 
 /**
@@ -171,7 +179,7 @@ type In = {
  * it to. A blank string means "not supplied"; anything that is not a JSON object
  * fails here, naming the field, rather than obscurely deeper in.
  */
-function coerceJsonObject(
+export function coerceJsonObject(
   value: JsonObjectArg | null | undefined,
   name: string,
 ): Record<string, unknown> | undefined {
@@ -260,6 +268,8 @@ async function run(i: In, ctx: GalaxyContext): Promise<InvokeWorkflowResult> {
     inputs_by: i.inputsBy ?? DEFAULT_INPUTS_BY,
     parameters: params ?? {},
     parameters_normalized: i.parametersNormalized ?? DEFAULT_PARAMETERS_NORMALIZED,
+    // bioblend always sends it, so the Python server does too
+    allow_tool_state_corrections: i.allowToolStateCorrections ?? DEFAULT_ALLOW_TOOL_STATE_CORRECTIONS,
   };
   if (historyField != null) body["history"] = historyField;
 
@@ -316,6 +326,7 @@ const withDefaults = (i: In): InputOf<typeof input> => ({
   ...i,
   inputsBy: i.inputsBy ?? DEFAULT_INPUTS_BY,
   parametersNormalized: i.parametersNormalized ?? DEFAULT_PARAMETERS_NORMALIZED,
+  allowToolStateCorrections: i.allowToolStateCorrections ?? DEFAULT_ALLOW_TOOL_STATE_CORRECTIONS,
 });
 
 export const invokeWorkflow = (i: In, ctx: GalaxyContext) =>

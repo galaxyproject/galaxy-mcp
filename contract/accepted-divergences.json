@@ -364,6 +364,22 @@
         "reason": "Only here. Same gap before invoke_workflow: no template, no run guide, no input validation on that side."
       },
       {
+        "tool": "import_workflow",
+        "param": null,
+        "kind": "missing-builtin-tool",
+        "observed": "python=write (tag) params=[definition type=anyOf<object|string> required=true default=none]",
+        "status": "intentional",
+        "reason": "Only here: POST /api/workflows with a definition the agent holds, .ga or Format2. Galaxy's server can import only from IWC (import_workflow_from_iwc); a workflow an agent wrote, such as a Foundry conversion, has no way in there."
+      },
+      {
+        "tool": "invoke_workflow",
+        "param": "allow_tool_state_corrections",
+        "kind": "missing-builtin-param",
+        "observed": "python=type=boolean required=false default=false",
+        "status": "intentional",
+        "reason": "The invocations API's own flag, passed through. Without it Galaxy refuses a workflow whose steps carry upgrade messages, which a workflow written outside the editor often does (a parameter left unset that Galaxy fills with its default)."
+      },
+      {
         "tool": "invoke_workflow",
         "param": "inputs",
         "kind": "type-mismatch",

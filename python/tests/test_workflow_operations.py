@@ -23,6 +23,7 @@ from .test_helpers import (
     get_iwc_workflows_fn,
     get_workflow_details_fn,
     get_workflow_input_template_fn,
+    import_workflow_fn,
     import_workflow_from_iwc_fn,
     invoke_workflow_fn,
     list_workflows_fn,
@@ -535,6 +536,7 @@ class TestWorkflowOperations:
                 history_name=None,
                 inputs_by="step_index",
                 parameters_normalized=False,
+                allow_tool_state_corrections=False,
             )
 
     def test_invoke_workflow_fn_with_history_name(self, mock_galaxy_instance):
@@ -565,6 +567,7 @@ class TestWorkflowOperations:
                 history_name="RNA-seq Analysis Results",
                 inputs_by="name",
                 parameters_normalized=False,
+                allow_tool_state_corrections=False,
             )
 
     def test_cancel_workflow_invocation_fn(self, mock_galaxy_instance):
@@ -1197,3 +1200,54 @@ class TestInvocationOutcome:
     )
     def test_outcome(self, state, job_states, outcome):
         assert _invocation_outcome(state, job_states) == outcome
+
+
+class TestImportWorkflow:
+    def test_imports_a_definition_dict(self, mock_galaxy_instance):
+        definition = {"class": "GalaxyWorkflow", "label": "wf", "inputs": {}, "steps": {}}
+        mock_galaxy_instance.workflows.import_workflow_dict.return_value = {
+            "id": "w1",
+            "name": "wf",
+        }
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            result = import_workflow_fn(definition)
+        mock_galaxy_instance.workflows.import_workflow_dict.assert_called_once_with(definition)
+        assert result.success is True
+        assert result.data["id"] == "w1"
+        assert result.message == "Imported workflow 'wf'"
+
+    def test_accepts_a_json_string(self, mock_galaxy_instance):
+        mock_galaxy_instance.workflows.import_workflow_dict.return_value = {
+            "id": "w1",
+            "name": "wf",
+        }
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            import_workflow_fn('{"a_galaxy_workflow": "true", "name": "wf", "steps": {}}')
+        mock_galaxy_instance.workflows.import_workflow_dict.assert_called_once_with(
+            {"a_galaxy_workflow": "true", "name": "wf", "steps": {}}
+        )
+
+    @pytest.mark.parametrize("bad", ["not json", "[1, 2]", "", {}])
+    def test_rejects_a_definition_that_is_not_an_object(self, mock_galaxy_instance, bad):
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError, match="definition"):
+                import_workflow_fn(bad)
+        mock_galaxy_instance.workflows.import_workflow_dict.assert_not_called()
+
+    def test_wraps_a_galaxy_refusal(self, mock_galaxy_instance):
+        mock_galaxy_instance.workflows.import_workflow_dict.side_effect = Exception("400: bad step")
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError, match="Failed to import workflow: 400: bad step"):
+                import_workflow_fn({"steps": {}})
+
+
+def test_invoke_passes_allow_tool_state_corrections(mock_galaxy_instance):
+    mock_galaxy_instance.workflows.invoke_workflow.return_value = {"id": "inv1"}
+    with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+        invoke_workflow_fn(workflow_id="w1", allow_tool_state_corrections=True)
+    assert (
+        mock_galaxy_instance.workflows.invoke_workflow.call_args.kwargs[
+            "allow_tool_state_corrections"
+        ]
+        is True
+    )

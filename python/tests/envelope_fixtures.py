@@ -76,6 +76,7 @@ from .test_helpers import (
     get_user_tool_fn,
     get_workflow_details_fn,
     get_workflow_input_template_fn,
+    import_workflow_fn,
     import_workflow_from_iwc_fn,
     invoke_workflow_fn,
     list_history_ids_fn,
@@ -3841,6 +3842,23 @@ def invocation_mutation_cases(add: AddCase) -> None:
             route("/api/workflows", imported, method="POST"),
         ],
     )
+    definition = {
+        "a_galaxy_workflow": "true",
+        "name": "Workflow 0",
+        "format-version": "0.1",
+        "steps": {},
+    }
+    add(
+        "import_workflow",
+        "imported",
+        "a .ga definition POSTed to Galaxy",
+        {"definition": definition},
+        lambda: import_workflow_fn(definition),
+        [
+            route("/api/workflows/upload", imported, method="POST"),
+            route("/api/workflows", imported, method="POST"),
+        ],
+    )
 
 
 def revision_cases(add: AddCase) -> None:
@@ -4854,6 +4872,16 @@ def iwc_failure_cases(add: AddFailure) -> None:
             fail("/api/workflows", 400, DENIED, method="POST"),
         ],
     )
+    add(
+        "import_workflow",
+        "refused_by_galaxy",
+        "the import refused, which is a bioblend write",
+        {"definition": {"name": "Workflow 0", "steps": {}}},
+        [
+            fail("/api/workflows/upload", 400, DENIED, method="POST"),
+            fail("/api/workflows", 400, DENIED, method="POST"),
+        ],
+    )
 
 
 def refusal_cases(add: AddFailure) -> None:
@@ -4980,6 +5008,13 @@ def order_of_refusal_cases(add: AddFailure) -> None:
 
 def argument_refusal_cases(add: AddFailure) -> None:
     """Arguments this server refuses on its own terms, before it asks Galaxy anything."""
+    add(
+        "import_workflow",
+        "empty_definition",
+        "an empty object is no workflow, so nothing is posted",
+        {"definition": {}},
+        [],
+    )
     # Galaxy indexes its stored versions with a plain list subscript, so a negative one
     # is not a 400 there but some other version, served quietly. Refused here instead.
     add(

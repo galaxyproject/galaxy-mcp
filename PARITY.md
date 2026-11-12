@@ -28,11 +28,11 @@ Two differences with that server are recorded once here rather than as a row per
 
 | Status | Differences |
 | --- | --- |
-| `intentional` | `10` |
+| `intentional` | `12` |
 | `pending-port` | `0` |
 | `pending-decision` | `3` |
 | `unreviewed-gap` | `53` |
-| **total** | `66` |
+| **total** | `68` |
 
 These are counted apart and ratcheted apart -- at 53 -- because they are not this repository's to close on its own: each one is a rename, an addition or a removal somebody has to agree with galaxyproject/galaxy. Nothing here has been ruled on yet.
 
@@ -44,7 +44,7 @@ Every tool any surface has, against the surfaces that do not have it. A name her
 
 **Missing from TypeScript** (5): `connect`, `get_invocation_details`, `get_job_status`, `list_file_source_templates`, `list_user_file_sources`
 
-**Missing from Built-in** (9): `get_iwc_workflows`, `get_job_logs`, `get_tool_input_template`, `get_user_tool`, `get_workflow_input_template`, `list_jobs`, `recommend_iwc_workflows`, `update_history`, `upload_file`
+**Missing from Built-in** (10): `get_iwc_workflows`, `get_job_logs`, `get_tool_input_template`, `get_user_tool`, `get_workflow_input_template`, `import_workflow`, `list_jobs`, `recommend_iwc_workflows`, `update_history`, `upload_file`
 
 ## Tools
 
@@ -114,8 +114,10 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `get_user_tool` |  | `4` | `read (tag)` | `read (hint)` | -- | `vs built-in: missing-builtin-tool` | `intentional` | Only here, and it exists because of the list_user_tools rows below: Galaxy's list returns every user-defined tool whole, so there a caller already holds the definition it wants; ours pages that list, so one tool by uuid needs its own call. Galaxy's server has no user-tool lookup by uuid and nothing there is asking for one. |
 | `get_workflow_details` |  | `5` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_workflow_input_template` |  | `11` | `read (tag)` | `read (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Same gap before invoke_workflow: no template, no run guide, no input validation on that side. |
+| `import_workflow` |  | `3` | `write (tag)` | `write (hint)` | -- | `vs built-in: missing-builtin-tool` | `intentional` | Only here: POST /api/workflows with a definition the agent holds, .ga or Format2. Galaxy's server can import only from IWC (import_workflow_from_iwc); a workflow an agent wrote, such as a Foundry conversion, has no way in there. |
 | `import_workflow_from_iwc` |  | `4` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
 | `invoke_workflow` |  | `4` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
+| `invoke_workflow` | `allow_tool_state_corrections` |  | `type=boolean required=false default=false` | `type=boolean required=false default=false` | -- | `vs built-in: missing-builtin-param` | `intentional` | The invocations API's own flag, passed through. Without it Galaxy refuses a workflow whose steps carry upgrade messages, which a workflow written outside the editor often does (a parameter left unset that Galaxy fills with its default). |
 | `invoke_workflow` | `inputs` |  | `type=anyOf<object\|string> required=false default=none` | `type=anyOf<object\|string> required=false default=none` | `type=object required=false default=none` | `vs built-in: type-mismatch` | `unreviewed-gap` | Ours also accepts the JSON text of the object, because that is what a CLI flag and some clients send; Galaxy's takes the object only. |
 | `invoke_workflow` | `inputs_by` |  | `type=string required=false default="step_index"` | `type=string required=false default="step_index"` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours lets the caller say how inputs are keyed (step index, step id, name); Galaxy's uses the API default. |
 | `invoke_workflow` | `parameters` |  | -- | -- | `type=object required=false default=none` | `vs built-in: missing-py-param` | `unreviewed-gap` | One parameter map under two names: `parameters` there, `params` here. |
