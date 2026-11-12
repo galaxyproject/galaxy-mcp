@@ -15,12 +15,7 @@
     "recommend_iwc_workflows",
     "extract_workflow_from_history"
   ],
-  "uncovered": [
-    {
-      "tool": "extract_workflow_from_history",
-      "reason": "No live scenario yet: extracting needs a history holding finished jobs whose ids and hids the scenario reads back, and none has been written or run against the test Galaxy. The golden envelopes pin its answer and its refusals on both servers until one is."
-    }
-  ],
+  "uncovered": [],
   "scenarios": [
     {
       "id": "workflows.list.by_name_paged",
@@ -1176,6 +1171,350 @@
           "args": {"intent": "sequencing", "limit": 26},
           "outcome": "failure",
           "expect": [{"path": "failure.sentence", "equals": "limit must be at most 25 (got 26); request 25 or fewer"}]
+        }
+      ]
+    },
+    {
+      "id": "workflows.extract.cat1_then_invoke",
+      "note": "A job run by hand becomes a workflow that runs. cat1 is run on one dataset through run_tool; extract_workflow_from_history is given that job's id and the input's hid -- a history item number, not an id -- and answers with a stored workflow Galaxy holds under the name asked for, with one input step and one tool step. The extracted workflow is then invoked on a second dataset and its output is that dataset's content, read through the bookkeeping client.",
+      "requires": {
+        "tools": [
+          "cat1"
+        ]
+      },
+      "fixtures": [
+        {
+          "as": "h",
+          "history": {}
+        },
+        {
+          "as": "d1",
+          "dataset": {
+            "history": "${h.id}",
+            "content": "alpha\nbeta\n",
+            "name": "${run.tag}-first.txt"
+          }
+        },
+        {
+          "as": "d2",
+          "dataset": {
+            "history": "${h.id}",
+            "content": "gamma\n",
+            "name": "${run.tag}-second.txt"
+          }
+        }
+      ],
+      "steps": [
+        {
+          "call": "run_tool",
+          "args": {
+            "history_id": "${h.id}",
+            "tool_id": "cat1",
+            "inputs": {
+              "input1": {
+                "src": "hda",
+                "id": "${d1.id}"
+              }
+            }
+          },
+          "expect": [
+            {
+              "path": "data.jobs",
+              "length": {
+                "eq": 1
+              }
+            },
+            {
+              "path": "data.outputs",
+              "length": {
+                "eq": 1
+              }
+            }
+          ],
+          "save": {
+            "job": "data.jobs.0.id",
+            "first_out": "data.outputs.0.id"
+          }
+        },
+        {
+          "wait": {
+            "job": "${job}",
+            "state": "ok",
+            "timeout": 600
+          }
+        },
+        {
+          "call": "extract_workflow_from_history",
+          "args": {
+            "history_id": "${h.id}",
+            "workflow_name": "${run.tag}-extracted",
+            "job_ids": [
+              "${job}"
+            ],
+            "dataset_hids": [
+              "${d1.hid}"
+            ]
+          },
+          "creates": {
+            "workflow": "data.workflow_id"
+          },
+          "expect": [
+            {
+              "path": "data.workflow_id",
+              "matches": "^[0-9a-f]{16}$"
+            },
+            {
+              "path": "data.name",
+              "equals": "${run.tag}-extracted"
+            },
+            {
+              "path": "data.number_of_steps",
+              "equals": null
+            },
+            {
+              "path": "data.steps_requested",
+              "equals": {
+                "tool_steps": 1,
+                "dataset_inputs": 1,
+                "collection_inputs": 0
+              }
+            },
+            {
+              "path": "data.history_id",
+              "equals": "${h.id}"
+            },
+            {
+              "path": "data.job_ids",
+              "equals": [
+                "${job}"
+              ]
+            },
+            {
+              "path": "data.dataset_hids",
+              "equals": [
+                "${d1.hid}"
+              ]
+            },
+            {
+              "path": "data.collection_hids",
+              "equals": []
+            },
+            {
+              "path": "data.workflow.name",
+              "equals": "${run.tag}-extracted"
+            },
+            {
+              "path": "data.workflow.deleted",
+              "equals": false
+            },
+            {
+              "path": "data.next_steps",
+              "contains": "get_workflow_input_template"
+            },
+            {
+              "path": "count",
+              "equals": null
+            },
+            {
+              "path": "message",
+              "contains": "1 tool step(s) from the listed jobs, 1 dataset input(s) and 0 collection input(s)"
+            }
+          ],
+          "save": {
+            "wf": "data.workflow_id"
+          }
+        },
+        {
+          "verify": {
+            "workflow": "${wf}"
+          },
+          "expect": [
+            {
+              "path": "name",
+              "equals": "${run.tag}-extracted"
+            },
+            {
+              "path": "deleted",
+              "equals": false
+            }
+          ]
+        },
+        {
+          "call": "get_workflow_details",
+          "args": {
+            "workflow_id": "${wf}"
+          },
+          "expect": [
+            {
+              "path": "data.name",
+              "equals": "${run.tag}-extracted"
+            },
+            {
+              "path": "data.steps",
+              "length": {
+                "eq": 2
+              }
+            }
+          ]
+        },
+        {
+          "call": "get_workflow_input_template",
+          "args": {
+            "workflow_id": "${wf}"
+          },
+          "expect": [
+            {
+              "path": "data.inputs_template",
+              "equals": {
+                "0": {
+                  "src": "hda",
+                  "id": "<dataset_id>"
+                }
+              }
+            },
+            {
+              "path": "data.slots",
+              "length": {
+                "eq": 1
+              }
+            },
+            {
+              "path": "data.slots.0.step_index",
+              "equals": 0
+            },
+            {
+              "path": "data.slots.0.input_type",
+              "equals": "data"
+            },
+            {
+              "path": "count",
+              "equals": 1
+            }
+          ]
+        },
+        {
+          "call": "invoke_workflow",
+          "args": {
+            "workflow_id": "${wf}",
+            "history_id": "${h.id}",
+            "inputs": {
+              "0": {
+                "src": "hda",
+                "id": "${d2.id}"
+              }
+            }
+          },
+          "creates": {
+            "invocation": "data.id"
+          },
+          "expect": [
+            {
+              "path": "data.history_id",
+              "equals": "${h.id}"
+            },
+            {
+              "path": "message",
+              "equals": "Invoked workflow '${wf}'"
+            }
+          ],
+          "save": {
+            "inv": "data.id"
+          }
+        },
+        {
+          "wait": {
+            "invocation": "${inv}",
+            "state": [
+              "scheduled",
+              "completed"
+            ],
+            "timeout": 600
+          }
+        },
+        {
+          "call": "get_invocations",
+          "args": {
+            "invocation_id": "${inv}",
+            "step_details": true
+          },
+          "until": {
+            "expect": [
+              {
+                "path": "data.outcome",
+                "equals": "completed"
+              }
+            ],
+            "timeout": 600,
+            "interval": 5
+          },
+          "expect": [
+            {
+              "path": "data.job_states",
+              "equals": {
+                "ok": 1
+              }
+            },
+            {
+              "path": "data.inputs.0.id",
+              "equals": "${d2.id}"
+            },
+            {
+              "path": "data.steps",
+              "length": {
+                "eq": 2
+              }
+            },
+            {
+              "path": "data.steps.1.jobs",
+              "length": {
+                "eq": 1
+              }
+            }
+          ],
+          "save": {
+            "wf_job": "data.steps.1.jobs.0.id"
+          }
+        },
+        {
+          "call": "get_job_details",
+          "args": {
+            "job_id": "${wf_job}"
+          },
+          "expect": [
+            {
+              "path": "data.job.tool_id",
+              "equals": "cat1"
+            },
+            {
+              "path": "data.job.state",
+              "equals": "ok"
+            },
+            {
+              "path": "data.job.history_id",
+              "equals": "${h.id}"
+            }
+          ],
+          "save": {
+            "out": "data.job.outputs.out_file1.id"
+          }
+        },
+        {
+          "wait": {
+            "dataset": "${out}",
+            "state": "ok",
+            "timeout": 600
+          }
+        },
+        {
+          "verify": {
+            "dataset_text": "${out}"
+          },
+          "expect": [
+            {
+              "path": "content",
+              "equals": "gamma\n"
+            }
+          ]
         }
       ]
     }
