@@ -91,8 +91,8 @@ export const importWorkflowOp: Operation<typeof input, ImportWorkflowResult> = {
     "the name the definition gives it, and it stays private. Each call creates a new stored workflow, " +
     "so a retry makes a duplicate; an embedded GalaxyUserTool step also becomes a new user-defined tool " +
     "each time, unless its tool_uuid names one the user already has. Galaxy imports a workflow whose " +
-    "tools it does not have; missing_tools in the result names them, and invoking the workflow fails " +
-    "until they are installed.",
+    "tools it does not have; missing_tools in the result names them (null if they could not be " +
+    "checked), and invoking the workflow fails until they are installed.",
   input,
   readOnly: false,
   run,
