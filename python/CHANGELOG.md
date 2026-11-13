@@ -57,6 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no substring of any one of them, such as `count occurrences` for Count ("occurrences
   of each record"), found nothing. Punctuation around a word is ignored; a query with a
   single-character word finds no more.
+- The code-mode instructions' `search_tools_by_name` example passed `name`; the parameter
+  is `query`, so a model copying the example got a validation error.
 
 ## [1.12.0] - 2026-10-19
 

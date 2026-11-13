@@ -1021,7 +1021,7 @@ script and `return` the final answer to avoid round-trips.
 
 `search` indexes the MCP tools (above), NOT Galaxy's full tool catalog. To
 find a Galaxy tool like FastQC, call
-`await call_tool('search_tools_by_name', {'name': 'fastqc'})` from inside
+`await call_tool('search_tools_by_name', {'query': 'fastqc'})` from inside
 `run_galaxy_tool`.
 """
 
