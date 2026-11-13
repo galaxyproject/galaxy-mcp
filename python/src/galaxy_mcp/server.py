@@ -4750,6 +4750,148 @@ def import_workflow_from_iwc(trs_id: str) -> GalaxyResult:
         raise ValueError(f"Failed to import workflow from IWC: {str(e)}") from e
 
 
+def _as_hids(values: list[int | str] | None, field: str) -> list[int]:
+    """History item numbers as integers, refusing anything that is not one.
+
+    Galaxy reads ``dataset_ids`` and ``dataset_collection_ids`` of its extraction form with
+    ``int()`` (workflow/extract.py): they are hids. An encoded id passed there is the likely
+    mistake, and Galaxy would answer it with a parse failure rather than an explanation.
+    """
+    hids: list[int] = []
+    for value in values or []:
+        number: int | None = None
+        if isinstance(value, bool):
+            number = None
+        elif isinstance(value, int):
+            number = value
+        elif isinstance(value, str) and re.fullmatch(r"[0-9]+", value.strip()):
+            number = int(value.strip())
+        if number is None or number < 1:
+            raise ValueError(
+                f"{field} must be history item numbers (hid, a positive integer such as 3), "
+                f"got {json.dumps(value, ensure_ascii=False)}. get_history_contents lists "
+                "each item's hid. Nothing was sent to Galaxy."
+            )
+        hids.append(number)
+    return hids
+
+
+@mcp.tool(tags={"workflows", "write", "extended"})
+def extract_workflow_from_history(
+    history_id: str,
+    workflow_name: str,
+    job_ids: list[str] | None = None,
+    dataset_hids: list[int | str] | None = None,
+    collection_hids: list[int | str] | None = None,
+) -> GalaxyResult:
+    """
+    Turn jobs already run in a history into a stored workflow, so the same chain of tools
+    can be invoked on other inputs instead of being re-run sample by sample.
+
+    Each listed job and each listed input becomes one step; a job's outputs feed the later
+    listed jobs that read them.
+
+    Args:
+        history_id: Encoded id of the history to extract from
+        workflow_name: Name for the new stored workflow
+        job_ids: Encoded ids of the jobs that become tool steps, in the order to extract
+                 them; get_job_details and list_jobs report them. A job not from
+                 history_id is refused. Without any, the workflow has no tool steps.
+        dataset_hids: History item numbers (the hid get_history_contents lists, not encoded
+                      ids) of the datasets that become the workflow's dataset inputs -- the
+                      ones the jobs read that another run would replace. A dataset a listed
+                      job reads that is neither here nor produced by a listed job is left as
+                      an unconnected step input.
+        collection_hids: History item numbers (hid) of the dataset collections that become
+                         the workflow's collection inputs; a hid that is not a collection is
+                         refused by Galaxy.
+
+    Returns:
+        GalaxyResult whose data carries the new workflow's workflow_id and name,
+        number_of_steps (null unless Galaxy's reply has one), steps_requested, what was
+        named, Galaxy's record under workflow, and next_steps: call
+        get_workflow_input_template, then invoke_workflow.
+    """
+    # Checked before connecting, the way the other server checks before sending: Galaxy
+    # would accept an extraction that names nothing and store a workflow with no steps.
+    name = workflow_name.strip()
+    if name == "":
+        raise ValueError("workflow_name must not be empty. Nothing was sent to Galaxy.")
+    jobs = list(job_ids or [])
+    if any(job.strip() == "" for job in jobs):
+        raise ValueError(
+            "job_ids must be encoded job ids; one of them is empty. Nothing was sent to Galaxy."
+        )
+    datasets = _as_hids(dataset_hids, "dataset_hids")
+    collections = _as_hids(collection_hids, "collection_hids")
+    if not jobs and not datasets and not collections:
+        raise ValueError(
+            "Nothing to extract: name at least one job (job_ids) or one input "
+            "(dataset_hids, collection_hids). Galaxy would otherwise store a workflow with "
+            "no steps. Nothing was sent to Galaxy."
+        )
+
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+
+    try:
+        # POST /api/workflows with from_history_id. bioblend's dataset_hids and
+        # dataset_collection_hids go out as Galaxy's dataset_ids and dataset_collection_ids,
+        # which are hids despite the name; job_ids are encoded ids Galaxy decodes itself.
+        workflow = gi.workflows.extract_workflow_from_history(
+            history_id,
+            name,
+            job_ids=jobs,
+            dataset_hids=datasets,  # type: ignore[arg-type]
+            dataset_collection_hids=collections,  # type: ignore[arg-type]
+        )
+        workflow_id = str(workflow["id"])
+        recorded_name = workflow.get("name")
+        recorded_name = recorded_name if isinstance(recorded_name, str) else None
+        steps = workflow.get("number_of_steps")
+        # Galaxy answers with StoredWorkflow.to_dict, which carries no step count.
+        steps = steps if isinstance(steps, int) and not isinstance(steps, bool) else None
+        next_steps = (
+            "To run it on other inputs, call get_workflow_input_template with workflow_id "
+            f"'{workflow_id}' to see its input slots, fill them with the new datasets or "
+            "collections, and invoke_workflow -- once for every set of inputs, instead of "
+            "re-running the tools one by one."
+        )
+        return GalaxyResult(
+            data={
+                "workflow_id": workflow_id,
+                "name": recorded_name,
+                "number_of_steps": steps,
+                "steps_requested": {
+                    "tool_steps": len(jobs),
+                    "dataset_inputs": len(datasets),
+                    "collection_inputs": len(collections),
+                },
+                "history_id": history_id,
+                "job_ids": jobs,
+                "dataset_hids": datasets,
+                "collection_hids": collections,
+                "workflow": workflow,
+                "next_steps": next_steps,
+            },
+            success=True,
+            message=(
+                f"Extracted workflow '{recorded_name or workflow_id}' (id {workflow_id}) from "
+                f"history {history_id}: {len(jobs)} tool step(s) from the listed jobs, "
+                f"{len(datasets)} dataset input(s) and {len(collections)} collection "
+                f"input(s). {next_steps}"
+            ),
+        )
+    except Exception as e:
+        raise ValueError(
+            format_error(
+                "Extract workflow from history",
+                e,
+                {"history_id": history_id, "workflow_name": workflow_name},
+            )
+        ) from e
+
+
 @mcp.tool(tags={"workflows", "read", "extended"})
 def list_workflows(
     name: str | None = None,

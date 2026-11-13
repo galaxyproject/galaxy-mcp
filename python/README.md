@@ -298,6 +298,7 @@ the same Galaxy tools API as a catalog tool.
 - `invoke_workflow`: Run a workflow, validating the inputs against its steps first
 - `get_invocations`: Invocations, by invocation, workflow, or history; pages with `limit` (at most 100, Galaxy's cap) and `offset`, sorts by `create_time` or `update_time`, and `include_terminal=False` keeps only the ones still running
 - `cancel_workflow_invocation`: Cancel a running invocation
+- `extract_workflow_from_history`: Turn jobs already run in a history into a stored workflow; `job_ids` become its tool steps and `dataset_hids` / `collection_hids` (history item numbers, not ids) its inputs
 
 ### IWC catalog
 

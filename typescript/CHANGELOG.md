@@ -6,6 +6,23 @@ entry covers all three; where something only affects one surface, it says which.
 
 ## Unreleased
 
+### `extract_workflow_from_history`: the tools already run, as a workflow
+
+A new write operation over `POST /api/workflows` with `from_history_id`, on both servers:
+the jobs already run in a history become the tool steps of a new stored workflow, and the
+datasets or collections they read become its inputs, so the same chain can be invoked on
+every remaining sample with `invoke_workflow` instead of being re-submitted one tool call
+at a time. It takes the history, a name, `job_ids` (encoded job ids, which become the tool
+steps -- without any there are none), `dataset_hids` and `collection_hids`. Those two are
+history item numbers, not ids: Galaxy's own form calls them `dataset_ids` and
+`dataset_collection_ids` and reads them as hids, so the operation names them for what they
+are and refuses an encoded id or an extraction that names nothing before anything is sent.
+A 400 from Galaxy -- a hid that is not a collection, a job from another history -- is a
+`validation` failure (exit 64) rather than a `connection` one. It answers with the new
+workflow's id and name, what was requested step by step, Galaxy's record, and one sentence
+pointing at `get_workflow_input_template` and `invoke_workflow`. Galaxy's reply carries no
+step count; `number_of_steps` is null until it does.
+
 ### galaxy-mcp serves Streamable HTTP
 
 `galaxy-mcp --transport streamable-http` (or `GALAXY_MCP_TRANSPORT=streamable-http`) serves the

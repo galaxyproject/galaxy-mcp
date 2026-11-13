@@ -17,6 +17,7 @@ from galaxy_mcp.server import (
     delete_user_tool,
     download_dataset,
     ensure_connected,
+    extract_workflow_from_history,
     galaxy_state,
     get_collection_details,
     get_dataset_details,
@@ -111,6 +112,7 @@ run_tool_fn = get_function(run_tool)
 create_user_tool_fn = get_function(create_user_tool)
 recommend_biocontainer_fn = get_function(recommend_biocontainer)
 delete_user_tool_fn = get_function(delete_user_tool)
+extract_workflow_from_history_fn = get_function(extract_workflow_from_history)
 get_user_tool_fn = get_function(get_user_tool)
 list_user_tools_fn = get_function(list_user_tools)
 run_user_tool_fn = get_function(run_user_tool)
@@ -165,6 +167,7 @@ __all__ = [
     "create_user_tool_fn",
     "recommend_biocontainer_fn",
     "delete_user_tool_fn",
+    "extract_workflow_from_history_fn",
     "get_user_tool_fn",
     "list_user_tools_fn",
     "run_user_tool_fn",
