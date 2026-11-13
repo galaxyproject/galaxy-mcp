@@ -338,7 +338,8 @@ def run_scenario(
     fctx = FixtureContext(ctx.gi, ledger, tag, tmp, pack.pack, timeout=180)
     primary: BaseException | None = None
     try:
-        session.ensure_alive()
+        if not scenario.server_env:
+            session.ensure_alive()
         for fixture in scenario.fixtures:
             spec = type(fixture.spec).model_validate(
                 resolve(fixture.spec.model_dump(by_alias=True, exclude_unset=True), bindings)
@@ -346,6 +347,12 @@ def run_scenario(
             bound = make_fixture(fctx, fixture, spec)
             bindings[fixture.as_] = bound
             record.bound += _string_leaves(bound, fixture.as_)
+
+        if scenario.server_env:
+            # A server of this scenario's own (see ServerPool.dedicated), started only now
+            # because its environment names things the fixtures just made.
+            session.env.update(resolve(scenario.server_env, bindings))
+            session.ensure_alive()
 
         for index, step in enumerate(scenario.steps):
             if time.monotonic() > deadline:
@@ -390,6 +397,8 @@ def run_scenario(
         primary = exc
         raise
     finally:
+        if scenario.server_env:
+            session.close()
         errors = ledger.cleanup()
         shutil.rmtree(tmp, ignore_errors=True)
         if errors:

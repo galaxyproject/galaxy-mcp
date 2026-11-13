@@ -3,6 +3,7 @@ import type { GalaxyContext } from "../context";
 import { httpError, GalaxyValidationError } from "../errors";
 import { jsonObject } from "../json-object";
 import { legacyGet } from "../legacy";
+import { recordCreatedHistory, recordHandles } from "../scope";
 import { validateInputs, buildWorkflowInputTemplate, type DatatypesMapping } from "../workflow-inputs";
 import { resolveWorkflowSlots } from "./get-workflow-input-template";
 import { register, runOperation } from "./registry";
@@ -277,6 +278,14 @@ async function run(i: In, ctx: GalaxyContext): Promise<InvokeWorkflowResult> {
   if (error || !data) throw httpError(response, error);
 
   // One invocation, or the list a batch expanded to, as it arrived.
+  for (const inv of Array.isArray(data) ? data : [data]) {
+    const record = inv as Record<string, unknown>;
+    recordHandles(ctx, "invocation", [record.id]);
+    recordHandles(ctx, "history", [record.history_id]);
+    // No history id and a name: Galaxy made a history of that name for this run.
+    if (!i.historyId && i.historyName) recordCreatedHistory(ctx, record.history_id);
+    recordHandles(ctx, "workflow", [record.workflow_id]);
+  }
   return data as InvokeWorkflowResult;
 }
 
@@ -286,6 +295,13 @@ export const invokeWorkflowOp: Operation<typeof input, InvokeWorkflowResult> = {
   summary:
     "Invoke (run) a workflow with specified inputs and parameters. When inputs are provided, runs a preflight that validates them against the workflow's slots and the server's datatype hierarchy before submitting. Call get_workflow_input_template first to see the expected input shape.",
   input,
+  ids: { workflowId: "workflow", historyId: "history" },
+  // With neither a history id nor a name for a new one the run goes to Galaxy's current
+  // history, which no scope vouches for. A name creates a history, which then joins the scope.
+  scope: {
+    requires: [["historyId", "historyName"]],
+    creates: (i) => !i.historyId && Boolean(i.historyName),
+  },
   readOnly: false,
   run,
   // server.py, invoke_workflow: the workflow that was invoked, and nothing about

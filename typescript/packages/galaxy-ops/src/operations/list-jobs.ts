@@ -4,6 +4,7 @@ import type { GalaxyContext } from "../context";
 import { httpError, GalaxyConnectionError } from "../errors";
 import { pyFormatError } from "../python-failure";
 import { pyStr } from "../python-values";
+import { recordHandles } from "../scope";
 import { validatePagination } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
@@ -142,7 +143,10 @@ async function run(i: In, ctx: GalaxyContext): Promise<JobSummary[]> {
 
   // Whatever the index sends back for the window it was asked for. Galaxy windows this
   // listing itself, and trimming it here would be a bound Python does not apply.
-  return data as JobSummary[];
+  const jobs = data as JobSummary[];
+  recordHandles(ctx, "job", jobs.map((j) => (j as { id?: unknown }).id));
+  recordHandles(ctx, "history", jobs.map((j) => (j as { history_id?: unknown }).history_id));
+  return jobs;
 }
 
 export const listJobsOp: Operation<typeof input, JobSummary[]> = {
@@ -154,6 +158,11 @@ export const listJobsOp: Operation<typeof input, JobSummary[]> = {
     "history is not a 404 but an empty page, the same answer as a history with no jobs; confirm the history with " +
     "get_history_details when that matters.",
   input,
+  ids: { historyId: "history" },
+  // Galaxy windows this listing, so a scoped page is the window with the other histories'
+  // jobs dropped from it: a page can come back short of limit without being the last one.
+  // Ask with historyId to have Galaxy do the narrowing and keep the short-page rule.
+  scope: { filter: (jobs, inScope) => jobs.filter((j) => inScope((j as { history_id?: unknown }).history_id)) },
   run,
   // server.py, list_jobs: a count of what came back, and no pagination -- the index reports
   // no total, so there is no window to describe, and the Python tool sends none either.

@@ -4,7 +4,9 @@ import {
   describeOperation,
   runWithEnvelope,
   createGalaxyContext,
+  scopeFromEnv,
   type GalaxyContext,
+  type OperationScope,
 } from "@galaxyproject/galaxy-ops";
 import { resolveConnection, loadSources, type Connection } from "./config";
 import { applyInputs } from "./flags-apply";
@@ -46,8 +48,12 @@ export function buildProgram(deps: CliDeps = {}): Command {
       }
       // When a context factory is injected (tests), skip credential resolution entirely.
       let conn: Connection = { baseUrl: "", apiKey: "" };
+      // An optional scope from GALAXY_MCP_SCOPE_*, the variables galaxy-mcp reads. One command
+      // is one session, so a history made by an earlier command is not "created" in this one.
+      let scope: OperationScope | undefined;
       if (!deps.makeContext) {
         try {
+          scope = scopeFromEnv(process.env, allOperations.map((o) => o.name));
           conn = resolveConnection({ url: globals.url, apiKey: globals.apiKey, profile: globals.profile }, loadSources());
         } catch (e) {
           console.error((e as Error).message);
@@ -59,7 +65,7 @@ export function buildProgram(deps: CliDeps = {}): Command {
       const ac = new AbortController();
       const onSig = () => ac.abort();
       process.once("SIGINT", onSig);
-      const ctx = (deps.makeContext ?? ((c, s) => createGalaxyContext({ ...c, signal: s, poll: globals.timeout ? { timeoutMs: Number(globals.timeout) } : undefined })))(conn, ac.signal);
+      const ctx = (deps.makeContext ?? ((c, s) => createGalaxyContext({ ...c, scope, signal: s, poll: globals.timeout ? { timeoutMs: Number(globals.timeout) } : undefined })))(conn, ac.signal);
       try {
         // No serializer of its own: the budget is measured on the compact line,
         // as it is on the MCP surface and on the Python server, and the indented

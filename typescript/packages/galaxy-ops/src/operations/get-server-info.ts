@@ -1,6 +1,7 @@
 import type { GetJson } from "../bindings";
 import type { GalaxyContext, GalaxyVersionSource } from "../context";
 import { httpError } from "../errors";
+import type { ScopeSummary } from "../scope";
 import { satisfiesRequirement } from "../version";
 import { allOperations, register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
@@ -57,6 +58,11 @@ export interface ServerInfo {
    * and a caller cannot have supplied one.
    */
   version_source: GalaxyVersionSource;
+  /**
+   * What this session may touch, when its host scoped it: present only then, so an unscoped
+   * answer is key for key what it always was.
+   */
+  scope?: ScopeSummary;
 }
 
 /**
@@ -142,6 +148,9 @@ export const getServerInfoOp: Operation<typeof input, ServerInfo> = {
     "to run.",
   input,
   run,
+  // A scoped session learns its limits here rather than by being refused: the registry adds
+  // the summary, and only under a scope.
+  scope: { annotate: (info, scope) => ({ ...info, scope }) },
   // server.py, get_server_info: the address that was connected to, and nothing else.
   // The version, whether it could be read, and the tools this server is too old for are
   // all in data, which is where a caller reads them. `version_source` is not: the other
@@ -149,7 +158,7 @@ export const getServerInfoOp: Operation<typeof input, ServerInfo> = {
   // the library result and comes off here -- the way trimmedForSize does.
   project: (s) => {
     const { version_source: _source, ...data } = s;
-    return { data, message: `Retrieved server info for ${s.url}` };
+    return { data, message: `Retrieved server info for ${s.url}` + (s.scope ? `. ${s.scope.note}` : "") };
   },
   // server.py, get_server_info: its own sentence. The configuration is read first there,
   // and the version after it, so a server that answers one and not the other fails on the

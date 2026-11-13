@@ -3,6 +3,25 @@ import "./operations/all-browser";
 export * from "./context";
 export * from "./errors";
 export {
+  HandleRegistry,
+  DEFAULT_HANDLE_CAPACITY,
+  HANDLE_KINDS,
+  HANDLE_NOUNS,
+  recordHandles,
+  recordRefs,
+  handleKindsOf,
+  historyAllowed,
+  allowedHistories,
+  historyIdOf,
+  recordCreatedHistory,
+  visibleHistories,
+  scopeSummary,
+  type ScopeSummary,
+  type HandleKind,
+  type OperationScope,
+  type ScopeAccess,
+} from "./scope";
+export {
   parseGalaxyVersion,
   parseRequirement,
   requirementSentence,
@@ -12,7 +31,8 @@ export {
 } from "./version";
 export { isJobTerminal, isJobSuccess } from "./terminal-states";
 export { invocationOutcome, type JobStates } from "./invocation-outcome";
-export type { Operation, OperationDomain, GalaxyResult, Pagination, InputOf, AnyOperation } from "./operations/types";
+export { scopeFromEnv, SCOPE_ENV } from "./scope-config";
+export type { Operation, OperationDomain, GalaxyResult, Pagination, InputOf, AnyOperation, ScopeSpec } from "./operations/types";
 export {
   allOperations,
   assertVersionSupported,
@@ -20,6 +40,7 @@ export {
   runOperation,
   runWithEnvelope,
   spellParamNames,
+  KNOWN_ID_PARAMS,
 } from "./operations/registry";
 export { validatePagination, paginate, paginationInfo, OUTPUT_BUDGET_BYTES } from "./operations/pagination";
 export { laxenLikePydantic, isPlainObject, materializeOnce } from "./laxen";

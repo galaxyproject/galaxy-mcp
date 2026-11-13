@@ -1,10 +1,29 @@
 import type { ZodRawShape } from "zod";
 import type { EnvelopeFacts, GalaxyContext } from "../context";
-import { GalaxyError, GalaxyVersionError, redirectRefusal } from "../errors";
+import { GalaxyError, GalaxyHandleKindError, GalaxyScopeError, GalaxyVersionError, redirectRefusal } from "../errors";
 import { pyFormatError, pyLibraryText } from "../python-failure";
+import {
+  HANDLE_NOUNS,
+  blockedOperationSentence,
+  createAllowed,
+  createNotAllowedSentence,
+  createdHistories,
+  historyDeletable,
+  notDeletableSentence,
+  scopeSummary,
+  handleKindsOf,
+  historyAllowed,
+  historyOutOfScopeSentence,
+  kindMismatchSentence,
+  missingScopedParamSentence,
+  ownerOutOfScopeSentence,
+  type HandleKind,
+  type OperationScope,
+  type ScopeAccess,
+} from "../scope";
 import { parseRequirement, requirementSentence, satisfiesRequirement } from "../version";
 import { trimToBudget } from "./pagination";
-import type { AnyOperation, GalaxyResult, InputOf, Operation } from "./types";
+import type { AnyOperation, GalaxyResult, InputOf, Operation, ScopeSpec } from "./types";
 
 /** Something that can carry a Galaxy requirement: an op, or a copy of one. */
 type Claim = { name: string; requires?: { galaxy: string } };
@@ -53,6 +72,201 @@ export async function guardVersion(
 /** Refuse an op the connected Galaxy is too old for, before a single request goes out. */
 export async function assertVersionSupported(op: Claim, ctx: GalaxyContext): Promise<void> {
   await guardVersion(ctx, op);
+}
+
+// ---------------------------------------------------------------------------
+// The scope guard: everything a scoped context refuses or narrows, in this one place.
+// ---------------------------------------------------------------------------
+
+/**
+ * The parameter names that always carry a Galaxy id of a known kind.
+ *
+ * Not the policy -- that is each op's own `ids` declaration -- but the lint behind it: an op
+ * that takes a parameter spelled like one of these and does not classify it fails to register,
+ * so a new op cannot slip past the scope guard by forgetting. A parameter under any other name
+ * (`pageId`, `toolUuid`, `trsId`) is not a history-scoped resource and is not an id of a kind
+ * the run remembers, so it needs no entry.
+ */
+export const KNOWN_ID_PARAMS: Readonly<Record<string, HandleKind>> = Object.freeze({
+  historyId: "history",
+  datasetId: "hda",
+  collectionId: "hdca",
+  jobId: "job",
+  invocationId: "invocation",
+  workflowId: "workflow",
+  toolRequestId: "tool_request",
+});
+
+/** What the registry kept of an op's scope declarations, out of reach of a later edit. */
+interface ScopeClaims {
+  readonly name: string;
+  readonly ids: Readonly<Record<string, HandleKind>>;
+  readonly access: ScopeAccess;
+  readonly spec: ScopeSpec<unknown, unknown>;
+}
+
+/** The id strings an argument holds: one, a list of them, or none. Empty strings are no id. */
+function idValues(value: unknown): string[] {
+  if (typeof value === "string") return value === "" ? [] : [value];
+  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === "string" && v !== "");
+  return [];
+}
+
+/** How the op's record is named in a refusal: "dataset 'd1' belongs to history ...". */
+function recordNoun(claims: ScopeClaims, input: Record<string, unknown>): { noun: string; id: string } {
+  for (const [param, kind] of Object.entries(claims.ids)) {
+    if (kind === "history") continue;
+    const [id] = idValues(input[param]);
+    if (id !== undefined) return { noun: HANDLE_NOUNS[kind].replace(/ id$/, ""), id };
+  }
+  return { noun: "record", id: "" };
+}
+
+/**
+ * Everything checked before the op runs that needs no request: the blocked list, then every id
+ * argument -- its kind against what the run has seen the id as, and a history against the scope
+ * -- then the parameters a scoped run must supply.
+ *
+ * The kind check runs whenever the context remembers handles, scope or no scope, because a
+ * host can ask for it alone. Everything else needs a scope. An id the run has never seen
+ * passes the kind check -- Galaxy's ids carry no type, so there is nothing to compare.
+ */
+function guardScopeArguments(claims: ScopeClaims, input: Record<string, unknown>, ctx: GalaxyContext): void {
+  const { scope } = ctx;
+  if (scope?.blockedOperations?.includes(claims.name)) {
+    throw new GalaxyScopeError(blockedOperationSentence(claims.name));
+  }
+  const created = createdHistories(ctx);
+  const destroys = scope !== undefined && claims.spec.destroys?.(input) === true;
+  for (const [param, kind] of Object.entries(claims.ids)) {
+    for (const id of idValues(input[param])) {
+      const seen = handleKindsOf(ctx, id);
+      if (seen && !seen.has(kind)) {
+        throw new GalaxyHandleKindError(kindMismatchSentence(param, id, seen, kind));
+      }
+      if (!scope || kind !== "history") continue;
+      if (!historyAllowed(scope, id, claims.access, created)) {
+        throw new GalaxyScopeError(
+          historyOutOfScopeSentence(claims.name, param, id, scope, claims.access, created),
+        );
+      }
+      // Deleting is held to a tighter rule than writing: a writable history the session did
+      // not create is still not its to delete, unless the host said so.
+      if (destroys && !historyDeletable(scope, id, created)) {
+        throw new GalaxyScopeError(notDeletableSentence(claims.name, param, id, scope, created));
+      }
+    }
+  }
+  if (!scope) return;
+  for (const entry of claims.spec.requires ?? []) {
+    const names = typeof entry === "string" ? [entry] : entry;
+    if (!names.some((param) => idValues(input[param]).length > 0)) {
+      throw new GalaxyScopeError(missingScopedParamSentence(claims.name, entry, scope, created));
+    }
+  }
+  if (claims.spec.creates?.(input) && !createAllowed(scope)) {
+    throw new GalaxyScopeError(createNotAllowedSentence(claims.name));
+  }
+}
+
+/**
+ * The one pre-call check that costs a request: for an op that declared `ownerOf`, ask which
+ * history its target belongs to and refuse before the op's own request -- a cancel, a write to
+ * disk -- when it is outside the scope. Only under a scope; nothing is asked otherwise.
+ */
+async function guardScopeOwner(claims: ScopeClaims, input: Record<string, unknown>, ctx: GalaxyContext): Promise<void> {
+  const { scope } = ctx;
+  if (!scope || !claims.spec.ownerOf) return;
+  let owner: string | null | undefined;
+  try {
+    owner = await claims.spec.ownerOf(input, ctx);
+  } catch {
+    // The lookup could not say. The op runs and stands or falls on its own request, which
+    // for a missing or unreadable record is the same failure, worded by the op.
+    owner = undefined;
+  }
+  const created = createdHistories(ctx);
+  if (owner && !historyAllowed(scope, owner, claims.access, created)) {
+    const { noun, id } = recordNoun(claims, input);
+    throw new GalaxyScopeError(
+      ownerOutOfScopeSentence(claims.name, noun, id, owner, scope, claims.access, "before", created),
+    );
+  }
+}
+
+/**
+ * What a scoped run may see of the op's output: a record is refused when it belongs to a
+ * history outside the scope, a listing is narrowed to the scoped histories, and an account
+ * record is cut down. Without a scope the output goes out untouched.
+ */
+function narrowOutput(
+  claims: ScopeClaims,
+  output: unknown,
+  input: Record<string, unknown>,
+  ctx: GalaxyContext,
+): unknown {
+  const scope: OperationScope | undefined = ctx.scope;
+  if (!scope) return output;
+  // Read after the op ran, so a history the op itself just created counts.
+  const created = createdHistories(ctx);
+  const owner = claims.spec.owner?.(output);
+  if (owner && !historyAllowed(scope, owner, claims.access, created)) {
+    const { noun, id } = recordNoun(claims, input);
+    throw new GalaxyScopeError(
+      ownerOutOfScopeSentence(claims.name, noun, id, owner, scope, claims.access, "after", created),
+    );
+  }
+  let narrowed = output;
+  if (claims.spec.filter) {
+    narrowed = claims.spec.filter(narrowed, (historyId) =>
+      typeof historyId === "string" && historyAllowed(scope, historyId, "read", created),
+    );
+  }
+  if (claims.spec.restrict) narrowed = claims.spec.restrict(narrowed);
+  const summary = claims.spec.annotate ? scopeSummary(ctx) : undefined;
+  if (claims.spec.annotate && summary) narrowed = claims.spec.annotate(narrowed, summary);
+  return narrowed;
+}
+
+/**
+ * Read an op's scope declarations once, at registration, and check them against its schema.
+ *
+ * Kept as plain copies in the registry's closure, like the version requirement: the op is
+ * frozen afterwards, but a copy of it could otherwise carry different declarations to the
+ * same registered run.
+ */
+function scopeClaims(op: AnyOperation): ScopeClaims {
+  const declared: Record<string, HandleKind> = { ...(op.ids ?? {}) } as Record<string, HandleKind>;
+  for (const param of Object.keys(declared)) {
+    if (!(param in op.input)) {
+      throw new Error(`operation "${op.name}" declares an id parameter "${param}" its input does not have`);
+    }
+    if (!(declared[param]! in HANDLE_NOUNS)) {
+      throw new Error(`operation "${op.name}" declares "${param}" as an unknown id kind "${declared[param]}"`);
+    }
+  }
+  for (const param of Object.keys(op.input)) {
+    if (param in KNOWN_ID_PARAMS && !(param in declared)) {
+      throw new Error(
+        `operation "${op.name}" takes "${param}" but declares no \`ids\` entry for it, ` +
+          "so the scope guard cannot classify it",
+      );
+    }
+  }
+  const spec = { ...(op.scope ?? {}) } as ScopeSpec<unknown, unknown>;
+  for (const param of (spec.requires ?? []).flat()) {
+    if (!(param in op.input)) {
+      throw new Error(`operation "${op.name}" requires a parameter "${param}" its input does not have`);
+    }
+  }
+  if (op.ids) Object.freeze(op.ids);
+  if (op.scope) Object.freeze(op.scope);
+  return {
+    name: op.name,
+    ids: Object.freeze(declared),
+    access: spec.access ?? (op.readOnly === false ? "write" : "read"),
+    spec: Object.freeze(spec),
+  };
 }
 
 /**
@@ -225,6 +439,7 @@ export function register(op: AnyOperation): AnyOperation {
   const registeredName = op.name;
   const registeredSpec = op.requires?.galaxy;
   if (op.requires) Object.freeze(op.requires);
+  const claims = scopeClaims(op);
 
   // Replace run on the object itself, which is what makes the guard unreachable-around rather
   // than merely available: the module's named export, the entry in allOperations and anything a
@@ -245,8 +460,15 @@ export function register(op: AnyOperation): AnyOperation {
       : undefined;
     const receiver =
       this?.requires && this.requires.galaxy !== registeredSpec ? this : undefined;
+    // The scope's argument checks first, because they cost no request and a refused call must
+    // not probe the server's version either; then the version; then the owner lookup, which is
+    // a request; then the op, whose output the scope narrows on the way out.
+    const args = (input ?? {}) as Record<string, unknown>;
+    const scoped = { ...claims, name: this?.name ?? registeredName };
+    guardScopeArguments(scoped, args, ctx);
     const pinned = await guardVersion(ctx, registeredClaim, receiver);
-    return unguarded(input, pinned);
+    await guardScopeOwner(scoped, args, pinned);
+    return narrowOutput(scoped, await unguarded(input, pinned), args, ctx);
   };
 
   registeredNames.add(op.name);

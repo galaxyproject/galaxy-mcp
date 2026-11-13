@@ -1,0 +1,33 @@
+{
+  "data": {
+    "history_id": "bbbb0002",
+    "contents": [
+      {
+        "id": "dd03",
+        "name": "reads",
+        "history_content_type": "dataset",
+        "hid": 1
+      },
+      {
+        "id": "c0c1",
+        "name": "pairs",
+        "history_content_type": "dataset_collection",
+        "hid": 2
+      }
+    ]
+  },
+  "success": true,
+  "message": "Retrieved 2 items from history",
+  "count": 2,
+  "pagination": {
+    "total_items": 2,
+    "returned_items": 2,
+    "limit": 100,
+    "offset": 0,
+    "has_next": false,
+    "has_previous": false,
+    "next_offset": null,
+    "previous_offset": null,
+    "helper_text": "Showing 2 of 2 items (offset 0). This is the last page."
+  }
+}

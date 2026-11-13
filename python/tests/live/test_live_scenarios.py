@@ -80,7 +80,10 @@ def test_scenario(
     # are reported without a traceback (and outside the except, so without the chain).
     failure = None
     try:
-        run_scenario(live_ctx, pack, scenario, live_servers.get(server))
+        session = (
+            live_servers.dedicated(server) if scenario.server_env else live_servers.get(server)
+        )
+        run_scenario(live_ctx, pack, scenario, session)
     except ExpectedFailureError as exc:
         failure = f"xfail: {exc}"
     except (HarnessError, FindingError) as exc:

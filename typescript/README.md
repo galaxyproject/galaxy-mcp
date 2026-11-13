@@ -92,6 +92,135 @@ export GALAXY_API_KEY=your-api-key
 If neither a URL nor a key can be found, the CLI exits with a usage error
 explaining what to set.
 
+## Scoping a context to a run
+
+A host that runs an agent -- an MCP client launching `galaxy-mcp` for one task, an MCP
+service holding one session per run, a benchmark runner -- can confine that session to the
+histories it was given. The scope is never a tool parameter: the agent cannot set it, and
+it reads it from `get_server_info`. With no scope configured, nothing below applies and
+every tool behaves as it always has. The Python server reads the same variables and answers
+the same way, word for word: the classification of every tool is one file,
+`../contract/scope.json`, generated from that server and checked against this one, and the
+scoped cases among the envelope goldens are replayed through both.
+
+### Configuring the two programs
+
+`galaxy-mcp` and `galaxy-cli` read the scope from the environment at startup (the library
+itself reads no environment):
+
+| Variable | Meaning |
+| --- | --- |
+| `GALAXY_MCP_SCOPE_WRITE_HISTORIES` | Comma-separated encoded history ids the session may read and change |
+| `GALAXY_MCP_SCOPE_READ_HISTORIES` | Comma-separated encoded history ids it may read but not change |
+| `GALAXY_MCP_SCOPE_CREATED_ONLY=1` | No pre-existing history may be written: only the ones the session creates (cannot be combined with `..._WRITE_HISTORIES`) |
+| `GALAXY_MCP_SCOPE_ALLOW_CREATE=0` | The session may not create histories (default: it may, and may then use them) |
+| `GALAXY_MCP_SCOPE_DESTRUCTIVE=writable` | Any writable history may be deleted (default `created`: only histories the session created) |
+| `GALAXY_MCP_SCOPE_BLOCKED_TOOLS` | Comma-separated tool names refused outright |
+
+Setting any of them turns the scope on, and one of the first three is then required. A value
+that cannot be read -- an id that is not hex, an unknown tool, `DESTRUCTIVE=all` -- stops the
+program with the variable's name (`galaxy-mcp` exits 2, `galaxy-cli` 64); it never falls back
+to unscoped. In an MCP client's configuration:
+
+```json
+{
+  "mcpServers": {
+    "galaxy": {
+      "command": "npx",
+      "args": ["-y", "@galaxyproject/galaxy-mcp"],
+      "env": {
+        "GALAXY_URL": "https://usegalaxy.org/",
+        "GALAXY_API_KEY": "your-api-key",
+        "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "f2db41e1fa331b3e",
+        "GALAXY_MCP_SCOPE_READ_HISTORIES": "1cd8e2f6b131e891"
+      }
+    }
+  }
+}
+```
+
+A stdio server is one session, so "created by the session" means created since that process
+started. The Streamable HTTP server is stateless and shares one context, so there it means
+created since the server started, by any client. A `galaxy-cli` command is a session of its
+own: a history made by an earlier command was not created by this one.
+
+### From the library
+
+```ts
+import { createGalaxyContext } from "@galaxyproject/galaxy-ops";
+
+const ctx = createGalaxyContext({
+  baseUrl,
+  apiKey,
+  scope: {
+    historyIds: ["f2db41e1fa331b3e"],           // may be read and changed
+    readOnlyHistoryIds: ["1cd8e2f6b131e891"],   // may be read, not changed
+    blockedOperations: [],                      // refused by name
+    includeCreated: true,                       // default: created histories join the writable set
+    allowCreate: true,                          // default
+    destructive: "created",                     // default; or "writable"
+  },
+});
+// then buildServer(ctx), runWithEnvelope(op, input, ctx), or the operation functions
+```
+
+`scopeFromEnv(env)` is the parser the two programs use, for a host that wants the same
+variables.
+
+### What a scoped session may do
+
+Every operation goes through one guard in the registry, so a direct call, `runOperation`,
+`runWithEnvelope`, the MCP server and the CLI are all held to it:
+
+- `get_server_info` reports the scope under `data.scope` -- readable, writable and created
+  history ids, whether creating is allowed, the delete rule, the blocked tools -- and says it
+  in one sentence in `message`, so an agent learns its limits without being refused first.
+- A history id argument has to be one of the session's histories. A read-only history serves a
+  read; a write -- `run_tool`, `update_history`, `upload_file`, `invoke_workflow`, `create_page`
+  with a history -- needs a writable one. The refusal names the parameter and the allowed ids.
+- A history the session creates (`create_history`, or `invoke_workflow` with a
+  `history_name` and no `history_id`) joins the histories it may read and write, unless the
+  host set `includeCreated: false`. With creating turned off, both are refused before anything
+  is sent.
+- Deleting a history (`update_history` with `deleted: true`) is held to a tighter rule than
+  writing to it: by default only a history the session created may be deleted, even when a
+  pre-existing one is writable. Renaming, tagging and restoring are ordinary writes.
+- A write whose absent history would land in Galaxy's current history -- `upload_file`,
+  `upload_file_from_url`, and `invoke_workflow` with neither a history id nor a name -- has to
+  name one: the current history cannot be known from the request.
+- A record read by a dataset, collection, job or invocation id is held to the history it
+  belongs to: `get_dataset_details`, `get_collection_details`, `get_job_details` and one
+  invocation from `get_invocations` are refused after the read rather than returned, and
+  `cancel_workflow_invocation`, `download_dataset` and `get_job_logs` look the owner up first
+  (one extra request), so the cancel, the write to disk or the log read never happens for
+  another history's record.
+- `get_histories`, `list_history_ids`, `list_jobs` and `get_invocations` answer with the
+  session's histories' rows only. The job and invocation indexes are windowed by Galaxy, so a
+  scoped page can come back shorter than `limit` without being the last one; ask with a
+  `history_id` to have Galaxy do the narrowing.
+- `get_user` answers with `id` and `username` and nothing else.
+- A tool named in `blockedOperations` is refused before anything is sent.
+
+A refusal is `errorKind: "out_of_scope"` -- exit code 77 from the CLI, an MCP error carrying
+the sentence over MCP -- and its sentence ends "Nothing was sent to Galaxy." where that is so.
+
+A scoped context also remembers which ids the session has seen and as what: `ctx.handles` is
+a bounded `Map` from each id a result carried to the kinds it was returned as (`history`,
+`hda`, `hdca`, `job`, `invocation`, `tool_request`, `workflow`,
+`dataset_collection_element`). An id passed where another kind belongs -- a job id as
+`dataset_id`, a collection element's id as a dataset's -- is refused before anything is sent
+with `errorKind: "handle_kind_mismatch"` (exit code 64), naming both kinds. An id the session
+has never seen passes, because Galaxy's ids carry no type, and an id seen as both kinds passes
+too. Galaxy encodes every table's integer ids with one cipher, so a dataset and a job can
+share an id string; the check only ever refuses an id seen under other kinds and never under
+the expected one. From the library, pass `handles: null` to run a scoped context without it.
+
+What a scope does not cover: ids inside free-form arguments (`run_tool` and `run_user_tool`
+`inputs`, `invoke_workflow` `inputs` and `params`, page markdown), which go to Galaxy as
+written; and account-level writes that touch no history (`create_user_tool`,
+`delete_user_tool`, `import_workflow_from_iwc`, the page operations), which
+`GALAXY_MCP_SCOPE_BLOCKED_TOOLS` can refuse by name.
+
 ## Using the CLI
 
 ```
@@ -148,13 +277,13 @@ The process exit code reflects the outcome, following `sysexits.h` conventions:
 | Code | Meaning |
 | --- | --- |
 | `0` | Success |
-| `64` | Usage error (bad flags, failed input validation, a run Galaxy refused with a 400) |
+| `64` | Usage error (bad flags, failed input validation, a run Galaxy refused with a 400, an id passed as a kind it is not) |
 | `66` | Not found |
 | `65` | Tool request rejected |
 | `69` | Connection / server unavailable |
 | `70` | Software error or job failure |
 | `76` | The connected Galaxy is too old for the operation |
-| `77` | Authentication failure (bad/missing API key) |
+| `77` | Authentication failure (bad/missing API key), or a target outside the run's scope (see [Scoping a context to a run](#scoping-a-context-to-a-run)) |
 
 ### Examples
 

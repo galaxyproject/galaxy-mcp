@@ -1,6 +1,8 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { httpError } from "../errors";
+import { historyIdOf, recordHandles } from "../scope";
+import { isEncodedId } from "./encoded-id";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
@@ -20,6 +22,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<CancelledInvocation> {
     params: { path: { invocation_id: i.invocationId } },
   });
   if (error || !data) throw httpError(response, error);
+  recordHandles(ctx, "invocation", [(data as { id?: unknown }).id]);
   return { cancelled: true, invocation: data as Record<string, unknown> };
 }
 
@@ -28,6 +31,19 @@ export const cancelWorkflowInvocationOp: Operation<typeof input, CancelledInvoca
   domain: "invocations",
   summary: "Cancel a running workflow invocation by id.",
   input,
+  ids: { invocationId: "invocation" },
+  // Cancelling cannot be undone, so under a scope the invocation is read first and the DELETE
+  // never sent when it belongs to a history the run may not change.
+  scope: {
+    ownerOf: async (i, ctx) => {
+      if (!isEncodedId(i.invocationId)) return undefined;
+      const { data } = await ctx.client.GET("/api/invocations/{invocation_id}", {
+        params: { path: { invocation_id: i.invocationId } },
+      });
+      return historyIdOf(data);
+    },
+    owner: (out) => historyIdOf(out.invocation),
+  },
   readOnly: false,
   destructive: true,
   run,

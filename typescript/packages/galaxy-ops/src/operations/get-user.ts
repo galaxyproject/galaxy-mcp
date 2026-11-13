@@ -51,6 +51,17 @@ export const getUserOp: Operation<typeof input, CurrentUser> = {
   summary: "Return the current authenticated Galaxy user, as Galaxy's own user record.",
   input,
   run,
+  // A scoped run is an agent's, and an agent needs to know who it is and nothing else about
+  // the account: the email, the stored preferences, the quota and whatever Galaxy adds next
+  // stay out. Only the two keys, and only when Galaxy sent them.
+  scope: {
+    restrict: (u) => {
+      const kept: CurrentUser = {};
+      if (typeof u.id === "string") kept.id = u.id;
+      if (typeof u.username === "string") kept.username = u.username;
+      return kept;
+    },
+  },
   // server.py, get_user: the username through dict.get, so a record without one is
   // announced as "unknown" -- which is the reachable branch and not a transcribed one,
   // since the anonymous reply is answered rather than refused.

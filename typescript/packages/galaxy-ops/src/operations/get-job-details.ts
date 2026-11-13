@@ -5,6 +5,7 @@ import type { GalaxyContext } from "../context";
 import { httpError, GalaxyConnectionError, GalaxyNotFoundError, GalaxyValidationError } from "../errors";
 import { legacyGet } from "../legacy";
 import { isEncodedId, isThisRecord, notAGalaxyId, notThatRecord } from "./encoded-id";
+import { historyIdOf, recordHandles, recordRefs } from "../scope";
 import { jobLookupFailure, jobNotFoundSentence } from "./jobs-common";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
@@ -57,6 +58,18 @@ type In = {
   jobId?: string | null;
 };
 
+/** What a job record names: itself, its history, and the datasets it read and wrote. */
+function rememberJob(ctx: GalaxyContext, job: JobDetail): void {
+  recordHandles(ctx, "job", [job.id]);
+  recordHandles(ctx, "history", [job.history_id]);
+  for (const key of ["inputs", "outputs"] as const) {
+    const refs = job[key];
+    if (refs && typeof refs === "object" && !Array.isArray(refs)) {
+      recordRefs(ctx, Object.values(refs as Record<string, unknown>));
+    }
+  }
+}
+
 async function run(i: In, ctx: GalaxyContext): Promise<GetJobDetailsResult> {
   // server.py: refused before anything is asked of Galaxy, and worded there, so neither
   // sentence carries a status. Truthiness, as over there: an empty id is no id.
@@ -88,6 +101,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetJobDetailsResult> {
     if (!isThisRecord(data, i.jobId)) {
       throw new GalaxyConnectionError(notThatRecord("job", i.jobId), response.status);
     }
+    rememberJob(ctx, data as JobDetail);
     return { job: data as JobDetail, dataset_id: null, job_id: i.jobId };
   }
 
@@ -132,6 +146,8 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetJobDetailsResult> {
   });
   if (jobError || !jobData) throw httpError(jobResp, jobError);
 
+  rememberJob(ctx, jobData as JobDetail);
+  recordHandles(ctx, "hda", [datasetId]);
   return {
     job: jobData as JobDetail,
     dataset_id: datasetId,
@@ -152,6 +168,8 @@ export const getJobDetailsOp: Operation<typeof input, GetJobDetailsResult> = {
     "and outputs. It does not carry the job's stdout or stderr: a failed job's logs are one " +
     "get_job_logs call away. Exactly one of datasetId and jobId is required.",
   input,
+  ids: { datasetId: "hda", historyId: "history", jobId: "job" },
+  scope: { owner: (out) => historyIdOf(out.job) },
   run,
   // server.py, get_job_details: the thing that was asked about -- the dataset, or the job
   // when it was asked for by id -- not what was found for it; the job's id is in `data`.

@@ -201,6 +201,14 @@ class ServerPool:
             self._sessions[server] = session
         return self._sessions[server]
 
+    def dedicated(self, server: str) -> StdioSession:
+        """A session of its own for one scenario, not started and not kept.
+
+        For a scenario with `server_env`: the runner adds the resolved variables to its
+        environment once the fixtures exist, starts it, and closes it when the scenario ends.
+        """
+        return StdioSession(launch_spec(server, self._env), *self._args)
+
     def close(self) -> None:
         for session in self._sessions.values():
             session.close()

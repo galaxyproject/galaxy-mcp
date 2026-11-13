@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { httpError } from "../errors";
+import { recordHandles } from "../scope";
 import { paginate, shrinkPaged, validatePagination, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
@@ -48,7 +49,9 @@ async function run(i: In, ctx: GalaxyContext): Promise<Paged<WorkflowItem>> {
   // caller supplied at all is a filter, including an empty one.
   const matches =
     i.name != null ? all.filter((w) => (w as { name?: string }).name === i.name) : all;
-  return paginate(matches, { limit, offset, noun: "workflows" });
+  const page = paginate(matches, { limit, offset, noun: "workflows" });
+  recordHandles(ctx, "workflow", page.items.map((w) => (w as { id?: unknown }).id));
+  return page;
 }
 
 export const listWorkflowsOp: Operation<typeof input, Paged<WorkflowItem>> = {

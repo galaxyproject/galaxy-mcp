@@ -1,5 +1,6 @@
 import { createGalaxyClient, type GalaxyClient } from "./client";
 import { httpError, GalaxyConnectionError, GalaxyError } from "./errors";
+import { HandleRegistry, type HandleKind, type OperationScope } from "./scope";
 import { parseGalaxyVersion, type GalaxyVersion } from "./version";
 
 export interface PollPolicy {
@@ -65,6 +66,23 @@ export interface GalaxyContext {
    * not be able to read each other's numbers.
    */
   readonly envelopeFacts?: EnvelopeFacts;
+  /**
+   * What this run may touch, when a host has said. The registry refuses an operation outside
+   * it before anything is sent and narrows what comes back (see operations/registry.ts); a
+   * context without one is unrestricted, which is every context built before this existed.
+   */
+  readonly scope?: OperationScope;
+  /**
+   * Which ids this run has seen, and as what: lowercased id to the kinds it was returned as.
+   * Ops fill it through `recordHandles`; the registry reads it to refuse an id passed as a
+   * kind it was never returned as. Absent, nothing is recorded and nothing is checked.
+   */
+  readonly handles?: Map<string, Set<HandleKind>>;
+  /**
+   * The histories this session created, lowercased. Filled by the ops that create one; under a
+   * scope they join the histories the session may read and write, and are the ones it may delete.
+   */
+  readonly createdHistories?: Set<string>;
 }
 
 export interface CreateContextOptions {
@@ -75,6 +93,18 @@ export interface CreateContextOptions {
   signal?: AbortSignal;
   fetchImpl?: typeof fetch; // tests only
   versionProbeTimeoutMs?: number; // tests only
+  /**
+   * Confine this context to a run: the histories it may read and write, and the operations it
+   * may not call. A host builds one context per run and passes the run's scope here; leaving it
+   * out changes nothing.
+   */
+  scope?: OperationScope;
+  /**
+   * The run's handle memory. Made automatically when a scope is given; pass one to share it
+   * across contexts of the same run or to turn the kind check on without a scope, or `null` to
+   * run a scoped context without the kind check.
+   */
+  handles?: Map<string, Set<HandleKind>> | null;
 }
 
 /**
@@ -187,6 +217,12 @@ function versionLookup(
 
 export function createGalaxyContext(opts: CreateContextOptions): GalaxyContext {
   const client = createGalaxyClient(opts.baseUrl, opts.apiKey, opts.fetchImpl);
+  // A scope copies the host's lists, so a host that goes on editing its arrays afterwards
+  // cannot widen a running context by accident; a handle memory comes with a scope unless the
+  // host supplied one or opted out with null.
+  const scope = opts.scope === undefined ? undefined : freezeScope(opts.scope);
+  const handles =
+    opts.handles === null ? undefined : (opts.handles ?? (scope ? new HandleRegistry() : undefined));
   return {
     client,
     baseUrl: opts.baseUrl,
@@ -195,5 +231,32 @@ export function createGalaxyContext(opts: CreateContextOptions): GalaxyContext {
     galaxyVersion: versionLookup(client, opts.serverVersion, opts.signal, opts.versionProbeTimeoutMs),
     poll: { ...DEFAULT_POLL, ...opts.poll },
     signal: opts.signal,
+    ...(scope ? { scope, createdHistories: new Set<string>() } : {}),
+    ...(handles ? { handles } : {}),
   };
+}
+
+function destructiveRule(value: unknown): "created" | "writable" {
+  if (value === undefined || value === "created") return "created";
+  if (value === "writable") return "writable";
+  throw new TypeError(`scope.destructive must be "created" or "writable" (got ${JSON.stringify(value)})`);
+}
+
+/** The scope as given, copied and frozen, with every id required to be a non-empty string. */
+function freezeScope(scope: OperationScope): OperationScope {
+  const ids = (name: string, values: readonly string[] | undefined): readonly string[] => {
+    if (values === undefined) return [];
+    if (!Array.isArray(values) || values.some((v) => typeof v !== "string" || v === "")) {
+      throw new TypeError(`scope.${name} must be a list of non-empty id strings`);
+    }
+    return Object.freeze([...values]);
+  };
+  return Object.freeze({
+    historyIds: ids("historyIds", scope.historyIds),
+    readOnlyHistoryIds: ids("readOnlyHistoryIds", scope.readOnlyHistoryIds),
+    blockedOperations: ids("blockedOperations", scope.blockedOperations),
+    includeCreated: scope.includeCreated !== false,
+    allowCreate: scope.allowCreate !== false,
+    destructive: destructiveRule(scope.destructive),
+  });
 }

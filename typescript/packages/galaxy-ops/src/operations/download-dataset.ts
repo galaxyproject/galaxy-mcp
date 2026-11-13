@@ -6,6 +6,7 @@ import { writeFile } from "node:fs/promises";
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { classifyHttp, GalaxyConnectionError } from "../errors";
+import { historyIdOf } from "../scope";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
 
@@ -154,6 +155,19 @@ export const downloadDatasetOp: Operation<typeof input, DownloadDatasetResult> =
     "content_available, and the dataset's name, extension, state and genome build -- with no " +
     "content in it. Nothing on the Galaxy server is changed either way.",
   input,
+  ids: { datasetId: "hda" },
+  // It reads the history and writes the caller's disk, so a read-only history may serve it;
+  // and the bytes must not land on disk before the owner is known, so under a scope the
+  // dataset's history is read first and the download refused before any of them are fetched.
+  scope: {
+    access: "read",
+    ownerOf: async (i, ctx) => {
+      const { data } = await ctx.client.GET("/api/datasets/{dataset_id}", {
+        params: { path: { dataset_id: i.datasetId } },
+      });
+      return historyIdOf(data);
+    },
+  },
   run,
   project: (out, i) => ({
     message: `Dataset ${i.datasetId} (${out.dataset_info.state})${out.file_path ? " -> " + out.file_path : ""}`,

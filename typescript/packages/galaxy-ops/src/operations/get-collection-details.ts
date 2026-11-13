@@ -3,6 +3,7 @@ import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { httpError } from "../errors";
 import { pyGet, pyStr } from "../python-values";
+import { historyIdOf, recordHandles } from "../scope";
 import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
@@ -79,6 +80,15 @@ async function run(i: In, ctx: GalaxyContext): Promise<CollectionDetail> {
   } else {
     recordFact(ctx, rawElementCount, 0);
   }
+  recordHandles(ctx, "hdca", [asRecord(data).id]);
+  recordHandles(ctx, "history", [asRecord(data).history_id]);
+  // The elements a caller sees: each element's own id, and the dataset or collection behind it.
+  const elements = Array.isArray(d.elements) ? d.elements.map(asRecord) : [];
+  recordHandles(ctx, "dataset_collection_element", elements.map((e) => e.id));
+  const objectsOf = (type: string) =>
+    elements.filter((e) => e.element_type === type).map((e) => asRecord(e.object).id);
+  recordHandles(ctx, "hda", objectsOf("hda"));
+  recordHandles(ctx, "hdca", objectsOf("dataset_collection"));
   return data as CollectionDetail;
 }
 
@@ -87,6 +97,8 @@ export const getCollectionDetailsOp: Operation<typeof input, CollectionDetail> =
   domain: "collections",
   summary: "Show a dataset collection by id, with its elements (optionally truncated).",
   input,
+  ids: { collectionId: "hdca" },
+  scope: { owner: (c) => historyIdOf(c) },
   run,
   // The other server does not hand Galaxy's record back: it names the id that was
   // asked for, states the content type, keeps six fields of the collection itself

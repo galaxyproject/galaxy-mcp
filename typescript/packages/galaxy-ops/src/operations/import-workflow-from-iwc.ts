@@ -3,6 +3,7 @@ import { fetchIwcWorkflows } from "../iwc-manifest";
 import type { GalaxyContext } from "../context";
 import { GalaxyNotFoundError } from "../errors";
 import { legacyPost } from "../legacy";
+import { recordHandles } from "../scope";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
@@ -31,9 +32,11 @@ async function run(i: In, ctx: GalaxyContext): Promise<ImportedWorkflow> {
     );
   }
 
-  return legacyPost<ImportedWorkflow>(ctx, "/api/workflows", {
+  const imported = await legacyPost<ImportedWorkflow>(ctx, "/api/workflows", {
     body: { workflow: wf.definition },
   });
+  recordHandles(ctx, "workflow", [imported.id]);
+  return imported;
 }
 
 export const importWorkflowFromIwcOp: Operation<typeof input, ImportedWorkflow> = {
