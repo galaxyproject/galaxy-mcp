@@ -8,7 +8,7 @@ output and meaningful exit codes. Built on
 ## Install
 
 ```bash
-npm install -g @galaxyproject/galaxy-cli   # provides the `galaxy-cli` command
+npm install -g @galaxyproject/galaxy-cli   # provides `galaxy-cli` and `gxy` (the same program, shorter name)
 # or run without installing:
 npx @galaxyproject/galaxy-cli --help
 ```
