@@ -1,0 +1,13 @@
+# Prettier formats the `gxy auth` code only: src/auth, test/auth and test/support (and the ESLint
+# config, which is ours). Everything else in the package is left as its authors wrote it, so an
+# editor that formats on save does not reformat it either. `pnpm format` and eslint.config.js name
+# the same scope.
+/*
+!/src
+/src/*
+!/src/auth
+!/test
+/test/*
+!/test/auth
+!/test/support
+!/eslint.config.js
