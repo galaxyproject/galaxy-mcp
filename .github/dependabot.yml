@@ -18,6 +18,10 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    # @types/node tracks the engines floor (>=22.19), not the Node we build and release on.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       npm-version-updates:
         applies-to: version-updates
