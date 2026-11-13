@@ -60,7 +60,7 @@ describe("flags mapping", () => {
     const inline = buildInput(shape, [], { inputs: '{"a":1}' });
     expect(inline.success && inline.data).toEqual({ inputs: { a: 1 } });
 
-    const dir = mkdtempSync(join(tmpdir(), "galaxy-cli-flags-"));
+    const dir = mkdtempSync(join(process.env.GXY_TEST_ROOT ?? tmpdir(), "galaxy-cli-flags-"));
     const file = join(dir, "inputs.json");
     try {
       writeFileSync(file, '{"b":2}');

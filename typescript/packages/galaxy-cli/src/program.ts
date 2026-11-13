@@ -11,15 +11,27 @@ import { applyInputs } from "./flags-apply";
 import { buildInput, inCliNames, keptPositionals } from "./flags";
 import { render, type Format } from "./render";
 import { exitCodeFor, EX_USAGE, EX_SOFTWARE } from "./exit";
+import { registerAuth } from "./auth/register";
+import { createAuthDeps } from "./auth/deps";
+import type { AuthDeps } from "./auth/types";
 
 export interface CliDeps {
   makeContext?: (conn: Connection, signal: AbortSignal) => GalaxyContext;
+  /** Tests inject fakes here; by default the real wiring in `auth/deps.ts`. */
+  makeAuthDeps?: (commandName: string) => AuthDeps;
+  /**
+   * The name the program prints in usage and hints: `gxy` or `galaxy-cli`. Each name has its own
+   * entry file (`gxy.ts`, `index.ts`) that passes it, because the name a person typed is not
+   * available at run time: pnpm and Windows shims run `node dist/<file>.js`, so `process.argv[1]`
+   * is the file and never the command.
+   */
+  invokedAs?: string;
 }
 
 export function buildProgram(deps: CliDeps = {}): Command {
   const program = new Command();
   program
-    .name("galaxy-cli")
+    .name(deps.invokedAs ?? "galaxy-cli")
     .description("Galaxy agent operations on the command line")
     .option("--url <url>", "Galaxy base URL")
     .option("--api-key <key>", "Galaxy API key")
@@ -27,6 +39,13 @@ export function buildProgram(deps: CliDeps = {}): Command {
     .option("--format <fmt>", "output format: table|json|text", "table")
     .option("--quiet", "suppress status messages", false)
     .option("--timeout <ms>", "poll timeout for blocking ops");
+
+  // `auth` takes its Galaxy from the global --url/--profile too, read at run time.
+  registerAuth(
+    program,
+    deps.makeAuthDeps ??
+      ((name) => createAuthDeps(name, () => program.opts<{ url?: string; profile?: string }>())),
+  );
 
   for (const op of allOperations) {
     const cmd = program.command(op.name).description(inCliNames(describeOperation(op), op.input));
