@@ -90,6 +90,7 @@ export { getIwcWorkflowsOp, getIwcWorkflows } from "./operations/get-iwc-workflo
 export { getIwcWorkflowDetailsOp, getIwcWorkflowDetails, type IwcWorkflowDetail } from "./operations/get-iwc-workflow-details";
 export { searchIwcWorkflowsOp, searchIwcWorkflows } from "./operations/search-iwc-workflows";
 export { recommendIwcWorkflowsOp, recommendIwcWorkflows, type Recommendations } from "./operations/recommend-iwc-workflows";
+export { importWorkflowOp, importWorkflow } from "./operations/import-workflow";
 export { importWorkflowFromIwcOp, importWorkflowFromIwc, type ImportedWorkflow } from "./operations/import-workflow-from-iwc";
 export { listUserToolsOp, listUserTools, type UserTool } from "./operations/list-user-tools";
 export { getUserToolOp, getUserTool, type UserToolRecord } from "./operations/get-user-tool";

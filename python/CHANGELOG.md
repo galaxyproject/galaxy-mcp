@@ -25,6 +25,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `import_workflow` imports a workflow from its definition: a `.ga` or Format2 dict, the
+  same as a JSON object string, or Format2 YAML text. It posts to `POST /api/workflows`,
+  with `fill_defaults` (default false) passed through, and answers with `missing_tools`:
+  the tools the stored workflow uses that this Galaxy does not have, read back from its
+  export, since Galaxy imports such a workflow without saying so. Until now the only way
+  in was `import_workflow_from_iwc`, so a workflow an agent wrote could not be run through
+  the server (#228).
+- `invoke_workflow` takes `allow_tool_state_corrections`, Galaxy's own flag for running a
+  workflow whose steps carry upgrade messages, such as a parameter left unset that Galaxy
+  fills with its default. It defaults to false, as before (#228).
 - `get_page` answers with `content_hash`, the hash Galaxy's page assistant uses over the
   editable source. Galaxy neither returns nor checks it; it is computed from the page as
   Galaxy sent it.
@@ -39,6 +49,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `import_workflow_from_iwc` posts to `POST /api/workflows`, as the TypeScript server
+  does, instead of bioblend's deprecated `/api/workflows/upload`. Galaxy stores the
+  workflow the same way.
 - `get_history_contents` asks Galaxy for one filtered, sorted window and the count it
   matched, instead of fetching the whole history; a page over the output budget is cut,
   and its `pagination` names where to continue. A failure quotes the contents URL with

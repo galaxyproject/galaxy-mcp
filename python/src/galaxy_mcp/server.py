@@ -4740,7 +4740,9 @@ def import_workflow_from_iwc(trs_id: str) -> GalaxyResult:
             )
 
         # Import the workflow into Galaxy
-        imported_workflow = gi.workflows.import_workflow_dict(workflow_definition)
+        imported_workflow = gi.make_post_request(
+            f"{gi.url}/workflows", payload={"workflow": workflow_definition}
+        )
         return GalaxyResult(
             data=imported_workflow,
             success=True,
@@ -4748,6 +4750,99 @@ def import_workflow_from_iwc(trs_id: str) -> GalaxyResult:
         )
     except Exception as e:
         raise ValueError(f"Failed to import workflow from IWC: {str(e)}") from e
+
+
+def _missing_tools(workflow: Any, found: list[str] | None = None) -> list[str]:
+    """The tools a workflow's export marks as not installed, its subworkflows included.
+
+    Galaxy's export gives each step ``errors: module.get_errors()``, and a tool step has
+    one only when no version of its tool is installed (ToolModule.get_errors).
+    """
+    found = [] if found is None else found
+    steps = workflow.get("steps") if isinstance(workflow, dict) else None
+    for step in steps.values() if isinstance(steps, dict) else []:
+        if not isinstance(step, dict):
+            continue
+        tool = step.get("tool_id") or step.get("tool_uuid")
+        if step.get("type") == "tool" and step.get("errors") and tool and tool not in found:
+            found.append(tool)
+        _missing_tools(step.get("subworkflow"), found)
+    return found
+
+
+@mcp.tool(tags={"workflows", "write", "extended"})
+def import_workflow(definition: dict[str, Any] | str, fill_defaults: bool = False) -> GalaxyResult:
+    """
+    Import a workflow from its definition into the user's Galaxy instance. The stored
+    workflow takes the name the definition gives it, and it stays private. Each call creates
+    a new stored workflow, so a retry makes a duplicate; an embedded GalaxyUserTool step also
+    becomes a new user-defined tool each time, unless its tool_uuid names one the user
+    already has. Galaxy imports a workflow whose tools it does not have; missing_tools in the
+    result names them, and invoking the workflow fails until they are installed.
+
+    Args:
+        definition: The workflow as Galaxy's native .ga dict or a Format2 (gxformat2) dict, the
+            same as a JSON object string, or Format2 YAML text (class: GalaxyWorkflow).
+            Embedded user-defined tools are created if the user is allowed to.
+        fill_defaults: Have Galaxy fill each tool parameter the definition leaves unset with
+            its default while storing it, so the stored workflow carries complete tool state;
+            without it, running the workflow may need allow_tool_state_corrections on
+            invoke_workflow for those parameters.
+
+    Returns:
+        GalaxyResult with Galaxy's record of the imported workflow in data, plus missing_tools:
+        the ids of the tools it uses that this Galaxy does not have, or null if they could
+        not be checked.
+    """
+    state = ensure_connected()
+    gi: GalaxyInstance = state["gi"]
+
+    workflow: dict[str, Any] | None = None
+    if isinstance(definition, str) and "GalaxyWorkflow" in definition:
+        try:
+            json.loads(definition)
+        except json.JSONDecodeError:
+            # Galaxy's own rule for workflow text (api/workflows.py, __api_import_from_archive):
+            # not JSON and naming GalaxyWorkflow is Format2 YAML, which it converts itself.
+            workflow = {"yaml_content": definition}
+    if workflow is None:
+        workflow = _coerce_optional_json_dict(definition, "definition")
+    if not workflow:
+        raise ValueError("definition must be a workflow object (a .ga or Format2 dict)")
+
+    try:
+        imported = gi.make_post_request(
+            f"{gi.url}/workflows", payload={"workflow": workflow, "fill_defaults": fill_defaults}
+        )
+    except Exception as e:
+        raise ValueError(f"Failed to import workflow: {str(e)}") from e
+
+    # Galaxy stores a workflow whose tools it lacks and leaves them out of its answer
+    # (managers/workflows.py, missing_tool_tups), so they are read back off the export.
+    # The workflow is stored by now: a failure here must not read as a failed import.
+    missing: list[str] | None
+    try:
+        # style=ga: a plain export follows the admin's default_workflow_export_format,
+        # and a Format2 one carries no step errors to read.
+        response = gi.make_get_request(
+            f"{gi.url}/workflows/{imported['id']}/download", params={"style": "ga"}
+        )
+        response.raise_for_status()
+        exported = response.json()
+        missing = _missing_tools(exported) if "a_galaxy_workflow" in exported else None
+    except Exception:  # noqa: BLE001
+        missing = None
+    name = imported.get("name")
+    if missing is None:
+        message = f"Imported workflow '{name}'; its tools could not be checked"
+    elif missing:
+        message = (
+            f"Imported workflow '{name}', but this Galaxy does not have {len(missing)} of its "
+            f"tools ({', '.join(missing)}); invoking it fails until they are installed"
+        )
+    else:
+        message = f"Imported workflow '{name}'"
+    return GalaxyResult(data={**imported, "missing_tools": missing}, success=True, message=message)
 
 
 @mcp.tool(tags={"workflows", "read", "extended"})
@@ -5004,6 +5099,7 @@ def invoke_workflow(
     history_name: str | None = None,
     inputs_by: str = "step_index",
     parameters_normalized: bool = False,
+    allow_tool_state_corrections: bool = False,
 ) -> GalaxyResult:
     """
     Invoke (run) a workflow with specified inputs and parameters
@@ -5022,6 +5118,9 @@ def invoke_workflow(
         inputs_by: How to identify workflow inputs - 'step_index', 'step_uuid', 'name', or
                   'step_index|step_uuid' (recommended; matches get_workflow_input_template)
         parameters_normalized: Whether parameters are already in normalized format
+        allow_tool_state_corrections: Let Galaxy fill in or correct tool state it would
+            otherwise refuse with "Workflow step has upgrade messages", e.g. a parameter a
+            workflow written outside the editor leaves unset
 
     Returns:
         GalaxyResult with workflow invocation information including invocation ID in data field
@@ -5072,6 +5171,7 @@ def invoke_workflow(
             history_name=history_name,
             inputs_by=resolved_inputs_by,
             parameters_normalized=parameters_normalized,
+            allow_tool_state_corrections=allow_tool_state_corrections,
         )
         return GalaxyResult(
             data=invocation,

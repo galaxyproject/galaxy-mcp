@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "python/src/galaxy_mcp/server.py",
-  "caseCount": 287,
-  "failureCaseCount": 99,
+  "caseCount": 291,
+  "failureCaseCount": 101,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -2243,6 +2243,52 @@
       "replies": "import_workflow_from_iwc/imported.galaxy.json"
     },
     {
+      "tool": "import_workflow",
+      "case": "imported",
+      "note": "a .ga definition POSTed to Galaxy, and its export read back for missing tools",
+      "outcome": "success",
+      "input": {
+        "definition": {
+          "a_galaxy_workflow": "true",
+          "format-version": "0.1",
+          "name": "Concatenate",
+          "annotation": "",
+          "steps": {
+            "0": {
+              "id": 0,
+              "type": "data_input",
+              "tool_state": "{\"name\": \"input\"}"
+            },
+            "1": {
+              "id": 1,
+              "type": "tool",
+              "tool_id": "cat1",
+              "input_connections": {
+                "input1": {
+                  "id": 0,
+                  "output_name": "output"
+                }
+              }
+            }
+          }
+        }
+      },
+      "envelope": "import_workflow/imported.json",
+      "replies": "import_workflow/imported.galaxy.json"
+    },
+    {
+      "tool": "import_workflow",
+      "case": "missing_tools",
+      "note": "Format2 YAML text Galaxy converts and stores although one tool is not installed",
+      "outcome": "success",
+      "input": {
+        "definition": "class: GalaxyWorkflow\nlabel: Trim\ninputs:\n  reads: data\nsteps:\n  trim:\n    tool_id: toolshed.g2.bx.psu.edu/repos/iuc/fastp/fastp/1.0.1+galaxy3\n    in:\n      single_paired|in1: reads\n",
+        "fill_defaults": true
+      },
+      "envelope": "import_workflow/missing_tools.json",
+      "replies": "import_workflow/missing_tools.galaxy.json"
+    },
+    {
       "tool": "get_page_revision",
       "case": "content_editor_from_the_server",
       "note": "the revision carries its own editable markdown",
@@ -3248,6 +3294,28 @@
       "replies": "import_workflow_from_iwc/refused_by_galaxy.galaxy.json"
     },
     {
+      "tool": "import_workflow",
+      "case": "refused_by_galaxy",
+      "note": "a step without the id Galaxy connects steps by, refused as a bioblend write",
+      "outcome": "failure",
+      "input": {
+        "definition": {
+          "a_galaxy_workflow": "true",
+          "format-version": "0.1",
+          "name": "Concatenate",
+          "annotation": "",
+          "steps": {
+            "0": {
+              "type": "tool",
+              "tool_id": "cat1"
+            }
+          }
+        }
+      },
+      "envelope": "import_workflow/refused_by_galaxy.json",
+      "replies": "import_workflow/refused_by_galaxy.galaxy.json"
+    },
+    {
       "tool": "list_workflows",
       "case": "limit_above_the_ceiling",
       "note": "the page ceiling, with the advice to use offset that a pageable tool gets",
@@ -3348,6 +3416,17 @@
       },
       "envelope": "get_dataset_details/is_a_collection.json",
       "replies": "get_dataset_details/is_a_collection.galaxy.json"
+    },
+    {
+      "tool": "import_workflow",
+      "case": "empty_definition",
+      "note": "an empty object is no workflow, so nothing is posted",
+      "outcome": "failure",
+      "input": {
+        "definition": {}
+      },
+      "envelope": "import_workflow/empty_definition.json",
+      "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {
       "tool": "get_workflow_input_template",
