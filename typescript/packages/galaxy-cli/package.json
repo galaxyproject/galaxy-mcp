@@ -1,6 +1,6 @@
 {
   "name": "@galaxyproject/galaxy-cli",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Command-line interface for Galaxy agent operations -- histories, datasets, tools, workflows, and the IWC catalog.",
   "license": "MIT",
   "author": "Galaxy Project",
@@ -17,22 +17,26 @@
   "publishConfig": {
     "access": "public"
   },
-  "bin": { "galaxy-cli": "./dist/index.js" },
+  "bin": { "galaxy-cli": "./dist/index.js", "gxy": "./dist/gxy.js" },
   "files": ["dist"],
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
+    "test:fast": "vitest run --exclude '**/*.int.test.ts'"
   },
   "dependencies": {
     "@galaxyproject/galaxy-ops": "workspace:*",
+    "@napi-rs/keyring": "^2.1.2",
     "commander": "^14.0.0",
+    "openid-client": "^6.8.9",
     "yaml": "^2.6.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "execa": "^9.5.0",
+    "fast-check": "^4.10.2",
     "tsup": "^8.3.0",
     "vitest": "^5.1.0",
     "typescript": "^6.0.0"
