@@ -42,7 +42,7 @@ function invocationsContext(asked: string[]) {
     createGalaxyContext({
       baseUrl: "https://g.example",
       apiKey: "K",
-      fetchImpl: (async (input: RequestInfo | URL) => {
+      fetchImpl: (async (input: Request | string | URL) => {
         const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         asked.push(url);
         const body = url.includes("/api/invocations/")
@@ -66,7 +66,7 @@ function recordingContext(asked: string[], body: unknown = []) {
     createGalaxyContext({
       baseUrl: "https://g.example",
       apiKey: "K",
-      fetchImpl: (async (input: RequestInfo | URL) => {
+      fetchImpl: (async (input: Request | string | URL) => {
         const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         asked.push(url);
         const payload = url.includes("/api/version")
@@ -95,7 +95,9 @@ describe("buildProgram", () => {
     const names = program.commands.map((c) => c.name());
     expect(names).toContain("get_histories");
     expect(names).toContain("create_history");
-    expect(names.length).toBe(allOperations.length);
+    // the `auth` group is the one command that is not an operation
+    expect(names).toContain("auth");
+    expect(names.length).toBe(allOperations.length + 1);
   });
 
   it("says in --help what an op needs from the server", () => {
@@ -239,7 +241,7 @@ describe("buildProgram", () => {
       createGalaxyContext({
         baseUrl: "https://g.example",
         apiKey: "K",
-        fetchImpl: (async (input: RequestInfo | URL) => {
+        fetchImpl: (async (input: Request | string | URL) => {
           const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
           asked.push(url);
           const body = url.includes("get_content_as_text")
@@ -329,6 +331,19 @@ describe("buildProgram", () => {
     expect(out.mock.calls.flat().join("")).toContain('"success": true');
     expect(process.exitCode === 0 || process.exitCode === undefined).toBe(true);
     out.mockRestore();
+  });
+});
+
+/**
+ * The name `auth` prints in its hints is the one the entry file passes (`dist/gxy.js` is `gxy`,
+ * `dist/index.js` is `galaxy-cli`), so a `galaxy-cli` user is never told to run `gxy`. It is not read
+ * from `process.argv[1]`: pnpm and Windows shims run the entry file, never the command name. The
+ * built entries are checked end to end in `auth/e2e.int.test.ts`.
+ */
+describe("the program name", () => {
+  it("is galaxy-cli unless the entry says otherwise", () => {
+    expect(buildProgram().name()).toBe("galaxy-cli");
+    expect(buildProgram({ invokedAs: "gxy" }).name()).toBe("gxy");
   });
 });
 
