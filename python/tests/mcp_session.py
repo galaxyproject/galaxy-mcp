@@ -53,7 +53,11 @@ class LiveMCPSession:
 
     def __enter__(self) -> LiveMCPSession:
         self._loop = asyncio.new_event_loop()
-        self._client = Client(mcp)
+        # Pinned to the handshake era rather than FastMCP 4's default: the contract envelopes
+        # are recorded from these results, and a 2026-07-28 result also carries
+        # `_meta.serverInfo` and `resultType`, which the TypeScript server's results do not.
+        # Both eras' connection handling is covered in tests/test_session_scope.py.
+        self._client = Client(mcp, mode="legacy")
         self._loop.run_until_complete(self._client.__aenter__())
         return self
 
@@ -98,9 +102,14 @@ class LiveMCPSession:
         content at all. This returns the `CallToolResult` the client session received,
         dumped the way the MCP SDK dumps it onto the wire -- by alias, in JSON mode, with
         None-valued fields left out -- so what a caller actually reads can be written down.
+
+        Unset fields are left out too: MCP SDK v2 models carry client-side defaults (such
+        as `resultType: "complete"`) that a handshake-era server never sends, and dumping
+        them would record a field the wire did not carry.
         """
         loop, client = self._require_open()
         result = loop.run_until_complete(client.call_tool_mcp(tool_name, arguments))
         return cast(
-            dict[str, Any], result.model_dump(by_alias=True, mode="json", exclude_none=True)
+            dict[str, Any],
+            result.model_dump(by_alias=True, mode="json", exclude_none=True, exclude_unset=True),
         )
