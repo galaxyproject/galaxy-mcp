@@ -42,7 +42,7 @@ function invocationsContext(asked: string[]) {
     createGalaxyContext({
       baseUrl: "https://g.example",
       apiKey: "K",
-      fetchImpl: (async (input: RequestInfo | URL) => {
+      fetchImpl: (async (input: Request | string | URL) => {
         const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         asked.push(url);
         const body = url.includes("/api/invocations/")
@@ -66,7 +66,7 @@ function recordingContext(asked: string[], body: unknown = []) {
     createGalaxyContext({
       baseUrl: "https://g.example",
       apiKey: "K",
-      fetchImpl: (async (input: RequestInfo | URL) => {
+      fetchImpl: (async (input: Request | string | URL) => {
         const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         asked.push(url);
         const payload = url.includes("/api/version")
@@ -239,7 +239,7 @@ describe("buildProgram", () => {
       createGalaxyContext({
         baseUrl: "https://g.example",
         apiKey: "K",
-        fetchImpl: (async (input: RequestInfo | URL) => {
+        fetchImpl: (async (input: Request | string | URL) => {
           const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
           asked.push(url);
           const body = url.includes("get_content_as_text")
@@ -329,6 +329,18 @@ describe("buildProgram", () => {
     expect(out.mock.calls.flat().join("")).toContain('"success": true');
     expect(process.exitCode === 0 || process.exitCode === undefined).toBe(true);
     out.mockRestore();
+  });
+});
+
+/**
+ * The name the program prints in usage is the one the entry file passes (`dist/gxy.js` is `gxy`,
+ * `dist/index.js` is `galaxy-cli`). It is not read from `process.argv[1]`: pnpm and Windows shims
+ * run the entry file, never the command name.
+ */
+describe("the program name", () => {
+  it("is galaxy-cli unless the entry says otherwise", () => {
+    expect(buildProgram().name()).toBe("galaxy-cli");
+    expect(buildProgram({ invokedAs: "gxy" }).name()).toBe("gxy");
   });
 });
 
