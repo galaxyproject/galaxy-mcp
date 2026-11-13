@@ -2,8 +2,8 @@ import type { AddressInfo } from "node:net";
 import { parseArgs } from "node:util";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createGalaxyContext } from "@galaxyproject/galaxy-ops";
-import { httpConfig, startHttpServer } from "./http.js";
-import { buildServer } from "./server.js";
+import { envFlag, httpConfig, startHttpServer } from "./http.js";
+import { APPS_ENV, buildServer } from "./server.js";
 
 // The Python server's flags and environment variables, with the same defaults.
 const USAGE =
@@ -38,9 +38,10 @@ if (!baseUrl || !apiKey) {
   process.exit(1);
 }
 
+const apps = envFlag(process.env[APPS_ENV]);
 const transport = (args.transport ?? process.env.GALAXY_MCP_TRANSPORT ?? "stdio").toLowerCase();
 if (transport === "stdio") {
-  await buildServer(createGalaxyContext({ baseUrl, apiKey })).connect(new StdioServerTransport());
+  await buildServer(createGalaxyContext({ baseUrl, apiKey }), { apps }).connect(new StdioServerTransport());
   console.error("galaxy-mcp: connected on stdio");
 } else if (transport === "streamable-http") {
   let config;
@@ -53,7 +54,7 @@ if (transport === "stdio") {
   const ctx = createGalaxyContext({ baseUrl, apiKey });
   let httpServer;
   try {
-    httpServer = await startHttpServer({ ...config, newServer: () => buildServer(ctx, { allowLocalFiles: config.allowLocalFiles }) });
+    httpServer = await startHttpServer({ ...config, newServer: () => buildServer(ctx, { allowLocalFiles: config.allowLocalFiles, apps }) });
   } catch (error) {
     // A port in use, or an address this machine does not have: say so in one line.
     console.error(`galaxy-mcp: ${(error as Error).message}`);
