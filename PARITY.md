@@ -29,10 +29,10 @@ Two differences with that server are recorded once here rather than as a row per
 | Status | Differences |
 | --- | --- |
 | `intentional` | `10` |
-| `pending-port` | `0` |
+| `pending-port` | `1` |
 | `pending-decision` | `3` |
 | `unreviewed-gap` | `53` |
-| **total** | `66` |
+| **total** | `67` |
 
 These are counted apart and ratcheted apart -- at 53 -- because they are not this repository's to close on its own: each one is a rename, an addition or a removal somebody has to agree with galaxyproject/galaxy. Nothing here has been ruled on yet.
 
@@ -44,7 +44,7 @@ Every tool any surface has, against the surfaces that do not have it. A name her
 
 **Missing from TypeScript** (5): `connect`, `get_invocation_details`, `get_job_status`, `list_file_source_templates`, `list_user_file_sources`
 
-**Missing from Built-in** (9): `get_iwc_workflows`, `get_job_logs`, `get_tool_input_template`, `get_user_tool`, `get_workflow_input_template`, `list_jobs`, `recommend_iwc_workflows`, `update_history`, `upload_file`
+**Missing from Built-in** (10): `evaluate_user_tool_preflight`, `get_iwc_workflows`, `get_job_logs`, `get_tool_input_template`, `get_user_tool`, `get_workflow_input_template`, `list_jobs`, `recommend_iwc_workflows`, `update_history`, `upload_file`
 
 ## Tools
 
@@ -68,6 +68,7 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `download_dataset` | `file_path` |  | `type=string required=false default=none` | `type=string required=false default=none` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours fetches the dataset and can write it to a path on the caller's disk. The built-in returns no bytes at all: its download_dataset hands back a download URL built from galaxy_infrastructure_url, alongside the dataset's name, extension, size and state. So this row is a real difference in what the two tools do rather than a parameter somebody forgot: a server-side tool can point a client at the bytes, and that is all it can do. |
 | `download_dataset` | `require_ok_state` |  | `type=boolean required=false default=true` | `type=boolean required=false default=true` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Both refuse a dataset that is not ok; only ours can be told not to. AgentOperationsManager.download_dataset returns an error and no download URL whenever the state is anything but `ok`, unconditionally -- so what the built-in is missing is the escape hatch, not the guard. Reconciling this one is a question of whether an agent should ever be able to ask for a dataset that is still running or failed, not of adding a check there. |
 | `download_dataset` | `use_default_filename` |  | `type=boolean required=false default=true` | `type=boolean required=false default=true` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours can name the file after the dataset; Galaxy's has no local file to name. |
+| `evaluate_user_tool_preflight` |  | `1` | `read (tag)` | `read (hint)` | -- | `vs built-in: missing-builtin-tool` | `pending-port` | This repository can combine an owned UDT definition, its completed job and safe job metrics into a resource recommendation. Galaxy's built-in MCP server exposes none of that orchestration yet. |
 | `get_collection_details` |  | `6` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_collection_details` | `max_elements` |  | `type=integer required=false default=100` | `type=integer required=false default=100` | `type=integer required=false default=500` | `vs built-in: default-mismatch` | `unreviewed-gap` | Both cap the elements returned and the caps differ: 100 here, 500 there. |
 | `get_dataset_details` |  | `8` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |

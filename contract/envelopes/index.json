@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "python/src/galaxy_mcp/server.py",
-  "caseCount": 287,
+  "caseCount": 288,
   "failureCaseCount": 99,
   "cases": [
     {
@@ -2200,6 +2200,19 @@
       },
       "envelope": "run_user_tool/scalar_input.json",
       "replies": "run_user_tool/scalar_input.galaxy.json"
+    },
+    {
+      "tool": "evaluate_user_tool_preflight",
+      "case": "completed_representative_run",
+      "note": "a completed UDT job with safe runtime and cgroup peak-memory metrics",
+      "outcome": "success",
+      "input": {
+        "tool_uuid": "61d15277-a911-45ef-aa66-5385146578cc",
+        "job_id": "0123456789abcdef",
+        "safety_factor": 1.5
+      },
+      "envelope": "evaluate_user_tool_preflight/completed_representative_run.json",
+      "replies": "evaluate_user_tool_preflight/completed_representative_run.galaxy.json"
     },
     {
       "tool": "run_user_tool",
