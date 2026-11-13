@@ -79,6 +79,47 @@ describe("create_user_tool", () => {
     expect(postCalled).toBe(false);
   });
 
+  it("rejects direct free-text interpolation without making a POST", async () => {
+    let postCalled = false;
+    const client = mockClient({
+      POST: () => {
+        postCalled = true;
+        return { data: {}, response: { status: 200 } };
+      },
+    });
+    const representation = {
+      ...VALID_REP,
+      shell_command: "printf '%s' '$(inputs.label)'",
+      inputs: [{ name: "label", type: "text" }],
+    };
+    await expect(createUserTool({ representation }, ctxWith(client))).rejects.toThrow(
+      "dynamic_tool.unsafe_text_interpolation",
+    );
+    expect(postCalled).toBe(false);
+  });
+
+  it("accepts free text serialized into a data config", async () => {
+    const representation = {
+      ...VALID_REP,
+      shell_command: "python script.py params.json",
+      inputs: [{ name: "label", type: "text" }],
+      configfiles: [
+        {
+          name: "params",
+          filename: "params.json",
+          content: '{"label": $(JSON.stringify(inputs.label))}',
+          eval_engine: "ecmascript",
+        },
+      ],
+    };
+    const client = mockClient({
+      POST: () => ({ data: { uuid: "abc" }, response: { status: 200 } }),
+    });
+    await expect(createUserTool({ representation }, ctxWith(client))).resolves.toMatchObject({
+      uuid: "abc",
+    });
+  });
+
   it("POSTs valid representation with correct body shape and returns created tool", async () => {
     const client = mockClient({
       POST: (path, init) => {

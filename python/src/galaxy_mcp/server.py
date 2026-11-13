@@ -5152,7 +5152,10 @@ def create_user_tool(representation: dict[str, Any]) -> GalaxyResult:
               available it resolves a verified image for you; otherwise use a
               known-good biocontainer tag.
             - shell_command: the command to execute, with $(inputs.name.path)
-              for data inputs and $(inputs.name) for parameter inputs
+              for data inputs and $(inputs.name) for typed or fixed parameter
+              inputs. Never interpolate free-form text into shell or script
+              source; serialize it with JSON.stringify into a configfile and
+              read it as data.
             - inputs: list of input dicts, each with "name" and "type"
               (type can be: "data", "integer", "float", "text", "boolean")
             - outputs: list of output dicts, each with "name", "type": "data",
@@ -5194,6 +5197,15 @@ def create_user_tool(representation: dict[str, Any]) -> GalaxyResult:
         raise ValueError(
             f"container must be a string (e.g. 'python:3.12-slim'), "
             f"got {type(representation['container']).__name__}: {representation['container']}"
+        )
+    from galaxy_mcp.user_tool_security import user_tool_security_diagnostics
+
+    diagnostics = user_tool_security_diagnostics(representation)
+    if diagnostics:
+        diagnostic = diagnostics[0]
+        raise ValueError(
+            f"Unsafe user tool at {diagnostic['path']} [{diagnostic['code']}]: "
+            f"{diagnostic['message']}"
         )
 
     try:

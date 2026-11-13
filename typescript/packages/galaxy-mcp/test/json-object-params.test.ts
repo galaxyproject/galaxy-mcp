@@ -369,8 +369,8 @@ describe("a key at the top level of an object-valued parameter", () => {
     const open = '"type":"object","propertyNames":{"type":"string"},"additionalProperties":{}';
 
     expect(schemaOf("create_user_tool", "representation")).toBe(
-      `{${open},"description":"a GalaxyUserTool representation: {class:'GalaxyUserTool', id, ` +
-        `version, name, shell_command, container:'<image>'}"}`,
+      `{${open},"description":"a GalaxyUserTool representation; free-form text must be serialized ` +
+        `into a data configfile, not interpolated into shell or script source"}`,
     );
     expect(schemaOf("run_tool", "inputs")).toBe(
       `{${open},"description":"Tool input parameters in Galaxy's legacy format: dataset inputs as ` +
