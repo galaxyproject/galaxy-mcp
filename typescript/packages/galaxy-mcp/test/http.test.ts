@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { request, type Server } from "node:http";
+import { request, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -101,20 +101,40 @@ describe("Host and Origin", () => {
   });
 });
 
+/** Reads a whole response; one cut off partway is a failure, not a pass on whatever made it through. */
+function collect(res: IncomingMessage): Promise<{ status: number; headers: IncomingMessage["headers"]; body: string }> {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    res.setEncoding("utf8");
+    res.on("data", (chunk) => (body += chunk));
+    res.on("end", () => resolve({ status: res.statusCode ?? 0, headers: res.headers, body }));
+    res.on("error", reject);
+    res.on("close", () => {
+      if (!res.complete) reject(new Error("response closed before it was complete"));
+    });
+  });
+}
+
 /** A raw request, so the test controls the Host header that fetch would not let it set. */
 function raw(
   port: number,
-  { method = "POST", path = "/mcp", headers = {}, body }: { method?: string; path?: string; headers?: Record<string, string>; body?: string },
+  {
+    method = "POST",
+    path = "/mcp",
+    headers = {},
+    body,
+  }: { method?: string; path?: string; headers?: Record<string, string>; body?: string | string[] },
 ): Promise<{ status: number; headers: Record<string, string | string[] | undefined>; body: string }> {
   return new Promise((resolve, reject) => {
-    const req = request({ host: "127.0.0.1", port, method, path, headers }, (res) => {
-      let text = "";
-      res.setEncoding("utf8");
-      res.on("data", (chunk) => (text += chunk));
-      res.on("end", () => resolve({ status: res.statusCode ?? 0, headers: res.headers, body: text }));
-    });
+    const req = request({ host: "127.0.0.1", port, method, path, headers }, (res) => collect(res).then(resolve, reject));
     req.on("error", reject);
-    req.end(body);
+    // An array goes out piece by piece with chunked encoding, so the server never sees a length.
+    if (Array.isArray(body)) {
+      for (const chunk of body) req.write(chunk);
+      req.end();
+    } else {
+      req.end(body);
+    }
   });
 }
 
@@ -202,6 +222,106 @@ describe("the Streamable HTTP server", () => {
       },
     });
     await expect(attempt).rejects.toThrow(/EADDRINUSE/);
+  });
+
+  // The SDK reads the body through the Node-to-Web Request adapter and refuses anything over
+  // 4 MiB, from Content-Length when one is sent and otherwise by counting the stream, so these
+  // depend on the adapter passing that header through and streaming the body faithfully.
+  describe("request bodies", () => {
+    const limit = 4 * 1024 * 1024;
+    const padded = (bytes: number) => {
+      const message = JSON.parse(initialize);
+      message.params._meta = { pad: "x".repeat(bytes) };
+      return JSON.stringify(message);
+    };
+    const inChunks = (text: string, size = 64 * 1024) =>
+      Array.from({ length: Math.ceil(text.length / size) }, (_, i) => text.slice(i * size, (i + 1) * size));
+
+    it("reads a large body whole, streamed in chunks", async () => {
+      // The id comes back verbatim, and no two stretches of it are alike, so a chunk dropped,
+      // repeated or reordered on the way in shows up in the reply rather than vanishing into
+      // padding the server ignores.
+      let id = "";
+      for (let i = 0; id.length < 3 * 1024 * 1024; i++) id += `${i},`;
+      const body = JSON.stringify({ ...JSON.parse(initialize), id });
+      expect(body.length).toBeLessThan(limit);
+      const res = await raw(port, { headers: mcpHeaders, body: inChunks(body) });
+      expect(res.status).toBe(200);
+      expect(res.body.includes(`"id":${JSON.stringify(id)}`), "the id came back changed").toBe(true);
+      expect(res.body).toContain('"serverInfo"');
+    });
+
+    it("takes a body of exactly the limit, sent with its length", async () => {
+      // Together with the limit + 1 refusal below, this pins the cap at 4 MiB in bytes.
+      const body = padded(limit - padded(0).length);
+      expect(Buffer.byteLength(body)).toBe(limit);
+      const headers = { ...mcpHeaders, "content-length": String(limit) };
+      const res = await raw(port, { headers, body });
+      expect(res.status).toBe(200);
+      expect(res.body).toContain('"serverInfo"');
+    });
+
+    it("refuses an oversized body by its declared length, before reading any of it", async () => {
+      // Only the headers go out: the refusal has to come from Content-Length alone, and not
+      // sending the body keeps the server's close from racing a write.
+      const res = await new Promise<{ status: number; body: string }>((resolve, reject) => {
+        const headers = { ...mcpHeaders, "content-length": String(limit + 1) };
+        let answered = false;
+        // The deadline runs until the whole response is in, and every outcome tears the request
+        // down, so a stalled reply fails here instead of hanging the suite.
+        const settle = (outcome: () => void) => {
+          clearTimeout(timer);
+          req.destroy();
+          outcome();
+        };
+        const req = request({ host: "127.0.0.1", port, method: "POST", path: "/mcp", headers }, (res) => {
+          answered = true;
+          collect(res).then(
+            (got) => settle(() => resolve(got)),
+            (error) => settle(() => reject(error)),
+          );
+        });
+        const timer = setTimeout(() => {
+          const why = answered
+            ? "the 413 started but never finished arriving"
+            : "the server waited for the body instead of refusing on Content-Length";
+          settle(() => reject(new Error(why)));
+        }, 2000);
+        req.on("error", (error) => settle(() => reject(error)));
+        req.flushHeaders();
+      });
+      expect(res.status).toBe(413);
+      expect(res.body).toContain(`Payload Too Large: Request body must not exceed ${limit} bytes`);
+      expect((await raw(port, { headers: mcpHeaders, body: initialize })).status).toBe(200);
+    });
+
+    it("refuses an oversized chunked body, and keeps serving after", async () => {
+      // Exactly one byte over the limit goes out with no length, and the upload is left open, so
+      // the server has to count its way to the refusal and there is nothing more to write into
+      // the socket it closes after. Writing on past the limit races that close, and a client slow
+      // to see the status can lose the 413 to a reset.
+      const body = padded(limit + 1 - padded(0).length);
+      expect(Buffer.byteLength(body)).toBe(limit + 1);
+      const status = await new Promise<number>((resolve, reject) => {
+        const req = request({ host: "127.0.0.1", port, method: "POST", path: "/mcp", headers: mcpHeaders }, (res) => {
+          clearTimeout(timer);
+          resolve(res.statusCode ?? 0);
+          res.resume();
+          req.destroy();
+        });
+        const timer = setTimeout(() => {
+          req.destroy();
+          reject(new Error("the server waited for more body instead of refusing at the limit"));
+        }, 2000);
+        req.on("error", (error) => {
+          clearTimeout(timer);
+          reject(error);
+        });
+        for (const chunk of inChunks(body)) req.write(chunk);
+      });
+      expect(status).toBe(413);
+      expect((await raw(port, { headers: mcpHeaders, body: initialize })).status).toBe(200);
+    });
   });
 
   it("serves only its path, and only POST", async () => {
