@@ -2684,14 +2684,13 @@ def workflow_details_cases(add: AddCase) -> None:
 
 
 def job_details_cases(add: AddCase) -> None:
-    """The job behind a dataset, found two ways.
+    """The job behind a dataset, found through the dataset's own record.
 
-    With a history the provenance record is asked first and its ``job_id`` is used;
-    without one, or when provenance answers without a job id, the dataset's own
-    ``creating_job`` is read instead. Both paths end at the same GET /api/jobs/{id},
-    which this server reaches with requests rather than through bioblend -- joined onto
-    the session's stored address, which is why that address has to be the one connect
-    would have stored.
+    The record's ``creating_job`` names the job, with or without a history; with one, its
+    ``history_id`` also has to name that history, since it is the only thing that says the
+    dataset is in it. Both end at the same GET /api/jobs/{id}, which this server reaches
+    with requests rather than through bioblend -- joined onto the session's stored
+    address, which is why that address has to be the one connect would have stored.
     """
     job = {
         "id": "j0000001",
@@ -2718,23 +2717,11 @@ def job_details_cases(add: AddCase) -> None:
     )
     add(
         "get_job_details",
-        "from_provenance",
-        "a history was named, so the provenance record answers with the job id",
+        "in_the_history_named",
+        "a history was named and the dataset's record puts it there, so its creating_job answers",
         {"dataset_id": "d0000002", "history_id": "h0000"},
         lambda: get_job_details_fn("d0000002", history_id="h0000"),
-        [
-            route(
-                "/api/histories/h0000/contents/d0000002/provenance",
-                {
-                    "id": "d0000002",
-                    "job_id": "j0000001",
-                    "tool_id": "fastqc",
-                    "uuid": "22222222-2222-2222-2222-222222222222",
-                    "parameters": {},
-                },
-            ),
-            job_route,
-        ],
+        [dataset_route, job_route],
     )
     add(
         "get_job_details",
@@ -2743,21 +2730,6 @@ def job_details_cases(add: AddCase) -> None:
         {"dataset_id": "d0000002"},
         lambda: get_job_details_fn("d0000002"),
         [dataset_route, job_route],
-    )
-    add(
-        "get_job_details",
-        "provenance_without_a_job_id",
-        "provenance answered, but named no job, so the dataset is read anyway",
-        {"dataset_id": "d0000002", "history_id": "h0000"},
-        lambda: get_job_details_fn("d0000002", history_id="h0000"),
-        [
-            route(
-                "/api/histories/h0000/contents/d0000002/provenance",
-                {"id": "d0000002", "tool_id": "fastqc", "parameters": {}},
-            ),
-            dataset_route,
-            job_route,
-        ],
     )
     # By id, the id has to look like one -- hex, as Galaxy writes them -- and the reply has
     # to carry it back, so these cases name a job the way Galaxy would.
@@ -4608,6 +4580,25 @@ def more_http_failure_cases(add: AddFailure) -> None:
         "a dataset that reads fine and names no job -- a refusal, not a failed request",
         {"dataset_id": "d0001"},
         [route("/api/datasets/d0001", {"id": "d0001", "name": "uploaded.txt", "state": "ok"})],
+    )
+    add(
+        "get_job_details",
+        "dataset_in_another_history",
+        "Galaxy reads a dataset by its id alone, so the dataset's own record decides: it is in "
+        "another history, which is refused before any job is read",
+        {"dataset_id": "d0003", "history_id": "h0001"},
+        [
+            route(
+                "/api/datasets/d0003",
+                {
+                    "id": "d0003",
+                    "name": "out.txt",
+                    "state": "ok",
+                    "history_id": "h0002",
+                    "creating_job": "j0000003",
+                },
+            ),
+        ],
     )
     add(
         "get_job_details",

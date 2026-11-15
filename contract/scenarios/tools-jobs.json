@@ -815,7 +815,7 @@
     },
     {
       "id": "jobs.job_details.upload",
-      "note": "A pasted dataset was made by an upload job, which get_job_details finds from the dataset alone (no history_id: the creating_job fallback) and reports finished ok.",
+      "note": "A pasted dataset was made by an upload job, which get_job_details finds from the dataset alone (no history_id: the record's creating_job) and reports finished ok.",
       "fixtures": [
         {"as": "h", "history": {"name": "${run.tag}-tools-jobs"}},
         {"as": "d", "dataset": {"history": "${h.id}", "content": "x\n"}}

@@ -3043,6 +3043,28 @@ def _not_that_record(noun: str, value: str) -> str:
     )
 
 
+def _is_in_history(record: Any, history_id: str) -> bool:
+    """Whether a dataset's own record puts it in the history asked about.
+
+    Galaxy writes ``history_id`` into every view of a history dataset, so a record that
+    names another history, or none (null for a dataset in no history, absent from anything
+    that is not a dataset record), does not say the dataset is in this one. Compared the way
+    ``_is_this_record`` compares an id: Galaxy writes lowercase hex and decodes either case.
+    """
+    if not isinstance(record, dict):
+        return False
+    held = record.get("history_id")
+    return isinstance(held, str) and held.lower() == history_id.lower()
+
+
+def _not_in_history(dataset_id: str, history_id: str) -> str:
+    """The refusal of a dataset outside the history named. Quoted by the TypeScript op."""
+    return (
+        f"Dataset ID '{dataset_id}' not found in history '{history_id}': Galaxy's record of "
+        "that dataset does not put it in that history, so its job was not returned."
+    )
+
+
 @mcp.tool(tags={"jobs", "read", "core"})
 def get_job_details(
     dataset_id: str | None = None,
@@ -3060,8 +3082,8 @@ def get_job_details(
     Args:
         dataset_id: Galaxy dataset ID whose creating job to look up - a hexadecimal hash
                    string (a 16-character hex string). Give this or job_id, not both
-        history_id: Galaxy history ID containing the dataset - optional for performance optimization
-                   (a 16-character hex string); only used with dataset_id
+        history_id: Galaxy history ID containing the dataset (a 16-character hex string);
+                   only used with dataset_id. A dataset in any other history is refused
         job_id: Galaxy job ID to look up directly (a 16-character hex string). Give this or
                dataset_id, not both
 
@@ -3109,42 +3131,28 @@ def get_job_details(
 
     assert dataset_id is not None  # one of the two, as refused above
 
-    # Two lookups and a read, each answering for its own failure while that failure is
-    # still in hand. One handler around all three could only see whatever the first one
-    # wrapped, and a wrapper carries no status.
-    provenance_error: Exception | None = None
-    if history_id:
-        try:
-            provenance = gi.histories.show_dataset_provenance(
-                history_id=history_id, dataset_id=dataset_id
-            )
-
-            # Extract job ID from provenance
-            job_id = provenance.get("job_id")
-        except Exception as exc:
-            provenance_error = exc
-
-    if not job_id:
-        # If provenance fails, try getting dataset details which might contain job info
-        try:
-            dataset_details = gi.datasets.show_dataset(dataset_id)
+    # The dataset's own record answers both questions: which history it is in, and which
+    # job made it. Galaxy finds the dataset by its id alone, so a dataset in any other
+    # history answers too, and the record's history_id is the one thing that says where it
+    # is. Its creating_job is the job Galaxy's provenance route reports as well (both read
+    # the dataset's creating_job property), so that route is not asked: it would add a
+    # request and nothing else, and it does not read the history in its path either. The
+    # job is no test of the history: a dataset copied into this history keeps the job that
+    # made the original, and that job ran in another one.
+    try:
+        dataset_details = gi.datasets.show_dataset(dataset_id)
+        # Decided before anything is taken from the reply, so one that is not a record at
+        # all is refused below, as the TypeScript op refuses it, rather than failing here
+        # on its way to a job.
+        in_history = not history_id or _is_in_history(dataset_details, history_id)
+        if in_history:
             job_id = dataset_details.get("creating_job")
-        except Exception as dataset_error:
-            # The provenance failure when there was one -- that is the lookup the caller
-            # asked for. Either way it is the original exception, not a paraphrase of it.
-            source = provenance_error or dataset_error
-            raise ValueError(_job_details_failed(dataset_id, source)) from source
+    except Exception as e:
+        raise ValueError(_job_details_failed(dataset_id, e)) from e
+    if history_id and not in_history:
+        raise ValueError(_not_in_history(dataset_id, history_id))
 
     if not job_id:
-        if provenance_error is not None:
-            # The fallback answered, and answered that it knows of no job. That says nothing
-            # about why provenance failed, and provenance is the lookup the caller asked
-            # for -- so the failure still in hand is the one to report. Telling them the
-            # dataset was not made by a job would bury a 500, a permission problem or a
-            # request that never completed under a sentence about something else.
-            raise ValueError(
-                _job_details_failed(dataset_id, provenance_error)
-            ) from provenance_error
         # The dataset is there and nothing says a job made it. Nothing failed over HTTP, so
         # there is no status here to read and none is guessed at from the text.
         raise ValueError(

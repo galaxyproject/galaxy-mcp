@@ -1,21 +1,12 @@
-// Note: /api/histories/{history_id}/contents/{dataset_id}/provenance is not in the typed API paths.
-// We route it through legacyGet, which handles the any-cast internally and throws typed errors.
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { httpError, GalaxyConnectionError, GalaxyNotFoundError, GalaxyValidationError } from "../errors";
-import { legacyGet } from "../legacy";
 import { isEncodedId, isThisRecord, notAGalaxyId, notThatRecord } from "./encoded-id";
 import { jobLookupFailure, jobNotFoundSentence } from "./jobs-common";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
-// The provenance endpoint's job_id field is not always typed; hand-type for safety.
-interface ProvenanceResponse {
-  job_id?: string;
-  [key: string]: unknown;
-}
-
-// Similarly, the dataset endpoint's creating_job field.
+// The dataset endpoint's creating_job field is not always typed; hand-type for safety.
 interface DatasetMeta {
   creating_job?: string;
   [key: string]: unknown;
@@ -45,7 +36,10 @@ const input = {
   historyId: z
     .string()
     .nullish()
-    .describe("history id; speeds provenance lookup, only used with datasetId"),
+    .describe(
+      "history id containing the dataset; a dataset in any other history is refused. Only " +
+        "used with datasetId",
+    ),
   jobId: z
     .string()
     .nullish()
@@ -56,6 +50,26 @@ type In = {
   historyId?: string | null;
   jobId?: string | null;
 };
+
+/**
+ * server.py, _is_in_history: whether a dataset's own record puts it in the history asked
+ * about. Galaxy writes history_id into every view of a history dataset, so a record naming
+ * another history, or none, does not say the dataset is in this one; compared the way
+ * isThisRecord compares an id, since Galaxy writes lowercase hex and decodes either case.
+ */
+function isInHistory(record: unknown, historyId: string): boolean {
+  if (!record || typeof record !== "object" || Array.isArray(record)) return false;
+  const held = (record as { history_id?: unknown }).history_id;
+  return typeof held === "string" && held.toLowerCase() === historyId.toLowerCase();
+}
+
+/** server.py, _not_in_history: the Python server's sentence, byte for byte, so change both. */
+function notInHistory(datasetId: string, historyId: string): string {
+  return (
+    `Dataset ID '${datasetId}' not found in history '${historyId}': Galaxy's record of ` +
+    "that dataset does not put it in that history, so its job was not returned."
+  );
+}
 
 async function run(i: In, ctx: GalaxyContext): Promise<GetJobDetailsResult> {
   // server.py: refused before anything is asked of Galaxy, and worded there, so neither
@@ -92,39 +106,27 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetJobDetailsResult> {
   }
 
   const datasetId = i.datasetId as string;
-  let jobId: string | undefined;
-  // What provenance said, kept rather than thrown. The other server holds this failure back
-  // and only reports it if the fallback ALSO fails or finds no job: a dataset whose
-  // provenance record is out of reach still names its creating job, and answering with the
-  // provenance failure there would refuse a question that had an answer.
-  let provenanceError: unknown;
-
-  if (i.historyId) {
-    try {
-      const prov = await legacyGet<ProvenanceResponse>(ctx, "/api/histories/{history_id}/contents/{dataset_id}/provenance", {
-        params: { path: { history_id: i.historyId, dataset_id: datasetId } },
-      });
-      jobId = prov.job_id;
-    } catch (err) {
-      provenanceError = err;
-    }
-    // Also fall through if provenance returned 200 but had no job_id
+  // server.py, get_job_details: the dataset's own record answers both questions, which
+  // history it is in and which job made it. Galaxy finds the dataset by its id alone, so a
+  // dataset in any other history answers too, and the record's history_id is the one thing
+  // that says where it is. Its creating_job is the job Galaxy's provenance route reports as
+  // well, so that route is not asked: it would add a request and nothing else. The job is no
+  // test of the history: a dataset copied into this history keeps the job that made the
+  // original, which ran in another one.
+  const { data, error, response } = await ctx.client.GET("/api/datasets/{dataset_id}", {
+    params: { path: { dataset_id: datasetId } },
+  });
+  if (error || !data) throw httpError(response, error);
+  // A refusal of our own, worded whole, so no facts for the failure contract.
+  if (i.historyId && !isInHistory(data, i.historyId)) {
+    throw new GalaxyNotFoundError(notInHistory(datasetId, i.historyId));
   }
-
-  // Fallback: read creating_job from dataset metadata
+  const jobId = (data as DatasetMeta).creating_job;
   if (!jobId) {
-    const { data, error, response } = await ctx.client.GET("/api/datasets/{dataset_id}", {
-      params: { path: { dataset_id: datasetId } },
-    });
-    if (error || !data) throw provenanceError ?? httpError(response, error);
-    jobId = (data as DatasetMeta).creating_job;
-    if (!jobId) {
-      if (provenanceError) throw provenanceError;
-      throw new GalaxyNotFoundError(
-        `No job information found for dataset '${datasetId}'. ` +
-          "The dataset may not have been created by a job.",
-      );
-    }
+    throw new GalaxyNotFoundError(
+      `No job information found for dataset '${datasetId}'. ` +
+        "The dataset may not have been created by a job.",
+    );
   }
 
   const { data: jobData, error: jobError, response: jobResp } = await ctx.client.GET("/api/jobs/{job_id}", {
