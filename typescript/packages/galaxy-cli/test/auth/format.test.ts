@@ -28,6 +28,13 @@ describe("describeExpiry and formatExpiry at the edges", () => {
     expect(describeExpiry(at(30 * SEC), now)).toBe("is about to expire (at 2026-11-06 12:00 UTC)");
   });
 
+  // `formatExpiry` prints a value from a file a person may have edited, so it must not pass a
+  // terminal escape through.
+  it("formatExpiry strips a terminal escape and names a valid time in UTC", () => {
+    expect(formatExpiry("\u001b[2Jx")).not.toContain("\u001b");
+    expect(formatExpiry("2026-11-06T18:42:00.000Z")).toBe("2026-11-06 18:42 UTC");
+  });
+
   it("says nothing is set, not unreadable, for null and undefined", () => {
     expect(checkExpiry(null, now)).toEqual({ state: "none" });
     expect(checkExpiry(undefined, now)).toEqual({ state: "none" });

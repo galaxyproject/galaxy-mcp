@@ -339,6 +339,26 @@ describe("auth, end to end", () => {
     },
   );
 
+  // `--profile` and `--api-key` do not apply to login: refused with 64 before the key is read, so the
+  // key on stdin goes nowhere, whatever GALAXY_URL names, and nothing is stored.
+  test("refuses `auth login --profile` and `--api-key` before reading the key", async ({
+    galaxy,
+    run,
+    configDir,
+  }) => {
+    for (const flag of ["--profile", "--api-key"]) {
+      const r = await run([flag, "p", "--quiet", "auth", "login", "--with-token"], {
+        env: { GALAXY_URL: galaxy.baseUrl },
+        input: `${galaxy.issueToken()}\n`,
+      });
+      expect(r.exitCode).toBe(64);
+      expect(r.stdout).toBe("");
+      expect(r.stderr).toContain(`${flag} does not apply to \`gxy auth login\``);
+      expect(galaxy.requests).toEqual([]);
+    }
+    expect(await readdir(configDir).catch(() => [])).toEqual([]);
+  }, 90_000);
+
   test("asks which Galaxy when two are stored", async ({ galaxy, galaxyWith, run, pasteLogin }) => {
     const second = await galaxyWith();
     expect((await pasteLogin(galaxy)).exitCode).toBe(0);
