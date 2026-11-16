@@ -7,7 +7,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createWhoami, probeGalaxy } from "../../src/auth/whoami";
 import { discover } from "../../src/auth/oauth";
 import { wasAnswered } from "../../src/auth/network";
-import { withUserAgent } from "../../src/auth/user-agent";
 import { startFakeGalaxy, useFakeGalaxies, type FakeGalaxy } from "../support/fake-galaxy";
 import type { BaseUrl } from "../../src/auth/types";
 import { version } from "../../package.json";
@@ -309,7 +308,7 @@ describe("User-Agent", () => {
   it("is gxy/<package version> (galaxy-cli) on whoami, the probe and every OAuth call", async () => {
     const token = galaxy.issueToken();
     await createWhoami()(base(), token);
-    const server = await discover(base(), { fetch: withUserAgent() });
+    const server = await discover(base());
     const pending = await server.startDeviceLogin();
     galaxy.approve(pending.userCode);
     await pending.waitForApproval();

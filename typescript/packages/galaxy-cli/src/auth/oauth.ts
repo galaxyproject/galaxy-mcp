@@ -12,6 +12,7 @@ import {
   type TokenGrant,
 } from "./types";
 import { abortReason } from "./abort";
+import { withUserAgent } from "./user-agent";
 import { trustedVerificationUri } from "./verification-uri";
 
 export interface DiscoverOptions {
@@ -42,6 +43,13 @@ const MAX_EXPIRES_IN_S = 3600;
 const MAX_INTERVAL_S = 60;
 const MAX_RETRY_AFTER_S = 60;
 const DEFAULT_MIN_INTERVAL_MS = 1000;
+/**
+ * How many polls in a row may fail in a way that looks transient before the wait gives up. A real
+ * blip is over in a few polls; a bug that throws the same `TypeError` every time is not, and
+ * would otherwise be retried until the code expired and then be reported as "expired". Any answer
+ * from the server (`authorization_pending`, `slow_down`) resets the count.
+ */
+const MAX_CONSECUTIVE_TRANSIENT_FAILURES = 10;
 
 /** The `grant_type` of RFC 8628 §3.4, sent by `genericGrantRequest` because the polling loop is ours. */
 const DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
@@ -59,6 +67,10 @@ const ENDPOINTS_ON_ISSUER_ORIGIN = [
  * plain http to anything else the device code and then the token would cross the network in
  * the clear. And the caller's signal cancels every request, so a Ctrl-C ends a request that
  * is in flight rather than only the wait between two.
+ *
+ * The plain-http check here is defence in depth: `discover` already refuses non-loopback http
+ * and endpoints on another origin before any request is made, so nothing it publishes can reach
+ * this branch. It stays so that a future caller of this function cannot send a token in the clear.
  */
 function guardedFetch(base: typeof fetch, signal: AbortSignal | undefined): typeof fetch {
   return (input, init) => {
@@ -172,7 +184,7 @@ export async function discover(
   }
   const clientId = options.clientId || CLIENT_ID;
 
-  const baseFetch = options.fetch ?? globalThis.fetch;
+  const baseFetch = options.fetch ?? withUserAgent();
   let config: client.Configuration;
   try {
     config = await client.discovery(url, clientId, undefined, client.None(), {
@@ -345,6 +357,9 @@ export async function discover(
                 if (transient === undefined) throw mapError(err, "poll", baseUrl);
                 failures += 1;
                 lastFailure = briefReason(err);
+                if (failures >= MAX_CONSECUTIVE_TRANSIENT_FAILURES) {
+                  throw mapError(err, "poll", baseUrl);
+                }
                 // Modest exponential backoff, and never sooner than the server asked.
                 delayMs = Math.max(
                   intervalMs,
@@ -370,6 +385,7 @@ export async function discover(
         // token that is already dead still gets a 200 (§2.2), so a late logout is not an error.
         await client.tokenRevocation(scoped(signal), token, { token_type_hint: "access_token" });
       } catch (err) {
+        if (signal?.aborted) throw signal.reason ?? err;
         throw mapError(err, "revoke", baseUrl);
       }
     },
@@ -509,7 +525,6 @@ function mapError(err: unknown, phase: Phase, baseUrl: string): AuthError {
         return new AuthError("protocol", `${baseUrl} answered unexpectedly (${detail}).`, {
           cause: err,
         });
-      case undefined:
       default:
         return new AuthError(
           "protocol",
