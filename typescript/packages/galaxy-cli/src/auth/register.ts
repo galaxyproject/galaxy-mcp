@@ -20,6 +20,42 @@ export function parseScopes(value: string, previous: string[] = []): string[] {
   return [...new Set([...previous, ...added])];
 }
 
+const INTERRUPT_SIGNALS = { SIGINT: 2, SIGTERM: 15, SIGHUP: 1 } as const;
+
+/** What a shell reports for a process that a signal ended: 128 plus its number. */
+const EX_INTERRUPTED = 130;
+
+/**
+ * Run `fn` with one signal that aborts when the process is asked to end: Ctrl-C, a `timeout` or CI
+ * cancel (SIGTERM), or the terminal closing (SIGHUP). The default for the last two is to die at
+ * once, which would skip what a command does on abort (taking back a token it was just issued,
+ * deleting a login). The command ends with 130 on an abort; that becomes 128 plus the number of the
+ * signal that came. `once`, so a second signal falls through to Node's default and ends the process.
+ *
+ * `keyring-store` hooks the same signals while a helper runs, ahead of ours, to kill the helper. It
+ * re-raises only when no listener is left, and ours is still there at that point, so both run.
+ */
+async function interruptible(fn: (signal: AbortSignal) => Promise<number>): Promise<number> {
+  const ac = new AbortController();
+  let received: keyof typeof INTERRUPT_SIGNALS | undefined;
+  const handlers = (Object.keys(INTERRUPT_SIGNALS) as (keyof typeof INTERRUPT_SIGNALS)[]).map(
+    (sig) => {
+      const onSig = () => {
+        received ??= sig;
+        ac.abort();
+      };
+      process.once(sig, onSig);
+      return [sig, onSig] as const;
+    },
+  );
+  try {
+    const code = await fn(ac.signal);
+    return received && code === EX_INTERRUPTED ? 128 + INTERRUPT_SIGNALS[received] : code;
+  } finally {
+    for (const [sig, onSig] of handlers) process.removeListener(sig, onSig);
+  }
+}
+
 /**
  * Add the `auth` group. `makeDeps` is called per invocation, so `--help` and the other
  * commands never touch the keyring or the network.
@@ -98,27 +134,16 @@ export function registerAuth(program: Command, makeDeps: (commandName: string) =
     .option("--no-browser", "do not offer to open the approval page in a browser")
     .option("--with-token", "read an existing API key from stdin instead of the device flow")
     .option("--insecure-storage", "store the token in a file instead of the system keyring")
+    // The signal ends every step of the login (discovery, the code request, the prompts, the
+    // poll) with "Cancelled.". A token the server issued at that very moment is taken back
+    // by `login` itself with its own bounded call; a code, or a token issued too late to see,
+    // expires on its own.
     .action((o: LoginOptions) =>
-      run(async (deps) => {
-        // Ctrl-C aborts one signal that every step of the login takes (discovery, the code
-        // request, the prompts, the poll), so it ends with "Cancelled." and 130. A token
-        // the server issued at that very moment is taken back by `login` itself with its own
-        // bounded call; a code, or a token issued too late to see, expires on its own. `once`,
-        // so a second Ctrl-C falls through to Node's default and ends the process.
-        const ac = new AbortController();
-        const onSig = () => {
-          ac.abort();
-        };
-        process.once("SIGINT", onSig);
-        try {
-          return await loginCommand(
-            { ...o, signal: ac.signal, quiet: program.opts<{ quiet?: boolean }>().quiet },
-            deps,
-          );
-        } finally {
-          process.removeListener("SIGINT", onSig);
-        }
-      }),
+      run((deps) =>
+        interruptible((signal) =>
+          loginCommand({ ...o, signal, quiet: program.opts<{ quiet?: boolean }>().quiet }, deps),
+        ),
+      ),
     );
 
   auth
@@ -131,18 +156,7 @@ export function registerAuth(program: Command, makeDeps: (commandName: string) =
     )
     .option("--show-token", "do not mask tokens")
     .action((o: StatusOptions) =>
-      run(async (deps) => {
-        const ac = new AbortController();
-        const onSig = () => {
-          ac.abort();
-        };
-        process.once("SIGINT", onSig);
-        try {
-          return await statusCommand({ ...o, signal: ac.signal }, deps);
-        } finally {
-          process.removeListener("SIGINT", onSig);
-        }
-      }),
+      run((deps) => interruptible((signal) => statusCommand({ ...o, signal }, deps))),
     );
 
   auth
@@ -172,5 +186,7 @@ export function registerAuth(program: Command, makeDeps: (commandName: string) =
     .command("logout")
     .description("Revoke the token where possible and delete the stored login")
     .addOption(host())
-    .action((o: LogoutOptions) => run((deps) => logoutCommand(o, deps)));
+    .action((o: LogoutOptions) =>
+      run((deps) => interruptible((signal) => logoutCommand({ ...o, signal }, deps))),
+    );
 }

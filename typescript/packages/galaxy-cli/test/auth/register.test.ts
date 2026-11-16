@@ -355,3 +355,50 @@ describe("parseScopes", () => {
     expect(parseScopes("b c,a", ["a", "b"])).toEqual(["a", "b", "c"]);
   });
 });
+
+/** Listeners on each signal before any command ran. */
+const before = {
+  SIGINT: process.listenerCount("SIGINT"),
+  SIGTERM: process.listenerCount("SIGTERM"),
+  SIGHUP: process.listenerCount("SIGHUP"),
+};
+
+// Login and logout end on SIGTERM and SIGHUP as they do on Ctrl-C, with the code a shell reports
+// for the signal. The default for those two is to die at once, which would skip the revocation of a
+// token that was just issued. `process.emit` stands in for the signal: what is tested is that the
+// handlers are registered, abort the command and set the code, then are removed.
+describe("interrupting login and logout", () => {
+  const never = () => new Promise<never>(() => {});
+
+  it.each([
+    ["SIGINT", 130],
+    ["SIGTERM", 143],
+    ["SIGHUP", 129],
+  ] as const)(
+    "login takes the token back and exits %s's code (%i) when it lands during whoami",
+    async (sig, expected) => {
+      const h = harness();
+      h.deps.whoami = () => (process.emit(sig), never());
+      const { code } = await run(["auth", "login", "--host", HOST_ARG], h);
+      expect(code).toBe(expected);
+      expect(h.server.revoked).toEqual([FAKE_TOKEN]);
+      expect(h.cap.err).toContain("Cancelled; the token");
+      expect(process.listenerCount(sig)).toBe(before[sig]);
+    },
+  );
+
+  it.each([
+    ["SIGTERM", 143],
+    ["SIGHUP", 129],
+  ] as const)(
+    "logout stops waiting for the revocation on %s, deletes locally, exits %i",
+    async (sig, expected) => {
+      const h = harness({ stored: [fakeLogin()] });
+      h.server.revoke = () => (process.emit(sig), never());
+      const { code } = await run(["auth", "logout", "--host", HOST_ARG], h);
+      expect(code).toBe(expected);
+      expect(await h.store.get(HOST)).toBeNull();
+      expect(h.cap.err).toContain("Could not revoke the token on the server");
+    },
+  );
+});

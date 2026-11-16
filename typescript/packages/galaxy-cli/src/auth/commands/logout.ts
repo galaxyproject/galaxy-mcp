@@ -5,6 +5,26 @@ import { fail, hostOf, sanitize } from "./common";
 
 export interface LogoutOptions {
   host?: string;
+  /** Aborted on Ctrl-C (or SIGTERM, SIGHUP) by the caller: stop waiting for the revocation. */
+  signal?: AbortSignal;
+}
+
+/** 128 + SIGINT; the caller turns it into the code of the signal that actually came. */
+const EX_INTERRUPTED = 130;
+
+/** `p`'s result, or "interrupted" as soon as `signal` aborts (`p` is left to end on its own). */
+function raceAbort(p: Promise<string | null>, signal: AbortSignal): Promise<string | null> {
+  p.catch(() => undefined);
+  if (signal.aborted) return Promise.resolve("interrupted");
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      resolve("interrupted");
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    p.then(resolve, reject).finally(() => {
+      signal.removeEventListener("abort", onAbort);
+    });
+  });
 }
 
 /**
@@ -20,6 +40,9 @@ export interface LogoutOptions {
  * the server is down or the network is wrong, and a hang there would delay the local removal they
  * asked for until the network gave up on its own, minutes later. A token that has already expired
  * is not revoked, since there is nothing left to take back.
+ *
+ * An interrupt stops the wait for the revocation and nothing else: the local login is still
+ * deleted, the token is reported as unrevoked, and the command ends with 130.
  */
 export async function logoutCommand(opts: LogoutOptions, deps: AuthDeps): Promise<number> {
   const err = (s: string) => {
@@ -53,6 +76,7 @@ export async function logoutCommand(opts: LogoutOptions, deps: AuthDeps): Promis
       expiry?.state === "expired" && expiry.at.getTime() <= deps.now().getTime();
 
     let revoked = false;
+    const interrupted = () => opts.signal?.aborted === true;
     let revokeProblem: string | null = null;
     if (summary.method === "device" && alreadyExpired) {
       // Nothing to take back, so nothing to try and nothing to warn about.
@@ -62,12 +86,13 @@ export async function logoutCommand(opts: LogoutOptions, deps: AuthDeps): Promis
       // Only a device login has a revocation call to make (RFC 7009). Discovery runs again here
       // because the store keeps no endpoints, only the login.
       try {
-        const problem = await withDeadline(async (signal) => {
+        const work = withDeadline(async (signal) => {
           const server = await deps.discover(baseUrl, signal);
           if (!server.supportsRevocation) return `${host} does not offer token revocation`;
           await server.revoke(login.token, signal);
           return null;
         });
+        const problem = opts.signal ? await raceAbort(work, opts.signal) : await work;
         revokeProblem = problem;
         revoked = problem === null;
       } catch (e) {
@@ -124,7 +149,7 @@ export async function logoutCommand(opts: LogoutOptions, deps: AuthDeps): Promis
       err(`! ${deleteProblem}`);
       return 1;
     }
-    return 0;
+    return interrupted() ? EX_INTERRUPTED : 0;
   } catch (e) {
     return fail(deps, e);
   }

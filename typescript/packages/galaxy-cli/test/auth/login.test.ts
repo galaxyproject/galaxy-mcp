@@ -700,6 +700,26 @@ describe("cancelling with Ctrl-C", () => {
     });
   });
 
+  // A token response with a huge `expires_in` once made `toISOString` throw after the token was issued.
+  describe("with an absurd expires_in", () => {
+    const galaxyOf = useFakeGalaxies();
+
+    it("stores a valid expiry, capped", async () => {
+      const galaxy = await galaxyOf();
+      const h = harness();
+      h.deps.discover = (u: BaseUrl, signal?: AbortSignal) =>
+        discover(u, { signal, minIntervalMs: 0 });
+      const p = loginCommand({ host: galaxy.baseUrl }, h.deps);
+      await vi.waitFor(() => {
+        expect(galaxy.pendingCodes()).toHaveLength(1);
+      });
+      galaxy.approve(galaxy.pendingCodes()[0]!, { expiresIn: 1e20 });
+      expect(await p).toBe(0);
+      const expiresAt = [...h.store.logins.values()][0]?.expiresAt;
+      expect(Number.isNaN(Date.parse(expiresAt!))).toBe(false);
+    });
+  });
+
   it("at the Galaxy URL prompt", async () => {
     const h = harness({ interactive: true });
     const ac = new AbortController();

@@ -61,6 +61,22 @@ describe("auth logout", () => {
     },
   );
 
+  // Ctrl-C during the bounded revocation must not leave the login stored: the command's rule is to
+  // delete locally whatever happens, and the person is told the token was not revoked.
+  it("on an interrupt stops waiting for the revocation, still deletes, and says the token is valid", async () => {
+    const h = harness({ stored: [fakeLogin()] });
+    const ac = new AbortController();
+    h.server.revoke = () => {
+      ac.abort();
+      return new Promise<void>(() => {});
+    };
+    expect(await logoutCommand({ signal: ac.signal }, h.deps)).toBe(130);
+    expect(await h.store.get(HOST)).toBeNull();
+    expect(h.cap.err).toContain("Could not revoke the token on the server");
+    expect(h.cap.err).toMatch(/stays valid until it expires/);
+    expect(h.cap.err).not.toContain("Revoked the token");
+  });
+
   // Logout is what a person runs when the network is wrong. Without its own limit it would wait for
   // undici's, minutes later, before the local removal they asked for.
   describe("when the server does not answer", () => {

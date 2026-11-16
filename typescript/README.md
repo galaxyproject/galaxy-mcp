@@ -164,6 +164,7 @@ The process exit code reflects the outcome, following `sysexits.h` conventions:
 | `76` | The connected Galaxy is too old for the operation, or an address `gxy auth login` refuses (it does not answer as a Galaxy, is plain `http://` to another machine, or has no device login) |
 | `77` | Authentication failure (bad/missing API key, no usable stored login), or a key that is not `.env`'s for a Galaxy only `.env` names |
 | `130` | A `gxy auth` command cancelled with Ctrl-C |
+| `143`, `129` | `gxy auth login`, `status` or `logout` ended by SIGTERM or SIGHUP, after cleaning up as for Ctrl-C |
 
 ### Examples
 

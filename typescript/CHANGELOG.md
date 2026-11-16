@@ -85,6 +85,10 @@ URL (it suggests nothing); otherwise it exits 64 naming `--host`.
 ends `login` with exit 76 and a hint to use `--with-token`. `gxy auth status` shows `device login`
 and the scopes that were granted.
 
+SIGTERM and SIGHUP now end `login`, `status` and `logout` the way Ctrl-C does, with 143 and 129
+rather than at once: `login` revokes a token already issued, and `logout` stops waiting for the
+revocation, still deletes the login and says the token was not revoked.
+
 ### galaxy-cli: a `.env` URL is only used with the `.env` key
 
 Behaviour change. A `GALAXY_URL` from a `.env` file in the current directory is now only used with
