@@ -1,10 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, inject } from "vitest";
 import { execa } from "execa";
 import { fileURLToPath } from "node:url";
 
 const bin = fileURLToPath(new URL("../dist/index.js", import.meta.url));
-const BASE_URL = process.env.GALAXY_URL;
-const KEY = process.env.GALAXY_API_KEY;
+// The test setup clears GALAXY_URL and GALAXY_API_KEY from the environment; global-setup.ts passes
+// the values you set through vitest's `provide`/`inject`, not process.env, so child processes and
+// ordinary tests don't inherit them (any test file that calls `inject("gxyLive")` can still read them).
+const { url: BASE_URL, apiKey: KEY } = inject("gxyLive");
 const run = BASE_URL && KEY ? describe : describe.skip;
 
 run("galaxy-cli built bin", () => {
