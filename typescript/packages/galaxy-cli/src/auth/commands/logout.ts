@@ -28,7 +28,12 @@ export async function logoutCommand(opts: LogoutOptions, deps: AuthDeps): Promis
       return 0;
     }
 
-    await deps.store.delete(baseUrl);
+    // Another logout can remove the entry between the list and here; then there is nothing left
+    // to report as removed.
+    if (!(await deps.store.delete(baseUrl))) {
+      err(`Not logged in to ${host}; nothing to remove.`);
+      return 0;
+    }
     err(`✓ Removed the stored API key for ${host}`);
     err(
       `! The key itself was not revoked, as it may be in use elsewhere. It still works until you revoke it in Galaxy's user preferences: ${baseUrl}/user/api_key`,

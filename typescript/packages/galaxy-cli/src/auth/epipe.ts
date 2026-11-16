@@ -8,15 +8,13 @@ const seen = new WeakSet<object>();
  * EPIPE, which Node raises as an `error` event, and with no listener that is an uncaught
  * exception: a stack trace on stderr, in a command whose arguments and output are secrets.
  *
- * On stdout the reader leaving is not our failure and the output was what they wanted (`| head`
- * is normal), so the process ends with 0 and no message. On stderr it is different: the work
- * is still going (a login), and 0 would report success for something that has not
- * finished. So stderr just goes quiet and the run carries on, and its exit code still says how
- * it went.
+ * Either stream, once its reader has gone, just goes quiet and the run carries on, and its exit
+ * code still says how it went. For `auth token` that is 0, as the output was what the reader
+ * wanted (`| head` is normal). For a command whose exit code is the report (`auth status`), a
+ * closed stdout must not hide a failure behind a 0, and a login still running has not finished.
  */
 export function exitQuietlyOnEpipe(
   streams: { stdout: NodeJS.WritableStream; stderr: NodeJS.WritableStream } = process,
-  exit: (code: number) => void = (code) => process.exit(code),
 ): void {
   const watch = (stream: NodeJS.WritableStream, onEpipe: () => void) => {
     if (seen.has(stream)) return;
@@ -28,11 +26,10 @@ export function exitQuietlyOnEpipe(
       else throw e;
     });
   };
-  watch(streams.stdout, () => {
-    exit(0);
-  });
-  watch(streams.stderr, () => {
+  const silence = (stream: NodeJS.WritableStream) => () => {
     // Later writes would only raise the same error again.
-    streams.stderr.write = () => true;
-  });
+    stream.write = () => true;
+  };
+  watch(streams.stdout, silence(streams.stdout));
+  watch(streams.stderr, silence(streams.stderr));
 }
