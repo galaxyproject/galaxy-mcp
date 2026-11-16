@@ -84,14 +84,17 @@ export interface CredentialStore {
  * Why an auth command failed. `exitCodeForAuthError` (`exit.ts`) turns each into a sysexits.h
  * code: `usage` and `ambiguous_host` are 64 (EX_USAGE: the command line is wrong or does not
  * say enough), `store` is 65 (EX_DATAERR: the credential file cannot be used as it is), `network`
- * is 69 (EX_UNAVAILABLE), `unsupported`, `protocol` and `insecure` are 76 (EX_PROTOCOL: the address,
+ * is 69 (EX_UNAVAILABLE), `protocol` and `insecure` are 76 (EX_PROTOCOL: the address,
  * or what its server supplied, is not something this can use; plain http is 76 too, though the
  * person typed it, see `exitCodeForAuthError`), and `not_logged_in` and `denied` are 77 (EX_NOPERM:
  * there is no permission to do this).
  */
 export type AuthErrorKind =
-  /** What `CombinedStore.delete` throws when the keyring will not confirm a secret is gone. */
-  | "unsupported"
+  /**
+   * What `CombinedStore.delete` throws when the login record is gone but the keyring would not
+   * confirm the secret is: it may remain there. `logout` reports it and exits 1.
+   */
+  | "leftover"
   /**
    * `put` refused to keep an admin token in the plaintext file (`requireKeyring`).
    */

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { CredentialScopeError, describeKeyReport, describeKeySource, keySourceFor, loadSources, loadSourcesAsync, resolveConnection, type GlobalFlags, type Sources } from "../src/config";
+import { CredentialScopeError, chooseKey, describeKeyReport, describeKeySource, keySourceFor, loadSources, loadSourcesAsync, resolveConnection, type GlobalFlags, type Sources } from "../src/config";
 import { normalizeBaseUrl } from "../src/auth/base-url";
 import { AuthError, type StoredLogin } from "../src/auth/types";
 import { DAY, FAKE_TOKEN, FakeStore, fakeLogin, useTempDir } from "./auth/harness";
@@ -448,11 +448,12 @@ describe("resolveConnection: keys and hosts", () => {
       expect(keySourceFor(url, {}, s(dotenvHere), stored.valid)).toEqual({ id: "stored" });
       expect(keySourceFor(url, {}, s(dotenvHere, keys.dotenv), stored.valid)).toEqual({ id: "stored" });
     });
-    it("names none when the stored token cannot be read and would have been the key, and the key used instead otherwise", () => {
+    it("names none when the stored token cannot be read and would have been the key, and a key above it otherwise", () => {
       const unreadable = { id: null, reason: "unreadable" };
       expect(keySourceFor(url, {}, s(), undefined)).toEqual(unreadable);
       expect(keySourceFor(url, {}, s(keys.dotenv), undefined)).toEqual(unreadable); // a .env key that names no Galaxy is not used
-      expect(keySourceFor(url, {}, s(here, keys.dotenv), undefined)).toEqual({ id: "dotenv" });
+      // Nor one that does: the .env key is never used in place of a login that cannot be read.
+      expect(keySourceFor(url, {}, s(here, keys.dotenv), undefined)).toEqual(unreadable);
       expect(keySourceFor(url, {}, s(here, keys.env), undefined)).toEqual({ id: "env" });
       expect(keySourceFor(url, {}, s(keys.env), undefined)).toEqual({ id: null, reason: "refused" });
       expect(keySourceFor(url, { url: other }, s(), undefined)).toEqual({ id: null, reason: "elsewhere", galaxy: other });
@@ -719,6 +720,60 @@ describe("loadSources (the files and environment)", () => {
       const s = loadSources();
       expect(s.dotenv).toEqual({});
       expect(s.profiles).toEqual({});
+    });
+  });
+});
+
+// The decision on its own: which Galaxy and key, or the reason for none, with no wording.
+describe("chooseKey", () => {
+  const url = normalizeBaseUrl("https://galaxy.example.org");
+  const now = new Date("2026-06-01T00:00:00.000Z");
+  const valid = fakeLogin({ baseUrl: url, token: "STORED", expiresAt: "2030-01-01T00:00:00.000Z" });
+  const expired = fakeLogin({ baseUrl: url, token: "STORED", expiresAt: "2026-05-01T00:00:00.000Z" });
+  const src = (over: Partial<Sources> = {}): Sources => ({ env: {}, dotenv: {}, profiles: {}, storedBaseUrls: [url], now, ...over });
+
+  it("chooses the winning source with its host and key", () => {
+    expect(chooseKey({}, src({ storedLogin: valid }))).toMatchObject({ ok: true, baseUrl: url, apiKey: "STORED", keySource: "stored", picked: { url, source: "stored" } });
+    expect(chooseKey({ url, apiKey: "K" }, src({ storedLogin: valid }))).toMatchObject({ ok: true, baseUrl: url, apiKey: "K", keySource: "flag" });
+    expect(chooseKey({}, src({ env: { GALAXY_URL: url, GALAXY_API_KEY: "E" } }))).toMatchObject({ ok: true, apiKey: "E", keySource: "env" });
+  });
+  it("refuses with host when the host rule does", () => {
+    const two = src({ storedBaseUrls: [url, normalizeBaseUrl("https://b.example.org")] });
+    expect(chooseKey({}, two)).toMatchObject({ ok: false, reason: "host", picked: undefined, error: expect.any(AuthError) });
+  });
+  it("refuses with no_credentials, and the Galaxy named when there is one", () => {
+    expect(chooseKey({}, src({ storedBaseUrls: [] }))).toMatchObject({ ok: false, reason: "no_credentials", named: undefined, picked: undefined });
+    expect(chooseKey({ url: "https://other.example.org" }, src({ storedLogin: valid }))).toMatchObject({ ok: false, reason: "no_credentials", named: "https://other.example.org" });
+  });
+  it("refuses a profile key with no Galaxy named, or only a .env one", () => {
+    const profiles = { p: { galaxy_user_key: "PK" } };
+    expect(chooseKey({ profile: "p" }, src({ profiles, storedLogin: valid }))).toMatchObject({ ok: false, reason: "profile_no_url" });
+    expect(chooseKey({ profile: "p" }, src({ profiles, dotenv: { GALAXY_URL: url } }))).toMatchObject({ ok: false, reason: "dotenv_host", keySource: "profile" });
+    expect(chooseKey({ apiKey: "K" }, src({ dotenv: { GALAXY_URL: url } }))).toMatchObject({ ok: false, reason: "dotenv_host", keySource: "flag" });
+    expect(chooseKey({}, src({ dotenv: { GALAXY_URL: url, GALAXY_API_KEY: "D" } }))).toMatchObject({ ok: true, keySource: "dotenv" });
+  });
+  // The .env key is the only one below a stored login, and would run you as the .env's account
+  // against your own Galaxy, so it is passed over, and the refusal says so.
+  it("refuses with login_expired, even with a .env key for a named host", () => {
+    expect(chooseKey({}, src({ storedLogin: expired }))).toMatchObject({ ok: false, reason: "login_expired", baseUrl: url, dotenvKeyNotUsed: false });
+    const keyed = chooseKey({}, src({ storedLogin: expired, dotenv: { GALAXY_URL: url, GALAXY_API_KEY: "D" } }));
+    expect(keyed).toMatchObject({ ok: false, reason: "login_expired", baseUrl: url, dotenvKeyNotUsed: true });
+  });
+  describe("with a stored login whose token cannot be read", () => {
+    const unreadableStored = url;
+    it("refuses with stored_unreadable when nothing else could be used", () => {
+      expect(chooseKey({}, src(), { unreadableStored })).toMatchObject({ ok: false, reason: "stored_unreadable" });
+      // A .env key that names no Galaxy would not be sent to the stored login's.
+      expect(chooseKey({}, src({ dotenv: { GALAXY_API_KEY: "D" } }), { unreadableStored })).toMatchObject({ ok: false, reason: "stored_unreadable" });
+    });
+    // The .env key is the only one below a stored login, and would run you as the .env's account
+    // against your own Galaxy, so it is passed over, as for an expired login.
+    it("does not use the .env key below the login, and keeps the refusals of the keys above it", () => {
+      expect(chooseKey({}, src({ dotenv: { GALAXY_URL: url, GALAXY_API_KEY: "D" } }), { unreadableStored })).toMatchObject({ ok: false, reason: "stored_unreadable", dotenvKeyNotUsed: true });
+      expect(chooseKey({}, src({ env: { GALAXY_API_KEY: "E" } }), { unreadableStored })).toMatchObject({ ok: false, reason: "no_credentials" });
+    });
+    it("does not apply to another Galaxy", () => {
+      expect(chooseKey({ url: "https://other.example.org" }, src(), { unreadableStored })).toMatchObject({ ok: false, reason: "no_credentials" });
     });
   });
 });
