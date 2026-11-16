@@ -14,16 +14,16 @@ export interface Sources {
   dotenvPath?: string;
 }
 
-/** The environment's key was about to go to a Galaxy it was not meant for. Exits EX_NOPERM. */
+/** A key from outside .env was about to go to a Galaxy that the .env chose. Exits EX_NOPERM. */
 export class CredentialScopeError extends Error {}
 
 /**
  * Pure resolver -- sources injected so it is fully testable.
  *
- * The environment's GALAXY_API_KEY is only sent to a Galaxy named by --url or by GALAXY_URL in the
- * environment, so a cloned repository's .env (or a profile) cannot point it somewhere else. A key
- * in .env still goes with the URL in that .env, a profile's key with its URL, and --api-key is
- * typed for the run, so those are unchanged.
+ * A GALAXY_URL from .env is only used with the GALAXY_API_KEY from that same .env. A .env comes
+ * with the directory, often a cloned repository, so it must not choose where a key from anywhere
+ * else (--api-key, GALAXY_API_KEY in the environment, a profile) is sent. The rule depends only on
+ * where the URL came from, not on how the sources are ranked.
  */
 export function resolveConnection(flags: GlobalFlags, src: Sources): Connection {
   const prof = flags.profile ? src.profiles[flags.profile] : undefined;
@@ -49,11 +49,15 @@ export function resolveConnection(flags: GlobalFlags, src: Sources): Connection 
         "or pass --profile <name> for a ~/.planemo.yml profile.",
     );
   }
-  if (keyFrom === "env" && (hostFrom === "dotenv" || hostFrom === "profile")) {
-    const origin = hostFrom === "dotenv" ? (src.dotenvPath ?? ".env") : `profile "${flags.profile}"`;
+  if (hostFrom === "dotenv" && keyFrom !== "dotenv") {
+    const dotenv = src.dotenvPath ?? ".env";
+    const key =
+      keyFrom === "flag" ? "--api-key"
+      : keyFrom === "env" ? "GALAXY_API_KEY from the environment"
+      : `the key of profile "${flags.profile}"`;
     throw new CredentialScopeError(
-      `GALAXY_API_KEY is only sent to GALAXY_URL from the environment or --url; this Galaxy came from ${origin}. ` +
-        "Set GALAXY_URL or pass --url to use it.",
+      `GALAXY_URL from ${dotenv} is only used with the GALAXY_API_KEY in the same file, not with ${key}. ` +
+        "Set GALAXY_URL in the environment or pass --url to send that key to this Galaxy.",
     );
   }
   return { baseUrl, apiKey };

@@ -469,16 +469,15 @@ describe("credential scoping through the real source loader", () => {
     const dir = mkdtempSync(join(tmpdir(), "gxy-scope-"));
     writeFileSync(join(dir, ".env"), "GALAXY_URL=https://galaxy.attacker.example\n");
     const cwd = vi.spyOn(process, "cwd").mockReturnValue(dir);
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("fetch must not be called"));
     vi.stubEnv("GALAXY_API_KEY", "ENVKEY");
-    vi.stubEnv("GALAXY_URL", "");
-    delete process.env.GALAXY_URL;
+    vi.stubEnv("GALAXY_URL", undefined);
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     process.exitCode = 0;
     try {
       await buildProgram().parseAsync(["node", "galaxy-cli", "get_user"]);
       expect(process.exitCode).toBe(77);
-      expect(err.mock.calls.flat().join("")).toContain("this Galaxy came from " + join(dir, ".env"));
+      expect(err.mock.calls.flat().join("")).toContain("GALAXY_URL from " + join(dir, ".env"));
       expect(fetchSpy).not.toHaveBeenCalled();
     } finally {
       process.exitCode = 0;

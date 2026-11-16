@@ -10,19 +10,25 @@ describe("resolveConnection", () => {
     expect(conn).toEqual({ baseUrl: "https://flag.example", apiKey: "FLAGKEY" });
   });
   it("falls back to env, then dotenv, then profile", () => {
-    const conn = resolveConnection(
-      { profile: "prod" },
-      { env: {}, dotenv: { GALAXY_URL: "https://dot.example" }, profiles: { prod: { galaxy_url: "https://prof.example", galaxy_user_key: "PK" } } },
-    );
-    expect(conn.baseUrl).toBe("https://dot.example"); // dotenv URL wins over profile
-    expect(conn.apiKey).toBe("PK"); // key only in profile
+    const prod = { galaxy_url: "https://prof.example", galaxy_user_key: "PK" };
+    // dotenv URL and key win over the profile's
+    expect(
+      resolveConnection(
+        { profile: "prod" },
+        { env: {}, dotenv: { GALAXY_URL: "https://dot.example", GALAXY_API_KEY: "DK" }, profiles: { prod } },
+      ),
+    ).toEqual({ baseUrl: "https://dot.example", apiKey: "DK" });
+    // key only in profile, URL from env
+    expect(
+      resolveConnection({ profile: "prod" }, { env: { GALAXY_URL: "https://env.example" }, dotenv: {}, profiles: { prod } }),
+    ).toEqual({ baseUrl: "https://env.example", apiKey: "PK" });
   });
   it("throws a clear error when no credentials resolve", () => {
     expect(() => resolveConnection({}, { env: {}, dotenv: {}, profiles: {} })).toThrow(/GALAXY_URL|GALAXY_API_KEY/);
   });
 });
 
-describe("resolveConnection: the environment's key and where the host came from", () => {
+describe("resolveConnection: a .env URL only goes with the .env key", () => {
   const HOST = {
     flag: { flags: { url: "https://flag.example" }, env: {}, dotenv: {} },
     env: { flags: {}, env: { GALAXY_URL: "https://env.example" }, dotenv: {} },
@@ -54,12 +60,12 @@ describe("resolveConnection: the environment's key and where the host came from"
     );
   }
 
-  // Key precedence is flag > env > dotenv > profile, so the key that wins is the highest listed.
+  // Refused exactly when the URL that wins came from .env and the key that wins did not.
   const hosts = ["flag", "env", "dotenv", "profile"] as const;
   const keys = ["flag", "env", "dotenv", "profile"] as const;
   for (const h of hosts) {
     for (const k of keys) {
-      const refused = k === "env" && (h === "dotenv" || h === "profile");
+      const refused = h === "dotenv" && k !== "dotenv";
       it(`host from ${h}, key from ${k}: ${refused ? "refused" : "sent"}`, () => {
         if (refused) expect(() => run(h, k)).toThrow(CredentialScopeError);
         else expect(run(h, k)).toEqual({ baseUrl: URL_OF[h], apiKey: KEY_OF[k] });
@@ -67,17 +73,15 @@ describe("resolveConnection: the environment's key and where the host came from"
     }
   }
 
-  it("names the .env file and how to proceed", () => {
+  it("names the .env file, the key and how to proceed", () => {
     expect(() => run("dotenv", "env")).toThrow(
-      "GALAXY_API_KEY is only sent to GALAXY_URL from the environment or --url; this Galaxy came from /repo/.env. " +
-        "Set GALAXY_URL or pass --url to use it.",
+      "GALAXY_URL from /repo/.env is only used with the GALAXY_API_KEY in the same file, not with GALAXY_API_KEY from the environment. " +
+        "Set GALAXY_URL in the environment or pass --url to send that key to this Galaxy.",
     );
   });
-  it("names the profile and how to proceed", () => {
-    expect(() => run("profile", "env")).toThrow(
-      'GALAXY_API_KEY is only sent to GALAXY_URL from the environment or --url; this Galaxy came from profile "p". ' +
-        "Set GALAXY_URL or pass --url to use it.",
-    );
+  it("names --api-key and a profile's key", () => {
+    expect(() => run("dotenv", "flag")).toThrow("not with --api-key.");
+    expect(() => run("dotenv", "profile")).toThrow('not with the key of profile "p".');
   });
   it("refuses, rather than switching keys, when .env has URL and key and the environment has a key", () => {
     expect(() =>
@@ -88,14 +92,23 @@ describe("resolveConnection: the environment's key and where the host came from"
       }),
     ).toThrow(CredentialScopeError);
   });
-  it("refuses when a profile has its own key but the environment's key outranks it", () => {
+  it("does not send a profile's key to a .env URL that outranks the profile's own", () => {
     expect(() =>
+      resolveConnection({ profile: "p" }, {
+        env: {},
+        dotenv: { GALAXY_URL: "https://dot.example" },
+        profiles: { p: { galaxy_url: "https://prof.example", galaxy_user_key: "PK" } },
+      }),
+    ).toThrow(CredentialScopeError);
+  });
+  it("sends the environment's key to a profile's URL: the profile is the user's own file", () => {
+    expect(
       resolveConnection({ profile: "p" }, {
         env: { GALAXY_API_KEY: "EK" },
         dotenv: {},
         profiles: { p: { galaxy_url: "https://prof.example", galaxy_user_key: "PK" } },
       }),
-    ).toThrow(CredentialScopeError);
+    ).toEqual({ baseUrl: "https://prof.example", apiKey: "EK" });
   });
   it("still reports missing credentials as a plain error", () => {
     expect(() => resolveConnection({}, { env: {}, dotenv: {}, profiles: {} })).not.toThrow(CredentialScopeError);
