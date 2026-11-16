@@ -245,10 +245,12 @@ export function harness(
       }),
     ignoredLoginHost: () => opts.ignoredLoginHost,
     // `GALAXY_API_KEY` outranks a stored login; flags, profiles and `.env` are not in play here.
-    keySourceFor: () =>
+    keySourceFor: (_baseUrl, login) =>
       env.GALAXY_API_KEY
         ? { id: "env", label: "GALAXY_API_KEY" }
-        : { id: "stored", label: "stored login" },
+        : login === undefined
+          ? { id: null, label: "none (the stored token cannot be read)" }
+          : { id: "stored", label: "stored login" },
     now,
     env,
     io: { stdin, stdout: cap.stdout, stderr: cap.stderr, interactive: opts.interactive ?? false },

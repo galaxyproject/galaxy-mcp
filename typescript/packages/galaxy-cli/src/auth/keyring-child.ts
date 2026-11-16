@@ -12,10 +12,10 @@
  * Protocol: stdin is one JSON request, stdout is one JSON reply, and the process exits.
  *   request: { op: "get" | "set" | "delete", service, account, secret? }
  *   reply:   { ok: true, value?: string | null | boolean }
- *          | { ok: false, kind: "unavailable" | "not-found" | "failed", message }
+ *          | { ok: false, kind: "unavailable" | "failed", message }
  * `unavailable` is a keyring that cannot be reached (the module will not load, or the entry
  * cannot be built); `failed` is one that was reached and refused the call. A missing secret is
- * `ok` with `value: null`; the parent also maps `not-found` to that, but this child never sends it.
+ * `ok` with `value: null`.
  * The secret travels only over these pipes, never argv, env or a file, and no reply or error
  * message echoes it. Standalone on purpose: it imports nothing from the CLI, so it builds as a
  * second tsup entry and also runs as source under Node's type stripping.
@@ -33,7 +33,7 @@ interface KeyringRequest {
 
 type Reply =
   | { ok: true; value: string | boolean | null }
-  | { ok: false; kind: "unavailable" | "not-found" | "failed"; message: string };
+  | { ok: false; kind: "unavailable" | "failed"; message: string };
 
 async function run(req: KeyringRequest): Promise<Reply> {
   let AsyncEntry: typeof Keyring.AsyncEntry;

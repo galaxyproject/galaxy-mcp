@@ -290,8 +290,8 @@ describe("nativeBackend (stub child)", () => {
   });
 
   // The child's three error kinds mean different things to the caller: `unavailable` and `failed`
-  // both reach it as errors, with the child's own message, while `not-found` is the ordinary
-  // "nothing stored" answer and so becomes null.
+  // both reach it as errors, with the child's own message. A missing entry is not an error kind:
+  // the child answers `ok` with `value: null`, which is what this test feeds it.
   it("maps the child's error kinds", async () => {
     const unavailable = await stub(
       `process.stdout.write(JSON.stringify({ ok: false, kind: "unavailable", message: "no bus" }))`,
@@ -305,10 +305,13 @@ describe("nativeBackend (stub child)", () => {
     await expect(
       new KeyringStore(nativeBackend({ script: failed, env }), 5000).set(baseUrl, "a", "x"),
     ).rejects.toThrow(/system keyring failed a write: locked/);
-    const notFound = await stub(
+    const missing = await stub(`process.stdout.write(JSON.stringify({ ok: true, value: null }))`);
+    expect(await nativeBackend({ script: missing, env }).get("s", "a")).toBeNull();
+    // `not-found` is not a kind of the protocol: such a reply is no usable answer.
+    const unknown = await stub(
       `process.stdout.write(JSON.stringify({ ok: false, kind: "not-found", message: "none" }))`,
     );
-    expect(await nativeBackend({ script: notFound, env }).get("s", "a")).toBeNull();
+    await expect(nativeBackend({ script: unknown, env }).get("s", "a")).rejects.toThrow();
   });
 
   // A helper that has answered but cannot exit (a native thread still blocked on the bus) must not

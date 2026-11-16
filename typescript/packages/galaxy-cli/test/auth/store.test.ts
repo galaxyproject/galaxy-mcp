@@ -238,6 +238,107 @@ describe("a keyring write that cannot be kept", () => {
     expect(kr.data.size).toBe(1);
   });
 
+  // The write landed, the read-back timed out, and that wedges the keyring, so the clean-up delete
+  // fails at once. The secret may be in the keyring with no record pointing at it: say so.
+  it("says the new secret may remain when the clean-up delete fails after a read-back timeout", async () => {
+    kr.get = async () => new Promise<never>(() => {});
+    const r = await store.put(fakeLogin());
+    expect(r.storage).toBe("file");
+    expect(r.warning).toMatch(/No system keyring available/);
+    expect(r.warning).toMatch(/new token for .* may still be in the system keyring/);
+    expect(r.warning).toContain(`"gxy:${HOST}" for that user`);
+    expect(r.warning).toContain("user aioue");
+    expect(r.warning).not.toContain(FAKE_TOKEN);
+    expect(kr.data.get(entryKey)).toBe(FAKE_TOKEN);
+  });
+
+  it("says so in the error when the file write fails and the clean-up delete cannot run", async () => {
+    vi.spyOn(file, "put").mockRejectedValueOnce(new Error("disk full"));
+    const realDelete = kr.delete.bind(kr);
+    kr.delete = async () => {
+      throw new Error("no secret service");
+    };
+    await expect(store.put(fakeLogin())).rejects.toThrow(
+      /disk full\. The new token .* may still be in the system keyring.*"gxy:/,
+    );
+    kr.delete = realDelete;
+  });
+
+  // Same host and user: the new write replaced the entry the existing record uses, and the old
+  // login's token must come back if the put does not complete.
+  describe("when it replaced the entry an existing record points at", () => {
+    /** Reads honestly once (the old secret, before the write) and then reads back wrong. */
+    const readBackWrong = () => {
+      let n = 0;
+      const real = kr.get.bind(kr);
+      kr.get = async (s: string, a: string) => (++n === 1 ? real(s, a) : "something-else");
+    };
+
+    it("puts the old secret back when the read-back fails (requireKeyring)", async () => {
+      await store.put(fakeLogin());
+      readBackWrong();
+      await expect(
+        store.put(fakeLogin({ token: SECOND_TOKEN }), { requireKeyring: true }),
+      ).rejects.toMatchObject({ kind: "denied" });
+      expect(kr.data.get(entryKey)).toBe(FAKE_TOKEN);
+    });
+
+    it("puts the old secret back when the file write fails", async () => {
+      await store.put(fakeLogin());
+      vi.spyOn(file, "put").mockRejectedValueOnce(new Error("disk full"));
+      await expect(store.put(fakeLogin({ token: SECOND_TOKEN }))).rejects.toThrow("disk full");
+      expect(kr.data.get(entryKey)).toBe(FAKE_TOKEN);
+    });
+
+    it("puts the old secret back when the put is cancelled after the write", async () => {
+      await store.put(fakeLogin());
+      const ac = new AbortController();
+      let n = 0;
+      const real = kr.get.bind(kr);
+      kr.get = async (s: string, a: string) => {
+        if (++n === 1) return real(s, a);
+        ac.abort();
+        throw new Error("helper killed by SIGINT");
+      };
+      await expect(
+        store.put(fakeLogin({ token: SECOND_TOKEN }), { signal: ac.signal }),
+      ).rejects.toMatchObject({ name: "AbortError" });
+      expect(kr.data.get(entryKey)).toBe(FAKE_TOKEN);
+    });
+
+    it("says the earlier login may not work when the old secret cannot be put back", async () => {
+      await store.put(fakeLogin());
+      readBackWrong();
+      const realSet = kr.set.bind(kr);
+      let sets = 0;
+      kr.set = async (s: string, a: string, v: string) => {
+        if (++sets > 1) throw new Error("locked");
+        await realSet(s, a, v);
+      };
+      await expect(
+        store.put(fakeLogin({ token: SECOND_TOKEN }), { requireKeyring: true }),
+      ).rejects.toThrow(/earlier login for .* \(user aioue\) may no longer work.*Log in again/);
+    });
+
+    it("says it too when the old secret could not be read beforehand", async () => {
+      await store.put(fakeLogin());
+      const real = kr.get.bind(kr);
+      let n = 0;
+      kr.get = async (s: string, a: string) => {
+        if (++n === 1) throw new Error("locked");
+        return n === 2 ? "something-else" : real(s, a);
+      };
+      await expect(
+        store.put(fakeLogin({ token: SECOND_TOKEN }), { requireKeyring: true }),
+      ).rejects.toThrow(/may no longer work.*could not be read beforehand/);
+    });
+
+    it("does not read the keyring first when there is no earlier keyring login", async () => {
+      await store.put(fakeLogin());
+      expect(kr.calls).toEqual(["set", "get"]);
+    });
+  });
+
   it("deletes an entry that reads back wrong before falling back to the file", async () => {
     kr.mode = "wrong";
     const r = await store.put(fakeLogin());
@@ -297,7 +398,12 @@ describe("deleting and listing", () => {
     async (mode) => {
       await store.put(fakeLogin());
       kr.mode = mode;
-      await expect(store.delete(HOST)).rejects.toThrow(/may remain/);
+      const err = (await store.delete(HOST).catch((e: unknown) => e)) as Error;
+      expect(err).toMatchObject({ kind: "leftover" });
+      expect(err.message).toMatch(/may remain/);
+      // Names the entry to remove and its user, as `put`'s leftover warning does.
+      expect(err.message).toContain(`"gxy:${HOST}" for that user`);
+      expect(err.message).toContain("user aioue");
       expect(await file.list()).toEqual([]);
     },
   );

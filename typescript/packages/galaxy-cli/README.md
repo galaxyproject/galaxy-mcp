@@ -102,7 +102,10 @@ record (it says the secret may remain in the keyring, and exits 1) and `auth sta
 reports that host as "token unavailable" and exits 1. Logging in again over a login that is in the
 keyring, when `gxy` cannot use the keyring to remove the old secret (`GXY_NO_KEYRING`, or a keyring
 that does not answer), stores the new login and warns that the old secret may remain, naming the
-entry (`gxy:<url>`) to remove with your keyring's own tool.
+entry (`gxy:<url>`) to remove with your keyring's own tool. `auth logout` names the entry the same
+way when the keyring could not confirm the removal. A login over one that is in the keyring puts the
+old secret back if it fails or is cancelled; if it cannot, it says the earlier login may no longer
+work and that logging in again will fix it.
 
 ### Which key and which Galaxy an operation uses
 

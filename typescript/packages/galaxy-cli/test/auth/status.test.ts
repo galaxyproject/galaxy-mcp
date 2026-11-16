@@ -287,10 +287,11 @@ describe("auth status", () => {
       h.store.get = async (baseUrl) => {
         if (baseUrl !== OTHER) return get(baseUrl);
         await hasAsked;
-        return null;
+        // A store error is what ends the command (an unreadable token is only that host's).
+        throw new AuthError("store", "hosts.yml changed and cannot be used.");
       };
-      expect(await statusCommand({ timeoutMs: 60_000 }, h.deps)).toBe(77);
-      expect(h.cap.err).toContain("was removed while this ran");
+      expect(await statusCommand({ timeoutMs: 60_000 }, h.deps)).toBe(65);
+      expect(h.cap.err).toContain("hosts.yml changed and cannot be used.");
       expect(signal?.aborted).toBe(true);
     });
 
@@ -355,6 +356,18 @@ describe("auth status", () => {
       expect(h.cap.err).toContain("Cancelled.");
       expect(h.cap.err).not.toContain("unavailable");
       expect(h.cap.out).toBe("");
+    });
+
+    // A store problem met while reading one host's token is reported as that, not as "token
+    // unavailable: log in", because logging in would meet the same refusal.
+    it("reports a store error met reading a token as such, exit 65", async () => {
+      const h = harness({ stored: [fakeLogin()] });
+      h.store.get = async () => {
+        throw new AuthError("store", "hosts.yml changed and cannot be used.");
+      };
+      expect(await statusCommand({}, h.deps)).toBe(65);
+      expect(h.cap.err).toContain("hosts.yml changed and cannot be used.");
+      expect(h.cap.err).not.toContain("auth login");
     });
 
     it("includes the token only with --show-token", async () => {

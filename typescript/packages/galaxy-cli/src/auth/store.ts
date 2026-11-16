@@ -63,6 +63,36 @@ export class CombinedStore implements CredentialStore {
     const { token, ...summary } = login;
     // Read first: what the old record points at decides what must be cleaned up afterwards.
     const prior = await this.file.get(login.baseUrl);
+    // The same user's earlier login is in the keyring: the write below replaces that very entry.
+    const samePrior = prior?.storage === "keyring" && prior.username === login.username;
+    // Read before overwriting, so a put that fails can put it back. Only on this path: a first
+    // login, or one that moves from the file or to another user, has nothing to restore.
+    // `undefined`: it could not be read. `null`: it was already missing, so nothing is lost.
+    let oldSecret: string | null | undefined;
+    if (samePrior && !opts.insecureStorage) {
+      oldSecret = await this.keyring.get(login.baseUrl, login.username).catch(() => undefined);
+    }
+    const user = sanitize(login.username);
+    // After a failed put whose keyring write landed: take the new secret back out, or, when the
+    // entry is the one the existing record uses, put the old secret back. Best effort; returns a
+    // note for the person when the keyring is left holding what no record accounts for.
+    const undo = async (): Promise<string | undefined> => {
+      try {
+        if (!samePrior) {
+          await this.keyring.delete(login.baseUrl, login.username);
+          return undefined;
+        }
+        if (oldSecret === null) return undefined;
+        if (oldSecret === undefined) throw new Error("it could not be read beforehand");
+        await this.keyring.set(login.baseUrl, login.username, oldSecret);
+        return undefined;
+      } catch (e) {
+        const why = sanitize(e instanceof Error ? e.message : String(e)).replace(/\.+$/, "");
+        return samePrior
+          ? `The earlier login for ${login.baseUrl} (user ${user}) may no longer work: its token in the system keyring was replaced and could not be put back (${why}). Log in again to fix it`
+          : `The new token for ${login.baseUrl} (user ${user}) may still be in the system keyring, which gxy could not use to remove it (${why}). Remove the entry "gxy:${login.baseUrl}" for that user with your keyring's own tool`;
+      }
+    };
     let storage: StorageKind = "file";
     let warning: string | undefined;
     if (!opts.insecureStorage) {
@@ -79,11 +109,14 @@ export class CombinedStore implements CredentialStore {
       } catch (e) {
         // The write may have landed even though it did not read back (or the read threw). Take
         // it out, best effort, so no copy of the token lives outside the record that is about
-        // to say "file", unless an existing record points at that very entry. A `set` that itself
-        // failed or timed out stored nothing we can see, and a delete after a timeout would only
-        // wait for the same wedged keyring again (up to a whole timeout more), so it is skipped.
-        if (wrote && !(prior?.storage === "keyring" && prior.username === login.username)) {
-          await this.keyring.delete(login.baseUrl, login.username).catch(() => {});
+        // to say "file"; when an existing record points at that very entry, put the old secret
+        // back instead, since that record stays if this put is refused or cancelled. (When the
+        // put falls back to the file, the old entry is removed below, as for any other change.)
+        // A `set` that itself failed or timed out stored nothing we can see, and a delete after a
+        // timeout would only wait for the same wedged keyring again, so it is skipped.
+        let note: string | undefined;
+        if (wrote && (!samePrior || opts.requireKeyring || opts.signal?.aborted)) {
+          note = await undo();
         }
         // A Ctrl-C while the keyring was working (an unlock prompt can last a minute) kills its
         // helper with the process group, which looks like an unavailable keyring. It is a cancel:
@@ -98,13 +131,13 @@ export class CombinedStore implements CredentialStore {
           // admin token is the one credential never left in plaintext as a side effect.
           throw new AuthError(
             "denied",
-            `${this.keyring.disabled ? "The system keyring is switched off by GXY_NO_KEYRING" : `No system keyring here (${why})`}, so nothing was stored. Rerun with --insecure-storage to keep it in ${this.file.path} (readable only by you), or use GALAXY_API_KEY for this session.`,
+            `${this.keyring.disabled ? "The system keyring is switched off by GXY_NO_KEYRING" : `No system keyring here (${why})`}, so nothing was stored. Rerun with --insecure-storage to keep it in ${this.file.path} (readable only by you), or use GALAXY_API_KEY for this session.${note ? ` ${note}.` : ""}`,
             { cause: e },
           );
         }
         // Said aloud, never silent: a fallback nobody hears about is a plaintext token that the
         // user believes is in the keyring.
-        warning = `${this.keyring.disabled ? "GXY_NO_KEYRING is set" : `No system keyring available (${why})`}; token saved in plain text at ${this.file.path} (readable only by you)`;
+        warning = `${this.keyring.disabled ? "GXY_NO_KEYRING is set" : `No system keyring available (${why})`}; token saved in plain text at ${this.file.path} (readable only by you)${note ? `. ${note}` : ""}`;
       }
     }
     const record: HostRecord =
@@ -113,13 +146,15 @@ export class CombinedStore implements CredentialStore {
     try {
       await this.file.put(record);
     } catch (e) {
-      // The secret is in the keyring but no record points at it: take it back out, best effort,
-      // unless it overwrote the entry an existing record still points at.
-      if (
-        storage === "keyring" &&
-        !(prior?.storage === "keyring" && prior.username === login.username)
-      ) {
-        await this.keyring.delete(login.baseUrl, login.username).catch(() => {});
+      // The secret is in the keyring but no record points at it: take it back out (or restore the
+      // old one, when it overwrote the entry an existing record still points at), best effort.
+      const note = storage === "keyring" ? await undo() : undefined;
+      if (note && e instanceof Error) {
+        // The failure itself is rethrown, carrying what the keyring was left holding.
+        const msg = `${e.message}. ${note}`;
+        throw e instanceof AuthError
+          ? new AuthError(e.kind, msg, { cause: e })
+          : new Error(msg, { cause: e });
       }
       throw e;
     }
@@ -154,8 +189,8 @@ export class CombinedStore implements CredentialStore {
     await this.file.delete(baseUrl);
     if (leftover) {
       throw new AuthError(
-        "unsupported",
-        `The login record was removed, but the system keyring could not confirm that the secret for ${baseUrl} is gone, so it may remain there: ${(leftover as Error).message}`,
+        "leftover",
+        `The login record was removed, but the system keyring could not confirm that the secret for ${baseUrl} (user ${sanitize(rec.username)}) is gone, so it may remain there: ${(leftover as Error).message}. Remove the entry "gxy:${baseUrl}" for that user with your keyring's own tool`,
         { cause: leftover },
       );
     }
