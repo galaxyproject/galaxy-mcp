@@ -232,6 +232,34 @@ describe("device login", () => {
     expect(grant.expiresIn).toBeUndefined();
   });
 
+  // `now + expires_in` must stay a valid date, and a login must not be stored already expired.
+  it("caps a huge expires_in at ten years", async () => {
+    const server = await discover(url());
+    const pending = await server.startDeviceLogin();
+    galaxy.approve(pending.userCode, { expiresIn: 1e20 });
+    const grant = await pending.waitForApproval();
+    expect(grant.expiresIn).toBe(10 * 365 * 24 * 3600);
+    expect(Number.isNaN(new Date(Date.now() + grant.expiresIn! * 1000).getTime())).toBe(false);
+  });
+
+  it.each([0, -5])("refuses an expires_in of %s, without echoing the token", async (value) => {
+    const server = await discover(url());
+    const pending = await server.startDeviceLogin();
+    galaxy.approve(pending.userCode, { expiresIn: value });
+    const e = await authErrorOf(pending.waitForApproval());
+    expect(e.kind).toBe("protocol");
+    // The client library already rejects a negative one; zero is ours.
+    if (value === 0) expect(e.message).toContain("unusable expires_in");
+    expect(e.message).not.toContain(galaxy.issuedTokens()[0]!);
+  });
+
+  it("refuses an expires_in that is not a number", async () => {
+    const server = await discover(url());
+    const pending = await server.startDeviceLogin();
+    galaxy.approve(pending.userCode, { expiresIn: "soon" as unknown as number });
+    expect((await authErrorOf(pending.waitForApproval())).kind).toBe("protocol");
+  });
+
   it("has no scopes when none were requested or returned", async () => {
     const server = await discover(url());
     const pending = await server.startDeviceLogin();

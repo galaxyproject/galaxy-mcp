@@ -42,6 +42,11 @@ export interface DiscoverOptions {
 const MAX_EXPIRES_IN_S = 3600;
 const MAX_INTERVAL_S = 60;
 const MAX_RETRY_AFTER_S = 60;
+/**
+ * The longest token lifetime taken from a token response: 10 years. Anything longer is cut to this,
+ * which keeps `now + expires_in` a valid Date (a huge number would make `toISOString` throw).
+ */
+const MAX_TOKEN_LIFETIME_S = 10 * 365 * 24 * 3600;
 const DEFAULT_MIN_INTERVAL_MS = 1000;
 /**
  * How many polls in a row may fail in a way that looks transient before the wait gives up. A real
@@ -420,9 +425,19 @@ function toGrant(tokens: client.TokenEndpointResponse, requested: string[]): Tok
   // RFC 6749 §5.1: `scope` is omitted when it equals what was requested.
   const scopes =
     typeof tokens.scope === "string" ? tokens.scope.split(/\s+/).filter(Boolean) : [...requested];
+  // Absent is a token with no expiry; present must be a positive finite number of seconds, since
+  // zero or less would store a login that has already expired and a huge one would break the date.
+  const rawExpiresIn: unknown = tokens.expires_in;
+  let expiresIn: number | undefined;
+  if (rawExpiresIn !== undefined && rawExpiresIn !== null) {
+    if (typeof rawExpiresIn !== "number" || !Number.isFinite(rawExpiresIn) || rawExpiresIn <= 0) {
+      throw new AuthError("protocol", "The token response had an unusable expires_in.");
+    }
+    expiresIn = Math.min(rawExpiresIn, MAX_TOKEN_LIFETIME_S);
+  }
   return {
     accessToken: tokens.access_token,
-    ...(typeof tokens.expires_in === "number" ? { expiresIn: tokens.expires_in } : {}),
+    ...(expiresIn !== undefined ? { expiresIn } : {}),
     scopes,
   };
 }

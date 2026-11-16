@@ -181,10 +181,41 @@ describe("$BROWSER", () => {
     vi.useFakeTimers();
     try {
       const hang = (() =>
-        Object.assign(new EventEmitter(), { unref() {} })) as unknown as typeof spawn;
+        Object.assign(new EventEmitter(), { unref() {}, kill() {} })) as unknown as typeof spawn;
       const p = openBrowser(URL_, { BROWSER: "stuck" }, "linux", hang);
       await vi.advanceTimersByTimeAsync(SPAWN_TIMEOUT_MS + 1);
       expect(await p).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // A slow `$BROWSER` helper that is given up on must be stopped, or it opens a tab after the next
+  // candidate has opened its own; and nothing it does later may arm a timer.
+  it("kills a launcher that is too slow to start, and ignores its late events", async () => {
+    vi.useFakeTimers();
+    try {
+      const kills: string[] = [];
+      const children: EventEmitter[] = [];
+      const impl = ((cmd: string) => {
+        const child = Object.assign(new EventEmitter(), {
+          unref() {},
+          kill() {
+            kills.push(cmd);
+          },
+        });
+        children.push(child);
+        return child;
+      }) as unknown as typeof spawn;
+      const p = openBrowser(URL_, { BROWSER: "slow", DISPLAY: ":0" }, "linux", impl);
+      await vi.advanceTimersByTimeAsync(SPAWN_TIMEOUT_MS + 1);
+      expect(kills).toEqual(["slow"]);
+      expect(children).toHaveLength(2); // xdg-open is being tried
+      // xdg-open fails, then the slow one's spawn arrives late: it must not arm a timer.
+      children[1]!.emit("error", new Error("ENOENT"));
+      expect(await p).toBe(false);
+      children[0]!.emit("spawn");
+      expect(vi.getTimerCount()).toBe(0);
     } finally {
       vi.useRealTimers();
     }
