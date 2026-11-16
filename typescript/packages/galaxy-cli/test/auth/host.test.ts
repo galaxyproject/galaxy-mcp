@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAuthDeps } from "../../src/auth/deps";
 import { normalizeBaseUrl } from "../../src/auth/base-url";
 import { pickHost, resolveHost } from "../../src/auth/host";
-import { loadSourcesAsync, resolveConnection, type Sources } from "../../src/config";
+import { loadSourcesAsync, resolveConnection } from "../../src/config";
 import { FakeStore, fakeLogin, useTempDir } from "./harness";
 
 const A = normalizeBaseUrl("https://a.example");

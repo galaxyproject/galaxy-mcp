@@ -175,7 +175,7 @@ describe("the auth commands", () => {
     ["logout", ["auth", "logout"], "Unknown --profile"],
     ["env", ["auth", "env"], "Unknown --profile"],
     ["headers", ["auth", "headers"], "Unknown --profile"],
-  ])("refuse an unknown --profile for auth %s with exit 64", async (cmd, argv, message) => {
+  ])("refuse an unknown --profile for auth %s with exit 64", async (_cmd, argv, message) => {
     const h = harness({ stored: [fakeLogin()], stdinText: `${FAKE_TOKEN}\n` });
     const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     process.exitCode = 0;
@@ -183,10 +183,13 @@ describe("the auth commands", () => {
     try {
       const program = buildProgram({
         invokedAs: "gxy",
-        makeAuthDeps: (name) => ({
-          ...h.deps,
-          resolveHost: createAuthDeps(name, () => program.opts()).resolveHost,
-        }),
+        makeAuthDeps: (name) => {
+          const real = createAuthDeps(name, () => program.opts());
+          return {
+            ...h.deps,
+            resolveHost: (explicit, purpose) => real.resolveHost(explicit, purpose),
+          };
+        },
       });
       await program.parseAsync(["node", "gxy", "--profile", "typo", ...argv]);
       printed = write.mock.calls.map((c) => String(c[0])).join("");
@@ -200,7 +203,7 @@ describe("the auth commands", () => {
     expect(h.cap.out).toBe("");
     expect(h.whoamiCalls).toEqual([]);
     expect(await h.store.list()).toHaveLength(1); // still only the seeded login
-    if (cmd === "login") expect(h.stdin.readableLength).toBeGreaterThan(0);
+    expect(h.stdin.readableLength).toBeGreaterThan(0); // the key on stdin was never read
   });
 
   // `status` lists every stored login and resolves no host unless `--host` is given, so it needs the

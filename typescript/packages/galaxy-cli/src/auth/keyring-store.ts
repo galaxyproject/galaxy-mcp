@@ -278,6 +278,7 @@ const CHILD_ENV_KEYS = [
   "SYSTEMROOT",
 ];
 
+// eslint-disable-next-line no-restricted-properties -- the default parameter is the real environment; callers pass `deps.env`
 export function childEnv(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {};
   for (const k of CHILD_ENV_KEYS) if (source[k] !== undefined) out[k] = source[k];

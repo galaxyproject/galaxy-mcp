@@ -249,7 +249,7 @@ describe("device login", () => {
     const e = await authErrorOf(pending.waitForApproval());
     expect(e.kind).toBe("protocol");
     // The client library already rejects a negative one; zero is ours.
-    if (value === 0) expect(e.message).toContain("unusable expires_in");
+    expect(e.message).toContain(value === 0 ? "unusable expires_in" : "");
     expect(e.message).not.toContain(galaxy.issuedTokens()[0]!);
   });
 

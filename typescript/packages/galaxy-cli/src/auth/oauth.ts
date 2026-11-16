@@ -542,6 +542,7 @@ function mapError(err: unknown, phase: Phase, baseUrl: string): AuthError {
         return new AuthError("protocol", `${baseUrl} answered unexpectedly (${detail}).`, {
           cause: err,
         });
+      case undefined: // a ClientError without a code is the same as one with a code not listed
       default:
         return new AuthError(
           "protocol",

@@ -215,6 +215,7 @@ export class CombinedStore implements CredentialStore {
  * `notify` is where that notice goes, stderr by default.
  */
 export function createCredentialStore(
+  // eslint-disable-next-line no-restricted-properties -- the default parameter is the real environment; callers pass `deps.env`
   env: Record<string, string | undefined> = process.env,
   home: string = homedir(),
   warn: (message: string) => void = (m) => process.stderr.write(`warning: ${m}\n`),

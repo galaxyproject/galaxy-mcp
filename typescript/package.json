@@ -7,6 +7,8 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r --if-present lint",
+    "format:check": "pnpm -r --if-present format:check",
     "depcruise": "dependency-cruiser --config .dependency-cruiser.cjs packages/galaxy-ops/src/index.ts packages/galaxy-mcp/src/index.ts packages/galaxy-cli/src/index.ts packages/galaxy-cli/src/gxy.ts packages/galaxy-cli/src/auth/keyring-child.ts",
     "parity:report": "pnpm --filter @galaxyproject/galaxy-mcp parity:report",
     "parity:report:print": "pnpm --silent --filter @galaxyproject/galaxy-mcp parity:report:print"
