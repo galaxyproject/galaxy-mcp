@@ -2,7 +2,7 @@ import type { Command } from "commander";
 import { Option } from "commander";
 import type { AuthDeps } from "./types";
 import { loginCommand, type LoginOptions } from "./commands/login";
-import { EX_SOFTWARE } from "../exit";
+import { EX_SOFTWARE, EX_USAGE } from "../exit";
 
 /**
  * Add the `auth` group. `makeDeps` is called per invocation, so `--help` and the other
@@ -14,25 +14,40 @@ export function registerAuth(program: Command, makeDeps: (commandName: string) =
     .command("auth")
     .description("Log in to a Galaxy and manage stored credentials");
   // `--api-key` belongs to the operations; `auth` takes its key from the store or from stdin.
-  // Without this it would be dropped without a word, by someone who thinks it was used.
   // `--profile` is the same for `login` alone: the other subcommands use it to find the host, but
-  // a login never takes its host from a profile, so there it would be dropped just as silently.
+  // a login never takes its host from a profile. A flag that does not apply is a usage error
+  // (64), as in `gh` and `aws`, and not a warning: `login --profile prod --with-token` would
+  // otherwise send the key piped on stdin to a Galaxy other than prod's before anyone could
+  // react. `--quiet` does not silence it. The hook runs before the action, so nothing is read,
+  // asked, stored or sent; `run` then sees `refused` and does nothing.
+  let refused = false;
   auth.hook("preAction", (_auth, action) => {
-    const g = program.opts<{ apiKey?: string; profile?: string; quiet?: boolean }>();
-    if (g.quiet) return;
-    if (g.apiKey) {
-      process.stderr.write(`Warning: --api-key is ignored by \`${commandName} auth\` commands.\n`);
-    }
-    if (g.profile && action.name() === "login") {
-      process.stderr.write(
-        `Warning: --profile is ignored by \`${commandName} auth login\`: it only uses --host or GALAXY_URL from the environment.\n`,
+    refused = false;
+    const g = program.opts<{ apiKey?: string; profile?: string }>();
+    const name = `${commandName} auth ${action.name()}`;
+    const problems: string[] = [];
+    if (g.profile !== undefined && action.name() === "login") {
+      problems.push(
+        `--profile does not apply to \`${name}\`: login takes its Galaxy from --host, --url or GALAXY_URL in the environment.`,
       );
     }
+    if (g.apiKey !== undefined) {
+      problems.push(
+        action.name() === "login"
+          ? `--api-key does not apply to \`${name}\`: pipe the key in with --with-token instead.`
+          : `--api-key does not apply to \`${name}\`.`,
+      );
+    }
+    if (problems.length === 0) return;
+    refused = true;
+    process.stderr.write(`${problems.join("\n")}\n`);
+    process.exitCode = EX_USAGE;
   });
   const host = () =>
     new Option("--host <url>", "Galaxy base URL (default: GALAXY_URL, or the only stored login)");
 
   const run = async (fn: (deps: AuthDeps) => Promise<number>): Promise<void> => {
+    if (refused) return;
     let deps: AuthDeps;
     try {
       deps = makeDeps(commandName);

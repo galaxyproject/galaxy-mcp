@@ -4,6 +4,9 @@ import type { AuthError } from "./types";
 const TLS_CODES =
   /^(?:CERT_|ERR_TLS_|UNABLE_TO_(?:GET_ISSUER_CERT|VERIFY_LEAF|GET_CRL)|SELF_SIGNED_CERT|DEPTH_ZERO_SELF_SIGNED|HOSTNAME_MISMATCH|ERR_SSL_)/;
 
+/** Errors with a cause that is known and is not a certificate one: the message is not searched. */
+const PLAIN_NETWORK_CODES = /^(?:ENOTFOUND|EAI_|ECONN|ETIMEDOUT|EHOST|ENET|EPIPE)/;
+
 function codeOf(err: unknown): string | undefined {
   const code = (err as { code?: unknown } | null)?.code;
   return typeof code === "string" ? code : undefined;
@@ -20,10 +23,11 @@ function rootCause(err: Error): Error {
 function isTlsError(err: Error): boolean {
   const cause = rootCause(err);
   const code = codeOf(cause);
-  return (
-    (code !== undefined && TLS_CODES.test(code)) ||
-    /certificate|self.signed|TLS|SSL/i.test(cause.message)
-  );
+  if (code !== undefined && TLS_CODES.test(code)) return true;
+  // A DNS or connection error carries the host name in its message (`getaddrinfo ENOTFOUND
+  // ssl-galaxy.example.org`), so the words below could match a name and not a certificate.
+  if (code !== undefined && PLAIN_NETWORK_CODES.test(code)) return false;
+  return /certificate|self.signed|TLS|SSL/i.test(cause.message);
 }
 
 /**

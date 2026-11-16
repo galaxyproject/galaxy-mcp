@@ -129,7 +129,7 @@ export function harness(
     stdinText?: string;
     stored?: StoredLogin[];
     hostFromEnv?: string;
-    ignoredLoginHost?: { source: "dotenv" | "profile"; url: string };
+    ignoredLoginHost?: { source: "dotenv"; url: string };
   } = {},
 ): Harness {
   const store = new FakeStore();
