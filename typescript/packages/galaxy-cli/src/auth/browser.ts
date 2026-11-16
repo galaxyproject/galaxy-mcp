@@ -113,29 +113,42 @@ function launch(spawnImpl: typeof spawn, cmd: string, args: string[]): Promise<b
   return new Promise((resolve) => {
     let timer: NodeJS.Timeout | undefined;
     let started = false;
+    // Once settled, a late event from this launcher must change nothing: the next candidate may
+    // already be running, and a second "success" here would open a second tab.
+    let settled = false;
     const done = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       resolve(ok);
+    };
+    // Timers are unref'd so a pending one never delays the exit of `gxy`.
+    const arm = (ms: number, fn: () => void) => {
+      clearTimeout(timer);
+      timer = setTimeout(fn, ms);
+      timer.unref();
     };
     try {
       // Detached with no stdio, and unref'd once it starts, so a browser that stays open does not
       // keep `gxy` running after login is done.
       const child = spawnImpl(cmd, args, { detached: true, stdio: "ignore" });
-      timer = setTimeout(() => {
+      arm(SPAWN_TIMEOUT_MS, () => {
+        // Too slow to start: stop it, so it cannot open a page after the next candidate has.
         child.unref();
+        child.kill();
         done(false);
-      }, SPAWN_TIMEOUT_MS);
+      });
       child.once("error", () => {
         done(false);
       });
       child.once("spawn", () => {
+        if (settled) return;
         started = true;
         child.unref();
         // Started is not opened: give it a moment to fail.
-        clearTimeout(timer);
-        timer = setTimeout(() => {
+        arm(EARLY_EXIT_MS, () => {
           done(true);
-        }, EARLY_EXIT_MS);
+        });
       });
       child.once("exit", (code) => {
         if (started) done(code === 0);
