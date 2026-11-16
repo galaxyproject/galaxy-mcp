@@ -31,7 +31,12 @@ galaxy-cli invoke_workflow <workflowId> --inputs @inputs.json --history-name "WF
 
 Credentials resolve from (first match wins): `--url`/`--api-key` flags, the
 `GALAXY_URL`/`GALAXY_API_KEY` environment variables, a `.env` file in the current
-directory, or a planemo profile (`--profile <name>`). Output is a table by
+directory, or a planemo profile (`--profile <name>`). The one limit on that: the
+`GALAXY_API_KEY` from your environment is only sent to a Galaxy named by `--url` or by
+`GALAXY_URL` in the environment. If the Galaxy came from a `.env` file or a profile, the run
+stops with exit code `77` and says so, so a `.env` in a cloned repository can't send your key
+elsewhere. A key in the `.env` goes with that file's URL, a profile's key with its URL, and
+`--api-key` is always used as typed. Output is a table by
 default; `--format json` prints the full result envelope for scripting. Exit
 codes follow `sysexits.h` conventions (e.g. `77` for auth failures).
 

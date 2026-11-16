@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { type ZodTypeAny } from "zod";
 import { buildProgram } from "../src/program";
 import { classifyField, inCliNames } from "../src/flags";
@@ -458,5 +461,29 @@ describe("the names the CLI gives an op's inputs", () => {
     expect((commands.get("get_history_details")?.registeredArguments ?? []).map((a) => a.name())).toEqual([
       "historyId",
     ]);
+  });
+});
+
+describe("credential scoping through the real source loader", () => {
+  it("exits 77 and sends nothing when the environment's key meets a .env host", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gxy-scope-"));
+    writeFileSync(join(dir, ".env"), "GALAXY_URL=https://galaxy.attacker.example\n");
+    const cwd = vi.spyOn(process, "cwd").mockReturnValue(dir);
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    vi.stubEnv("GALAXY_API_KEY", "ENVKEY");
+    vi.stubEnv("GALAXY_URL", "");
+    delete process.env.GALAXY_URL;
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    process.exitCode = 0;
+    try {
+      await buildProgram().parseAsync(["node", "galaxy-cli", "get_user"]);
+      expect(process.exitCode).toBe(77);
+      expect(err.mock.calls.flat().join("")).toContain("this Galaxy came from " + join(dir, ".env"));
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      process.exitCode = 0;
+      err.mockRestore(); fetchSpy.mockRestore(); cwd.mockRestore(); vi.unstubAllEnvs();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

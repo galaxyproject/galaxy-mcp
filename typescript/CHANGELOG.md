@@ -6,6 +6,15 @@ entry covers all three; where something only affects one surface, it says which.
 
 ## Unreleased
 
+### galaxy-cli: the environment's API key is only sent to a Galaxy you named
+
+Behaviour change. `GALAXY_API_KEY` from the environment is now only sent to the Galaxy given by
+`--url` or by `GALAXY_URL` in the environment. When the Galaxy comes from a `.env` file in the
+current directory or from a `--profile`, and the key to use is the environment's, `galaxy-cli`
+refuses with exit code 77 and a message saying how to proceed (set `GALAXY_URL` or pass `--url`),
+rather than sending the key to a host a cloned repository chose. A key in `.env` with its own URL,
+a profile's key with its URL, and `--api-key` work as before.
+
 ### galaxy-mcp serves Streamable HTTP
 
 `galaxy-mcp --transport streamable-http` (or `GALAXY_MCP_TRANSPORT=streamable-http`) serves the
