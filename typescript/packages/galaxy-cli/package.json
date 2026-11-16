@@ -25,8 +25,8 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
     "test:fast": "vitest run --exclude '**/*.int.test.ts'",
     "lint": "eslint",
-    "format": "prettier --write \"src/auth/**/*.ts\" \"test/auth/**/*.ts\" \"test/support/**/*.ts\" eslint.config.js",
-    "format:check": "prettier --check \"src/auth/**/*.ts\" \"test/auth/**/*.ts\" \"test/support/**/*.ts\" eslint.config.js"
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@galaxyproject/galaxy-ops": "workspace:*",

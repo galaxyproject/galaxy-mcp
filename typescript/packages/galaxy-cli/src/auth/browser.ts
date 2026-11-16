@@ -59,6 +59,7 @@ function browserCandidates(env: Env): string[] {
  * machine, where there is often no `DISPLAY` at all.
  */
 export function canOpenBrowser(
+  // eslint-disable-next-line no-restricted-properties -- the default parameter is the real environment; callers pass `deps.env`
   env: Env = process.env,
   platform: NodeJS.Platform = process.platform,
 ): boolean {
@@ -82,6 +83,7 @@ export function canOpenBrowser(
  */
 export async function openBrowser(
   url: string,
+  // eslint-disable-next-line no-restricted-properties -- the default parameter is the real environment; callers pass `deps.env`
   env: Env = process.env,
   platform: NodeJS.Platform = process.platform,
   spawnImpl: typeof spawn = spawn,

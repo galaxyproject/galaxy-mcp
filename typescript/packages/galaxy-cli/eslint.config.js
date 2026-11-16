@@ -5,19 +5,17 @@ import regexp from "eslint-plugin-regexp";
 import nodePlugin from "eslint-plugin-n";
 import vitest from "@vitest/eslint-plugin";
 
+// The auth scope is listed here and in .prettierignore (which alone sets Prettier's scope). ESLint
+// has no way to read that file, so a new auth directory needs an entry in both.
 const authSource = ["src/auth/**/*.ts"];
 const authTests = ["test/auth/**/*.ts", "test/support/**/*.ts"];
 const authFiles = [...authSource, ...authTests];
 
-// Files that legitimately read the real process environment: the wiring that builds `deps.env`,
-// and the helpers whose default parameter is the real environment. Commands take `deps.env`.
-const mayReadProcessEnv = [
-  "src/auth/deps.ts",
-  "src/auth/paths.ts",
-  "src/auth/browser.ts",
-  "src/auth/store.ts",
-  "src/auth/keyring-store.ts",
-];
+// The one file that legitimately reads the real process environment: the wiring that builds
+// `deps.env`. Commands take `deps.env`. The few helpers whose default parameter is the real
+// environment (browser.ts, store.ts, keyring-store.ts) carry an `eslint-disable-next-line` at that
+// parameter instead, so a new `process.env` read in those files is still an error.
+const mayReadProcessEnv = ["src/auth/deps.ts"];
 
 export default tseslint.config(
   { ignores: ["dist/**", "node_modules/**"] },
