@@ -407,6 +407,18 @@ describe("auth status", () => {
       expect(h.cap.out).toBe("");
     });
 
+    // A store problem met while reading one host's token is reported as that, not as "token
+    // unavailable: log in", because logging in would meet the same refusal.
+    it("reports a store error met reading a token as such, exit 65", async () => {
+      const h = harness({ stored: [fakeLogin()] });
+      h.store.get = async () => {
+        throw new AuthError("store", "hosts.yml changed and cannot be used.");
+      };
+      expect(await statusCommand({}, h.deps)).toBe(65);
+      expect(h.cap.err).toContain("hosts.yml changed and cannot be used.");
+      expect(h.cap.err).not.toContain("auth login");
+    });
+
     it("includes the token only with --show-token", async () => {
       const h = harness({ stored: [fakeLogin()] });
       await statusCommand({ json: true, showToken: true }, h.deps);
