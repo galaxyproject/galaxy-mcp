@@ -41,39 +41,54 @@ describe("the auth commands", () => {
     expect(code).toBe(0);
   });
 
-  // The global `--api-key` is for the operations. `auth` never reads it, and saying so is better than
-  // letting someone think a key they typed was used.
-  it("warn once that the global --api-key is ignored, and not with --quiet", async () => {
-    const warned = async (...argv: string[]) => {
+  // A flag that does not apply is a usage error, not a warning: with `--profile prod --with-token`
+  // the key on stdin would otherwise go to a Galaxy other than prod's before anyone could react.
+  // The refusal comes before deps are built, stdin is read, anything is sent or stored.
+  describe("refuse a global flag that does not apply to login", () => {
+    const refusal = async (argv: string[]) => {
       const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
       try {
-        await run(["--api-key", "fake-flag-key", ...argv, ...loginArgv]);
-        return write.mock.calls.map((c) => String(c[0])).join("");
+        const result = await run(argv);
+        return { ...result, text: write.mock.calls.map((c) => String(c[0])).join("") };
       } finally {
         write.mockRestore();
       }
     };
-    const text = await warned();
-    expect(text).toBe("Warning: --api-key is ignored by `gxy auth` commands.\n");
-    expect(await warned("--quiet")).toBe("");
-  });
+    const PROFILE_MSG =
+      "--profile does not apply to `gxy auth login`: login takes its Galaxy from --host, --url or GALAXY_URL in the environment.\n";
+    const KEY_MSG =
+      "--api-key does not apply to `gxy auth login`: pipe the key in with --with-token instead.\n";
 
-  // A login never takes its host from a profile, so `--profile` does nothing there, and saying so
-  // is better than letting someone think it picked the Galaxy.
-  it("warn once that the global --profile is ignored by login, and not with --quiet", async () => {
-    const warned = async (...argv: string[]) => {
-      const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-      try {
-        await run(["--profile", "p", ...argv]);
-        return write.mock.calls.map((c) => String(c[0])).join("");
-      } finally {
-        write.mockRestore();
+    it.each([
+      ["a profile that exists or not", ["--profile", "p"], PROFILE_MSG],
+      ["an --api-key", ["--api-key", "fake-flag-key"], KEY_MSG],
+      ["an empty --profile", ["--profile", ""], PROFILE_MSG],
+      ["an empty --api-key", ["--api-key", ""], KEY_MSG],
+    ])("%s: exit 64, nothing read, asked, sent or stored", async (_what, flags, message) => {
+      for (const quiet of [[], ["--quiet"]]) {
+        const { h, code, makeAuthDeps, text } = await refusal([...quiet, ...flags, ...loginArgv]);
+        expect(code).toBe(64);
+        expect(text).toBe(message);
+        expect(makeAuthDeps).not.toHaveBeenCalled();
+        expect(h.whoamiCalls).toEqual([]);
+        expect(h.store.logins.size).toBe(0);
+        expect(h.stdin.readableLength).toBeGreaterThan(0); // the key is still waiting on stdin
+        expect(h.cap.out + h.cap.err).toBe("");
       }
-    };
-    const warning =
-      "Warning: --profile is ignored by `gxy auth login`: it only uses --host or GALAXY_URL from the environment.\n";
-    expect(await warned(...loginArgv)).toContain(warning);
-    expect(await warned("--quiet", ...loginArgv)).not.toContain("--profile");
+    });
+
+    it("say both when both flags are given", async () => {
+      const { code, text } = await refusal(["--profile", "p", "--api-key", "K", ...loginArgv]);
+      expect(code).toBe(64);
+      expect(text).toBe(PROFILE_MSG + KEY_MSG);
+    });
+
+    it("do not stop login without them, and --quiet alone says nothing", async () => {
+      const { h, code, text } = await refusal(["--quiet", ...loginArgv]);
+      expect(code).toBe(0);
+      expect(text).toBe("");
+      expect(h.store.logins.has(HOST)).toBe(true);
+    });
   });
 
   // Building the deps opens the credential store. `--help` and the operations

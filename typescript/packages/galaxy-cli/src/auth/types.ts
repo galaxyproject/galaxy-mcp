@@ -131,10 +131,10 @@ export interface AuthDeps {
    */
   resolveHost(explicit?: string, purpose?: "login"): Promise<BaseUrl>;
   /**
-   * The Galaxy named by `.env` (`GALAXY_URL`) or the selected profile, which `login` ignores by
-   * design; lets it say so when that differs from the host it uses. Absent means none.
+   * The Galaxy named by `.env` (`GALAXY_URL`), which `login` ignores by design; lets it say so
+   * when that differs from the host it uses. Absent means none.
    */
-  ignoredLoginHost?(): { source: "dotenv" | "profile"; url: string } | undefined;
+  ignoredLoginHost?(): { source: "dotenv"; url: string } | undefined;
   now(): Date;
   env: Record<string, string | undefined>;
   io: AuthIo;

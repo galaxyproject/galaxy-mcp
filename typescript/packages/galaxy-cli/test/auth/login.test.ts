@@ -50,6 +50,39 @@ describe("naming the Galaxy", () => {
     expect(note).toBeLessThan(h.cap.err.indexOf("Logging in to"));
   });
 
+  it("names --url as well as --host and GALAXY_URL in the note", async () => {
+    const h = withKey({
+      hostFromEnv: HOST_ARG,
+      ignoredLoginHost: { source: "dotenv", url: "https://other.example.org" },
+    });
+    await loginCommand({ withToken: true }, h.deps);
+    expect(h.cap.err).toContain("login only uses --host, --url or GALAXY_URL from the environment");
+  });
+
+  it("shows an ignored URL without its credentials, query, fragment or control characters", async () => {
+    const h = withKey({
+      hostFromEnv: HOST_ARG,
+      ignoredLoginHost: {
+        source: "dotenv",
+        url: "https://user:pw@other.example.org/galaxy?token=secret#frag",
+      },
+    });
+    await loginCommand({ withToken: true }, h.deps);
+    expect(h.cap.err).toContain("(https://other.example.org/galaxy)");
+    for (const leak of ["user:pw", "pw@", "secret", "frag"]) expect(h.cap.err).not.toContain(leak);
+  });
+
+  it("strips terminal escapes from an ignored value that is not a URL", async () => {
+    const h = withKey({
+      hostFromEnv: HOST_ARG,
+      ignoredLoginHost: { source: "dotenv", url: "evil\x1b[2J\x07 host" + "x".repeat(500) },
+    });
+    await loginCommand({ withToken: true }, h.deps);
+    expect(h.cap.err).not.toMatch(/[\x00-\x09\x0b-\x1f\x7f]/);
+    expect(h.cap.err).toContain("evil[2J host");
+    expect(h.cap.err).not.toContain("x".repeat(200));
+  });
+
   it.each([
     [
       "when .env names the chosen host, even written differently",

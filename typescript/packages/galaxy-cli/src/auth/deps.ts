@@ -19,7 +19,7 @@ export function createAuthDeps(
     store,
     whoami: createWhoami(),
     // The global `--url` counts as the flag and `--profile` supplies its planemo URL; login
-    // ignores `.env` and the profile (see pickHost).
+    // ignores `.env` (see pickHost) and refuses `--profile` before it gets here (register.ts).
     resolveHost: (explicit, purpose) => {
       const g = globals();
       const src = loadSources();
@@ -35,10 +35,7 @@ export function createAuthDeps(
     ignoredLoginHost: () => {
       const src = loadSources();
       const dotenv = src.dotenv.GALAXY_URL;
-      if (dotenv) return { source: "dotenv", url: dotenv };
-      const profileName = globals().profile;
-      const profile = profileName ? src.profiles[profileName]?.galaxy_url : undefined;
-      return profile ? { source: "profile", url: profile } : undefined;
+      return dotenv ? { source: "dotenv", url: dotenv } : undefined;
     },
     now: () => new Date(),
     env,

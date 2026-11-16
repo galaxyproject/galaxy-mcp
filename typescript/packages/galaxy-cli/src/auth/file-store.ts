@@ -469,7 +469,7 @@ function isObject(v: unknown): v is Record<string, unknown> {
 }
 
 /** File-supplied text for a message: no control characters (they could drive the terminal), bounded. */
-function show(text: string): string {
+export function show(text: string): string {
   const clean = sanitize(text);
   return clean.length > 120 ? `${clean.slice(0, 120)}...` : clean;
 }

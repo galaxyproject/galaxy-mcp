@@ -150,11 +150,12 @@ The process exit code reflects the outcome, following `sysexits.h` conventions:
 | `0` | Success |
 | `64` | Usage error (bad flags, failed input validation, a run Galaxy refused with a 400) |
 | `66` | Not found |
-| `65` | Tool request rejected |
+| `65` | Tool request rejected, or a `gxy auth` login store (`hosts.yml`) that cannot be used |
 | `69` | Connection / server unavailable |
 | `70` | Software error or job failure |
-| `76` | The connected Galaxy is too old for the operation |
+| `76` | The connected Galaxy is too old for the operation, or an address `gxy auth login` refuses (it does not answer as a Galaxy, or is plain `http://` to another machine) |
 | `77` | Authentication failure (bad/missing API key) |
+| `130` | A `gxy auth` command cancelled with Ctrl-C |
 
 ### Examples
 
