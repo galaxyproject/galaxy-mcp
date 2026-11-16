@@ -6,6 +6,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { statusCommand } from "../../src/auth/commands/status";
 import { createWhoami } from "../../src/auth/whoami";
+import { normalizeBaseUrl } from "../../src/auth/base-url";
 import { AuthError } from "../../src/auth/types";
 import { FAKE_TOKEN, HOST, OTHER, SOON, fakeLogin, harness } from "./harness";
 
@@ -107,6 +108,14 @@ describe("auth status", () => {
       const j = harness({ stored: [fakeLogin()], env: { GALAXY_API_KEY: "x" } });
       await statusCommand({ json: true }, j.deps);
       expect((JSON.parse(j.cap.out) as { key_source: string }[])[0]!.key_source).toBe("env");
+    });
+    it("does not say .env takes precedence when it stands in for an expired login", async () => {
+      const h = harness({ stored: [expiredLogin()] });
+      h.deps.keySourceFor = () => ({ id: "dotenv", label: ".env GALAXY_API_KEY" });
+      await statusCommand({}, h.deps);
+      expect(h.cap.err).not.toContain("takes precedence");
+      expect(h.cap.err).toContain("Key used by operations: .env GALAXY_API_KEY");
+      expect(h.cap.err).toContain("The .env key is used instead");
     });
     it("says stored login, with no warning, when nothing outranks it", async () => {
       const h = harness({ stored: [fakeLogin()] });
@@ -253,11 +262,36 @@ describe("auth status", () => {
 
     it("costs one timeout, not one per host", async () => {
       const h = twoLogins();
+      h.store.seed(fakeLogin({ baseUrl: normalizeBaseUrl("https://third.example.org") }));
       h.deps.whoami = () => new Promise(() => {});
       const started = Date.now();
-      expect(await statusCommand({ timeoutMs: 400 }, h.deps)).toBe(1);
-      expect(Date.now() - started).toBeLessThan(700);
-      expect(h.cap.err.match(/No answer from/g)).toHaveLength(2);
+      expect(await statusCommand({ timeoutMs: 1000 }, h.deps)).toBe(1);
+      // One after another would take 3000 ms; the margin is what a loaded runner may add.
+      expect(Date.now() - started).toBeLessThan(1800);
+      expect(h.cap.err.match(/No answer from/g)).toHaveLength(3);
+    });
+
+    // A check that throws (a login removed between `list` and `get`) ends the command at once, so the
+    // other hosts' requests are aborted and do not keep the process alive for their timeout.
+    it("aborts the other checks when one fails", async () => {
+      const h = twoLogins();
+      let signal: AbortSignal | undefined;
+      let asked!: () => void;
+      const hasAsked = new Promise<void>((r) => (asked = r));
+      h.deps.whoami = (_baseUrl, _token, s) => {
+        signal = s;
+        asked();
+        return new Promise(() => {});
+      };
+      const get = h.store.get.bind(h.store);
+      h.store.get = async (baseUrl) => {
+        if (baseUrl !== OTHER) return get(baseUrl);
+        await hasAsked;
+        return null;
+      };
+      expect(await statusCommand({ timeoutMs: 60_000 }, h.deps)).toBe(77);
+      expect(h.cap.err).toContain("was removed while this ran");
+      expect(signal?.aborted).toBe(true);
     });
 
     it("stops on Ctrl-C with 130", async () => {

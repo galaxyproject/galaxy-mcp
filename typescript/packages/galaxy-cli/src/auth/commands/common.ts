@@ -1,5 +1,5 @@
 import { exitCodeForAuthError, EX_SOFTWARE } from "../../exit";
-import { describeExpiry, formatExpiry, isExpired } from "../expiry";
+import { describeExpiry, isExpired } from "../expiry";
 import { NoHostError } from "../host";
 import { wasAnswered } from "../network";
 import { sanitize } from "../sanitize";
@@ -53,8 +53,6 @@ export function hostOf(baseUrl: string): string {
     return baseUrl;
   }
 }
-
-export { isExpired, formatExpiry };
 
 /** "7h 58m", "2d 3h", "12m", "under a minute". */
 export function formatTimeLeft(ms: number): string {

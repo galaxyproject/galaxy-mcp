@@ -1,4 +1,4 @@
-import { checkExpiry, describeExpiry } from "../expiry";
+import { checkExpiry, describeExpiry, formatExpiry } from "../expiry";
 import {
   AuthError,
   type AuthDeps,
@@ -7,8 +7,8 @@ import {
   type StorageKind,
   type StoredLogin,
 } from "../types";
-import { fail, formatExpiry, formatTimeLeft, hostOf, maskToken, sanitize } from "./common";
-import { abortReason } from "../abort";
+import { fail, formatTimeLeft, hostOf, maskToken, sanitize } from "./common";
+import { untilAborted } from "../abort";
 
 export interface StatusOptions {
   host?: string;
@@ -23,23 +23,6 @@ export interface StatusOptions {
 const CHECK_TIMEOUT_MS = 10_000;
 /** 128 + SIGINT, which is what a shell reports for a process that Ctrl-C ended. */
 const EX_INTERRUPTED = 130;
-
-/** Settle with `p`, or reject as soon as `signal` aborts (the work behind `p` is left to end on its own). */
-function abortable<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    if (signal.aborted) {
-      reject(abortReason(signal));
-      return;
-    }
-    const onAbort = () => {
-      reject(abortReason(signal));
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
-    p.then(resolve, reject).finally(() => {
-      signal.removeEventListener("abort", onAbort);
-    });
-  });
-}
 
 type State = "ok" | "expired" | "invalid" | "error";
 
@@ -67,6 +50,8 @@ export async function statusCommand(opts: StatusOptions, deps: AuthDeps): Promis
     deps.io.stderr.write(`${s}\n`);
   };
   try {
+    // Before anything is listed or checked: an unknown `--profile` is refused with or without `--host`.
+    deps.checkProfile?.();
     let summaries = await deps.store.list();
     // Every stored Galaxy, before `--host` narrows the list: with several, an operation that names
     // none is ambiguous, whichever one is being shown.
@@ -89,6 +74,8 @@ export async function statusCommand(opts: StatusOptions, deps: AuthDeps): Promis
     }
 
     const now = deps.now();
+    // Ended when this command returns on a failure, so the other hosts' requests do not outlive it.
+    const stop = new AbortController();
     /** One host's check; `undefined` when Ctrl-C ended it. */
     const check = async (summary: LoginSummary): Promise<Checked | undefined> => {
       const login = await deps.store.get(summary.baseUrl);
@@ -110,9 +97,9 @@ export async function statusCommand(opts: StatusOptions, deps: AuthDeps): Promis
       }
       const timeoutMs = opts.timeoutMs ?? CHECK_TIMEOUT_MS;
       const timeout = AbortSignal.timeout(timeoutMs);
-      const signal = opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout;
+      const signal = AbortSignal.any([...(opts.signal ? [opts.signal] : []), stop.signal, timeout]);
       try {
-        const who = await abortable(deps.whoami(login.baseUrl, login.token, signal), signal);
+        const who = await untilAborted(deps.whoami(login.baseUrl, login.token, signal), signal);
         return {
           login,
           state: "ok",
@@ -120,7 +107,7 @@ export async function statusCommand(opts: StatusOptions, deps: AuthDeps): Promis
           ...(who.isAdmin !== undefined ? { isAdmin: who.isAdmin } : {}),
         };
       } catch (e) {
-        if (opts.signal?.aborted) return undefined;
+        if (opts.signal?.aborted || stop.signal.aborted) return undefined;
         if (timeout.aborted) {
           return {
             login,
@@ -142,7 +129,13 @@ export async function statusCommand(opts: StatusOptions, deps: AuthDeps): Promis
     };
     // All at once, so N unreachable Galaxies cost one timeout and not N; `checked` keeps the order
     // of `summaries`, which is the order the report is printed in.
-    const results = await Promise.all(summaries.map((summary) => check(summary)));
+    let results: (Checked | undefined)[];
+    try {
+      results = await Promise.all(summaries.map((summary) => check(summary)));
+    } catch (e) {
+      stop.abort();
+      throw e;
+    }
     if (results.includes(undefined)) return EX_INTERRUPTED;
     const checked = results as Checked[];
     // What an operation run now would use for each Galaxy: a login on the list is not always the key
@@ -150,12 +143,11 @@ export async function statusCommand(opts: StatusOptions, deps: AuthDeps): Promis
     // and the flags or environment may send operations to another Galaxy altogether, in which case
     // no source is named for this one.
     const rows = checked.map((c) => {
-      const asked = deps.keySourceFor?.(c.login.baseUrl, c.login, stored);
-      const key: { id: KeySourceId | null; label: string } =
-        asked ??
-        (deps.env.GALAXY_API_KEY
-          ? { id: "env", label: "GALAXY_API_KEY" }
-          : { id: "stored", label: "stored login" });
+      const key: { id: KeySourceId | null; label: string } = deps.keySourceFor(
+        c.login.baseUrl,
+        c.login,
+        stored,
+      );
       return { c, key };
     });
 
@@ -178,10 +170,13 @@ export async function statusCommand(opts: StatusOptions, deps: AuthDeps): Promis
       return 0;
     }
 
-    // Said first, because a green login below it can be about a key nothing is using.
+    // Said first, because a green login below it can be about a key nothing is using. `.env` is left
+    // out: it ranks below a stored login and is used only when that login cannot be (said per login).
     const outranking = [
       ...new Set(
-        rows.filter((r) => r.key.id !== null && r.key.id !== "stored").map((r) => r.key.label),
+        rows
+          .filter((r) => r.key.id !== null && r.key.id !== "stored" && r.key.id !== "dotenv")
+          .map((r) => r.key.label),
       ),
     ];
     if (outranking.length)
@@ -207,6 +202,8 @@ export async function statusCommand(opts: StatusOptions, deps: AuthDeps): Promis
       // Masked on stderr always: the secret itself, when asked for, goes to stdout.
       err(`  Token    ${maskToken(l.token)}`);
       err(`  Key used by operations: ${sanitize(key.label)}`);
+      if (key.id === "dotenv")
+        err("  ! The .env key is used instead, because this login cannot be used (see above).");
       if (c.isAdmin)
         err(
           `  ! This token carries full admin rights on ${hostOf(l.baseUrl)}. Treat it like a password.`,

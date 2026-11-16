@@ -146,7 +146,10 @@ export function harness(
   }
   const whoamiCalls: { baseUrl: string; token: string }[] = [];
   const knobs: Harness["knobs"] = { whoami: { username: "aioue", email: "a@example.org" } };
-  const env = { ...(opts.hostFromEnv ? { GALAXY_URL: opts.hostFromEnv } : {}), ...opts.env };
+  const env: Record<string, string | undefined> = {
+    ...(opts.hostFromEnv ? { GALAXY_URL: opts.hostFromEnv } : {}),
+    ...opts.env,
+  };
   const deps: AuthDeps = {
     store,
     async whoami(baseUrl, token) {
@@ -166,6 +169,11 @@ export function harness(
         forLogin: purpose === "login",
       }),
     ignoredLoginHost: () => opts.ignoredLoginHost,
+    // `GALAXY_API_KEY` outranks a stored login; flags, profiles and `.env` are not in play here.
+    keySourceFor: () =>
+      env.GALAXY_API_KEY
+        ? { id: "env", label: "GALAXY_API_KEY" }
+        : { id: "stored", label: "stored login" },
     now,
     env,
     io: { stdin, stdout: cap.stdout, stderr: cap.stderr, interactive: opts.interactive ?? false },

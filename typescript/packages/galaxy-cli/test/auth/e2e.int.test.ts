@@ -355,6 +355,17 @@ describe("auth, end to end", () => {
     }, 30_000);
   });
 
+  test(
+    "env with a shell that does not exist exits 64, the usage code",
+    { timeout: 30_000 },
+    async ({ run }) => {
+      const bad = await run(["auth", "env", "--shell", "csh"]);
+      expect(bad.exitCode).toBe(64);
+      expect(bad.stdout).toBe("");
+      expect(bad.stderr).toContain('Unknown shell "csh"');
+    },
+  );
+
   // The way in is `--with-token`, spelled with whichever name was run: 64 is EX_USAGE.
   test.for(NAMES)(
     "login without --with-token, as %s, exits 64 and says to use it under its own name",
@@ -386,6 +397,23 @@ describe("auth, end to end", () => {
       expect(galaxy.requests).toEqual([]);
     }
     expect(await readdir(configDir).catch(() => [])).toEqual([]);
+  }, 90_000);
+
+  // `status` resolves no host without `--host`, so the unknown profile has to be caught on its own.
+  test("refuses an unknown --profile for `auth status`, with or without --host", async ({
+    galaxy,
+    run,
+    pasteLogin,
+  }) => {
+    expect((await pasteLogin(galaxy)).exitCode).toBe(0);
+    galaxy.requests.length = 0;
+    for (const extra of [[], ["--host", galaxy.baseUrl], ["--json"]]) {
+      const r = await run(["--profile", "typo", "auth", "status", ...extra]);
+      expect(r.exitCode).toBe(64);
+      expect(r.stdout).toBe("");
+      expect(r.stderr).toContain("Unknown --profile typo: no such profile in ~/.planemo.yml");
+    }
+    expect(galaxy.requests).toEqual([]);
   }, 90_000);
 
   test("asks which Galaxy when two are stored", async ({ galaxy, galaxyWith, run, pasteLogin }) => {
