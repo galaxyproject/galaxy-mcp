@@ -433,6 +433,17 @@ describe("no request reaches another origin through a redirect", () => {
   });
 });
 
+describe("revoke and cancelling", () => {
+  it("rethrows the caller's abort reason rather than reporting the network", async () => {
+    const galaxy = await start();
+    const server = await discover(galaxy.baseUrl as BaseUrl);
+    const reason = new Error("ctrl-c");
+    const ac = new AbortController();
+    ac.abort(reason);
+    await expect(server.revoke("fake-access-token-1", ac.signal)).rejects.toBe(reason);
+  });
+});
+
 describe("plain http", () => {
   // A token would cross the network unencrypted. The spy shows that the refusal comes before any request.
   it("is refused to a non-loopback host without making a request", async () => {
