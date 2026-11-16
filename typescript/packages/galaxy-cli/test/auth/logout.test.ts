@@ -31,6 +31,16 @@ describe("auth logout", () => {
     expect(h.cap.err).toContain("store is broken");
   });
 
+  // Another `gxy auth logout` can remove the entry between this one's list and delete.
+  it("says nothing was removed when the entry is gone by the time of the delete", async () => {
+    const h = harness({ stored: [fakeLogin()] });
+    h.store.delete = async () => false;
+    expect(await logoutCommand({}, h.deps)).toBe(0);
+    expect(h.cap.err).toContain("Not logged in to dev.galaxy.example.org; nothing to remove.");
+    expect(h.cap.err).not.toContain("Removed");
+    expect(h.cap.err).not.toContain("not revoked");
+  });
+
   it("is a no-op with a note when nothing is stored for the host", async () => {
     const h = harness();
     expect(await logoutCommand({ host: HOST }, h.deps)).toBe(0);
