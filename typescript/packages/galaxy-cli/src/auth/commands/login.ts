@@ -11,6 +11,8 @@ export interface LoginOptions {
   insecureStorage?: boolean;
   /** Aborted on Ctrl-C by the caller (commands don't touch process signals). */
   signal?: AbortSignal;
+  /** The global `--quiet`: drops this command's own warnings, for a wrapper that fails on stderr output. */
+  quiet?: boolean;
 }
 
 /** Same Galaxy, however the URL was written; an unparsable one never matches. */
@@ -88,7 +90,7 @@ export async function loginCommand(opts: LoginOptions, deps: AuthDeps): Promise<
 
     // Operations take `GALAXY_API_KEY` before any stored login (config.ts), so the login made here
     // would go unused. gh refuses to log in while `GH_TOKEN` is set; this warns and carries on.
-    if (deps.env.GALAXY_API_KEY) {
+    if (deps.env.GALAXY_API_KEY && !opts.quiet) {
       err(
         "! GALAXY_API_KEY is set and will take precedence over the login stored now. Unset it to use the stored login.",
       );

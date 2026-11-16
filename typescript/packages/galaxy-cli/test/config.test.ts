@@ -23,6 +23,31 @@ describe("resolveConnection", () => {
     // Without --profile the profile is not read at all: .env's URL is used.
     expect(resolveConnection({}, { env: {}, dotenv: { ...dotenv, GALAXY_API_KEY: "DK" }, profiles })).toMatchObject({ baseUrl: "https://dot.example", apiKey: "DK" });
   });
+  // A name that is not in ~/.planemo.yml is an error, not "no profile": it must not fall through to
+  // a stored login, an environment key or an empty profiles map (an unreadable file reads as that).
+  it("refuses an unknown --profile, whatever else could answer", () => {
+    const profiles = { prod: { galaxy_url: "https://prof.example", galaxy_user_key: "PK" } };
+    const stored = fakeLogin({ baseUrl: normalizeBaseUrl("https://stored.example"), token: "STORED", expiresAt: null });
+    const cases: Sources[] = [
+      { env: {}, dotenv: {}, profiles, storedBaseUrls: [stored.baseUrl], storedLogin: stored },
+      { env: { GALAXY_URL: "https://env.example", GALAXY_API_KEY: "ENVKEY" }, dotenv: {}, profiles },
+      { env: { GALAXY_URL: "https://env.example", GALAXY_API_KEY: "ENVKEY" }, dotenv: {}, profiles: {} },
+    ];
+    for (const src of cases) {
+      let thrown: unknown;
+      try {
+        resolveConnection({ profile: "prod-typo" }, src);
+      } catch (e) {
+        thrown = e;
+      }
+      expect(thrown).toBeInstanceOf(AuthError);
+      expect((thrown as AuthError).kind).toBe("usage");
+      expect((thrown as Error).message).toBe("Unknown --profile prod-typo: no such profile in ~/.planemo.yml");
+    }
+    // Names are not looked up on the prototype, and a printed name is cleaned.
+    expect(() => resolveConnection({ profile: "toString" }, { env: {}, dotenv: {}, profiles })).toThrow(/Unknown --profile toString/);
+    expect(() => resolveConnection({ profile: "a\u001b[31mb" }, { env: {}, dotenv: {}, profiles })).toThrow(/^Unknown --profile a[^\u001b]*b:/);
+  });
   it("sends the profile's key to the profile's URL, not to a hostile .env or GALAXY_URL", () => {
     const profiles = { p: { galaxy_url: "https://prof.example", galaxy_user_key: "PK" } };
     const hostile = { GALAXY_URL: "https://evil.example" };
@@ -369,6 +394,11 @@ describe("loadSourcesAsync", () => {
       expect(s.storedLogin).toBeUndefined();
       expect(s.storeProblem).toBeUndefined();
     }
+  });
+  it("refuses an unknown --profile before it reads the store", async () => {
+    const boom = seeded();
+    boom.list = async () => { throw new Error("store was read"); };
+    await expect(loadSourcesAsync({ profile: "nope" }, { store: boom, base: base() })).rejects.toThrow(/^Unknown --profile nope/);
   });
   // A broken store is a warning for an operation, not a usage error: see the last case in exit.test.ts.
   it("turns store failures into a problem rather than throwing", async () => {

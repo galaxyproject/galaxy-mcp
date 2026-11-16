@@ -85,7 +85,10 @@ export function registerAuth(program: Command, makeDeps: (commandName: string) =
         };
         process.once("SIGINT", onSig);
         try {
-          return await loginCommand({ ...o, signal: ac.signal }, deps);
+          return await loginCommand(
+            { ...o, signal: ac.signal, quiet: program.opts<{ quiet?: boolean }>().quiet },
+            deps,
+          );
         } finally {
           process.removeListener("SIGINT", onSig);
         }

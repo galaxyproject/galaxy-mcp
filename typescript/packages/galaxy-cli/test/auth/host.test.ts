@@ -3,11 +3,14 @@
  * operations alike, and `resolveHost` is its form for `auth`: it reads the stored logins only when
  * nothing else names a host, and normalises the result.
  */
-import { describe, expect, it } from "vitest";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createAuthDeps } from "../../src/auth/deps";
 import { normalizeBaseUrl } from "../../src/auth/base-url";
 import { pickHost, resolveHost } from "../../src/auth/host";
 import { loadSourcesAsync, resolveConnection, type Sources } from "../../src/config";
-import { FakeStore, fakeLogin } from "./harness";
+import { FakeStore, fakeLogin, useTempDir } from "./harness";
 
 const A = normalizeBaseUrl("https://a.example");
 const B = normalizeBaseUrl("https://b.example");
@@ -157,52 +160,77 @@ describe("resolveHost (gxy auth *)", () => {
   });
 });
 
-// Each case feeds the same inputs to the operations' own resolver (`loadSourcesAsync` and
-// `resolveConnection`, config.ts) and to `auth`'s `resolveHost`, and compares what they pick. The
-// expectation is the other code path's answer, not a restatement of the precedence, so the two cannot
-// drift apart without this failing.
+// Each case builds the real inputs on disk (a `.env` in the working directory, `~/.planemo.yml`,
+// a `hosts.yml` with a login for A) and asks the operations' own resolver (`loadSourcesAsync` and
+// `resolveConnection`, config.ts) and `auth`'s real wiring (`createAuthDeps(...).resolveHost`,
+// which reads the global flags, `loadSources()` and the profile) which Galaxy they pick. The
+// expectation is the other code path's answer, not a restatement of the precedence, so dropping
+// the profile or `--url` from the wiring in deps.ts fails this.
 describe("operations and auth pick the same Galaxy", () => {
+  const tmp = useTempDir("gxy-same-");
+  beforeEach(async () => {
+    vi.stubEnv("HOME", tmp.path);
+    vi.stubEnv("GXY_CONFIG_DIR", join(tmp.path, "cfg"));
+    vi.stubEnv("GALAXY_URL", "");
+    vi.stubEnv("GALAXY_API_KEY", "");
+    vi.spyOn(process, "cwd").mockReturnValue(tmp.path);
+    await mkdir(join(tmp.path, "cfg"), { mode: 0o700 });
+    await writeFile(
+      join(tmp.path, "cfg", "hosts.yml"),
+      `hosts:\n  ${A}:\n    username: alice\n    method: pasted\n    scopes: []\n    expires_at: null\n    obtained_at: "2026-01-01T00:00:00.000Z"\n    storage: file\n    token: FAKE-TOKEN\n`,
+      { mode: 0o600 },
+    );
+    await writeFile(
+      join(tmp.path, ".planemo.yml"),
+      `profiles:\n  p:\n    galaxy_url: ${B}\n    galaxy_user_key: K\n`,
+    );
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
   const cases: Record<
     string,
     {
       flags: { url?: string; profile?: string };
       env?: Record<string, string>;
-      dotenv?: Record<string, string>;
+      dotenv?: string;
     }
   > = {
     flag: { flags: { url: B } },
     env: { flags: {}, env: { GALAXY_URL: B } },
-    dotenv: { flags: {}, dotenv: { GALAXY_URL: B } },
+    dotenv: { flags: {}, dotenv: `GALAXY_URL=${B}\n` },
     profile: { flags: { profile: "p" } },
     // The steps that used to differ: a profile URL against GALAXY_URL and a `.env` URL.
     "profile over env": { flags: { profile: "p" }, env: { GALAXY_URL: "https://env.example" } },
     "profile over .env": {
       flags: { profile: "p" },
-      dotenv: { GALAXY_URL: "https://dot.example" },
+      dotenv: "GALAXY_URL=https://dot.example\n",
     },
     "flag over profile": { flags: { url: "https://flag.example", profile: "p" } },
     stored: { flags: {} },
   };
   for (const [name, c] of Object.entries(cases)) {
     it(`agree on the ${name} step`, async () => {
-      const store = storeOf(A);
-      const profiles = { p: { galaxy_url: B, galaxy_user_key: "K" } };
-      const base: Sources = {
-        env: c.env ?? {},
-        dotenv: { GALAXY_API_KEY: "K", ...c.dotenv },
-        profiles,
-        now: new Date("2026-06-01"),
-      };
-      const src = await loadSourcesAsync(c.flags, { store, base, now: base.now });
+      for (const [k, v] of Object.entries(c.env ?? {})) vi.stubEnv(k, v);
+      await writeFile(join(tmp.path, ".env"), `GALAXY_API_KEY=K\n${c.dotenv ?? ""}`);
+      const src = await loadSourcesAsync(c.flags);
       const op = resolveConnection(c.flags, src).baseUrl;
-      const auth = await resolveHost({
-        explicit: c.flags.url,
-        env: base.env,
-        dotenv: base.dotenv,
-        profileUrl: c.flags.profile ? B : undefined,
-        store,
-      });
+      const auth = await createAuthDeps("gxy", () => c.flags).resolveHost();
       expect(normalizeBaseUrl(op)).toBe(auth);
     });
   }
+
+  // An unknown profile is refused by both, rather than quietly falling back to the stored login.
+  it("both refuse an unknown --profile", async () => {
+    const flags = { profile: "typo" };
+    await expect(loadSourcesAsync(flags)).rejects.toMatchObject({ kind: "usage" });
+    const deps = createAuthDeps("gxy", () => flags);
+    await expect(deps.resolveHost()).rejects.toMatchObject({
+      kind: "usage",
+      message: "Unknown --profile typo: no such profile in ~/.planemo.yml",
+    });
+    // Login never gets this far with a --profile: register.ts refuses the flag outright (register.test.ts).
+  });
 });

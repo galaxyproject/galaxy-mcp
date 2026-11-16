@@ -5,6 +5,7 @@ import { parse as parseYaml } from "yaml";
 import { normalizeBaseUrl } from "./auth/base-url";
 import { NoHostError, pickHost, type HostSource } from "./auth/host";
 import { createCredentialStore } from "./auth/store";
+import { sanitize } from "./auth/sanitize";
 import { describeExpiry, isExpired } from "./auth/expiry";
 import { AuthError, type BaseUrl, type CredentialStore, type KeySourceId, type StoredLogin } from "./auth/types";
 
@@ -57,6 +58,19 @@ function pickOperationHost(flags: GlobalFlags, src: Sources): { url: string; sou
   });
 }
 
+/**
+ * A named profile that is not in `~/.planemo.yml` is an error, not "no profile": it would
+ * otherwise contribute neither a URL nor a key, and the run would quietly go to a stored login for
+ * a different Galaxy than the one the person named. (An unreadable `~/.planemo.yml` reads as no
+ * profiles, so it ends here too.) It is a usage error: exit 64.
+ */
+export function requireProfile(flags: { profile?: string }, src: { profiles: Record<string, unknown> }): void {
+  const name = flags.profile;
+  if (name && !Object.prototype.hasOwnProperty.call(src.profiles, name)) {
+    throw new AuthError("usage", `Unknown --profile ${sanitize(name)}: no such profile in ~/.planemo.yml`);
+  }
+}
+
 /** The key of the `--profile` planemo profile, if one is named and has one. */
 function profileKeyOf(flags: GlobalFlags, src: Sources): string | undefined {
   const prof = flags.profile ? src.profiles[flags.profile] : undefined;
@@ -80,6 +94,7 @@ function profileKeyOf(flags: GlobalFlags, src: Sources): string | undefined {
  * chosen the same way: `--url`, the `--profile` URL, `GALAXY_URL`, `.env`'s, the only stored login.
  */
 export function resolveConnection(flags: GlobalFlags, src: Sources, commandName = "gxy"): Connection {
+  requireProfile(flags, src);
   // The same rule as `gxy auth *` (auth/host.ts). With nothing named and nothing stored the
   // generic "no credentials" error below says what to do, so that case is not an error here.
   let picked: { url: string; source: HostSource } | undefined;
@@ -211,6 +226,7 @@ export async function loadSourcesAsync(
 ): Promise<Sources> {
   const src = opts.base ?? loadSources();
   const now = opts.now ?? new Date();
+  requireProfile(flags, src);
   if (flags.apiKey || profileKeyOf(flags, src) || src.env.GALAXY_API_KEY) return { ...src, now };
   try {
     const store = opts.store ?? createCredentialStore(src.env);
