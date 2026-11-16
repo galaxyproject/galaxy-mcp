@@ -367,6 +367,46 @@ describe("transient failures", () => {
     expect(attempts).toBe(1);
   });
 
+  // A bug that throws the same uncoded TypeError on every poll looks like the network, so it is
+  // retried, but only a few times: not until the code expires and the failure is called "expired".
+  describe("a failure that never goes away", () => {
+    /** A token endpoint that fails with an uncoded TypeError, except on the calls `answer` names. */
+    const flaky = (answer: (call: number) => boolean) => {
+      let calls = 0;
+      const impl: typeof fetch = (input, init) => {
+        if (!urlOf(input).endsWith("/oauth/token")) return fetch(input, init);
+        calls += 1;
+        if (answer(calls)) return fetch(input, init);
+        return Promise.reject(new TypeError("Cannot read properties of undefined"));
+      };
+      return { fetch: impl, calls: () => calls };
+    };
+    const idle = { idle: () => true };
+
+    it("is reported as itself after 10 polls, not as an expired code", async () => {
+      const net = flaky(() => false);
+      const server = await discover(url(), { fetch: net.fetch });
+      const w = startWaiting(await server.startDeviceLogin(), idle);
+      const outcome = authErrorOf(w.done);
+      for (let i = 0; i < 20 && net.calls() < 10; i++) await w.tick(60_000);
+      const e = await outcome;
+      expect(e.kind).toBe("network");
+      expect(net.calls()).toBe(10);
+    });
+
+    it("counts only consecutive failures: an answer from the server starts again", async () => {
+      // 9 failures, one authorization_pending, 9 more, then approval: 18 failures in all.
+      const net = flaky((n) => n === 10 || n >= 20);
+      const server = await discover(url(), { fetch: net.fetch });
+      const w = startWaiting(await server.startDeviceLogin(), idle);
+      const code = galaxy.pendingCodes()[0]!;
+      for (let i = 0; i < 40 && net.calls() < 19; i++) await w.tick(60_000);
+      galaxy.approve(code);
+      await w.tick(60_000);
+      await expect(w.done).resolves.toMatchObject({ scopes: [] });
+    });
+  });
+
   it("waits out a 429's Retry-After before polling again", async () => {
     galaxy = await start({ interval: 1 });
     const { server, net } = await connect();
