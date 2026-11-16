@@ -2,7 +2,7 @@
 // filesystem and the temp-file name under test control, so `node:fs/promises` and `randomBytes`
 // are wrapped here (passing through unless a test arms them). This is a file of its own because
 // `vi.mock` applies to the whole file, and the other store tests need the real file system.
-import { mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, symlink, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type * as Crypto from "node:crypto";
 import type * as FsPromises from "node:fs/promises";
@@ -16,6 +16,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const arm = vi.hoisted(() => ({
   failWrite: false,
   failRename: false,
+  failClose: false,
+  failFirstLstat: false,
   fixedRandom: undefined as number[] | undefined,
 }));
 
@@ -44,10 +46,15 @@ vi.mock("node:fs/promises", async (orig) => {
         flags,
         mode,
       );
-      if (!arm.failWrite || !path.includes(".hosts.")) return fh;
+      if (!(arm.failWrite || arm.failClose) || !path.includes(".hosts.")) return fh;
       return new Proxy(fh, {
         get(target, prop) {
-          if (prop === "writeFile")
+          if (prop === "close" && arm.failClose)
+            return async () => {
+              await target.close();
+              throw new Error("close failed");
+            };
+          if (prop === "writeFile" && arm.failWrite)
             return async () => {
               throw new Error("disk full");
             };
@@ -55,6 +62,14 @@ vi.mock("node:fs/promises", async (orig) => {
           return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(target) : v;
         },
       });
+    },
+    // Throws once, like a temp file that vanished between `readdir` and `lstat`.
+    async lstat(path: string) {
+      if (arm.failFirstLstat && path.includes(".hosts.")) {
+        arm.failFirstLstat = false;
+        throw Object.assign(new Error("gone"), { code: "ENOENT" });
+      }
+      return actual.lstat(path);
     },
     async rename(from: string, to: string) {
       if (arm.failRename) throw new Error("rename refused");
@@ -71,6 +86,8 @@ const tmp = useTempDir("gxy-fsw-");
 beforeEach(() => {
   arm.failWrite = false;
   arm.failRename = false;
+  arm.failClose = false;
+  arm.failFirstLstat = false;
   arm.fixedRandom = undefined;
 });
 
@@ -96,6 +113,13 @@ describe.each([
       arm.failRename = true;
     },
     /rename refused/,
+  ],
+  [
+    "closing the temp file",
+    () => {
+      arm.failClose = true;
+    },
+    /close failed/,
   ],
 ] as const)("a failure while %s", (_when, breakIt, why) => {
   /** Puts into a directory that already holds `prior`, with the failure armed; returns the store. */
@@ -137,5 +161,23 @@ describe("the temp file", () => {
     await expect(s.put(rec())).rejects.toThrow(/EEXIST/);
     expect(await readFile(victim, "utf8")).toBe("untouched");
     expect(await readFile(victim, "utf8")).not.toContain(FAKE_TOKEN);
+  });
+});
+
+describe("clearing stale temp files", () => {
+  // The first `lstat` of a temp file fails, as for a file a concurrent writer just renamed away; whichever stale
+  // temp file `readdir` lists first, the other must still be removed.
+  it("carries on past a temp file that vanishes mid-sweep", async () => {
+    const dir = join(tmp.path, "cfg");
+    await mkdir(dir, { mode: 0o700 });
+    const old = new Date(Date.now() - 24 * 3600 * 1000);
+    for (const n of [".hosts.1.aa.tmp", ".hosts.2.bb.tmp"]) {
+      await writeFile(join(dir, n), "x", { mode: 0o600 });
+      await utimes(join(dir, n), old, old);
+    }
+    arm.failFirstLstat = true;
+    await new FileStore(dir).put(rec());
+    // The one whose `lstat` failed is still there (it was only pretending to be gone); the other is not.
+    expect(await readdir(dir)).toHaveLength(2);
   });
 });

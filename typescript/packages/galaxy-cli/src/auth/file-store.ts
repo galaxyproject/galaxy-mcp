@@ -353,12 +353,13 @@ export class FileStore {
       await fh.writeFile(this.encode(doc), "utf8");
       await fh.chmod(0o600);
       await fh.sync();
+      await fh.close();
     } catch (e) {
+      // A failed close lands here too, so the temp file (which holds every token) is never left.
       await fh.close().catch(() => {});
       await unlink(tmp).catch(() => {});
       throw e;
     }
-    await fh.close();
     try {
       await rename(tmp, this.path);
     } catch (e) {
@@ -442,16 +443,23 @@ export class FileStore {
    * may hold a token. Remove the ones old enough that no live write can own them. Best effort.
    */
   private async removeStaleTemps(): Promise<void> {
+    let names: string[];
     try {
-      const cutoff = Date.now() - STALE_TEMP_MS;
-      for (const name of await readdir(this.dir)) {
-        if (!/^\.hosts\..+\.tmp$/.test(name)) continue;
-        const p = join(this.dir, name);
+      names = await readdir(this.dir);
+    } catch {
+      return; // Cleaning up is never worth failing a login for.
+    }
+    const cutoff = Date.now() - STALE_TEMP_MS;
+    for (const name of names) {
+      if (!/^\.hosts\..+\.tmp$/.test(name)) continue;
+      const p = join(this.dir, name);
+      // Per file: one that vanishes (a concurrent writer finishing) must not end the sweep.
+      try {
         const st = await lstat(p);
         if (st.isFile() && st.mtimeMs < cutoff) await unlink(p);
+      } catch {
+        // Skip it.
       }
-    } catch {
-      // Cleaning up is never worth failing a login for.
     }
   }
 }
