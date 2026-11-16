@@ -38,7 +38,8 @@ function readDotenv(): Record<string, string | undefined> {
     const text = readFileSync(join(process.cwd(), ".env"), "utf8");
     const out: Record<string, string> = {};
     for (const line of text.split("\n")) {
-      const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$/);
+      // Lazy `(.*?)` so the trailing `\s*` takes trailing spaces and tabs, not the value.
+      const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*?)\s*$/);
       if (m?.[1] !== undefined && m[2] !== undefined) out[m[1]] = m[2].replace(/^["']|["']$/g, "");
     }
     return out;
