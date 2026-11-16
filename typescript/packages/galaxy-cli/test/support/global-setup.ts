@@ -27,9 +27,10 @@ export default function setup(project: Pick<TestProject, "provide">): () => void
   process.env.GXY_TEST_ROOT = root;
   // safe-env.ts clears GALAXY_URL and GALAXY_API_KEY in every test file, which would switch off the
   // opt-in smoke test (test/bin.smoke.int.test.ts, which runs against a real Galaxy when both are
-  // set). It reads them with `inject("gxyLive")` instead. vitest's `provide` hands the values to
-  // each test file directly, rather than through process.env, which every worker (and every child
-  // process a test spawns with the default env) would inherit, live key included.
+  // set). It reads them with `inject("gxyLive")` instead. vitest's `provide` makes the values
+  // available to any test file that calls `inject`, rather than through process.env, which every
+  // worker (and every child process a test spawns with the default env) would inherit, live key
+  // included. It keeps them out of the environment; it doesn't make them private to one file.
   // GXY_LIVE_URL and GXY_LIVE_API_KEY, if set, are accepted as the same thing under their own
   // names, and removed from the environment here too, so no worker inherits either.
   project.provide("gxyLive", {
