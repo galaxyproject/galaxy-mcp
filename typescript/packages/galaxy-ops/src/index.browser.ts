@@ -27,9 +27,6 @@ export { jsonObject, isJsonObjectSchema } from "./json-object";
 export type { PaginationInfo, Paged } from "./operations/pagination";
 export { getUserOp, getUser, type CurrentUser } from "./operations/get-user";
 export { runToolOp, runTool, type ToolSubmission } from "./operations/run-tool";
-// The queue-and-wait path over /api/jobs and /api/tool_requests. `run_tool` submits and
-// returns, because that is what the other server does; a caller who wants to wait for the
-// jobs it queued calls this directly.
 // The read behind galaxy-mcp's optional show_datasets card; not an operation, so not a tool.
 export {
   getSelectedDatasets,
@@ -39,6 +36,9 @@ export {
   type SelectedDatasets,
   type SelectedDatasetsArgs,
 } from "./selected-datasets";
+// The queue-and-wait path over /api/jobs and /api/tool_requests. `run_tool` submits and
+// returns, because that is what the other server does; a caller who wants to wait for the
+// jobs it queued calls this directly.
 export {
   executeToolRequest,
   type ExecuteToolRequestArgs,

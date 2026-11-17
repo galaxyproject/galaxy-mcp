@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cardPage, type CardSpec } from "../src/apps/card-page";
+import { datasetsCard, historiesCard, historyCard } from "../src/apps/cards";
 import { runCard as runPage, toolResult } from "./card-host";
 
 /** A card over a made-up paged read, so the page's own behaviour is what is under test. */
@@ -199,8 +200,10 @@ describe("the card page", () => {
     expect(card.sent.at(-2)?.method).toBe("ui/notifications/initialized");
   });
 
-  it("is one self-contained page", () => {
-    const html = cardPage(spec);
-    expect(html).not.toMatch(/\b(src|href)=|@import|url\(/);
+  it("is one self-contained page, and writes Galaxy's strings as text, never as markup", () => {
+    // The stand-in host keeps text as plain strings, so it would not notice markup being parsed.
+    for (const card of [spec, historiesCard, historyCard, datasetsCard]) {
+      expect(cardPage(card)).not.toMatch(/\b(src|href)=|@import|url\(|innerHTML|outerHTML|insertAdjacentHTML|document\.write/);
+    }
   });
 });

@@ -173,6 +173,18 @@ describe("the history card", () => {
     expect(card.root.text).toContain("fastqsanger");
   });
 
+  it("reads what show_history actually returns", async () => {
+    const client = await connect(true);
+    const args = { history_id: "h1", limit: 5 };
+    const shown = await client.callTool({ name: "show_history", arguments: args });
+    const card = runCard(cardPage(historyCard));
+    await card.initialize();
+    await card.deliver({ method: "ui/notifications/tool-input", params: { arguments: args } });
+    await card.deliver({ method: "ui/notifications/tool-result", params: shown });
+    expect(card.rows()).toEqual(["1: reads.fastq", "2: samples"]);
+    expect(card.scope()).toBe("Browsing history, without deleted or hidden items · Showing 2 of 2");
+  });
+
   it("pages within the same history and filters", async () => {
     const card = runCard(cardPage(historyCard));
     await card.initialize();

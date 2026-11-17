@@ -43,7 +43,9 @@ export interface SelectedDatasetFields {
 /**
  * One chosen id and what became of it: `available` with its fields; `inaccessible` when Galaxy
  * returned it but says the user cannot access it; `unavailable` when it did not come back from
- * this history at all (not there, not a dataset, or deleted from the database).
+ * this history at all (not there, or deleted from the database). Every id is looked up as a
+ * dataset, and collections and datasets share one encoded id space, so a collection's id can
+ * come back as an unrelated dataset of the same history rather than as `unavailable`.
  */
 export interface SelectedDataset {
   id: string;
