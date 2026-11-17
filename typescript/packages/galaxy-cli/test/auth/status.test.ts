@@ -8,6 +8,7 @@ import { statusCommand } from "../../src/auth/commands/status";
 import { createWhoami } from "../../src/auth/whoami";
 import { normalizeBaseUrl } from "../../src/auth/base-url";
 import { AuthError } from "../../src/auth/types";
+import { describeKeyReport, keySourceFor, type GlobalFlags, type Sources } from "../../src/config";
 import { FAKE_TOKEN, HOST, OTHER, SOON, fakeLogin, harness } from "./harness";
 
 const expiredLogin = () => fakeLogin({ expiresAt: "2026-11-06T09:00:00.000Z" });
@@ -165,6 +166,54 @@ describe("auth status", () => {
       };
       await statusCommand({ host: OTHER }, h.deps);
       expect(asked).toEqual([[OTHER, [HOST, OTHER]]]);
+    });
+  });
+
+  // Wired to the real resolver (config.ts), with a `.env` that names the stored login's own Galaxy: the
+  // key an operation would be refused with is not named as the key in use.
+  describe("a .env Galaxy", () => {
+    const withDotenv = (flags: GlobalFlags, env: Record<string, string> = {}) => {
+      const h = harness({ stored: [fakeLogin()] });
+      h.deps.keySourceFor = (baseUrl, login, stored) => {
+        const src: Sources = {
+          env,
+          dotenv: { GALAXY_URL: HOST },
+          dotenvPath: "/work/repo/.env",
+          profiles: {},
+          storedBaseUrls: [...stored],
+        };
+        const report = keySourceFor(normalizeBaseUrl(baseUrl), flags, src, login);
+        return { id: report.id, label: describeKeyReport(report, flags) };
+      };
+      return h;
+    };
+    it("says operations are refused, with the operation's reason, and still exits as before", async () => {
+      for (const [flags, env, key] of [
+        [{ apiKey: "FAKEKEY" }, {}, "--api-key"],
+        [{}, { GALAXY_API_KEY: "FAKEKEY" }, "GALAXY_API_KEY from the environment"],
+      ] as const) {
+        const h = withDotenv(flags, { ...env });
+        expect(await statusCommand({}, h.deps)).toBe(0);
+        expect(h.cap.err).toContain(
+          `Key used by operations: none (operations are refused: GALAXY_URL from /work/repo/.env is only used with the GALAXY_API_KEY in the same file, not with ${key}.`,
+        );
+        expect(h.cap.err).not.toContain("takes precedence");
+        expect(h.cap.err).not.toContain("FAKEKEY");
+        const j = withDotenv(flags, { ...env });
+        await statusCommand({ json: true }, j.deps);
+        expect(
+          (JSON.parse(j.cap.out) as { key_source: string | null }[])[0]!.key_source,
+        ).toBeNull();
+      }
+    });
+    it("shows the stored login as the one in use when the .env URL is its Galaxy and no other key outranks it", async () => {
+      const h = withDotenv({});
+      expect(await statusCommand({}, h.deps)).toBe(0);
+      expect(h.cap.err).toContain("Key used by operations: stored login");
+      expect(h.cap.err).not.toContain("refused");
+      const j = withDotenv({});
+      await statusCommand({ json: true }, j.deps);
+      expect((JSON.parse(j.cap.out) as { key_source: string }[])[0]!.key_source).toBe("stored");
     });
   });
 

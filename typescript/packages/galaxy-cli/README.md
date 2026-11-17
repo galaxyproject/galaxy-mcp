@@ -136,7 +136,10 @@ environment would use for that Galaxy (`--api-key`, `--profile <name>`, `GALAXY_
 same as `key_source` in `--json` (`flag`, `profile`, `env`, `stored`, `dotenv`). When an operation
 with those flags would go to another Galaxy (a `--profile` or `GALAXY_URL` that names one), or would
 stop with an error (a key and no Galaxy named, or several logins and none named), it names no
-source: the line says `none` and why, and `key_source` is `null`.
+source: the line says `none` and why, and `key_source` is `null`. That includes an operation that
+would be refused because a `.env` chose the Galaxy and the key is `--api-key`, `GALAXY_API_KEY` or a
+profile's: the line gives the same reason the operation would (exit 77), and `status` itself still
+exits as above.
 
 The `auth` commands (except `login`) pick their Galaxy by this same order, so `gxy auth status` and
 `gxy get_user` cannot disagree about which Galaxy a set of flags and variables means; `--host` is

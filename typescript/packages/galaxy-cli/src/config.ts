@@ -233,7 +233,9 @@ export function resolveConnection(flags: GlobalFlags, src: Sources, commandName 
 type KeySourceReport =
   | { id: KeySourceId }
   | { id: null; reason: "elsewhere"; galaxy: string }
-  | { id: null; reason: "ambiguous" | "refused" };
+  | { id: null; reason: "ambiguous" | "refused" }
+  /** `message` is what the operation's `CredentialScopeError` says. */
+  | { id: null; reason: "scope"; message: string };
 
 /**
  * Which source an operation run now, with these flags and this environment, would take its key
@@ -261,6 +263,7 @@ export function keySourceFor(baseUrl: BaseUrl, flags: GlobalFlags, src: Sources,
   try {
     return { id: resolveConnection(flags, all).keySource };
   } catch (e) {
+    if (e instanceof CredentialScopeError) return { id: null, reason: "scope", message: e.message };
     return e instanceof AuthError && e.kind === "not_logged_in" ? { id: "stored" } : { id: null, reason: "refused" };
   }
 }
@@ -282,6 +285,8 @@ export function describeKeyReport(report: KeySourceReport, flags: GlobalFlags = 
       return "none (several logins are stored, and operations need --url to say which)";
     case "refused":
       return "none (operations with these flags stop with an error)";
+    case "scope":
+      return `none (operations are refused: ${report.message})`;
   }
 }
 

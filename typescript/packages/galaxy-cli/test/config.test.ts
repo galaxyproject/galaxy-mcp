@@ -413,10 +413,37 @@ describe("resolveConnection: keys and hosts", () => {
       expect(keySourceFor(url, {}, s(keys.env), stored.valid)).toEqual({ id: null, reason: "refused" });
       expect(keySourceFor(url, { apiKey: "K" }, s(), stored.valid)).toEqual({ id: null, reason: "refused" });
       // A profile key with no galaxy_url, and a Galaxy that only `.env` names, is refused.
-      expect(keySourceFor(url, { profile: "p" }, s(keys.profile, { dotenv: { GALAXY_URL: url } }), stored.valid)).toEqual({ id: null, reason: "refused" });
+      expect(keySourceFor(url, { profile: "p" }, s(keys.profile), stored.valid)).toEqual({ id: null, reason: "refused" });
       const two: Sources = { ...merge(), storedBaseUrls: [url, normalizeBaseUrl(other)] };
       expect(keySourceFor(url, {}, two, stored.valid)).toEqual({ id: null, reason: "ambiguous" });
       expect(keySourceFor(url, { url }, two, stored.valid)).toEqual({ id: "stored" });
+    });
+    // The Galaxy comes from `.env` and the key does not: the operation exits 77 with CredentialScopeError,
+    // and status says that, with the operation's own words, instead of naming a key that would be sent.
+    it("names none, with the operation's reason, when a .env Galaxy refuses the key", () => {
+      const dotenvHere = { dotenv: { GALAXY_URL: url }, dotenvPath: "/work/repo/.env" };
+      const refusal = (flags: GlobalFlags, ...parts: Partial<Sources>[]) => {
+        const src = s(dotenvHere, ...parts);
+        let thrown: unknown;
+        try {
+          resolveConnection(flags, { ...src, storedLogin: stored.valid });
+        } catch (e) {
+          thrown = e;
+        }
+        expect(thrown).toBeInstanceOf(CredentialScopeError);
+        return { id: null, reason: "scope", message: (thrown as Error).message };
+      };
+      expect(keySourceFor(url, { apiKey: "K" }, s(dotenvHere), stored.valid)).toEqual(refusal({ apiKey: "K" }));
+      expect(keySourceFor(url, {}, s(dotenvHere, keys.env), stored.valid)).toEqual(refusal({}, keys.env));
+      expect(keySourceFor(url, { profile: "p" }, s(dotenvHere, keys.profile), stored.valid)).toEqual(refusal({ profile: "p" }, keys.profile));
+      expect(describeKeyReport(refusal({ apiKey: "K" }) as never)).toMatch(
+        /^none \(operations are refused: GALAXY_URL from \/work\/repo\/\.env is only used with the GALAXY_API_KEY in the same file, not with --api-key\./,
+      );
+    });
+    it("still names the stored login when a .env URL is that login's Galaxy and no other key outranks it", () => {
+      const dotenvHere = { dotenv: { GALAXY_URL: url }, dotenvPath: "/work/repo/.env" };
+      expect(keySourceFor(url, {}, s(dotenvHere), stored.valid)).toEqual({ id: "stored" });
+      expect(keySourceFor(url, {}, s(dotenvHere, keys.dotenv), stored.valid)).toEqual({ id: "stored" });
     });
     it("labels them", () => {
       expect(describeKeySource("profile", { profile: "prod" })).toBe("--profile prod");
