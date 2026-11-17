@@ -48,7 +48,8 @@ still works for operations but is deprecated, since the key shows in the process
 ### `gxy auth status`, `env` and `headers` (#220)
 
 `gxy auth status` lists the stored logins, checked against each Galaxy, and says which key an
-operation run with the same flags and environment would use (`key_source` in `--json`). `gxy auth
+operation run with the same flags and environment would use (`key_source` in `--json`), or why
+operations would be refused (a `.env` Galaxy with another key). `gxy auth
 env` prints `GALAXY_URL` and `GALAXY_API_KEY` assignments for `eval`, and `gxy auth headers` prints
 `{"x-api-key": ...}` as JSON, for an MCP `headersHelper`. Both write only to stdout, so a pipe
 reads them and nothing else.
