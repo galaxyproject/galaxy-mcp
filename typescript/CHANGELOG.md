@@ -6,6 +6,21 @@ entry covers all three; where something only affects one surface, it says which.
 
 ## Unreleased
 
+### galaxy-mcp can show cards (MCP Apps)
+
+With `GALAXY_MCP_APPS=1` (or `buildServer(ctx, { apps: true })`), `galaxy-mcp` serves
+[MCP Apps](https://github.com/modelcontextprotocol/ext-apps) cards and three tools that open them:
+
+- `show_histories` returns what `get_histories` returns, beside a card of the user's histories.
+- `show_history` returns what `get_history_contents` returns, beside a card of one history.
+- `show_datasets` shows only the datasets an agent chose.
+
+Each card shows five rows and can show more, show less and collapse, and its rows open in
+place. A card pages through the read tool with the arguments it was opened with.
+`@galaxyproject/galaxy-ops` exports the read behind `show_datasets` as `getSelectedDatasets`.
+That is a helper, not an operation, so it adds no tool. Cards are off by default, so the tool
+list and the parity report are unchanged unless they are turned on.
+
 ### galaxy-mcp serves Streamable HTTP
 
 `galaxy-mcp --transport streamable-http` (or `GALAXY_MCP_TRANSPORT=streamable-http`) serves the

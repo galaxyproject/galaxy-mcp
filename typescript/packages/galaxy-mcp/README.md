@@ -73,6 +73,30 @@ There is no OAuth on this server yet, so every caller acts with the configured
 The older HTTP+SSE transport the Python server also offers (`--transport sse`) is deprecated
 in MCP and not provided here.
 
+## Cards (MCP Apps)
+
+With `GALAXY_MCP_APPS=1` the server also offers cards for
+[MCP Apps](https://github.com/modelcontextprotocol/ext-apps) hosts, over either transport.
+They are off by default, which keeps the tool list identical to the Python server's.
+
+| Tool | Card |
+| --- | --- |
+| `show_histories` | The user's histories. Returns what `get_histories` returns. |
+| `show_history` | One history's datasets and collections. Returns what `get_history_contents` returns. |
+| `show_datasets` | Only the datasets an agent chose, in its order, with an optional caption shown as the assistant's note. |
+
+Reads stay card-free. An agent looks things up with `get_*` and calls a `show_*` tool only when the
+user wants to see something, at most once per reply. To show "the latest successful datasets", for
+example, it reads with `get_history_contents(order="create_time-dsc")`, picks the datasets whose
+state is `ok`, and passes their ids to `show_datasets`. Galaxy supplies every name and state. An id
+that is not in the history, or that the user cannot access, is shown as such.
+
+A card shows five rows, and Show more reveals rows it already holds before it fetches the next page.
+Show less hides rows again, and Collapse leaves only the header with the card's scope and count. Rows
+open into their details within the card, and Full screen appears where the host offers it. A card is a
+self-contained page with no external resources. It reads only through tool calls the host relays,
+so it never holds a Galaxy credential. Hosts without MCP Apps just see the `show_*` tools' results.
+
 ## Tool arguments
 
 Parameters are spelled the way the [Python MCP server](https://github.com/galaxyproject/galaxy-mcp/tree/main/python)
