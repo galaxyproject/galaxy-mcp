@@ -54,6 +54,7 @@ from .test_helpers import (
     create_page_fn,
     create_user_tool_fn,
     delete_user_tool_fn,
+    evaluate_user_tool_preflight_fn,
     get_collection_details_fn,
     get_dataset_details_fn,
     get_histories_fn,
@@ -3448,6 +3449,66 @@ def user_tool_mutation_cases(add: AddCase) -> None:
         },
         lambda: run_user_tool_fn("h0000", "61d15277-a911-45ef-aa66-5385146578cc", {"threshold": 5}),
         [lookup, route("/api/tools", submission, method="POST")],
+    )
+    profiled_tool = {
+        **created_tool,
+        "representation": {
+            **representation,
+            "requirements": [
+                {
+                    "type": "resource",
+                    "cores_min": 2,
+                    "ram_min": 512,
+                    "ram_max": 4096,
+                    "timelimit": 300,
+                }
+            ],
+        },
+    }
+    job_id = "0123456789abcdef"
+    add(
+        "evaluate_user_tool_preflight",
+        "completed_representative_run",
+        "a completed UDT job with safe runtime and cgroup peak-memory metrics",
+        {
+            "tool_uuid": "61d15277-a911-45ef-aa66-5385146578cc",
+            "job_id": job_id,
+            "safety_factor": 1.5,
+        },
+        lambda: evaluate_user_tool_preflight_fn(
+            "61d15277-a911-45ef-aa66-5385146578cc",
+            job_id,
+            1.5,
+        ),
+        [
+            route(
+                "/api/unprivileged_tools/61d15277-a911-45ef-aa66-5385146578cc",
+                profiled_tool,
+            ),
+            route(
+                f"/api/jobs/{job_id}",
+                {"id": job_id, "tool_id": "row_filter", "state": "ok"},
+            ),
+            route(
+                f"/api/jobs/{job_id}/metrics",
+                [
+                    {
+                        "plugin": "cgroup",
+                        "name": "memory.peak",
+                        "raw_value": "838860800",
+                        "title": "Max memory usage recorded",
+                        "value": "800 MiB",
+                    },
+                    {
+                        "plugin": "core",
+                        "name": "runtime_seconds",
+                        "raw_value": "240",
+                        "title": "Job Runtime (Wall Clock)",
+                        "value": "4 minutes",
+                    },
+                ],
+            ),
+        ],
     )
     add(
         "run_user_tool",

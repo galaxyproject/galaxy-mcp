@@ -96,6 +96,11 @@ export { getUserToolOp, getUserTool, type UserToolRecord } from "./operations/ge
 export { createUserToolOp, createUserTool, type CreatedUserTool } from "./operations/create-user-tool";
 export { deleteUserToolOp, deleteUserTool, type DeletedUserTool } from "./operations/delete-user-tool";
 export { runUserToolOp, runUserTool, type UserToolRun } from "./operations/run-user-tool";
+export {
+  evaluateUserToolPreflightOp,
+  evaluateUserToolPreflight,
+  type ResourcePreflightReport,
+} from "./operations/evaluate-user-tool-preflight";
 export { getToolInputTemplateOp, getToolInputTemplate, type ToolInputTemplateResult } from "./operations/get-tool-input-template";
 export { getWorkflowInputTemplateOp, getWorkflowInputTemplate, resolveWorkflowSlots, type ResolvedSlots } from "./operations/get-workflow-input-template";
 export {
