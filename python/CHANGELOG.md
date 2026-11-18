@@ -22,6 +22,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `get_history_contents` rows are the contents index's summary view. Dataset rows are
   unchanged; collection rows gain `type_id` and `store_times_summary` and lose
   `model_class`, `populated` and `column_definitions`.
+- Behaviour change: a `GALAXY_URL` from a `.env` file (in the working directory or any parent)
+  is only used with the `GALAXY_API_KEY` from that same file. An exported `GALAXY_API_KEY` is
+  only sent to an exported `GALAXY_URL`, or to a `url` passed to `connect()` along with a key.
+  When the Galaxy would come from `.env` and the key from the environment, the server doesn't
+  connect at startup and `connect()` refuses, saying to set `GALAXY_URL` in the environment or
+  call `connect(url=..., api_key=...)`. That includes a `.env` holding both a URL and a key
+  while a key is also exported: the exported key used to win and went to the `.env` URL; now
+  it refuses rather than quietly switching keys. `connect(api_key=...)` without a `url` is
+  likewise refused when the URL would come from `.env`. `connect()` reads `.env` again when
+  credentials are missing, as before, but no longer merges it into the environment, so a
+  `.env` written after startup can't replace an exported `GALAXY_URL` or pair its URL with the
+  exported key. Unchanged: `GALAXY_URL` and `GALAXY_API_KEY` both in the same `.env`, both
+  exported, an exported URL with the key in `.env`, and `connect(url=..., api_key=...)`. Other
+  settings in `.env` (`GALAXY_MCP_*`) are applied as before.
 
 ### Added
 
