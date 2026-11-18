@@ -315,6 +315,14 @@ def test_connect(stdio, galaxy_instance, monkeypatch, name, at_startup):
         assert _sent(galaxy_instance) == [expected]
 
 
+def test_stdio_ignores_an_oauth_provider(stdio, galaxy_instance, monkeypatch):
+    # GALAXY_MCP_PUBLIC_URL builds the provider whatever the transport; it only governs HTTP.
+    monkeypatch.setattr(server, "auth_provider", Mock())
+    _start(monkeypatch, stdio, {}, {**URL_D, **KEY_D}, at_startup=False)
+    connect_fn()
+    assert _sent(galaxy_instance) == [(DOTENV_URL, DOTENV_KEY)]
+
+
 def test_refusal_names_the_dotenv_and_how_to_proceed(stdio, galaxy_instance, monkeypatch):
     _start(monkeypatch, stdio, KEY_E, URL_D, at_startup=False)
     with pytest.raises(ValueError) as refused:

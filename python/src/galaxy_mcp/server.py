@@ -1542,6 +1542,9 @@ def _resolve_connect_credentials(
             if use_url is None:
                 raise _ConnectRefusedError("Galaxy URL is not allowed by this server.")
         url_from_dotenv = url is None and startup_credentials.url_from == "dotenv"
+        # OAuth never lends out the configured key, so a caller's own key is all there is.
+        if auth_provider and not (api_key and url_from_dotenv):
+            return use_url, api_key
     else:
         env_url = configured.url
         use_url = url or env_url
@@ -1552,7 +1555,7 @@ def _resolve_connect_credentials(
             f"{_dotenv_url_only_with_its_key(dotenv)}, not with an api_key passed to "
             "connect(). Pass url as well, or set GALAXY_URL in the environment."
         )
-    if api_key or auth_provider:
+    if api_key:
         return use_url, api_key
 
     # The allowlist is fixed at startup while the environment and .env can change after it,
