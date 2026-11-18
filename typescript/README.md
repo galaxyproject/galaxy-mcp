@@ -73,16 +73,24 @@ The built entry points are `packages/galaxy-cli/dist/index.js` and
 
 ## Connecting to Galaxy
 
-Both tools need a **base URL** and an **API key**. The CLI looks for them in this
-order (first match wins); the MCP server uses environment variables only:
+Both tools need a **base URL** and an **API key**. The MCP server takes them from the environment
+only (`GALAXY_URL` and `GALAXY_API_KEY`). The CLI also reads a `.env` file in the current
+directory, a [planemo](https://planemo.readthedocs.io) profile and the logins stored by
+`gxy auth login`. For each, the first match wins:
 
-1. CLI flags: `--url <url>` and `--api-key <key>`
-2. Environment: `GALAXY_URL` and `GALAXY_API_KEY`
-3. A `.env` file in the current directory (same two variable names)
-4. A [planemo](https://planemo.readthedocs.io) profile: `--profile <name>` reads
-   `~/.planemo.yml` (uses that profile's `galaxy_url` and `galaxy_user_key`, or
-   `galaxy_admin_key`). A top-level `galaxy_url`/`galaxy_user_key` in that file is
-   treated as the `default` profile.
+- The key: `--api-key` (deprecated, as it shows in the process list), then the key of the
+  `--profile` you name, then `GALAXY_API_KEY` in the environment, then the stored login for the
+  Galaxy being used, then `GALAXY_API_KEY` in `.env`.
+- The Galaxy: `--url`, then the `--profile` URL, then `GALAXY_URL` in the environment, then
+  `GALAXY_URL` in `.env`, then the only stored login.
+
+`--profile <name>` reads `~/.planemo.yml` (that profile's `galaxy_url` and `galaxy_user_key`, or
+`galaxy_admin_key`); a top-level `galaxy_url`/`galaxy_user_key` in that file is treated as the
+`default` profile. A key that is not a stored login's only goes to a Galaxy that something named,
+and a `GALAXY_URL` from `.env` is only used with the `GALAXY_API_KEY` from the same `.env` (any
+other key is refused with exit code 77). The
+[galaxy-cli README](packages/galaxy-cli/README.md#which-key-and-which-galaxy-an-operation-uses)
+has the details.
 
 ```bash
 export GALAXY_URL=https://usegalaxy.org/
@@ -110,7 +118,7 @@ galaxy-cli run_tool --help
 | Option | Description |
 | --- | --- |
 | `--url <url>` | Galaxy base URL |
-| `--api-key <key>` | Galaxy API key |
+| `--api-key <key>` | Galaxy API key (deprecated: it shows in the process list) |
 | `--profile <name>` | planemo profile name from `~/.planemo.yml` |
 | `--format <fmt>` | Output format: `table` (default), `json`, or `text` |
 | `--quiet` | Suppress the status/summary line on stderr |
@@ -154,7 +162,7 @@ The process exit code reflects the outcome, following `sysexits.h` conventions:
 | `69` | Connection / server unavailable |
 | `70` | Software error or job failure |
 | `76` | The connected Galaxy is too old for the operation, or an address `gxy auth login` refuses (it does not answer as a Galaxy, or is plain `http://` to another machine) |
-| `77` | Authentication failure (bad/missing API key) |
+| `77` | Authentication failure (bad/missing API key, no usable stored login), or a key that is not `.env`'s for a Galaxy only `.env` names |
 | `130` | A `gxy auth` command cancelled with Ctrl-C |
 
 ### Examples

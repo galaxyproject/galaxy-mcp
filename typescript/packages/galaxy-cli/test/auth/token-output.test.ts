@@ -55,8 +55,8 @@ describe("auth token", () => {
 });
 
 // Whoever runs this substitutes stdout (`$(gxy auth token)`), so when there is no token it must stay
-// empty and the reason go to stderr, with an exit code. Under a minute left counts as expired,
-// since such a token would run out before the caller used it.
+// empty and the reason go to stderr, with an exit code. Under a minute left counts as expired, the margin operations use too
+// (config.ts), since such a token would run out before the caller used it.
 describe.each(commands)("%s when there is nothing to hand out", (_name, run) => {
   it("exits 77 on stderr, with nothing on stdout, when not logged in", async () => {
     const h = harness();

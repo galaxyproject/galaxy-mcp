@@ -28,9 +28,9 @@ export class FileCredentialStore implements CredentialStore {
 }
 
 /**
- * The real store, the only one: config dir from the environment. One factory, so every auth
- * command agrees about where logins live. Warnings go to stderr, because stdout carries only
- * what a pipe may read (a token).
+ * The real store, the only one: config dir from the environment. One factory, so the auth
+ * commands and operations (`config.ts`) cannot disagree about where logins live. Warnings go to
+ * stderr, because stdout carries only what a pipe may read (a token).
  */
 export function createCredentialStore(
   env: Record<string, string | undefined> = process.env,
