@@ -212,3 +212,43 @@ describe("the histories card", () => {
     expect(card.sent.at(-1)!.params.arguments).toEqual({ name: "RNA-seq", limit: 20, offset: 1 });
   });
 });
+
+describe("the cards under a session scope", () => {
+  // Every history answers here, so only the scope stands between the session and "other".
+  const asked: string[] = [];
+  const scoped = createGalaxyContext({
+    baseUrl: "http://galaxy.invalid",
+    apiKey: "k",
+    scope: { historyIds: ["h1"] },
+    fetchImpl: async (request) => {
+      const url = new URL(request instanceof Request ? request.url : String(request));
+      asked.push(url.pathname);
+      if (url.searchParams.get("q") === "type_id-in") return Response.json(detailed);
+      return Response.json({ contents, stats: { total_matches: contents.length } });
+    },
+  });
+  const connectScoped = async (): Promise<Client> => {
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    await buildServer(scoped, { apps: true }).connect(serverSide);
+    const client = new Client({ name: "apps-scope-test", version: "0" });
+    await client.connect(clientSide);
+    return client;
+  };
+
+  it.each(["show_datasets", "show_history"])("%s reads a history in the scope", async (name) => {
+    const client = await connectScoped();
+    const args = name === "show_datasets" ? { history_id: "h1", dataset_ids: ["d1"] } : { history_id: "h1" };
+    const shown = await client.callTool({ name, arguments: args });
+    expect(shown.isError).toBeFalsy();
+  });
+
+  it.each(["show_datasets", "show_history"])("%s refuses a history outside the scope without asking Galaxy", async (name) => {
+    const client = await connectScoped();
+    asked.length = 0;
+    const args = name === "show_datasets" ? { history_id: "other", dataset_ids: ["d1"] } : { history_id: "other" };
+    const refused = await client.callTool({ name, arguments: args });
+    expect(refused.isError).toBe(true);
+    expect(JSON.stringify(refused.content)).toContain("outside this run's scope");
+    expect(asked).toEqual([]);
+  });
+});
