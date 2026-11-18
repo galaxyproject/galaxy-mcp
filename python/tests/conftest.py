@@ -123,6 +123,22 @@ def mock_galaxy_instance():
 
 
 @pytest.fixture(autouse=True)
+def _no_ambient_dotenv(monkeypatch):
+    """Keep a .env above the checkout (find_dotenv searches every parent) out of the tests.
+
+    Tests that exercise .env handling put one in a temporary directory and read it for real.
+    """
+    from galaxy_mcp import server
+
+    monkeypatch.setattr(server, "startup_dotenv_path", None)
+    monkeypatch.setattr(server, "startup_dotenv", {})
+    monkeypatch.setattr(
+        server, "startup_credentials", server._ConfiguredCredentials(None, None, None, None)
+    )
+    monkeypatch.setattr(server, "_read_dotenv", lambda: (None, {}))
+
+
+@pytest.fixture(autouse=True)
 def _reset_galaxy_state():
     """Reset galaxy state for each test"""
     from galaxy_mcp import http_security

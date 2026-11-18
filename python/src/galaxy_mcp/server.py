@@ -25,7 +25,7 @@ from urllib.parse import quote, urlsplit
 import bioblend
 import pydantic_core
 import requests
-from dotenv import find_dotenv, load_dotenv
+from dotenv import dotenv_values, find_dotenv
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_context
 from mcp.server.auth.middleware.auth_context import get_access_token
@@ -979,14 +979,75 @@ def _format_tool_input_error(
     )
 
 
-# Try to load environment variables from .env file
-dotenv_path = find_dotenv(usecwd=True)
-if dotenv_path:
-    load_dotenv(dotenv_path)
-    print(f"Loaded environment variables from {dotenv_path}")
+_CREDENTIAL_VARS = ("GALAXY_URL", "GALAXY_API_KEY")
+
+
+def _read_dotenv() -> tuple[str | None, dict[str, str]]:
+    """The nearest .env (this directory or a parent) and its values, leaving os.environ alone."""
+    path = find_dotenv(usecwd=True)
+    if not path:
+        return None, {}
+    return path, {name: value for name, value in dotenv_values(path).items() if value}
+
+
+@dataclass(frozen=True)
+class _ConfiguredCredentials:
+    url: str | None
+    url_from: Literal["environment", "dotenv"] | None
+    api_key: str | None
+    key_from: Literal["environment", "dotenv"] | None
+    refusal: str | None = None
+
+
+def _configured_credentials(
+    exported: typing.Mapping[str, str], dotenv: typing.Mapping[str, str], dotenv_path: str | None
+) -> _ConfiguredCredentials:
+    """Pair GALAXY_URL with GALAXY_API_KEY from the environment and the .env, exported first.
+
+    A .env comes with the directory, often a cloned repository, so its GALAXY_URL is only used
+    with the GALAXY_API_KEY from that same file. Pairing it with an exported key would let the
+    directory decide where that key is sent.
+    """
+
+    def pick(name: str) -> tuple[str | None, Literal["environment", "dotenv"] | None]:
+        if exported.get(name):
+            return exported[name], "environment"
+        if dotenv.get(name):
+            return dotenv[name], "dotenv"
+        return None, None
+
+    url, url_from = pick("GALAXY_URL")
+    api_key, key_from = pick("GALAXY_API_KEY")
+    if url_from == "dotenv" and key_from == "environment":
+        return _ConfiguredCredentials(
+            url,
+            url_from,
+            None,
+            None,
+            refusal=(
+                f"GALAXY_URL from {dotenv_path or '.env'} is only used with the GALAXY_API_KEY "
+                "in the same file, not with GALAXY_API_KEY from the environment. Set GALAXY_URL "
+                "in the environment, or call connect(url=..., api_key=...), to use that key "
+                "with this Galaxy."
+            ),
+        )
+    return _ConfiguredCredentials(url, url_from, api_key, key_from)
+
+
+# GALAXY_URL and GALAXY_API_KEY from .env stay out of os.environ, so os.environ only ever holds
+# what was exported; every other .env setting is applied as before, without overriding.
+startup_dotenv_path, startup_dotenv = _read_dotenv()
+if startup_dotenv_path:
+    for _name, _value in startup_dotenv.items():
+        if _name not in _CREDENTIAL_VARS:
+            os.environ.setdefault(_name, _value)
+    print(f"Loaded environment variables from {startup_dotenv_path}")
 
 # Configure Galaxy target and client state
-raw_galaxy_url = os.environ.get("GALAXY_URL")
+startup_credentials = _configured_credentials(os.environ, startup_dotenv, startup_dotenv_path)
+if startup_credentials.refusal:
+    logger.warning(startup_credentials.refusal)
+raw_galaxy_url = startup_credentials.url
 normalized_galaxy_url = normalize_galaxy_url(raw_galaxy_url) if raw_galaxy_url else None
 extra_allowed_galaxy_urls = tuple(
     normalize_galaxy_url(value.strip())
@@ -995,7 +1056,7 @@ extra_allowed_galaxy_urls = tuple(
 )
 galaxy_state: dict[str, Any] = {
     "url": normalized_galaxy_url,
-    "api_key": os.environ.get("GALAXY_API_KEY"),
+    "api_key": startup_credentials.api_key,
     "gi": None,
     "connected": False,
 }
@@ -1423,17 +1484,23 @@ class _ConnectRefusedError(ValueError):
 
 
 def _resolve_connect_credentials(
-    url: str | None, api_key: str | None
+    url: str | None,
+    api_key: str | None,
+    dotenv: tuple[str | None, dict[str, str]] | None = None,
 ) -> tuple[str | None, str | None]:
-    """Fill in connect() arguments from the environment, where that is safe.
+    """Fill in connect() arguments from the environment and the .env, where that is safe.
 
     Over HTTP the caller is not the operator, so the destination has to be one the operator
     configured -- GALAXY_URL or GALAXY_MCP_EXTRA_ALLOWED_URLS, matched exactly -- or
     connect(url=...) would make this server fetch whatever URL it is handed. Over stdio the
-    caller is the operator, and any Galaxy is fair game. Either way the environment's API key
-    only goes to the environment's URL, and OAuth deployments never lend out the operator's
-    credentials at all.
+    caller is the operator, and any Galaxy is fair game. Either way the configured API key only
+    goes to the configured URL, a GALAXY_URL from .env only with the key from that .env (see
+    _configured_credentials), and OAuth deployments never lend out the operator's credentials.
+
+    ``dotenv`` is the .env to read, as from _read_dotenv(); the one found at startup by default.
     """
+    dotenv_path, dotenv_entries = dotenv or (startup_dotenv_path, startup_dotenv)
+    configured = _configured_credentials(os.environ, dotenv_entries, dotenv_path)
     if remote_caller_possible():
         env_url = normalized_galaxy_url
         if not env_url:
@@ -1455,23 +1522,32 @@ def _resolve_connect_credentials(
                 raise _ConnectRefusedError("Galaxy URL is not allowed by this server.")
         if auth_provider:
             return use_url, api_key
+        url_from_dotenv = url is None and startup_credentials.url_from == "dotenv"
     else:
-        env_url = os.environ.get("GALAXY_URL")
+        env_url = configured.url
         use_url = url or env_url
+        url_from_dotenv = url is None and configured.url_from == "dotenv"
 
-    # A .env reloaded after startup can change GALAXY_API_KEY without changing the allowlist,
-    # so the key also has to belong to the GALAXY_URL in the environment right now.
-    live_env_url = os.environ.get("GALAXY_URL")
-    use_api_key = api_key
+    if api_key:
+        if url_from_dotenv:
+            raise _ConnectRefusedError(
+                f"GALAXY_URL from {dotenv_path or '.env'} is only used with the GALAXY_API_KEY "
+                "in the same file, not with an api_key passed to connect(). Pass url as well, "
+                "or set GALAXY_URL in the environment."
+            )
+        return use_url, api_key
+
+    # The allowlist is fixed at startup while the environment and .env can change after it,
+    # so the key also has to belong to the GALAXY_URL configured right now.
+    use_api_key = None
     if (
-        not use_api_key
-        and use_url
+        use_url
         and env_url
-        and live_env_url
+        and configured.url
         and _same_galaxy_url(use_url, env_url)
-        and _same_galaxy_url(use_url, live_env_url)
+        and _same_galaxy_url(use_url, configured.url)
     ):
-        use_api_key = os.environ.get("GALAXY_API_KEY")
+        use_api_key = configured.api_key
     return use_url, use_api_key
 
 
@@ -1556,15 +1632,16 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
 
         # Check if we have the necessary credentials
         if not use_url or not use_api_key:
-            # Try to reload from .env file in case it was added after startup
-            dotenv_path = find_dotenv(usecwd=True)
-            if dotenv_path:
-                load_dotenv(dotenv_path, override=True)
-                # Check again after loading .env
-                use_url, use_api_key = _resolve_connect_credentials(url, api_key)
+            # The .env may have been written or changed after startup, so read it again
+            dotenv = _read_dotenv()
+            if dotenv[0]:
+                use_url, use_api_key = _resolve_connect_credentials(url, api_key, dotenv)
 
             # If still missing credentials, report error
             if not use_url or not use_api_key:
+                refusal = _configured_credentials(os.environ, dotenv[1], dotenv[0]).refusal
+                if url is None and api_key is None and refusal:
+                    raise _ConnectRefusedError(refusal)
                 if url and not api_key and os.environ.get("GALAXY_API_KEY"):
                     raise _ConnectRefusedError(
                         "The configured GALAXY_API_KEY is only used with the configured "
