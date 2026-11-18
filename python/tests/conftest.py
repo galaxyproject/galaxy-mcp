@@ -130,12 +130,11 @@ def _no_ambient_dotenv(monkeypatch):
     """
     from galaxy_mcp import server
 
-    monkeypatch.setattr(server, "startup_dotenv_path", None)
-    monkeypatch.setattr(server, "startup_dotenv", {})
+    monkeypatch.setattr(server, "startup_dotenv", server._Dotenv())
     monkeypatch.setattr(
-        server, "startup_credentials", server._ConfiguredCredentials(None, None, None, None)
+        server, "startup_credentials", server._ConfiguredCredentials(None, None, None)
     )
-    monkeypatch.setattr(server, "_read_dotenv", lambda: (None, {}))
+    monkeypatch.setattr(server, "_read_dotenv", server._Dotenv)
 
 
 @pytest.fixture(autouse=True)
