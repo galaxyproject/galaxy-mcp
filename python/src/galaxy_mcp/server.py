@@ -29,6 +29,7 @@ from dotenv import find_dotenv, load_dotenv
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_context
 from mcp.server.auth.middleware.auth_context import get_access_token
+from mcp.types.version import HANDSHAKE_PROTOCOL_VERSIONS
 from pydantic import BaseModel, Field
 from starlette.requests import Request
 
@@ -110,7 +111,23 @@ class SessionGalaxyConnection:
     connected: bool = True
 
 
-_session_connections: dict[str, SessionGalaxyConnection] = {}
+class _ProcessConnectionKey:
+    """Names the one connection a sessionless stdio or in-memory caller shares.
+
+    Deliberately not a string: a client can pick any string as its session id through the
+    mcp-session-id header, and none of them may ever name the operator's connection.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "<process connection>"
+
+
+_PROCESS_CONNECTION_KEY = _ProcessConnectionKey()
+ConnectionKey = str | _ProcessConnectionKey
+
+_session_connections: dict[ConnectionKey, SessionGalaxyConnection] = {}
 
 
 def _prune_session_connections() -> None:
@@ -145,14 +162,79 @@ def _make_thread_safe(gi: GalaxyInstance) -> GalaxyInstance:
     return gi
 
 
-def _get_current_session_id() -> str | None:
+def _is_sessionless(ctx: Any) -> bool:
+    """True when the request came over a protocol era with no session to key on.
+
+    The 2026-07-28 era mints a fresh session id for every request, so a connection stored
+    under it is gone by the next call. Anything outside the handshake eras counts as
+    sessionless, which keeps an unknown future revision from silently dropping state.
+    """
     try:
-        return get_context().session_id
+        request_context = ctx.request_context
+    except Exception:
+        return False
+    version = getattr(request_context, "protocol_version", None) if request_context else None
+    return version is not None and version not in HANDSHAKE_PROTOCOL_VERSIONS
+
+
+def _lacks_negotiated_http_session(ctx: Any) -> bool:
+    """True for a streamable-HTTP request with no session the server issued.
+
+    A stateless HTTP server issues none, and fastmcp then takes the session id from the
+    client's own mcp-session-id header or makes up a new one per request: either the caller
+    picks the key or it is gone by the next call. The SDK keeps the negotiated id on the
+    session's connection; if that ever moves, this fails closed.
+    """
+    if getattr(ctx, "transport", None) != "streamable-http":
+        return False
+    try:
+        session = ctx.request_context.session
+    except Exception:
+        return True
+    connection = getattr(session, "_connection", None)
+    return getattr(connection, "session_id", None) is None
+
+
+def _untracked_remote_request() -> bool:
+    """True when a remote caller's request carries nothing that ties it to its next call.
+
+    That is any sessionless (2026-07-28) request that may be remote, and a handshake-era
+    request to a stateless HTTP server. There is no safe place to keep a connection made
+    with connect() for either.
+    """
+    try:
+        ctx = get_context()
+    except Exception:
+        return False
+    if _is_sessionless(ctx):
+        transport = getattr(ctx, "transport", None)
+        return transport in ("sse", "streamable-http") or remote_caller_possible()
+    return _lacks_negotiated_http_session(ctx)
+
+
+def _get_current_session_id() -> ConnectionKey | None:
+    """The key the current caller's connect() connection is stored under.
+
+    Handshake-era connections key on the MCP session. A sessionless (2026-07-28) request
+    over stdio or in-memory has exactly one client, the operator, so it shares one
+    process-wide key. A request that may be remote and carries no session the server
+    issued gets no key at all.
+    """
+    try:
+        ctx = get_context()
     except Exception:
         return None
+    if _untracked_remote_request():
+        return None
+    if not _is_sessionless(ctx):
+        try:
+            return ctx.session_id
+        except Exception:
+            return None
+    return _PROCESS_CONNECTION_KEY
 
 
-def _get_session_connection(session_id: str) -> SessionGalaxyConnection | None:
+def _get_session_connection(session_id: ConnectionKey) -> SessionGalaxyConnection | None:
     with _session_state_lock:
         session_connection = _session_connections.get(session_id)
         if not session_connection:
@@ -162,7 +244,12 @@ def _get_session_connection(session_id: str) -> SessionGalaxyConnection | None:
 
 
 def _set_session_connection(
-    session_id: str, *, url: str, api_key: str, gi: GalaxyInstance, connected: bool = True
+    session_id: ConnectionKey,
+    *,
+    url: str,
+    api_key: str,
+    gi: GalaxyInstance,
+    connected: bool = True,
 ) -> None:
     with _session_state_lock:
         now = time.monotonic()
@@ -176,7 +263,7 @@ def _set_session_connection(
         _prune_session_connections()
 
 
-def _clear_session_connection(session_id: str) -> None:
+def _clear_session_connection(session_id: ConnectionKey) -> None:
     with _session_state_lock:
         _session_connections.pop(session_id, None)
 
@@ -1080,6 +1167,9 @@ class _OAuthPublicRoutes:
 
 
 def _http_app_with_security(self, *args, **kwargs):
+    # Whoever serves the app (run_http_server, `fastmcp run`, a host mounting it), this
+    # process now takes remote callers, so no call may pass for the operator's.
+    mark_serving_http()
     app = _original_http_app(self, *args, **kwargs)
     app.add_middleware(
         HTTPSecurityMiddleware,
@@ -1433,6 +1523,24 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
                 },
                 success=True,
                 message=f"Connected to Galaxy at {state['url']} via {state['source']}",
+            )
+
+        # Validating here and keeping nothing would report success, then let the next call
+        # quietly run against the operator's GALAXY_URL instead.
+        if (url or api_key or not state["connected"]) and _untracked_remote_request():
+            if state.get("source") == "oauth":
+                raise _ConnectRefusedError(
+                    f"This client is already signed in through OAuth to {state['url']}; "
+                    "call connect() without a URL or API key to use that connection. A "
+                    "different Galaxy URL or key cannot be kept for this client, since nothing "
+                    "on its HTTP requests ties one call to the next."
+                )
+            raise _ConnectRefusedError(
+                "connect() cannot keep a Galaxy connection for this client: nothing on its "
+                "HTTP requests ties one call to the next (it speaks the sessionless 2026-07-28 "
+                "MCP protocol, or this server runs stateless HTTP). Sign in through OAuth if "
+                "this server offers it, or ask the server operator to set GALAXY_URL and "
+                "GALAXY_API_KEY."
             )
 
         if session_id and not url and not api_key and not state["connected"]:
