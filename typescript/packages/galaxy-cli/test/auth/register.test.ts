@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import type { Command } from "commander";
 import { createGalaxyContext } from "@galaxyproject/galaxy-ops";
 import { buildProgram } from "../../src/program";
+import { createAuthDeps } from "../../src/auth/deps";
 import { FAKE_TOKEN, HOST, fakeLogin, harness } from "./harness";
 
 const HOST_ARG = "https://dev.galaxy.example.org";
@@ -123,6 +124,58 @@ describe("the auth commands", () => {
         expect(makeAuthDeps).toHaveBeenCalled();
       }
     });
+  });
+
+  // The login warning that a GALAXY_API_KEY outranks the stored login is the command's own (a
+  // warning, not a refusal), so `--quiet` has to reach the command.
+  it("drop login's GALAXY_API_KEY precedence warning with --quiet", async () => {
+    const login = async (...global: string[]) => {
+      const h = harness({ env: { GALAXY_API_KEY: "irrelevant" }, stdinText: `${FAKE_TOKEN}\n` });
+      await run([...global, "auth", "login", "--with-token", "--host", HOST_ARG], h);
+      return h.cap.err;
+    };
+    expect(await login()).toContain("GALAXY_API_KEY is set and will take precedence");
+    expect(await login("--quiet")).not.toContain("GALAXY_API_KEY is set");
+  });
+
+  // `login` refuses any --profile, one that is not in ~/.planemo.yml too, before it looks the name
+  // up: the refusal is about login, not about the profile. `token` and `logout` do use the profile to
+  // find the host, so for them an unknown name is `requireProfile`'s refusal. The host rule here is
+  // the real one (`createAuthDeps`), over the harness's fake store, whoami and stdin.
+  it.each([
+    [
+      "login",
+      ["auth", "login", "--with-token", "--host", HOST_ARG],
+      "does not apply to `gxy auth login`",
+    ],
+    ["token", ["auth", "token"], "Unknown --profile"],
+    ["logout", ["auth", "logout"], "Unknown --profile"],
+  ])("refuse an unknown --profile for auth %s with exit 64", async (cmd, argv, message) => {
+    const h = harness({ stored: [fakeLogin()], stdinText: `${FAKE_TOKEN}\n` });
+    const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    process.exitCode = 0;
+    let printed = "";
+    try {
+      const program = buildProgram({
+        invokedAs: "gxy",
+        makeAuthDeps: (name) => ({
+          ...h.deps,
+          resolveHost: createAuthDeps(name, () => program.opts()).resolveHost,
+        }),
+      });
+      await program.parseAsync(["node", "gxy", "--profile", "typo", ...argv]);
+      printed = write.mock.calls.map((c) => String(c[0])).join("");
+    } finally {
+      write.mockRestore();
+    }
+    const code = process.exitCode;
+    process.exitCode = 0;
+    expect(code).toBe(64);
+    expect(printed + h.cap.err).toContain(message);
+    expect(h.cap.out).toBe("");
+    expect(h.whoamiCalls).toEqual([]);
+    expect(await h.store.list()).toHaveLength(1); // still only the seeded login
+    if (cmd === "login") expect(h.stdin.readableLength).toBeGreaterThan(0);
   });
 
   // Building the deps opens the credential store. `--help` and the operations

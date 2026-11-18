@@ -2,70 +2,264 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
+import { normalizeBaseUrl } from "./auth/base-url";
+import { NoHostError, pickHost, type HostSource } from "./auth/host";
+import { createCredentialStore } from "./auth/store";
+import { sanitize } from "./auth/sanitize";
+import { describeExpiry, isExpired } from "./auth/expiry";
+import { AuthError, type BaseUrl, type CredentialStore, type KeySourceId, type StoredLogin } from "./auth/types";
 
-export interface Connection { baseUrl: string; apiKey: string; }
+/** `warning` is set when a usable key was found but something the user should know about was not. */
+export interface Connection {
+  baseUrl: string;
+  apiKey: string;
+  /** Where the key came from. */
+  keySource: KeySourceId;
+  warning?: string;
+  /** Worth saying unless `--quiet`: a `.env` was used, or a login outranked its key. */
+  note?: string;
+}
 export interface GlobalFlags { url?: string; apiKey?: string; profile?: string; }
 interface PlanemoProfile { galaxy_url?: string; galaxy_user_key?: string; galaxy_admin_key?: string; }
 export interface Sources {
   env: Record<string, string | undefined>;
   dotenv: Record<string, string | undefined>;
   profiles: Record<string, PlanemoProfile>;
-  /** Where `dotenv` was read from, for messages. */
+  /** Base URLs of every stored login (`gxy auth login`), loaded before resolving. */
+  storedBaseUrls?: BaseUrl[];
+  /** The stored login for the Galaxy being used (or the only one), with its token. */
+  storedLogin?: StoredLogin;
+  /** The clock, for judging whether `storedLogin` has expired. */
+  now?: Date;
+  /** The `.env` file `dotenv` was read from, for saying so. */
   dotenvPath?: string;
+  /** Set when the credential store could not be read (corrupt file). */
+  storeProblem?: string;
 }
 
 /** A key from outside .env was about to go to a Galaxy that the .env chose. Exits EX_NOPERM. */
 export class CredentialScopeError extends Error {}
 
 /**
- * Pure resolver -- sources injected so it is fully testable.
+ * Which Galaxy an operation talks to: `auth/host.ts`'s one rule, fed from these sources.
  *
- * A GALAXY_URL from .env is only used with the GALAXY_API_KEY from that same .env. A .env comes
- * with the directory, often a cloned repository, so it must not choose where a key from anywhere
- * else (--api-key, GALAXY_API_KEY in the environment, a profile) is sent. The rule depends only on
- * where the URL came from, not on how the sources are ranked.
+ * The `--profile` URL ranks second: a profile is a pair, and its key must go to its own Galaxy and
+ * not to whatever `GALAXY_URL` or a `.env` says. `auth` (except `login`) uses the same order.
+ *
+ * `forLogin` is left off. An operation has always read `.env` and the profile, and a stored token
+ * only goes to a host that matches a stored login, so those files cannot send one anywhere; it is
+ * `auth login` that must not take its host from them.
  */
-export function resolveConnection(flags: GlobalFlags, src: Sources): Connection {
+function pickOperationHost(flags: GlobalFlags, src: Sources): { url: string; source: HostSource } {
   const prof = flags.profile ? src.profiles[flags.profile] : undefined;
-  // Same order as the `??` chains below, so the label always names the value that wins.
-  const hostFrom =
-    flags.url !== undefined ? "flag"
-    : src.env.GALAXY_URL !== undefined ? "env"
-    : src.dotenv.GALAXY_URL !== undefined ? "dotenv"
-    : prof?.galaxy_url !== undefined ? "profile"
-    : undefined;
-  const baseUrl = flags.url ?? src.env.GALAXY_URL ?? src.dotenv.GALAXY_URL ?? prof?.galaxy_url;
-  const keyFrom =
-    flags.apiKey !== undefined ? "flag"
-    : src.env.GALAXY_API_KEY !== undefined ? "env"
-    : src.dotenv.GALAXY_API_KEY !== undefined ? "dotenv"
-    : (prof?.galaxy_user_key ?? prof?.galaxy_admin_key) !== undefined ? "profile"
-    : undefined;
-  const apiKey =
-    flags.apiKey ?? src.env.GALAXY_API_KEY ?? src.dotenv.GALAXY_API_KEY ?? prof?.galaxy_user_key ?? prof?.galaxy_admin_key;
-  if (!baseUrl || !apiKey) {
-    throw new Error(
+  return pickHost({
+    flag: flags.url,
+    env: src.env,
+    dotenv: src.dotenv,
+    profileUrl: prof?.galaxy_url,
+    storedBaseUrls: src.storedBaseUrls ?? [],
+  });
+}
+
+/**
+ * A named profile that is not in `~/.planemo.yml` is an error, not "no profile": it would
+ * otherwise contribute neither a URL nor a key, and the run would quietly go to a stored login for
+ * a different Galaxy than the one the person named. (An unreadable `~/.planemo.yml` reads as no
+ * profiles, so it ends here too.) It is a usage error: exit 64.
+ */
+export function requireProfile(flags: { profile?: string }, src: { profiles: Record<string, unknown> }): void {
+  const name = flags.profile;
+  if (name && !Object.prototype.hasOwnProperty.call(src.profiles, name)) {
+    throw new AuthError("usage", `Unknown --profile ${sanitize(name)}: no such profile in ~/.planemo.yml`);
+  }
+}
+
+/** The key of the `--profile` planemo profile, if one is named and has one. */
+function profileKeyOf(flags: GlobalFlags, src: Sources): string | undefined {
+  const prof = flags.profile ? src.profiles[flags.profile] : undefined;
+  return prof?.galaxy_user_key ?? prof?.galaxy_admin_key;
+}
+
+/**
+ * Pure resolver -- sources injected so it is fully testable. `commandName` is only for the hints
+ * in messages (`gxy`, or `galaxy-cli` for someone who typed that).
+ *
+ * The key, first match: `--api-key`; the `--profile` key; `GALAXY_API_KEY` in the environment;
+ * the stored login for the host; `.env`'s key. The command line beats the environment, which
+ * beats files, as in the aws CLI: what you typed for this run is never overridden by what was left
+ * lying around, and a `.env` in a directory you happen to be in is the weakest claim of all. Before
+ * stored logins existed `--profile` ranked below the environment and `.env`; it was the one
+ * command-line choice that lost to files.
+ *
+ * Only a stored login's own token may go to the host that the stored logins supplied (the only
+ * one, when nothing names a host). Any other key goes only to a host somebody named: otherwise a
+ * `.env` for some other Galaxy would send its key to wherever you last logged in. The Galaxy is
+ * chosen the same way: `--url`, the `--profile` URL, `GALAXY_URL`, `.env`'s, the only stored login.
+ */
+export function resolveConnection(flags: GlobalFlags, src: Sources, commandName = "gxy"): Connection {
+  requireProfile(flags, src);
+  // The same rule as `gxy auth *` (auth/host.ts). With nothing named and nothing stored the
+  // generic "no credentials" error below says what to do, so that case is not an error here.
+  let picked: { url: string; source: HostSource } | undefined;
+  try {
+    picked = pickOperationHost(flags, src);
+  } catch (e) {
+    if (!(e instanceof NoHostError)) throw e;
+  }
+  const named = picked && picked.source !== "stored" ? picked.url : undefined;
+  const noCredentials = () => {
+    const problem = src.storeProblem ? ` (${src.storeProblem})` : "";
+    // A Galaxy was named, and logins are stored, but none of them is for it: say so, rather than the
+    // generic advice, which reads as if a login existed and were not found. Shown as a URL without
+    // anything a user could have put in it (its credentials, its query): normalised, else the host.
+    if (named && src.storedBaseUrls?.length) {
+      let key: string | undefined;
+      let shown: string;
+      try {
+        key = normalizeBaseUrl(named);
+        shown = key;
+      } catch {
+        try {
+          shown = new URL(named).host;
+        } catch {
+          shown = "the Galaxy named";
+        }
+      }
+      if (!key || !src.storedBaseUrls.includes(key as BaseUrl)) {
+        const logins = src.storedBaseUrls.join(", ");
+        return new Error(
+          `No Galaxy credentials for ${shown}: the stored login${src.storedBaseUrls.length > 1 ? "s are" : " is"} for ${logins}. ` +
+            `Run ${commandName} auth login --host ${shown}, or set GALAXY_API_KEY (env, a .env file, or --api-key) for it.${problem}`,
+        );
+      }
+    }
+    return new Error(
       "No Galaxy credentials. Set GALAXY_URL and GALAXY_API_KEY (env, a .env file, or --url/--api-key), " +
-        "or pass --profile <name> for a ~/.planemo.yml profile.",
+        `or pass --profile <name> for a ~/.planemo.yml profile, or run ${commandName} auth login.${problem}`,
     );
+  };
+  const dotenvFile = src.dotenvPath ?? ".env";
+  const dotenvKey = src.dotenv.GALAXY_API_KEY;
+  // A `.env` comes with the directory you are in, often a clone of somebody else's repository, so
+  // say when it chose the Galaxy or the key, and when a login of yours outranked its key.
+  const finish = (conn: Connection): Connection => {
+    const used = [
+      conn.keySource === "dotenv" ? "GALAXY_API_KEY" : "",
+      picked?.source === "dotenv" ? "GALAXY_URL" : "",
+    ].filter(Boolean);
+    const lines = [];
+    if (used.length) lines.push(`Using ${used.join(" and ")} from ${dotenvFile}.`);
+    if (conn.keySource === "stored" && dotenvKey) {
+      lines.push(
+        `The stored login for ${conn.baseUrl} ranks above GALAXY_API_KEY in ${dotenvFile}, so that key is not used.`,
+      );
+    }
+    return lines.length ? { ...conn, note: lines.join("\n") } : conn;
+  };
+  // A key that did not come from a stored login goes to a named Galaxy or nowhere, and never to a
+  // Galaxy that a `.env` chose unless the key is that `.env`'s own: a `.env` comes with the directory,
+  // often a clone of somebody else's repository, and must not say where another key is sent. This
+  // depends only on where the Galaxy came from, not on how the keys are ranked. A stored login does
+  // not come through here, so a `.env` URL that is a stored login's host still gets that login's token.
+  const sendTo = (apiKey: string, keySource: KeySourceId, warning?: string): Connection => {
+    if (!named) {
+      if (keySource === "profile") {
+        throw new Error(
+          `--profile ${flags.profile ?? ""} has a key but no galaxy_url, and no Galaxy is named. ` +
+            "Add galaxy_url to the profile, or pass --url.",
+        );
+      }
+      throw noCredentials();
+    }
+    if (picked?.source === "dotenv" && keySource !== "dotenv") {
+      const key =
+        keySource === "flag" ? "--api-key"
+        : keySource === "env" ? "GALAXY_API_KEY from the environment"
+        : `the key of profile "${flags.profile ?? ""}"`;
+      const hint = keySource === "profile" ? ", or add galaxy_url to the profile" : "";
+      throw new CredentialScopeError(
+        `GALAXY_URL from ${dotenvFile} is only used with the GALAXY_API_KEY in the same file, not with ${key}. ` +
+          `Set GALAXY_URL in the environment or pass --url to send that key to this Galaxy${hint}.`,
+      );
+    }
+    return finish({ baseUrl: named, apiKey, keySource, ...(warning ? { warning } : {}) });
+  };
+
+  if (flags.apiKey) return sendTo(flags.apiKey, "flag");
+  const profileKey = profileKeyOf(flags, src);
+  if (profileKey) return sendTo(profileKey, "profile");
+  if (src.env.GALAXY_API_KEY) return sendTo(src.env.GALAXY_API_KEY, "env");
+
+  const login = picked ? matchingLogin(picked.url, src.storedLogin) : undefined;
+  const now = src.now ?? new Date();
+  // An unreadable expiry counts as expired, and so does one within a minute of running out.
+  if (login && !isExpired(login.expiresAt, now)) {
+    // The key goes to the vetted form of the URL it was stored for, not to the raw string
+    // (which may carry a query or an odd path) that merely normalises to it.
+    return finish({ baseUrl: login.baseUrl, apiKey: login.token, keySource: "stored" });
   }
-  if (hostFrom === "dotenv" && keyFrom !== "dotenv") {
-    const dotenv = src.dotenvPath ?? ".env";
-    const key =
-      keyFrom === "flag" ? "--api-key"
-      : keyFrom === "env" ? "GALAXY_API_KEY from the environment"
-      : `the key of profile "${flags.profile}"`;
-    throw new CredentialScopeError(
-      `GALAXY_URL from ${dotenv} is only used with the GALAXY_API_KEY in the same file, not with ${key}. ` +
-        "Set GALAXY_URL in the environment or pass --url to send that key to this Galaxy.",
-    );
+  if (login) {
+    const expired = `Your login to ${login.baseUrl} ${describeExpiry(login.expiresAt!, now)}`;
+    // The only other key that can be used is one for a host somebody named.
+    if (dotenvKey && named) {
+      return sendTo(dotenvKey, "dotenv", `${expired}; using another key instead. Run ${commandName} auth login --host ${login.baseUrl} to renew it.`);
+    }
+    throw new AuthError("not_logged_in", `${expired}; run ${commandName} auth login --host ${login.baseUrl}`);
   }
-  return { baseUrl, apiKey };
+  if (dotenvKey) return sendTo(dotenvKey, "dotenv", src.storeProblem);
+  throw noCredentials();
+}
+
+/** The stored login, if it is for this very Galaxy: compared as normalised, never as typed. */
+function matchingLogin(baseUrl: string, login: StoredLogin | undefined): StoredLogin | undefined {
+  if (!login) return undefined;
+  try {
+    return normalizeBaseUrl(baseUrl) === login.baseUrl ? login : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Read the real sources from disk/env (kept separate from the pure resolver). */
 export function loadSources(): Sources {
-  return { env: process.env, dotenv: readDotenv(), profiles: readPlanemoProfiles(), dotenvPath: join(process.cwd(), ".env") };
+  return { env: process.env, dotenv: readDotenv(), dotenvPath: join(process.cwd(), ".env"), profiles: readPlanemoProfiles() };
+}
+
+/**
+ * Like `loadSources`, plus the stored login for the Galaxy these flags point at. The store
+ * is only touched when no key outranking it is given, so a broken hosts.yml never
+ * gets in the way of `--api-key`, `--profile` or `GALAXY_API_KEY`.
+ */
+export async function loadSourcesAsync(
+  flags: GlobalFlags = {},
+  opts: { store?: CredentialStore; now?: Date; base?: Sources } = {},
+): Promise<Sources> {
+  const src = opts.base ?? loadSources();
+  const now = opts.now ?? new Date();
+  requireProfile(flags, src);
+  if (flags.apiKey || profileKeyOf(flags, src) || src.env.GALAXY_API_KEY) return { ...src, now };
+  try {
+    const store = opts.store ?? createCredentialStore(src.env);
+    const summaries = await store.list();
+    const storedBaseUrls = summaries.map((s) => s.baseUrl);
+    let target: BaseUrl | undefined;
+    try {
+      // Only a host that matches a stored login exactly gets its token: a `.env` or profile
+      // that names another Galaxy finds no login here, so nothing is sent there.
+      target = normalizeBaseUrl(pickOperationHost(flags, { ...src, storedBaseUrls }).url);
+    } catch (e) {
+      // Ambiguity is reported by resolveConnection; an unparsable URL has no stored login.
+      if (!(e instanceof AuthError)) throw e;
+      target = undefined;
+    }
+    // Asked of the store for any named Galaxy, not only a listed one: the list leaves out a login this
+    // version cannot read (one a newer gxy wrote), and `get` is what says so (as the store problem) instead of
+    // leaving a plain "no credentials". For a Galaxy with no login at all it returns null: no token is read.
+    const storedLogin = target ? ((await store.get(target)) ?? undefined) : undefined;
+    return { ...src, storedBaseUrls, ...(storedLogin ? { storedLogin } : {}), now };
+  } catch (e) {
+    return { ...src, now, storeProblem: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 function readDotenv(): Record<string, string | undefined> {

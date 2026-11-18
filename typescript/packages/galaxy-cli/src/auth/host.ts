@@ -24,7 +24,7 @@ export class NoLoginHostError extends AuthError {
   }
 }
 
-type HostSource = "flag" | "env" | "dotenv" | "profile" | "stored";
+export type HostSource = "flag" | "env" | "dotenv" | "profile" | "stored";
 
 interface PickHostInput {
   /** `--host` or `--url`. */
@@ -39,10 +39,10 @@ interface PickHostInput {
   /**
    * `login` sends a key to the host it picks, so it never takes one from files in the working
    * directory or the home directory (`.env`, a profile): a repository must not be able to choose
-   * where your credentials go. Everything else (reading a stored token) only uses a host that must
-   * match a stored login to get a token, so the files are safe there. For the same reason `login`
-   * never falls back to the only stored login either (`NoLoginHostError`): the key it sends is a
-   * new one, and need not belong to that Galaxy.
+   * where your credentials go. Everything else (reading a stored token, running an operation) only
+   * uses a host that must match a stored login to get a token, so the files are safe there. For
+   * the same reason `login` never falls back to the only stored login either (`NoLoginHostError`):
+   * the key it sends is a new one, and need not belong to that Galaxy.
    *
    * The Python galaxy-mcp server holds to the same line from the other side: its
    * `GALAXY_API_KEY` is only used with the `GALAXY_URL` it was configured with.
@@ -51,11 +51,13 @@ interface PickHostInput {
 }
 
 /**
- * The one rule for which Galaxy is meant, for every `gxy auth` command: `--host`/`--url`, then
- * the `--profile` URL, then `GALAXY_URL` in the environment, then in `.env`, then the only stored
- * login. The command line beats the environment, which beats files, and a profile names its
- * Galaxy, so its URL comes right after the flag. `login` (`forLogin`) takes the flag and the
- * environment only, with no stored-login fallback. Returns the URL as named (not normalised).
+ * The one rule for which Galaxy is meant, shared by `gxy auth *` and by operations, so they
+ * cannot pick different ones: `--host`/`--url`, then the `--profile` URL, then `GALAXY_URL` in the
+ * environment, then in `.env`, then the only stored login. The command line beats the
+ * environment, which beats files, and a profile is a pair: its key goes to its own Galaxy, not to
+ * whatever `GALAXY_URL` or a `.env` says. `login` (`forLogin`) takes the flag and the environment
+ * only, with no stored-login fallback. Returns the URL as named (not normalised: operations keep
+ * an `http://` URL that `auth` would refuse).
  */
 export function pickHost(input: PickHostInput): { url: string; source: HostSource } {
   const named: [HostSource, string | undefined][] = input.forLogin
