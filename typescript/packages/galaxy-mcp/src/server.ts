@@ -169,6 +169,13 @@ const readCards: { name: string; operation: string; card: CardSpec; guidance: st
 ];
 
 /**
+ * With the cards on, a card's frame can call this server's tools. A card only pages through and
+ * reopens these reads, so every other tool is kept to the model: a fault in a card's page can then
+ * reach nothing that writes.
+ */
+const CARD_CALLABLE = new Set(["get_histories", "get_history_contents", "show_datasets"]);
+
+/**
  * One MCP server over one Galaxy context. The context is passed in rather than built here so
  * servers can share it, along with the Galaxy version it caches.
  */
@@ -182,13 +189,16 @@ export function buildServer(ctx: GalaxyContext, { allowLocalFiles = true, apps =
     const { shape, object, toInput } = wireShape(op);
     shapes.set(name, shape);
     const description = inWireNames(describeOperation(op), op.input);
+    const meta = apps && !CARD_CALLABLE.has(name)
+      ? { ...extra._meta, ui: { ...(extra._meta?.["ui"] as Record<string, unknown> | undefined), visibility: ["model"] } }
+      : extra._meta;
     server.registerTool(
       name,
       {
         description: extra.guidance ? `${extra.guidance}\n\n${description}` : description,
         inputSchema: object,
         annotations: annotations[op.name],
-        ...(extra._meta && { _meta: extra._meta }),
+        ...(meta && { _meta: meta }),
       },
       async (args: unknown) => {
         const input = toOperationInput(args as Record<string, unknown>, toInput);

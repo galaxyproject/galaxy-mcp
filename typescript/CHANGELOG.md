@@ -78,7 +78,9 @@ Each card shows five rows and can show more, show less and collapse, and its row
 place. A card pages through the read tool with the arguments it was opened with.
 `@galaxyproject/galaxy-ops` exports the read behind `show_datasets` as `getSelectedDatasets`.
 That is a helper, not an operation, so it adds no tool. Cards are off by default, so the tool
-list and the parity report are unchanged unless they are turned on.
+list and the parity report are unchanged unless they are turned on. With them on, a card's frame
+can call only the reads it pages through (`get_histories`, `get_history_contents`,
+`show_datasets`); every other tool is advertised with `_meta.ui.visibility: ["model"]`.
 
 ### `extract_workflow_from_history`: the tools already run, as a workflow
 

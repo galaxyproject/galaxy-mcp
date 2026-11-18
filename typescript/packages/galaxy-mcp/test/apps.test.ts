@@ -57,19 +57,37 @@ describe("MCP Apps cards", () => {
     const off = (await (await connect(false)).listTools()).tools;
     const { tools } = await (await connect(true)).listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([...toolNames(), "show_datasets", "show_histories", "show_history"].sort());
-    expect(tools.filter((t) => !t.name.startsWith("show_"))).toEqual(off);
+    // The one difference: tools the cards do not call are kept to the model (see the next test).
+    const withoutVisibility = tools.filter((t) => !t.name.startsWith("show_")).map(({ _meta, ...rest }) => {
+      const { visibility: _v, ...ui } = ((_meta?.ui ?? {}) as Record<string, unknown>);
+      return Object.keys(ui).length ? { ...rest, _meta: { ...(_meta as object), ui } } : rest;
+    });
+    expect(withoutVisibility).toEqual(off);
     for (const [show, read, uri] of [
       ["show_histories", "get_histories", HISTORIES_CARD_URI],
       ["show_history", "get_history_contents", HISTORY_CARD_URI],
     ] as const) {
       const shown = tools.find((t) => t.name === show)!;
       const plain = tools.find((t) => t.name === read)!;
-      expect(shown._meta).toEqual({ ui: { resourceUri: uri } });
+      expect(shown._meta).toEqual({ ui: { resourceUri: uri, visibility: ["model"] } });
       expect(shown.inputSchema).toEqual(plain.inputSchema);
       expect(shown.annotations).toEqual(plain.annotations);
       expect(shown.description).toContain(`use ${read}, which shows nothing`);
       expect(shown.description).toContain(plain.description!);
     }
+  });
+
+  it("let a card's frame call only the reads it pages through, keeping every other tool to the model", async () => {
+    const { tools } = await (await connect(true)).listTools();
+    const visibility = (name: string) => (tools.find((t) => t.name === name)!._meta?.ui as { visibility?: string[] } | undefined)?.visibility;
+    for (const name of ["get_histories", "get_history_contents", "show_datasets"]) expect(visibility(name), name).toBeUndefined();
+    for (const tool of tools.filter((t) => !["get_histories", "get_history_contents", "show_datasets"].includes(t.name))) {
+      expect(visibility(tool.name), tool.name).toEqual(["model"]);
+    }
+    expect(visibility("run_tool")).toEqual(["model"]);
+    expect(tools.find((t) => t.name === "show_history")!._meta).toEqual({ ui: { resourceUri: HISTORY_CARD_URI, visibility: ["model"] } });
+    // With the cards off nothing is advertised differently.
+    expect((await (await connect(false)).listTools()).tools.some((t) => t._meta)).toBe(false);
   });
 
   it("serve each card as an MCP App", async () => {
