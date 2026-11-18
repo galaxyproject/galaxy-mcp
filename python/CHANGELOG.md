@@ -30,12 +30,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   call `connect(url=..., api_key=...)`. That includes a `.env` holding both a URL and a key
   while a key is also exported: the exported key used to win and went to the `.env` URL; now
   it refuses rather than quietly switching keys. `connect(api_key=...)` without a `url` is
-  likewise refused when the URL would come from `.env`. `connect()` reads `.env` again when
-  credentials are missing, as before, but no longer merges it into the environment, so a
-  `.env` written after startup can't replace an exported `GALAXY_URL` or pair its URL with the
-  exported key. Unchanged: `GALAXY_URL` and `GALAXY_API_KEY` both in the same `.env`, both
-  exported, an exported URL with the key in `.env`, and `connect(url=..., api_key=...)`. Other
-  settings in `.env` (`GALAXY_MCP_*`) are applied as before.
+  likewise refused when the URL would come from `.env`, with or without OAuth. `${...}` is no
+  longer expanded in a `.env`'s `GALAXY_URL` or `GALAXY_API_KEY`. `connect()` still reads
+  `.env` again when credentials are missing, but only for those two values: it no longer
+  merges the file into the environment, so it can't replace an exported `GALAXY_URL` or change
+  other settings mid-run. Other settings in `.env` (`GALAXY_MCP_*`) are applied once at startup
+  without overriding the environment; `${...}` in them now resolves from the file first. An
+  exported variable shadows the `.env`'s even when empty, and `PYTHON_DOTENV_DISABLED` is
+  honoured. Unchanged: `GALAXY_URL` and `GALAXY_API_KEY` both in the same `.env`, both
+  exported, an exported URL with the key in `.env`, and `connect(url=..., api_key=...)`.
 
 ### Added
 

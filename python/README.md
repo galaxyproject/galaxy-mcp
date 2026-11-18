@@ -89,9 +89,9 @@ How you authenticate depends on your transport:
 You can also steer the transport with `GALAXY_MCP_TRANSPORT` (`stdio`, `streamable-http`, or `sse`).
 All variables can be placed in a `.env` file for convenience (the server uses the nearest one,
 in the working directory or a parent). The one limit: a `GALAXY_URL` from `.env` is only used
-with the `GALAXY_API_KEY` from the same file. If the URL comes from `.env` and the key is
-exported, the server refuses to connect rather than send your key to a Galaxy that a cloned
-repository's `.env` chose; export `GALAXY_URL` too, or call `connect(url=..., api_key=...)`.
+with the `GALAXY_API_KEY` from the same file, and `${...}` is not expanded in those two. If the
+URL comes from `.env` and the key is exported, the server doesn't connect; export `GALAXY_URL`
+too, or call `connect(url=..., api_key=...)`. `PYTHON_DOTENV_DISABLED=1` turns `.env` off.
 
 ## Usage
 
