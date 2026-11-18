@@ -47,8 +47,9 @@ def _client(client_id="client-1"):
 
 
 def _anonymous_client():
-    # redirect_uris is the only required field; client_id defaults to None.
-    return OAuthClientInformationFull(redirect_uris=[REDIRECT_URI])
+    # MCP SDK v2 makes client_id required, so a client without one can only arrive
+    # unvalidated. The provider still guards against it; build one past validation.
+    return OAuthClientInformationFull.model_construct(client_id=None, redirect_uris=[REDIRECT_URI])
 
 
 @pytest.fixture
