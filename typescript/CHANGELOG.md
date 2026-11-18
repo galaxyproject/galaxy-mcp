@@ -6,6 +6,21 @@ entry covers all three; where something only affects one surface, it says which.
 
 ## Unreleased
 
+### galaxy-mcp can show cards (MCP Apps)
+
+With `GALAXY_MCP_APPS=1` (or `buildServer(ctx, { apps: true })`), `galaxy-mcp` serves
+[MCP Apps](https://github.com/modelcontextprotocol/ext-apps) cards and three tools that open them:
+
+- `show_histories` returns what `get_histories` returns, beside a card of the user's histories.
+- `show_history` returns what `get_history_contents` returns, beside a card of one history.
+- `show_datasets` shows only the datasets an agent chose.
+
+Each card shows five rows and can show more, show less and collapse, and its rows open in
+place. A card pages through the read tool with the arguments it was opened with.
+`@galaxyproject/galaxy-ops` exports the read behind `show_datasets` as `getSelectedDatasets`.
+That is a helper, not an operation, so it adds no tool. Cards are off by default, so the tool
+list and the parity report are unchanged unless they are turned on.
+
 ### A per-run scope for agent hosts
 
 On both servers: the Python server enforces the same scope from the same variables, and
@@ -58,6 +73,16 @@ contract, and every MCP client we know of reads both, but a consumer that patter
 old `anyOf` will see the new spelling in the input schemas `galaxy-mcp` advertises and in what
 `galaxy-ops` hands out. The parity comparison reads the list as the union it is, so the report
 against the Python server is unchanged.
+
+### `@galaxyproject/galaxy-api-client` 26.1
+
+`galaxy-ops` moves from `galaxy-api-client ^26.0.1` to `^26.1.2`, and the response types it
+re-exports follow Galaxy 26.1's schema. A user tool's `representation` may now also be a plain
+`{ [key: string]: unknown }` object, so code that reached into `representation.inputs` needs to
+narrow first, and a job's `job_messages` gains an output-collection security message type. 26.1
+also adds `representation_errors` and `representation_status` to a user tool; a 26.0 server
+does not send them, so `UserToolRecord` keeps both optional rather than promising fields that
+can be missing at runtime.
 
 ## 0.5.0 (2026-10-20)
 
