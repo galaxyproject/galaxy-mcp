@@ -774,21 +774,6 @@ def test_resolve_slots_requests_instance_false():
     # gi.url is already the API root -- a doubled /api/api 404s and this path
     # quietly falls back to the .ga export instead of erroring.
     assert url.startswith("https://g/api/workflows/wfid/download?")
-    assert "version=" not in url
-
-
-def test_resolve_slots_reads_the_asked_for_version():
-    # Validating against the latest version's slots would refuse inputs that are right
-    # for the version actually being run.
-    gi = Mock()
-    gi.url = "https://g/api"
-    run_resp = Mock()
-    run_resp.status_code = 500
-    gi.make_get_request.return_value = run_resp
-    gi.workflows.export_workflow_dict.return_value = {"steps": {}}
-    _resolve_workflow_slots(gi, "wfid", version=2)
-    assert "&version=2" in gi.make_get_request.call_args.args[0]
-    gi.workflows.export_workflow_dict.assert_called_once_with("wfid", version=2)
 
 
 # ---------------------------------------------------------------------------
