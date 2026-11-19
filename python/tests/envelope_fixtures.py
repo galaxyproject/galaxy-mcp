@@ -5397,6 +5397,14 @@ def replies_json_for(case: Case) -> str:
                     f"`{REGENERATE_COMMAND}`. Matched by method and path; where a route "
                     "declares a query, every declared parameter must match, and the most "
                     "specific matching route wins."
+                    # Said only where it applies, so the tables without one read as before.
+                    + (
+                        " Where a route declares json, the request's JSON body has to carry "
+                        "each of those keys with that value, and a declared key counts "
+                        "toward specificity like a query parameter."
+                        if any(spec.get("json") for spec in case.routes)
+                        else ""
+                    )
                 ),
                 "baseUrl": GALAXY_BASE_URL,
                 "routes": case.routes,
