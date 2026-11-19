@@ -34,6 +34,7 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "execa": "^10.2.1",
+    "fast-check": "^4.10.2",
     "tsup": "^9.0.0",
     "vitest": "^5.1.0",
     "typescript": "^7.0.2"
