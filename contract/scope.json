@@ -1,0 +1,326 @@
+{
+  "$comment": "Generated from python/src/galaxy_mcp/scope.py -- do not edit by hand. Regenerate with `uv run python -m tests.scope_manifest` in python/. `tools` is keyed by wire tool name and spelled in wire parameter names; `ids` keeps the order a refusal names records in; each `requires` entry is satisfied by any one of its names; the other keys name a strategy each server implements once (a TypeScript op declares the matching function). `only` marks a tool one server has and the other does not. `sentences` is every refusal rendered for one fixed set of arguments.",
+  "env": {
+    "write": "GALAXY_MCP_SCOPE_WRITE_HISTORIES",
+    "read": "GALAXY_MCP_SCOPE_READ_HISTORIES",
+    "createdOnly": "GALAXY_MCP_SCOPE_CREATED_ONLY",
+    "allowCreate": "GALAXY_MCP_SCOPE_ALLOW_CREATE",
+    "destructive": "GALAXY_MCP_SCOPE_DESTRUCTIVE",
+    "blocked": "GALAXY_MCP_SCOPE_BLOCKED_TOOLS"
+  },
+  "idParams": {
+    "history_id": "history",
+    "dataset_id": "hda",
+    "collection_id": "hdca",
+    "job_id": "job",
+    "invocation_id": "invocation",
+    "workflow_id": "workflow",
+    "tool_request_id": "tool_request"
+  },
+  "kinds": {
+    "history": "history id",
+    "hda": "dataset id",
+    "hdca": "dataset collection id",
+    "job": "job id",
+    "invocation": "invocation id",
+    "tool_request": "tool request id",
+    "workflow": "workflow id",
+    "dataset_collection_element": "collection element id"
+  },
+  "handleCapacity": 10000,
+  "tools": {
+    "cancel_workflow_invocation": {
+      "ids": {
+        "invocation_id": "invocation"
+      },
+      "access": "write",
+      "ownerOf": "invocation",
+      "owner": "cancelled_invocation"
+    },
+    "connect": {
+      "ids": {},
+      "access": "write",
+      "only": "python"
+    },
+    "create_history": {
+      "ids": {},
+      "access": "write",
+      "creates": "always"
+    },
+    "create_page": {
+      "ids": {
+        "history_id": "history"
+      },
+      "access": "write"
+    },
+    "create_user_tool": {
+      "ids": {},
+      "access": "write"
+    },
+    "delete_user_tool": {
+      "ids": {},
+      "access": "write"
+    },
+    "download_dataset": {
+      "ids": {
+        "dataset_id": "hda"
+      },
+      "access": "read",
+      "ownerOf": "dataset"
+    },
+    "get_collection_details": {
+      "ids": {
+        "collection_id": "hdca"
+      },
+      "access": "read",
+      "owner": "collection"
+    },
+    "get_dataset_details": {
+      "ids": {
+        "dataset_id": "hda"
+      },
+      "access": "read",
+      "owner": "dataset"
+    },
+    "get_histories": {
+      "ids": {},
+      "access": "read",
+      "filter": "histories_in_tool"
+    },
+    "get_history_contents": {
+      "ids": {
+        "history_id": "history"
+      },
+      "access": "read"
+    },
+    "get_history_details": {
+      "ids": {
+        "history_id": "history"
+      },
+      "access": "read"
+    },
+    "get_invocations": {
+      "ids": {
+        "invocation_id": "invocation",
+        "workflow_id": "workflow",
+        "history_id": "history"
+      },
+      "access": "read",
+      "owner": "invocation",
+      "filter": "invocation_rows"
+    },
+    "get_iwc_workflow_details": {
+      "ids": {},
+      "access": "read"
+    },
+    "get_iwc_workflows": {
+      "ids": {},
+      "access": "read"
+    },
+    "get_job_details": {
+      "ids": {
+        "dataset_id": "hda",
+        "history_id": "history",
+        "job_id": "job"
+      },
+      "access": "read",
+      "owner": "job"
+    },
+    "get_job_logs": {
+      "ids": {
+        "job_id": "job"
+      },
+      "access": "read",
+      "ownerOf": "job"
+    },
+    "get_page": {
+      "ids": {},
+      "access": "read"
+    },
+    "get_page_revision": {
+      "ids": {},
+      "access": "read"
+    },
+    "get_server_info": {
+      "ids": {},
+      "access": "read",
+      "annotate": "server_info"
+    },
+    "get_tool_citations": {
+      "ids": {},
+      "access": "read"
+    },
+    "get_tool_details": {
+      "ids": {},
+      "access": "read"
+    },
+    "get_tool_input_template": {
+      "ids": {},
+      "access": "read"
+    },
+    "get_tool_panel": {
+      "ids": {},
+      "access": "read"
+    },
+    "get_tool_run_examples": {
+      "ids": {},
+      "access": "read"
+    },
+    "get_user": {
+      "ids": {},
+      "access": "read",
+      "restrict": "user"
+    },
+    "get_user_tool": {
+      "ids": {},
+      "access": "read"
+    },
+    "get_workflow_details": {
+      "ids": {
+        "workflow_id": "workflow"
+      },
+      "access": "read"
+    },
+    "get_workflow_input_template": {
+      "ids": {
+        "workflow_id": "workflow",
+        "history_id": "history"
+      },
+      "access": "read"
+    },
+    "import_workflow_from_iwc": {
+      "ids": {},
+      "access": "write"
+    },
+    "invoke_workflow": {
+      "ids": {
+        "workflow_id": "workflow",
+        "history_id": "history"
+      },
+      "access": "write",
+      "requires": [
+        [
+          "history_id",
+          "history_name"
+        ]
+      ],
+      "creates": "history_name_without_history_id"
+    },
+    "list_history_ids": {
+      "ids": {},
+      "access": "read",
+      "filter": "histories_in_tool"
+    },
+    "list_jobs": {
+      "ids": {
+        "history_id": "history"
+      },
+      "access": "read",
+      "filter": "job_rows"
+    },
+    "list_page_revisions": {
+      "ids": {},
+      "access": "read"
+    },
+    "list_pages": {
+      "ids": {
+        "history_id": "history"
+      },
+      "access": "read"
+    },
+    "list_user_tools": {
+      "ids": {},
+      "access": "read"
+    },
+    "list_workflows": {
+      "ids": {},
+      "access": "read"
+    },
+    "recommend_biocontainer": {
+      "ids": {},
+      "access": "read"
+    },
+    "recommend_iwc_workflows": {
+      "ids": {},
+      "access": "read"
+    },
+    "revert_page_revision": {
+      "ids": {},
+      "access": "write"
+    },
+    "run_tool": {
+      "ids": {
+        "history_id": "history"
+      },
+      "access": "write"
+    },
+    "run_user_tool": {
+      "ids": {
+        "history_id": "history"
+      },
+      "access": "write"
+    },
+    "search_iwc_workflows": {
+      "ids": {},
+      "access": "read"
+    },
+    "search_tools_by_keywords": {
+      "ids": {},
+      "access": "read"
+    },
+    "search_tools_by_name": {
+      "ids": {},
+      "access": "read"
+    },
+    "update_history": {
+      "ids": {
+        "history_id": "history"
+      },
+      "access": "write",
+      "destroys": "deleted_true"
+    },
+    "update_page": {
+      "ids": {},
+      "access": "write"
+    },
+    "upload_file": {
+      "ids": {
+        "history_id": "history"
+      },
+      "access": "write",
+      "requires": [
+        [
+          "history_id"
+        ]
+      ]
+    },
+    "upload_file_from_url": {
+      "ids": {
+        "history_id": "history"
+      },
+      "access": "write",
+      "requires": [
+        [
+          "history_id"
+        ]
+      ]
+    }
+  },
+  "sentences": {
+    "blocked": "create_history is not available in this run: the host's scope blocks it. Nothing was sent to Galaxy.",
+    "history_out_of_scope_read": "history_id 'c3' is outside this run's scope. Histories this run may read: a1, d4, b2. Nothing was sent to Galaxy.",
+    "history_out_of_scope_write": "history_id 'c3' is outside this run's scope. Histories this run may write: a1, d4; read-only: b2. Nothing was sent to Galaxy.",
+    "history_read_only": "history_id 'b2' is read-only in this run and update_history changes it. Histories this run may write: a1, d4; read-only: b2. Nothing was sent to Galaxy.",
+    "missing_param": "upload_file needs history_id in this run: without it Galaxy would use its current history, which is not known to be one this run may write. Histories this run may write: a1, d4; read-only: b2. Nothing was sent to Galaxy.",
+    "missing_param_either": "invoke_workflow needs history_id or history_name in this run: without it Galaxy would use its current history, which is not known to be one this run may write. Histories this run may write: a1; read-only: b2. Nothing was sent to Galaxy.",
+    "create_not_allowed": "create_history would create a history, and this run may not create histories. Nothing was sent to Galaxy.",
+    "not_deletable_created": "update_history would delete history_id 'a1', which this run may not delete. This run may delete only histories it created itself: d4. Nothing was sent to Galaxy.",
+    "not_deletable_writable": "update_history would delete history_id 'c3', which this run may not delete. Histories this run may delete: a1, d4. Nothing was sent to Galaxy.",
+    "owner_after": "dataset 'dd' belongs to history 'c3', which is outside this run's scope. Histories this run may read: a1, d4, b2. It was not returned.",
+    "owner_before": "invocation 'ee' belongs to history 'c3', which is outside this run's scope. Histories this run may write: a1; read-only: b2. cancel_workflow_invocation was not run.",
+    "owner_read_only": "invocation 'ee' belongs to history 'b2', which is read-only in this run, and cancel_workflow_invocation changes it. Histories this run may write: a1; read-only: b2. cancel_workflow_invocation was not run.",
+    "kind_mismatch": "dataset_id 'ee' was returned by an earlier call as a job id; dataset_id expects a dataset id. Nothing was sent to Galaxy.",
+    "kind_mismatch_two": "collection_id 'ee' was returned by an earlier call as a job id and a dataset id; collection_id expects a dataset collection id. Nothing was sent to Galaxy.",
+    "summary_note": "This session is scoped. It may read histories: a1, d4, b2; write to: a1, d4. It may create histories, and use the ones it creates. It may delete only histories it created itself."
+  }
+}

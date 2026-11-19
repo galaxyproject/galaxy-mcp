@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { httpError } from "../errors";
+import { recordHandles, visibleHistories } from "../scope";
 import { paginate, wirePagination, type Paged } from "./pagination";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
@@ -40,12 +41,14 @@ async function run(i: In, ctx: GalaxyContext): Promise<Histories> {
     params: { query: { limit: null, offset: null } },
   });
   if (error || !data) throw httpError(response, error);
-  const all = data as History[];
+  // A scoped session lists only its own histories, narrowed before anything is counted.
+  const all = visibleHistories(ctx, data as History[]);
   // Exact equality, because that is what bioblend does on the other surface:
   // `[h for h in histories if h["name"] == name]`, and it filters whenever the
   // caller supplied a name at all, an empty one included.
   const matching =
     i.name != null ? all.filter((h) => (h as { name?: string }).name === i.name) : all;
+  recordHandles(ctx, "history", matching.map((h) => (h as { id?: unknown }).id));
   // No limit means no window, and `||` rather than `??` on purpose: bioblend drops
   // a falsy limit with `if limit:`, so zero means unset there and means unset here.
   // One page then holds everything there is, which is what the other surface

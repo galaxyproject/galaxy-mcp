@@ -56,6 +56,27 @@ through `runWithEnvelope` -- and a server that is too old is refused with a
 `/api/version` once per context, or taken from the `serverVersion` you pass to
 `createGalaxyContext`; a version that cannot be read refuses nothing.
 
+## Scoping a context to a run
+
+A host that runs an agent can confine a context to that run. Pass a `scope` -- the
+histories the run may read and write, the ones it may only read, and the operations it may
+not call -- and every operation is held to it by the registry, whether it is called directly,
+through `runWithEnvelope`, or from the MCP server built over the context:
+
+```ts
+const ctx = createGalaxyContext({
+  baseUrl,
+  apiKey,
+  scope: { historyIds: ["f2db41e1fa331b3e"], readOnlyHistoryIds: [], blockedOperations: ["create_history"] },
+});
+```
+
+A refusal is a `GalaxyScopeError` (`kind: "out_of_scope"`); an id passed as a kind the run
+has seen it returned as something else is a `GalaxyHandleKindError`
+(`kind: "handle_kind_mismatch"`). What is checked, what is narrowed and what is not covered is
+in the workspace [README](../../README.md#scoping-a-context-to-a-run). Without a `scope`,
+nothing changes.
+
 ## In a browser
 
 The default entry registers every operation, and three of them need something a

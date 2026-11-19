@@ -198,6 +198,7 @@ export const getWorkflowInputTemplateOp: Operation<typeof input, WorkflowInputTe
   domain: "workflows",
   summary:
     "Return a ready-to-fill input template plus a run guide for a workflow. Call this before invoke_workflow. Each slot lists its label, expected src (hda/hdca), accepted datatypes, collection type, and -- for parameters -- selectable options.",
+  ids: { workflowId: "workflow", historyId: "history" },
   input,
   run,
   project: (out, i, facts) => {

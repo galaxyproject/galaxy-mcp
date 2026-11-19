@@ -648,3 +648,52 @@ class TestAliasChains:
             self.C,
         )
         assert compare_runs(py, ts) == ['step 0 t [exact] o: python "<h.id>", typescript "<c.id>"']
+
+
+class TestServerEnv:
+    """A scenario's `server_env`: GALAXY_MCP_* only, references checked, a server of its own."""
+
+    @staticmethod
+    def _scenario(server_env: dict[str, str]) -> dict[str, object]:
+        return {
+            "id": "scope.env.case",
+            "note": "a scenario with a server environment of its own",
+            "fixtures": [{"as": "a", "history": {}}],
+            "server_env": server_env,
+            "steps": [{"call": "get_server_info"}],
+        }
+
+    def test_only_the_servers_own_settings_may_be_set(self):
+        from tests.live.model import Scenario
+
+        Scenario.model_validate(self._scenario({"GALAXY_MCP_SCOPE_WRITE_HISTORIES": "${a.id}"}))
+        for name in ("GALAXY_URL", "GALAXY_API_KEY", "PATH", "GALAXY_LIVE_ALLOW_PRODUCTION"):
+            with pytest.raises(ValueError, match="server_env may only set GALAXY_MCP_"):
+                Scenario.model_validate(self._scenario({name: "x"}))
+
+    def test_a_reference_to_nothing_is_an_offline_problem(self):
+        from tests.live.loader import check_references
+        from tests.live.model import Scenario
+
+        good = Scenario.model_validate(
+            self._scenario({"GALAXY_MCP_SCOPE_WRITE_HISTORIES": "${a.id}"})
+        )
+        assert check_references(good) == []
+        bad = Scenario.model_validate(
+            self._scenario({"GALAXY_MCP_SCOPE_WRITE_HISTORIES": "${nope.id}"})
+        )
+        assert any("server_env" in problem for problem in check_references(bad))
+
+    def test_a_dedicated_session_is_not_the_shared_one_and_takes_the_extra_environment(
+        self, tmp_path
+    ):
+        pool = servers.ServerPool(
+            {}, "http://galaxy.invalid", "k", "/usr/bin", str(tmp_path), tmp_path
+        )
+        own = pool.dedicated("python")
+        assert own is not pool.dedicated("python")
+        assert pool._sessions == {}
+        own.env.update({"GALAXY_MCP_SCOPE_CREATED_ONLY": "1"})
+        assert own.env["GALAXY_URL"] == "http://galaxy.invalid"
+        assert own.env["GALAXY_MCP_SCOPE_CREATED_ONLY"] == "1"
+        assert own.starts == 0

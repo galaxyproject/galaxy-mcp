@@ -16,6 +16,7 @@ import type { GalaxyContext } from "../context";
 import { DetailedError } from "tus-js-client";
 import { GalaxyAuthError, GalaxyConnectionError, GalaxyError } from "../errors";
 import { legacyPost } from "../legacy";
+import { recordHandles, recordUploadResult } from "../scope";
 import { tusUploadFile } from "../tus-upload";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
@@ -87,7 +88,10 @@ async function run(i: In, ctx: GalaxyContext): Promise<UploadFileResult> {
     payload["history_id"] = i.historyId;
   }
 
-  return legacyPost<UploadFileResult>(ctx, "/api/tools/fetch", { body: payload });
+  const result = await legacyPost<UploadFileResult>(ctx, "/api/tools/fetch", { body: payload });
+  recordUploadResult(ctx, result);
+  recordHandles(ctx, "history", [i.historyId]);
+  return result;
 }
 
 export const uploadFileOp: Operation<typeof input, UploadFileResult> = {
@@ -97,6 +101,9 @@ export const uploadFileOp: Operation<typeof input, UploadFileResult> = {
   summary:
     "Upload a local file to a Galaxy history via the tus resumable-upload protocol, then finalize via the Fetch API. Returns immediately with job info (no wait).",
   input,
+  ids: { historyId: "history" },
+  // Without a history the upload lands in Galaxy's current history, which no scope vouches for.
+  scope: { requires: ["historyId"] },
   run,
   project: (out, i) => ({
     message: `Uploaded ${basename(i.path)} (${out.jobs?.length ?? 0} job(s))`,

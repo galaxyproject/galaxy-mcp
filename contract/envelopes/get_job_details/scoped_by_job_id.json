@@ -1,0 +1,28 @@
+{
+  "data": {
+    "job": {
+      "id": "e001",
+      "state": "ok",
+      "tool_id": "cat1",
+      "history_id": "aaaa0001",
+      "inputs": {
+        "input1": {
+          "id": "dd05",
+          "src": "hda"
+        }
+      },
+      "outputs": {
+        "out1": {
+          "id": "dd06",
+          "src": "hda"
+        }
+      }
+    },
+    "dataset_id": null,
+    "job_id": "e001"
+  },
+  "success": true,
+  "message": "Retrieved job details for job 'e001'",
+  "count": null,
+  "pagination": null
+}

@@ -17,6 +17,12 @@ const MAP: Record<GalaxyErrorKind, number> = {
   version: EX_PROTOCOL,
   tool_request_rejected: EX_DATAERR,
   job_failed: EX_SOFTWARE,
+  // "permission denied": the host's scope for this run does not allow the target. Shares the
+  // code with a bad key because both say the caller may not do this, and neither is retryable.
+  out_of_scope: EX_NOPERM,
+  // The caller passed an id of one kind where another belongs: an argument to fix, like any
+  // other usage error.
+  handle_kind_mismatch: EX_USAGE,
   unknown: EX_SOFTWARE,
 };
 

@@ -33,7 +33,14 @@ import { fileURLToPath } from "node:url";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { createGalaxyContext } from "@galaxyproject/galaxy-ops";
+import {
+  createGalaxyContext,
+  recordCreatedHistory,
+  recordHandles,
+  scopeFromEnv,
+  type GalaxyContext,
+  type HandleKind,
+} from "@galaxyproject/galaxy-ops";
 import { buildServer } from "../src/server";
 // The IWC manifest and the container recommender are both memoised for the life of
 // the process, as they are on the other side, so a case that serves its own manifest
@@ -71,6 +78,41 @@ interface CaseEntry {
   input: Record<string, unknown>;
   envelope: string;
   replies: string;
+  scope?: CaseScope;
+  scopeAfter?: { created: string[]; handles: Record<string, string[]> };
+}
+
+/** The scope a case runs under, and what an earlier call of its session left behind. */
+interface CaseScope {
+  env: Record<string, string>;
+  created?: string[];
+  handles?: Record<string, HandleKind[]>;
+}
+
+/**
+ * A context for one case: unscoped for every case there was before scopes existed, and for
+ * a scoped one the scope its environment describes, seeded with the session's memory.
+ */
+function contextFor(
+  entry: { scope?: CaseScope },
+  base: { baseUrl: string; apiKey: string; fetchImpl?: typeof fetch },
+): GalaxyContext {
+  const ctx = createGalaxyContext({ ...base, scope: entry.scope ? scopeFromEnv(entry.scope.env) : undefined });
+  for (const id of entry.scope?.created ?? []) recordCreatedHistory(ctx, id);
+  for (const [id, kinds] of Object.entries(entry.scope?.handles ?? {})) {
+    for (const kind of kinds) recordHandles(ctx, kind, [id]);
+  }
+  return ctx;
+}
+
+/** What the call left behind, spelled the way the generator writes `scopeAfter`. */
+function sessionAfter(ctx: GalaxyContext): { created: string[]; handles: Record<string, string[]> } {
+  return {
+    created: [...(ctx.createdHistories ?? [])],
+    handles: Object.fromEntries(
+      [...(ctx.handles ?? [])].sort(([a], [b]) => (a < b ? -1 : 1)).map(([id, kinds]) => [id, [...kinds].sort()]),
+    ),
+  };
 }
 
 /** A failed call as the other server's wire carries it, plus the tool's own sentence. */
@@ -138,11 +180,12 @@ function replier(baseUrl: string, routes: Route[]): typeof fetch {
 /** Call one tool the way a client does, and hand back the parsed text block. */
 async function callThroughMcp(
   baseUrl: string,
-  tool: string,
-  args: Record<string, unknown>,
-): Promise<{ content: Array<{ type: string; text?: string }>; isError: boolean }> {
+  entry: CaseEntry,
+): Promise<{ content: Array<{ type: string; text?: string }>; isError: boolean; ctx: GalaxyContext }> {
+  const { tool, input: args } = entry;
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const server = buildServer(createGalaxyContext({ baseUrl, apiKey: "envelope-parity-not-a-key" }));
+  const ctx = contextFor(entry, { baseUrl, apiKey: "envelope-parity-not-a-key" });
+  const server = buildServer(ctx);
   const client = new Client({ name: "envelope-parity", version: "0" });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {
@@ -150,7 +193,7 @@ async function callThroughMcp(
       content: Array<{ type: string; text?: string }>;
       isError?: boolean;
     };
-    return { content: result.content, isError: result.isError === true };
+    return { content: result.content, isError: result.isError === true, ctx };
   } finally {
     await client.close();
     await server.close();
@@ -186,9 +229,11 @@ describe("the MCP envelope is the Python server's", () => {
       const replies = readJson<{ baseUrl: string; routes: Route[] }>(entry.replies);
       arrange(replies);
 
-      const { content, isError } = await callThroughMcp(replies.baseUrl, entry.tool, entry.input);
+      const { content, isError, ctx } = await callThroughMcp(replies.baseUrl, entry);
       const text = content.map((c) => c.text ?? "").join("");
       expect(isError, text).toBe(false);
+      // A scoped case also pins what the session remembers afterwards.
+      if (entry.scopeAfter) expect(sessionAfter(ctx), "the session's memory").toEqual(entry.scopeAfter);
       const parsed = JSON.parse(text) as Record<string, unknown>;
 
       expect(Object.keys(parsed).sort(), "the envelope's keys").toEqual(
@@ -217,9 +262,10 @@ describe("the MCP failure is the Python server's", () => {
       const replies = readJson<{ baseUrl: string; routes: Route[] }>(entry.replies);
       arrange(replies);
 
-      const { content, isError } = await callThroughMcp(replies.baseUrl, entry.tool, entry.input);
+      const { content, isError, ctx } = await callThroughMcp(replies.baseUrl, entry);
       const text = content.map((c) => c.text ?? "").join("");
       expect(isError, text).toBe(true);
+      if (entry.scopeAfter) expect(sessionAfter(ctx), "the session's memory").toEqual(entry.scopeAfter);
       // One block, of type text, carrying the whole answer -- not an envelope with
       // success:false in it, which is what this surface used to send.
       expect(content.length, "content blocks").toBe(expected.result.content.length);

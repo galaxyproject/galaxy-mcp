@@ -1,0 +1,16 @@
+{
+  "data": [
+    {
+      "id": "aaaa0001",
+      "name": "assigned"
+    },
+    {
+      "id": "bbbb0002",
+      "name": "reference"
+    }
+  ],
+  "success": true,
+  "message": "Retrieved 2 histories",
+  "count": 2,
+  "pagination": null
+}

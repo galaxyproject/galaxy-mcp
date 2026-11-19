@@ -1,0 +1,10 @@
+{
+  "data": {
+    "id": "f00d",
+    "username": "curator"
+  },
+  "success": true,
+  "message": "Retrieved user info for 'curator'",
+  "count": null,
+  "pagination": null
+}

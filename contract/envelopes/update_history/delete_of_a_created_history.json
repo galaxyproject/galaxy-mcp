@@ -1,0 +1,11 @@
+{
+  "data": {
+    "id": "dddd0004",
+    "name": "scratch",
+    "deleted": true
+  },
+  "success": true,
+  "message": "Updated history dddd0004 (deleted)",
+  "count": null,
+  "pagination": null
+}

@@ -28,7 +28,16 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect, vi } from "vitest";
-import { allOperations, createGalaxyContext, type AnyOperation } from "@galaxyproject/galaxy-ops";
+import {
+  allOperations,
+  createGalaxyContext,
+  recordCreatedHistory,
+  recordHandles,
+  scopeFromEnv,
+  type AnyOperation,
+  type GalaxyContext,
+  type HandleKind,
+} from "@galaxyproject/galaxy-ops";
 import { buildProgram } from "../src/program";
 import { classifyField, flagName } from "../src/flags";
 
@@ -57,6 +66,41 @@ interface CaseEntry {
   input: Record<string, unknown>;
   envelope: string;
   replies: string;
+  scope?: CaseScope;
+  scopeAfter?: { created: string[]; handles: Record<string, string[]> };
+}
+
+/** The scope a case runs under, and what an earlier call of its session left behind. */
+interface CaseScope {
+  env: Record<string, string>;
+  created?: string[];
+  handles?: Record<string, HandleKind[]>;
+}
+
+/**
+ * A context for one case: unscoped for every case there was before scopes existed, and for
+ * a scoped one the scope its environment describes, seeded with the session's memory.
+ */
+function contextFor(
+  entry: { scope?: CaseScope },
+  base: { baseUrl: string; apiKey: string; fetchImpl?: typeof fetch },
+): GalaxyContext {
+  const ctx = createGalaxyContext({ ...base, scope: entry.scope ? scopeFromEnv(entry.scope.env) : undefined });
+  for (const id of entry.scope?.created ?? []) recordCreatedHistory(ctx, id);
+  for (const [id, kinds] of Object.entries(entry.scope?.handles ?? {})) {
+    for (const kind of kinds) recordHandles(ctx, kind, [id]);
+  }
+  return ctx;
+}
+
+/** What the call left behind, spelled the way the generator writes `scopeAfter`. */
+function sessionAfter(ctx: GalaxyContext): { created: string[]; handles: Record<string, string[]> } {
+  return {
+    created: [...(ctx.createdHistories ?? [])],
+    handles: Object.fromEntries(
+      [...(ctx.handles ?? [])].sort(([a], [b]) => (a < b ? -1 : 1)).map(([id, kinds]) => [id, [...kinds].sort()]),
+    ),
+  };
 }
 
 /** A failed call on the other server: the wire result, and the tool's own sentence. */
@@ -147,7 +191,8 @@ function argvFor(op: AnyOperation, input: Record<string, unknown>): string[] {
   return [op.name, ...positionals, ...options, "--format", "json"];
 }
 
-async function runCli(argv: string[], baseUrl: string, fetchImpl: typeof fetch) {
+async function runCli(argv: string[], baseUrl: string, fetchImpl: typeof fetch, entry: { scope?: CaseScope } = {}) {
+  const ctx = contextFor(entry, { baseUrl, apiKey: "not-a-key", fetchImpl });
   const out = vi.spyOn(console, "log").mockImplementation(() => {});
   const err = vi.spyOn(console, "error").mockImplementation(() => {});
   // The context's client takes the canned fetch as an argument; the IWC manifest and
@@ -160,12 +205,13 @@ async function runCli(argv: string[], baseUrl: string, fetchImpl: typeof fetch) 
       // The table's own base, spelled as it spells it: get_server_info answers with the
       // address it was given, so a trailing slash dropped here would be a difference in
       // the harness rather than in the surface.
-      makeContext: () => createGalaxyContext({ baseUrl, apiKey: "not-a-key", fetchImpl }),
+      makeContext: () => ctx,
     }).parseAsync(["node", "galaxy-cli", ...argv]);
     return {
       stdout: out.mock.calls.flat().join(""),
       stderr: err.mock.calls.flat().join(""),
       exitCode: process.exitCode,
+      ctx,
     };
   } finally {
     out.mockRestore();
@@ -199,8 +245,10 @@ describe("the CLI's json envelope is the Python server's", () => {
         argvFor(op!, entry.input),
         replies.baseUrl,
         replier(replies.baseUrl, replies.routes),
+        entry,
       );
       expect(run.exitCode, run.stderr || run.stdout).toBe(0);
+      if (entry.scopeAfter) expect(sessionAfter(run.ctx), "the session's memory").toEqual(entry.scopeAfter);
       const printed = JSON.parse(run.stdout) as Record<string, unknown>;
 
       expect(Object.keys(printed).sort(), "the envelope's keys").toEqual(
@@ -235,6 +283,17 @@ describe("the CLI's json envelope is the Python server's", () => {
  * the table is what will make the change visible when it happens.
  */
 const EXIT_CODES: Record<string, number> = {
+  // EX_NOPERM 77 -- out_of_scope: the host's scope for the session does not allow it
+  "cancel_workflow_invocation/invocation_in_another_history": 77,
+  "create_history/blocked_by_name": 77,
+  "create_history/creating_not_allowed": 77,
+  "get_collection_details/collection_in_another_history": 77,
+  "get_dataset_details/dataset_in_another_history": 77,
+  "get_history_details/history_outside_the_scope": 77,
+  "run_tool/read_only_history": 77,
+  "update_history/delete_of_a_history_it_did_not_create": 77,
+  // EX_USAGE 64 -- handle_kind_mismatch: an id of one kind passed where another belongs
+  "get_dataset_details/job_id_passed_as_a_dataset_id": 64,
   // EX_USAGE 64 -- validation: the caller has to change something, and a retry cannot help
   "get_dataset_details/is_a_collection": 64,
   "get_history_contents/limit_below_one": 64,
@@ -367,7 +426,9 @@ describe("the CLI's json failure says what the Python server's tool said", () =>
         argvFor(op!, entry.input),
         replies.baseUrl,
         replier(replies.baseUrl, replies.routes),
+        entry,
       );
+      if (entry.scopeAfter) expect(sessionAfter(run.ctx), "the session's memory").toEqual(entry.scopeAfter);
       const printed = JSON.parse(run.stdout) as Record<string, unknown>;
       expect(printed.success, "success").toBe(false);
       expect(printed.message, "the sentence").toEqual(expected.sentence);

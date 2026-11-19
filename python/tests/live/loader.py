@@ -251,6 +251,7 @@ def check_references(scenario: Scenario) -> list[str]:
     for fixture in scenario.fixtures:
         check(f"fixture {fixture.as_}", fixture.spec.model_dump(by_alias=True))
         scope[fixture.as_] = fixture_scope(fixture.kind)
+    check("server_env", scenario.server_env)
     for i, step in enumerate(scenario.steps):
         where = f"step {i}"
         if isinstance(step, CallStep):

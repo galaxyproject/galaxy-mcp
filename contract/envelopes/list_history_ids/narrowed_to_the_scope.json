@@ -1,0 +1,26 @@
+{
+  "data": [
+    {
+      "id": "aaaa0001",
+      "name": "assigned"
+    },
+    {
+      "id": "bbbb0002",
+      "name": "reference"
+    }
+  ],
+  "success": true,
+  "message": "Found 2 of 2 histories",
+  "count": 2,
+  "pagination": {
+    "total_items": 2,
+    "returned_items": 2,
+    "limit": 100,
+    "offset": 0,
+    "has_next": false,
+    "has_previous": false,
+    "next_offset": null,
+    "previous_offset": null,
+    "helper_text": "Showing 2 of 2 histories (offset 0). This is the last page."
+  }
+}

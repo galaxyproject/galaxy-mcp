@@ -4,6 +4,7 @@ import type { GalaxyContext } from "../context";
 import { httpError, GalaxyConnectionError, GalaxyNotFoundError, GalaxyValidationError } from "../errors";
 import { pyFormatError } from "../python-failure";
 import { pyStr } from "../python-values";
+import { historyIdOf, recordHandles, recordRefs } from "../scope";
 import { isEncodedId, isThisRecord, notAGalaxyId, notThatRecord } from "./encoded-id";
 import { validatePagination } from "./pagination";
 import { withOutcome, type JobStates } from "../invocation-outcome";
@@ -147,6 +148,24 @@ async function jobStates(ctx: GalaxyContext, invocationId: string): Promise<JobS
   ) as JobStates;
 }
 
+/** What an invocation record names: itself, its history and workflow, its steps' jobs, its data. */
+function rememberInvocation(ctx: GalaxyContext, record: unknown): void {
+  if (!record || typeof record !== "object") return;
+  const inv = record as Record<string, unknown>;
+  recordHandles(ctx, "invocation", [inv.id]);
+  recordHandles(ctx, "history", [inv.history_id]);
+  recordHandles(ctx, "workflow", [inv.workflow_id]);
+  if (Array.isArray(inv.steps)) {
+    recordHandles(ctx, "job", inv.steps.map((s) => (s as { job_id?: unknown } | null)?.job_id));
+  }
+  for (const key of ["inputs", "outputs", "output_collections"]) {
+    const refs = inv[key];
+    if (refs && typeof refs === "object") {
+      recordRefs(ctx, Array.isArray(refs) ? refs : Object.values(refs as Record<string, unknown>));
+    }
+  }
+}
+
 async function run(i: In, ctx: GalaxyContext): Promise<GetInvocationsResult> {
   if (i.invocationId) {
     // Not an id, not a request: see encoded-id.ts for what a stray "." would turn into.
@@ -182,6 +201,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetInvocationsResult> {
     if (!isThisRecord(data, i.invocationId)) {
       throw new GalaxyConnectionError(notThatRecord("invocation", i.invocationId), response.status);
     }
+    rememberInvocation(ctx, data);
     return withOutcome(data as InvocationDetail, await jobStates(ctx, i.invocationId));
   }
 
@@ -233,6 +253,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<GetInvocationsResult> {
   // have no way to see where the missing rows went. A listing carries Galaxy's scheduling
   // state only: an outcome needs each invocation's jobs, one request each, so it is read for
   // one invocation by id rather than for every row of a page.
+  for (const row of data) rememberInvocation(ctx, row);
   return data as InvocationSummary[];
 }
 
@@ -247,6 +268,15 @@ export const getInvocationsOp: Operation<typeof input, GetInvocationsResult> = {
     "for what the run amounted to; both are left out when Galaxy's jobs summary cannot be read. " +
     "Get an invocation by id to learn its outcome.",
   input,
+  ids: { invocationId: "invocation", workflowId: "workflow", historyId: "history" },
+  scope: {
+    // One invocation belongs to a history only its record names; a listing is Galaxy's window
+    // with the other histories' rows dropped, so a short page may not be the last one -- ask
+    // with historyId to have Galaxy narrow it instead.
+    owner: (result) => (Array.isArray(result) ? undefined : historyIdOf(result)),
+    filter: (result, inScope) =>
+      Array.isArray(result) ? result.filter((inv) => inScope((inv as { history_id?: unknown }).history_id)) : result,
+  },
   run,
   project: (result, i) => {
     // server.py, get_invocations: the id that was asked for on the detail branch --

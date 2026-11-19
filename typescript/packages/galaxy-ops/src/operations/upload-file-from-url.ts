@@ -8,6 +8,7 @@
 import { z } from "zod";
 import type { GalaxyContext } from "../context";
 import { legacyPost } from "../legacy";
+import { recordUploadResult } from "../scope";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, InputOf, Operation } from "./types";
 
@@ -46,7 +47,9 @@ async function run(i: In, ctx: GalaxyContext): Promise<UploadFileFromUrlResult> 
     body["history_id"] = i.historyId;
   }
 
-  return legacyPost<UploadFileFromUrlResult>(ctx, "/api/tools", { body });
+  const result = await legacyPost<UploadFileFromUrlResult>(ctx, "/api/tools", { body });
+  recordUploadResult(ctx, result);
+  return result;
 }
 
 export const uploadFileFromUrlOp: Operation<typeof input, UploadFileFromUrlResult> = {
@@ -56,6 +59,9 @@ export const uploadFileFromUrlOp: Operation<typeof input, UploadFileFromUrlResul
   summary:
     "Upload a file from a URL to a Galaxy history via the classic upload1 tool form. Returns immediately with job info (no wait).",
   input,
+  ids: { historyId: "history" },
+  // Without a history the upload lands in Galaxy's current history, which no scope vouches for.
+  scope: { requires: ["historyId"] },
   run,
   project: (_out, i) => ({
     message: `Submitted URL upload to history ${i.historyId ?? "(default)"}`,

@@ -3,6 +3,7 @@ import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { httpError } from "../errors";
 import { pyGet, pyStr } from "../python-values";
+import { recordHandles } from "../scope";
 import { envelopeFact, readFact, recordFact } from "./envelope-facts";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
@@ -30,6 +31,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<HistoryDetail> {
   });
   if (error || !data) throw httpError(response, error);
   const history = data as HistoryDetail;
+  recordHandles(ctx, "history", [(history as { id?: unknown }).id]);
   const contents = await ctx.client.GET("/api/histories/{history_id}/contents", {
     params: { path: { history_id: i.historyId } },
   });
@@ -57,6 +59,7 @@ export const getHistoryDetailsOp: Operation<typeof input, HistoryDetail> = {
   domain: "histories",
   summary: "Show a single history's details by id (name, state, counts).",
   input,
+  ids: { historyId: "history" },
   run,
   // The other server wraps the record: this tool answers with the history under its
   // own key and the count it already paid a request for under another, so a caller

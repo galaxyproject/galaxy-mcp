@@ -2,6 +2,7 @@ import type { z, ZodRawShape, ZodObject } from "zod";
 import type { EnvelopeFacts, GalaxyContext } from "../context";
 import type { GalaxyErrorKind } from "../errors";
 import type { HttpFailureFacts, PyRequestShape } from "../python-failure";
+import type { HandleKind, ScopeAccess, ScopeSummary } from "../scope";
 
 export type OperationDomain =
   | "connection"
@@ -69,6 +70,18 @@ export interface Operation<Shape extends ZodRawShape, O> {
   readonly readOnly?: boolean;
   /** Destructive (delete/cancel) ops set this true (drives MCP destructiveHint). */
   readonly destructive?: boolean;
+  /**
+   * Which of this op's parameters carry a Galaxy id, and of what kind.
+   *
+   * Read by the registry's scope guard and by nothing else: a `history` parameter is held to
+   * the run's scope, and every one is held to the kind the run has seen that id as. Declared
+   * per op rather than guessed from names so a reviewer reads it beside the schema, and the
+   * registry refuses to register an op that takes a parameter spelled like one of the known
+   * id parameters without declaring it here (see KNOWN_ID_PARAMS in registry.ts).
+   */
+  readonly ids?: { readonly [K in keyof Shape]?: HandleKind };
+  /** How a scoped run treats this op beyond its id parameters. See ScopeSpec. */
+  readonly scope?: ScopeSpec<InputOf<Shape>, O>;
   run(input: InputOf<Shape>, ctx: GalaxyContext): Promise<O>;
   /**
    * How to cut this op's page down, for the ops the Python server budgets.
@@ -96,6 +109,60 @@ export interface Operation<Shape extends ZodRawShape, O> {
   project?(output: O, input: InputOf<Shape>, facts?: EnvelopeFacts): Projection;
   /** How a failed request is worded. See FailureContract. */
   failure?: FailureContract<InputOf<Shape>>;
+}
+
+/**
+ * What a scoped run needs to know about an op that its `ids` do not say.
+ *
+ * Every field is optional and every one is read only when the context carries a scope, so an
+ * op that declares none of them is scoped by its id parameters alone. Declared on the op, run
+ * by the registry: the op says where its records keep their history and how its listing is
+ * narrowed, and the one place that refuses stays the registry.
+ */
+export interface ScopeSpec<Input, O> {
+  /**
+   * Parameters a scoped run must supply. For a write whose absent history parameter sends the
+   * write to Galaxy's current history -- an upload, a workflow run -- which no scope can vouch
+   * for. Not for an op where an absent history means "no history" (a standalone page). An
+   * entry that is a list is satisfied by any one of its names (a history id, or a name for a
+   * new history).
+   */
+  readonly requires?: readonly (string | readonly string[])[];
+  /** Whether this call creates a history. Refused when the scope does not allow creating. */
+  readonly creates?: (input: Input) => boolean;
+  /**
+   * Whether this call deletes the history its history parameter names. Held to the scope's
+   * destructive rule: by default only a history the session created.
+   */
+  readonly destroys?: (input: Input) => boolean;
+  /** Add the session's own scope to the output, for the op that reports it. */
+  readonly annotate?: (output: O, scope: ScopeSummary) => O;
+  /**
+   * Whether the op reads Galaxy or changes it, where `readOnly` says something else:
+   * `download_dataset` is not read-only because it writes a local file, but it only reads the
+   * history, so a read-only history may serve it. Left out, a write op is `write`.
+   */
+  readonly access?: ScopeAccess;
+  /**
+   * The history the record this op returns belongs to, read off its output. Out of scope, the
+   * record is refused rather than returned. For an op whose output carries no history, or whose
+   * side effect must not happen first, use `ownerOf`.
+   */
+  readonly owner?: (output: O) => string | null | undefined;
+  /**
+   * Look up the history the target record belongs to BEFORE the op runs, for an op with a side
+   * effect keyed by a non-history id (cancelling an invocation, writing a dataset to disk) and
+   * for one whose output cannot carry it (a job's logs). Costs a request, so it is asked only
+   * under a scope; a lookup that fails leaves the owner unknown and the op runs as it would have.
+   */
+  readonly ownerOf?: (input: Input, ctx: GalaxyContext) => Promise<string | null | undefined>;
+  /**
+   * Narrow a listing to the scoped histories: given the output and whether a history may be
+   * read, hand back the output with the rows outside it dropped.
+   */
+  readonly filter?: (output: O, inScope: (historyId: unknown) => boolean) => O;
+  /** What of this op's output a scoped run may see -- an account record cut to its id and name. */
+  readonly restrict?: (output: O) => O;
 }
 
 /**

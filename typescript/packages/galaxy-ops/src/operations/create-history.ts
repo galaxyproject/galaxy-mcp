@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { PostJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { httpError } from "../errors";
+import { recordCreatedHistory, recordHandles } from "../scope";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
@@ -20,6 +21,8 @@ async function run(i: In, ctx: GalaxyContext): Promise<CreatedHistory> {
     headers: { "content-type": "application/x-www-form-urlencoded" },
   });
   if (error || !data) throw httpError(response, error);
+  recordHandles(ctx, "history", [(data as { id?: unknown }).id]);
+  recordCreatedHistory(ctx, (data as { id?: unknown }).id);
   return data as CreatedHistory;
 }
 
@@ -28,6 +31,9 @@ export const createHistoryOp: Operation<typeof input, CreatedHistory> = {
   domain: "histories",
   summary: "Create a new history with the given name.",
   input,
+  // Under a scope the new history joins the ones the session may use, unless the host turned
+  // creating off -- then this is refused before anything is sent.
+  scope: { creates: () => true },
   readOnly: false,
   run,
   // The name that was ASKED for, which is the one server.py's sentence carries

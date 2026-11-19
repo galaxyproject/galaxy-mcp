@@ -11,7 +11,8 @@
  * Galaxy cannot decode at all fails the read with Galaxy's own message.
  */
 import type { GalaxyContext } from "./context";
-import { GalaxyValidationError, httpError } from "./errors";
+import { GalaxyScopeError, GalaxyValidationError, httpError } from "./errors";
+import { blockedOperationSentence, createdHistories, historyAllowed, historyOutOfScopeSentence } from "./scope";
 
 export const MAX_SELECTED_DATASETS = 20;
 /** Long enough for any real dataset name; a longer one is cut so twenty always fit the budget. */
@@ -71,7 +72,29 @@ function project(item: Record<string, unknown>, id: string): SelectedDatasetFiel
   return out as unknown as SelectedDatasetFields;
 }
 
+/** The tool this read is behind, for the scope's refusals. */
+const SHOWN_AS = "show_datasets";
+/** The operation whose read this is: a scope that blocks it blocks this too. */
+const READS_AS = "get_history_contents";
+
+/**
+ * This is not an operation, so the registry's scope guard never sees it: the same two checks a
+ * read of a history's contents gets are made here, before anything is asked of Galaxy.
+ */
+function guardScope(historyId: string, ctx: GalaxyContext): void {
+  const { scope } = ctx;
+  if (!scope) return;
+  if (scope.blockedOperations?.includes(READS_AS)) {
+    throw new GalaxyScopeError(blockedOperationSentence(SHOWN_AS));
+  }
+  const created = createdHistories(ctx);
+  if (!historyAllowed(scope, historyId, "read", created)) {
+    throw new GalaxyScopeError(historyOutOfScopeSentence(SHOWN_AS, "historyId", historyId, scope, "read", created));
+  }
+}
+
 export async function getSelectedDatasets(args: SelectedDatasetsArgs, ctx: GalaxyContext): Promise<SelectedDatasets> {
+  guardScope(args.historyId, ctx);
   // A repeated id is shown once, where it was first chosen.
   const ids = [...new Set(args.datasetIds)];
   if (ids.length === 0) throw new GalaxyValidationError("dataset_ids must name at least one dataset");

@@ -56,6 +56,9 @@ contract/scenarios/scenario.schema.json (regenerate with `uv run python -m tests
   wait (dataset/job/invocation to a state, "terminal", or a list), verify (Galaxy's own
   JSON for history/dataset/workflow/invocation/page, or {content, size} for dataset_text
   and {exists, content, size} for file).
+- `server_env` on a scenario adds GALAXY_MCP_* variables to both servers' environment,
+  for behaviour configured at startup (the scope). Values may reference fixtures; such a
+  scenario runs against a server process of its own, started after its fixtures.
 - Anything a tool creates must be declared in `creates` so cleanup finds it.
 - The call-step view is {outcome, data, success, message, count, pagination} or
   {outcome: "failure", failure: {kind: "tool"|"arguments", sentence}}. Assert

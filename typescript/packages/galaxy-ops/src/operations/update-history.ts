@@ -61,6 +61,9 @@ export const updateHistoryOp: Operation<typeof input, UpdatedHistory> = {
   domain: "histories",
   summary: "Update history metadata (name, annotation, tags, deleted, published).",
   input,
+  ids: { historyId: "history" },
+  // Deleting is the one update a scope holds to its destructive rule; restoring is not.
+  scope: { destroys: (i) => i.deleted === true },
   readOnly: false,
   // Deleting the whole history is one of the updates it makes, and MCP's destructiveHint says
   // what a tool may do.

@@ -1,0 +1,20 @@
+{
+  "data": [
+    {
+      "id": "e001",
+      "state": "ok",
+      "tool_id": "cat1",
+      "history_id": "aaaa0001"
+    },
+    {
+      "id": "e003",
+      "state": "ok",
+      "tool_id": "cat1",
+      "history_id": "bbbb0002"
+    }
+  ],
+  "success": true,
+  "message": "Retrieved 2 jobs",
+  "count": 2,
+  "pagination": null
+}

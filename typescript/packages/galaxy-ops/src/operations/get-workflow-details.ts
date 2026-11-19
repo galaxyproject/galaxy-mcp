@@ -3,6 +3,7 @@ import type { GetJson } from "../bindings";
 import type { GalaxyContext } from "../context";
 import { httpError } from "../errors";
 import { pyGet, pyStr } from "../python-values";
+import { recordHandles } from "../scope";
 import { register, runOperation } from "./registry";
 import type { AnyOperation, Operation } from "./types";
 
@@ -19,6 +20,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<WorkflowDetail> {
     params: { path: { workflow_id: i.workflowId }, query: { version: i.version ?? null } },
   });
   if (error || !data) throw httpError(response, error);
+  recordHandles(ctx, "workflow", [(data as { id?: unknown }).id]);
   return data as WorkflowDetail;
 }
 
@@ -27,6 +29,7 @@ export const getWorkflowDetailsOp: Operation<typeof input, WorkflowDetail> = {
   domain: "workflows",
   summary: "Show a stored workflow by id (name, steps, inputs).",
   input,
+  ids: { workflowId: "workflow" },
   run,
   // server.py, get_workflow_details: the workflow's name through dict.get, falling
   // back to the id that was asked for when the record carries no name key.

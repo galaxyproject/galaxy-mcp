@@ -3,6 +3,7 @@ import type { GalaxyContext } from "../context";
 import { GalaxyNotFoundError } from "../errors";
 import { jsonObject } from "../json-object";
 import { legacyGet, legacyPost } from "../legacy";
+import { recordUploadResult } from "../scope";
 import { enrichedRunFailure, USER_TOOL_SHAPE_HINT } from "../tool-input-error";
 import { preflightToolInputs } from "../tool-preflight";
 import { envelopeFact, readFact, recordFact } from "./envelope-facts";
@@ -70,7 +71,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<UserToolRun> {
 
   // Step 2: run via POST /api/tools (the synchronous UDT path, off-schema -> legacyPost).
   try {
-    return await legacyPost<UserToolRun>(ctx, "/api/tools", {
+    const submitted = await legacyPost<UserToolRun>(ctx, "/api/tools", {
       body: {
         history_id: i.historyId,
         tool_uuid: i.toolUuid,
@@ -79,6 +80,8 @@ async function run(i: In, ctx: GalaxyContext): Promise<UserToolRun> {
         input_format: "legacy",
       },
     });
+    recordUploadResult(ctx, submitted);
+    return submitted;
   } catch (err) {
     // The representation is the schema to explain the refusal with -- this tool is not in
     // the toolbox, so a lookup by id would 404 and the message would come back empty. No
@@ -100,6 +103,7 @@ export const runUserToolOp: Operation<typeof input, UserToolRun> = {
   domain: "userTools",
   summary: "Run a user-defined tool via the Galaxy tools API (two-step: lookup then POST /api/tools).",
   input,
+  ids: { historyId: "history" },
   readOnly: false,
   run,
   // server.py, run_user_tool. The tool_id is the one thing in it that the arguments

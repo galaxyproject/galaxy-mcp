@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "python/src/galaxy_mcp/server.py",
-  "caseCount": 287,
-  "failureCaseCount": 99,
+  "caseCount": 311,
+  "failureCaseCount": 108,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -3529,6 +3529,651 @@
       },
       "envelope": "create_page/galaxy_too_old.json",
       "replies": "create_page/galaxy_too_old.galaxy.json"
+    },
+    {
+      "tool": "get_server_info",
+      "case": "scoped",
+      "note": "a scoped session is told what it may touch, in data.scope and in the message",
+      "outcome": "success",
+      "input": {},
+      "envelope": "get_server_info/scoped.json",
+      "replies": "get_server_info/scoped.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002"
+        }
+      },
+      "scopeAfter": {
+        "created": [],
+        "handles": {}
+      }
+    },
+    {
+      "tool": "get_server_info",
+      "case": "scoped_with_a_created_history",
+      "note": "a history the session created is listed as writable, and as the one it may delete",
+      "outcome": "success",
+      "input": {},
+      "envelope": "get_server_info/scoped_with_a_created_history.json",
+      "replies": "get_server_info/scoped.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002"
+        },
+        "created": [
+          "dddd0004"
+        ]
+      },
+      "scopeAfter": {
+        "created": [
+          "dddd0004"
+        ],
+        "handles": {}
+      }
+    },
+    {
+      "tool": "get_history_details",
+      "case": "history_outside_the_scope",
+      "note": "a history the scope does not list is refused before anything is asked of Galaxy",
+      "outcome": "failure",
+      "input": {
+        "history_id": "cccc0003"
+      },
+      "envelope": "get_history_details/history_outside_the_scope.json",
+      "replies": "get_invocations/malformed_id.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002"
+        }
+      },
+      "scopeAfter": {
+        "created": [],
+        "handles": {}
+      }
+    },
+    {
+      "tool": "run_tool",
+      "case": "read_only_history",
+      "note": "a write to a history the session may only read",
+      "outcome": "failure",
+      "input": {
+        "history_id": "bbbb0002",
+        "tool_id": "cat1",
+        "inputs": {}
+      },
+      "envelope": "run_tool/read_only_history.json",
+      "replies": "get_invocations/malformed_id.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002"
+        }
+      },
+      "scopeAfter": {
+        "created": [],
+        "handles": {}
+      }
+    },
+    {
+      "tool": "get_dataset_details",
+      "case": "dataset_in_another_history",
+      "note": "the dataset's own record puts it in a history outside the scope, so it is not returned",
+      "outcome": "failure",
+      "input": {
+        "dataset_id": "dd01"
+      },
+      "envelope": "get_dataset_details/dataset_in_another_history.json",
+      "replies": "get_dataset_details/dataset_in_another_history.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002"
+        }
+      },
+      "scopeAfter": {
+        "created": [],
+        "handles": {
+          "cccc0003": [
+            "history"
+          ],
+          "dd01": [
+            "hda"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "get_dataset_details",
+      "case": "dataset_in_a_read_only_history",
+      "note": "a dataset in a history the session may read is returned, and what it names remembered",
+      "outcome": "success",
+      "input": {
+        "dataset_id": "dd02"
+      },
+      "envelope": "get_dataset_details/dataset_in_a_read_only_history.json",
+      "replies": "get_dataset_details/dataset_in_a_read_only_history.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002"
+        }
+      },
+      "scopeAfter": {
+        "created": [],
+        "handles": {
+          "bbbb0002": [
+            "history"
+          ],
+          "dd02": [
+            "hda"
+          ],
+          "e002": [
+            "job"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "get_histories",
+      "case": "narrowed_to_the_scope",
+      "note": "only the session's histories are listed, and the count is theirs",
+      "outcome": "success",
+      "input": {},
+      "envelope": "get_histories/narrowed_to_the_scope.json",
+      "replies": "get_histories/narrowed_to_the_scope.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002"
+        }
+      },
+      "scopeAfter": {
+        "created": [],
+        "handles": {
+          "aaaa0001": [
+            "history"
+          ],
+          "bbbb0002": [
+            "history"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "get_histories",
+      "case": "narrowed_then_paged",
+      "note": "narrowed before the window is cut, so the page and its total describe the same set",
+      "outcome": "success",
+      "input": {
+        "limit": 1,
+        "offset": 1
+      },
+      "envelope": "get_histories/narrowed_then_paged.json",
+      "replies": "get_histories/narrowed_to_the_scope.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002"
+        }
+      },
+      "scopeAfter": {
+        "created": [],
+        "handles": {
+          "aaaa0001": [
+            "history"
+          ],
+          "bbbb0002": [
+            "history"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "list_history_ids",
+      "case": "narrowed_to_the_scope",
+      "note": "the compact listing is narrowed the same way",
+      "outcome": "success",
+      "input": {},
+      "envelope": "list_history_ids/narrowed_to_the_scope.json",
+      "replies": "get_histories/narrowed_to_the_scope.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002"
+        }
+      },
+      "scopeAfter": {
+        "created": [],
+        "handles": {
+          "aaaa0001": [
+            "history"
+          ],
+          "bbbb0002": [
+            "history"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "create_history",
+      "case": "blocked_by_name",
+      "note": "a tool the host blocked is refused by name",
+      "outcome": "failure",
+      "input": {
+        "history_name": "scratch"
+      },
+      "envelope": "create_history/blocked_by_name.json",
+      "replies": "get_invocations/malformed_id.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002",
+          "GALAXY_MCP_SCOPE_BLOCKED_TOOLS": "create_history"
+        }
+      },
+      "scopeAfter": {
+        "created": [],
+        "handles": {}
+      }
+    },
+    {
+      "tool": "create_history",
+      "case": "creating_not_allowed",
+      "note": "creating turned off refuses the tool that creates",
+      "outcome": "failure",
+      "input": {
+        "history_name": "scratch"
+      },
+      "envelope": "create_history/creating_not_allowed.json",
+      "replies": "get_invocations/malformed_id.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002",
+          "GALAXY_MCP_SCOPE_ALLOW_CREATE": "0"
+        }
+      },
+      "scopeAfter": {
+        "created": [],
+        "handles": {}
+      }
+    },
+    {
+      "tool": "create_history",
+      "case": "joins_the_scope",
+      "note": "a history the session creates is remembered as created",
+      "outcome": "success",
+      "input": {
+        "history_name": "scratch"
+      },
+      "envelope": "create_history/joins_the_scope.json",
+      "replies": "create_history/joins_the_scope.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002"
+        }
+      },
+      "scopeAfter": {
+        "created": [
+          "dddd0004"
+        ],
+        "handles": {
+          "dddd0004": [
+            "history"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "run_tool",
+      "case": "in_a_created_history",
+      "note": "a write to a history the session created earlier",
+      "outcome": "success",
+      "input": {
+        "history_id": "dddd0004",
+        "tool_id": "cat1",
+        "inputs": {}
+      },
+      "envelope": "run_tool/in_a_created_history.json",
+      "replies": "run_tool/in_a_created_history.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002"
+        },
+        "created": [
+          "dddd0004"
+        ]
+      },
+      "scopeAfter": {
+        "created": [
+          "dddd0004"
+        ],
+        "handles": {
+          "c0f1": [
+            "hdca"
+          ],
+          "e001": [
+            "job"
+          ],
+          "f001": [
+            "hda"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "update_history",
+      "case": "delete_of_a_history_it_did_not_create",
+      "note": "writable is not deletable: only a history the session created may be deleted",
+      "outcome": "failure",
+      "input": {
+        "history_id": "aaaa0001",
+        "deleted": true
+      },
+      "envelope": "update_history/delete_of_a_history_it_did_not_create.json",
+      "replies": "get_invocations/malformed_id.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002"
+        },
+        "created": [
+          "dddd0004"
+        ]
+      },
+      "scopeAfter": {
+        "created": [
+          "dddd0004"
+        ],
+        "handles": {}
+      }
+    },
+    {
+      "tool": "update_history",
+      "case": "delete_of_a_created_history",
+      "note": "the session may delete a history it created",
+      "outcome": "success",
+      "input": {
+        "history_id": "dddd0004",
+        "deleted": true
+      },
+      "envelope": "update_history/delete_of_a_created_history.json",
+      "replies": "update_history/delete_of_a_created_history.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002"
+        },
+        "created": [
+          "dddd0004"
+        ]
+      },
+      "scopeAfter": {
+        "created": [
+          "dddd0004"
+        ],
+        "handles": {}
+      }
+    },
+    {
+      "tool": "update_history",
+      "case": "delete_of_a_writable_history_when_the_host_allows",
+      "note": "with the destructive rule set to writable, a writable history may be deleted",
+      "outcome": "success",
+      "input": {
+        "history_id": "aaaa0001",
+        "deleted": true
+      },
+      "envelope": "update_history/delete_of_a_writable_history_when_the_host_allows.json",
+      "replies": "update_history/delete_of_a_writable_history_when_the_host_allows.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002",
+          "GALAXY_MCP_SCOPE_DESTRUCTIVE": "writable"
+        }
+      },
+      "scopeAfter": {
+        "created": [],
+        "handles": {}
+      }
+    },
+    {
+      "tool": "get_dataset_details",
+      "case": "job_id_passed_as_a_dataset_id",
+      "note": "an id an earlier call returned as a job is refused where a dataset id belongs",
+      "outcome": "failure",
+      "input": {
+        "dataset_id": "e001"
+      },
+      "envelope": "get_dataset_details/job_id_passed_as_a_dataset_id.json",
+      "replies": "get_invocations/malformed_id.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002"
+        },
+        "handles": {
+          "e001": [
+            "job"
+          ]
+        }
+      },
+      "scopeAfter": {
+        "created": [],
+        "handles": {
+          "e001": [
+            "job"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "cancel_workflow_invocation",
+      "case": "invocation_in_another_history",
+      "note": "the invocation is read first, and the cancel never sent for another history's",
+      "outcome": "failure",
+      "input": {
+        "invocation_id": "e00f"
+      },
+      "envelope": "cancel_workflow_invocation/invocation_in_another_history.json",
+      "replies": "cancel_workflow_invocation/invocation_in_another_history.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002"
+        }
+      },
+      "scopeAfter": {
+        "created": [],
+        "handles": {}
+      }
+    },
+    {
+      "tool": "get_user",
+      "case": "scoped",
+      "note": "a scoped session reads its id and username and nothing else of the account",
+      "outcome": "success",
+      "input": {},
+      "envelope": "get_user/scoped.json",
+      "replies": "get_user/scoped.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002"
+        }
+      },
+      "scopeAfter": {
+        "created": [],
+        "handles": {}
+      }
+    },
+    {
+      "tool": "list_jobs",
+      "case": "narrowed_to_the_scope",
+      "note": "jobs from histories outside the scope are dropped from the page",
+      "outcome": "success",
+      "input": {},
+      "envelope": "list_jobs/narrowed_to_the_scope.json",
+      "replies": "list_jobs/narrowed_to_the_scope.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002"
+        }
+      },
+      "scopeAfter": {
+        "created": [],
+        "handles": {
+          "aaaa0001": [
+            "history"
+          ],
+          "bbbb0002": [
+            "history"
+          ],
+          "cccc0003": [
+            "history"
+          ],
+          "e001": [
+            "job"
+          ],
+          "e002": [
+            "job"
+          ],
+          "e003": [
+            "job"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "get_history_contents",
+      "case": "read_only_history",
+      "note": "a read of a read-only history, whose items are remembered by kind",
+      "outcome": "success",
+      "input": {
+        "history_id": "bbbb0002"
+      },
+      "envelope": "get_history_contents/read_only_history.json",
+      "replies": "get_history_contents/read_only_history.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002"
+        }
+      },
+      "scopeAfter": {
+        "created": [],
+        "handles": {
+          "c0c1": [
+            "hdca"
+          ],
+          "dd03": [
+            "hda"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "get_collection_details",
+      "case": "scoped",
+      "note": "a collection in scope, whose elements and the datasets behind them are remembered apart",
+      "outcome": "success",
+      "input": {
+        "collection_id": "c0c1"
+      },
+      "envelope": "get_collection_details/scoped.json",
+      "replies": "get_collection_details/scoped.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002"
+        }
+      },
+      "scopeAfter": {
+        "created": [],
+        "handles": {
+          "aaaa0001": [
+            "history"
+          ],
+          "c0c1": [
+            "hdca"
+          ],
+          "dce1": [
+            "dataset_collection_element"
+          ],
+          "dd04": [
+            "hda"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "get_collection_details",
+      "case": "collection_in_another_history",
+      "note": "a collection whose record names a history outside the scope is not returned",
+      "outcome": "failure",
+      "input": {
+        "collection_id": "c0c2"
+      },
+      "envelope": "get_collection_details/collection_in_another_history.json",
+      "replies": "get_collection_details/collection_in_another_history.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002"
+        }
+      },
+      "scopeAfter": {
+        "created": [],
+        "handles": {
+          "c0c2": [
+            "hdca"
+          ],
+          "cccc0003": [
+            "history"
+          ]
+        }
+      }
+    },
+    {
+      "tool": "get_job_details",
+      "case": "scoped_by_job_id",
+      "note": "a job in scope, whose inputs and outputs are remembered",
+      "outcome": "success",
+      "input": {
+        "job_id": "e001"
+      },
+      "envelope": "get_job_details/scoped_by_job_id.json",
+      "replies": "get_job_details/scoped_by_job_id.galaxy.json",
+      "scope": {
+        "env": {
+          "GALAXY_MCP_SCOPE_WRITE_HISTORIES": "aaaa0001",
+          "GALAXY_MCP_SCOPE_READ_HISTORIES": "bbbb0002"
+        }
+      },
+      "scopeAfter": {
+        "created": [],
+        "handles": {
+          "aaaa0001": [
+            "history"
+          ],
+          "dd05": [
+            "hda"
+          ],
+          "dd06": [
+            "hda"
+          ],
+          "e001": [
+            "job"
+          ]
+        }
+      }
     }
   ]
 }

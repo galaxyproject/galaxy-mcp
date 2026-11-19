@@ -893,6 +893,13 @@
         "requires": {
           "$ref": "#/$defs/Requires"
         },
+        "server_env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Server Env",
+          "type": "object"
+        },
         "servers": {
           "items": {
             "enum": [

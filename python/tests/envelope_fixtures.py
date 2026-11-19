@@ -43,11 +43,13 @@ import pydantic_core
 import responses
 from bioblend.galaxy import GalaxyInstance
 
+from galaxy_mcp import scope as scope_module
 from galaxy_mcp import server
 from galaxy_mcp.server import GalaxyResult, galaxy_state
 from galaxy_mcp.version import clear_version_cache
 
 from .mcp_session import LiveMCPSession
+from .scope_fixtures import scope_cases
 from .test_helpers import (
     cancel_workflow_invocation_fn,
     create_history_fn,
@@ -175,6 +177,12 @@ class Case:
     # built; a failure has no envelope to pin, so what is written down is the tool result
     # the MCP wire carries.
     failure: bool = False
+    # The scope the call runs under, for a scoped case: ``env`` as a host would set it,
+    # and what an earlier call of the session left behind (``created`` histories, the
+    # ``handles`` it saw). None is every case there was before scopes existed.
+    scope: dict[str, Any] | None = None
+    # What the call left behind in turn, filled in when the case is run.
+    scope_after: dict[str, Any] | None = None
 
 
 # How a section below adds one case: the same six arguments ``cases()`` takes, so a
@@ -2088,6 +2096,20 @@ def cases() -> list[Case]:  # noqa: PLR0915 -- a flat table reads better than he
         )
 
     failure_cases(add_failure)
+
+    for tool, name, note, inp, call, routes, scope in scope_cases(route, VERSION_ROUTE):
+        out.append(
+            Case(
+                tool=tool,
+                name=name,
+                note=note,
+                input=inp,
+                call=call,
+                routes=routes,
+                failure=call is None,
+                scope=scope,
+            )
+        )
 
     return out
 
@@ -5126,6 +5148,18 @@ def run_case(case: Case, session: LiveMCPSession | None = None) -> GalaxyResult 
     galaxy_state.update(
         {"url": GALAXY_BASE_URL, "api_key": PLACEHOLDER_KEY, "gi": gi, "connected": True}
     )
+    previous_scope = scope_module.current()
+    scoped = None
+    if case.scope is not None:
+        scoped = scope_module.configure(
+            scope_module.scope_from_env(case.scope["env"], scope_module.TOOLS)
+        )
+        assert scoped is not None, f"{case.tool}/{case.name} declares a scope that is none"
+        for history in case.scope.get("created", []):
+            scoped.record_created(history)
+        for value, kinds in case.scope.get("handles", {}).items():
+            for kind in kinds:
+                scoped.record_handles(kind, [value])
     try:
         with responses.RequestsMock(assert_all_requests_are_fired=False) as mock:
             # Most specific first: `responses` takes the first registration that matches,
@@ -5154,6 +5188,14 @@ def run_case(case: Case, session: LiveMCPSession | None = None) -> GalaxyResult 
             assert case.call is not None, "a success case needs something to call"
             return case.call()
     finally:
+        if scoped is not None:
+            case.scope_after = {
+                "created": list(scoped.created),
+                "handles": {
+                    value: sorted(kinds) for value, kinds in sorted(scoped.handles.items())
+                },
+            }
+        scope_module.restore(previous_scope)
         galaxy_state.clear()
         galaxy_state.update(previous)
         _reset_caches()
@@ -5272,6 +5314,12 @@ def build() -> dict[str, str]:
                     "input": case.input,
                     "envelope": f"{case.tool}/{case.name}.json",
                     "replies": path,
+                    # Only a scoped case carries these, so every other row is what it was.
+                    **(
+                        {"scope": case.scope, "scopeAfter": case.scope_after}
+                        if case.scope is not None
+                        else {}
+                    ),
                 }
             )
     files["index.json"] = (

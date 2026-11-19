@@ -1,0 +1,51 @@
+{
+  "data": {
+    "url": "https://galaxy.example/",
+    "version": {
+      "version_major": "26.1",
+      "version_minor": "1"
+    },
+    "version_known": true,
+    "unsupported_tools": [],
+    "config": {
+      "brand": "Scoped Galaxy",
+      "logo_url": null,
+      "welcome_url": null,
+      "support_url": null,
+      "citation_url": null,
+      "terms_url": null,
+      "allow_user_creation": null,
+      "allow_user_deletion": null,
+      "enable_quotas": null,
+      "ftp_upload_site": null,
+      "wiki_url": null,
+      "screencasts_url": null,
+      "library_import_dir": null,
+      "user_library_import_dir": null,
+      "allow_library_path_paste": null,
+      "enable_unique_workflow_defaults": null
+    },
+    "scope": {
+      "readable_history_ids": [
+        "aaaa0001",
+        "dddd0004",
+        "bbbb0002"
+      ],
+      "writable_history_ids": [
+        "aaaa0001",
+        "dddd0004"
+      ],
+      "created_history_ids": [
+        "dddd0004"
+      ],
+      "create_allowed": true,
+      "destructive": "created",
+      "blocked_operations": [],
+      "note": "This session is scoped. It may read histories: aaaa0001, dddd0004, bbbb0002; write to: aaaa0001, dddd0004. It may create histories, and use the ones it creates. It may delete only histories it created itself."
+    }
+  },
+  "success": true,
+  "message": "Retrieved server info for https://galaxy.example/. This session is scoped. It may read histories: aaaa0001, dddd0004, bbbb0002; write to: aaaa0001, dddd0004. It may create histories, and use the ones it creates. It may delete only histories it created itself.",
+  "count": null,
+  "pagination": null
+}
