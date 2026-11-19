@@ -56,7 +56,9 @@ describe("render a paged list op", () => {
     expect(printed).not.toContain("items");
     expect(printed).not.toContain("pagination");
     vi.restoreAllMocks();
-  });
+    // The first test here loads the whole galaxy-ops source with the dynamic import in `paged`:
+    // about 0.6 s on a quiet machine, over the 5 s default under load.
+  }, 20_000);
 
   it("puts the pagination helper on stderr so an agent can page on", async () => {
     const result = await paged();
