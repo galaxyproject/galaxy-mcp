@@ -17,5 +17,9 @@ when anything here changes.
 
 `PARITY.md` at the repo root is generated from these (`pnpm parity:report` in `typescript/`).
 
+Envelopes are recorded on the handshake protocol era (`mode="legacy"` in
+`python/tests/mcp_session.py`). On the sessionless 2026-07-28 era the Python server's results
+also carry `_meta.serverInfo` and `resultType`, which the TypeScript server does not send.
+
 The contract can change. When it does, both implementations and these files change in the
 same pull request.

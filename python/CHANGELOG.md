@@ -49,6 +49,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   object by something other than an encoded id (a hid, a name). Galaxy already refuses
   those with a 400 when the page is stored, so what changes is the message. A section
   edit on a page authored as HTML is refused the same way.
+- galaxy-mcp runs on FastMCP 4, which also speaks the sessionless 2026-07-28 MCP protocol
+  that FastMCP 4 and MCP SDK v2 clients pick by default. On that protocol every request
+  is its own session, so `connect(url=..., api_key=...)` can no longer keep a connection
+  for the next call the way it does per MCP session. Over stdio there is only one client,
+  so the connection is kept for the whole server process. Over HTTP nothing ties one call
+  to the next, so `connect()` with a URL or key is refused there: sign in through OAuth,
+  or set `GALAXY_URL` and `GALAXY_API_KEY` on the server. Clients on the older handshake
+  protocols see no change, except against a server running stateless HTTP
+  (`FASTMCP_STATELESS_HTTP`): it issues no sessions, so `connect()` with a URL or key is
+  refused there too, where before it reported success and later calls quietly used the
+  server's own `GALAXY_URL`. The TypeScript server has no `connect` tool and was never
+  affected.
 
 ### Fixed
 
