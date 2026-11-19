@@ -381,6 +381,26 @@ const EXIT_CODES: Record<string, number> = {
   "run_user_tool/lookup_refused": 77,
 };
 
+// The same check as the MCP replay's: a json route must refuse a body without its keys,
+// or a matcher that ignored `json` would pass every golden that uses one.
+describe("a json route answers only a body that carries it", () => {
+  it("refuses with_version's POST when --version is left out", async () => {
+    const entry = index.cases.find((c) => c.tool === "invoke_workflow" && c.case === "with_version");
+    expect(entry, "invoke_workflow/with_version").toBeDefined();
+    const replies = readJson<{ baseUrl: string; routes: Route[] }>(entry!.replies);
+    const op = allOperations.find((o) => o.name === entry!.tool)!;
+    const { version: _dropped, ...input } = entry!.input;
+
+    const run = await runCli(
+      argvFor(op, input),
+      replies.baseUrl,
+      replier(replies.baseUrl, replies.routes),
+    );
+    expect(run.exitCode, run.stdout).not.toBe(0);
+    expect(run.stderr + run.stdout).toContain("no canned reply for POST");
+  });
+});
+
 describe("the CLI's json failure says what the Python server's tool said", () => {
   it("has cases to check", () => {
     expect(failures.length).toBeGreaterThan(10);

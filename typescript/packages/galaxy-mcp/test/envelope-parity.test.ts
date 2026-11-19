@@ -243,6 +243,24 @@ describe("the MCP envelope is the Python server's", () => {
   );
 });
 
+// A json route is what proves an argument reached a write, so the replay has to be shown
+// to refuse a body without it -- otherwise a matcher that ignored `json` would pass every
+// golden that uses one.
+describe("a json route answers only a body that carries it", () => {
+  it("refuses with_version's POST when the version is left out", async () => {
+    const entry = index.cases.find((c) => c.tool === "invoke_workflow" && c.case === "with_version");
+    expect(entry, "invoke_workflow/with_version").toBeDefined();
+    const replies = readJson<{ baseUrl: string; routes: Route[] }>(entry!.replies);
+    arrange(replies);
+    const { version: _dropped, ...input } = entry!.input;
+
+    const { content, isError } = await callThroughMcp(replies.baseUrl, entry!.tool, input);
+    const text = content.map((c) => c.text ?? "").join("");
+    expect(isError, text).toBe(true);
+    expect(text).toContain("no canned reply for POST");
+  });
+});
+
 describe("the MCP failure is the Python server's", () => {
   it("has cases to check", () => {
     expect(failures.length).toBeGreaterThan(10);
