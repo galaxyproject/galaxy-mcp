@@ -51,11 +51,12 @@ number `get_workflow_details` reports and accepts. It goes into the invocation P
 input preflight reads that version's run model, so inputs that suit it aren't refused against
 the newest version's slots. A negative version is refused before anything is sent, since
 Galaxy would read it as a list index counted from the newest end. Without `version` the request
-is unchanged. Two new golden cases, `invoke_workflow/with_version` and
+is unchanged. A pinned run that fails names the version in its error. Three new golden cases,
+`invoke_workflow/with_version`, `invoke_workflow/oldest_version` and
 `invoke_workflow/inputs_checked_against_that_version`, are answered only when `version` reaches
 the request, so a surface dropping it fails the replay; `invoke_workflow/negative_version` pins
-the refusal. The fixture route table can now narrow a write on keys in its JSON body, which is
-what those cases need.
+the refusal and `invoke_workflow/version_out_of_range` Galaxy's 400. The fixture route table can
+now narrow a write on keys in its JSON body, which is what those cases need.
 
 ### zod 4.6
 

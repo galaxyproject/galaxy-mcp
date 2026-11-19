@@ -58,7 +58,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `get_workflow_details` reports and accepts. The input preflight reads that version's slots
   too, so inputs that are right for an older version aren't refused against the newest one's.
   A negative version is refused before anything is sent, since Galaxy would read it as a list
-  index counted from the newest end. Without `version` the request is unchanged.
+  index counted from the newest end. Without `version` the request is unchanged. A pinned run
+  that fails names the version in its error.
 
 ### Changed
 
