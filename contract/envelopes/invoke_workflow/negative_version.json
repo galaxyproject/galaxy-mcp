@@ -5,10 +5,10 @@
     "content": [
       {
         "type": "text",
-        "text": "Error calling tool 'invoke_workflow': version must be 0 or greater (got -1)"
+        "text": "Error calling tool 'invoke_workflow': version must be 0 or greater (got -1); 0 is the oldest stored version and get_workflow_details counts up from there"
       }
     ],
     "isError": true
   },
-  "sentence": "version must be 0 or greater (got -1)"
+  "sentence": "version must be 0 or greater (got -1); 0 is the oldest stored version and get_workflow_details counts up from there"
 }

@@ -219,9 +219,16 @@ function describeJson(value: unknown): string {
 async function run(i: In, ctx: GalaxyContext): Promise<InvokeWorkflowResult> {
   // Galaxy indexes its version list with this number, so a negative one would silently
   // run a version counted from the newest end rather than fail. Refused before anything
-  // else, where the other server refuses it.
-  if (i.version != null && (!Number.isInteger(i.version) || i.version < 0)) {
-    throw new GalaxyValidationError(`version must be 0 or greater (got ${i.version})`);
+  // else, where the other server refuses it, in get_workflow_input_template's words.
+  if (i.version != null && i.version < 0) {
+    throw new GalaxyValidationError(
+      `version must be 0 or greater (got ${i.version}); 0 is the oldest stored ` +
+        "version and get_workflow_details counts up from there",
+    );
+  }
+  // The schema already refuses a fraction; only a caller that skipped it gets here.
+  if (i.version != null && !Number.isInteger(i.version)) {
+    throw new GalaxyValidationError(`version must be a whole number (got ${i.version})`);
   }
   const inputs = coerceJsonObject(i.inputs, "inputs");
   const params = coerceJsonObject(i.params, "params");

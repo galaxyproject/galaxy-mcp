@@ -5250,7 +5250,10 @@ def invoke_workflow(
     # Galaxy indexes its version list with this number, so a negative one would
     # silently run a version counted from the newest end rather than fail.
     if version is not None and version < 0:
-        raise ValueError(f"version must be 0 or greater (got {version})")
+        raise ValueError(
+            f"version must be 0 or greater (got {version}); 0 is the oldest stored "
+            "version and get_workflow_details counts up from there"
+        )
     state = ensure_connected()
 
     inputs = _coerce_optional_json_dict(inputs, "inputs")

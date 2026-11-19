@@ -376,10 +376,19 @@ describe("a stored workflow version", () => {
     expect(download.query).toEqual({ style: "run", instance: false, version: 2 });
   });
 
-  it.each([-1, 1.5])("refuses %s before anything is sent", async (version) => {
+  // The negative refusal is get_workflow_input_template's, word for word; a fraction
+  // only reaches run() from a caller that skipped the schema, and says what it is.
+  it.each([
+    [
+      -1,
+      "version must be 0 or greater (got -1); 0 is the oldest stored version and " +
+        "get_workflow_details counts up from there",
+    ],
+    [1.5, "version must be a whole number (got 1.5)"],
+  ])("refuses %s before anything is sent", async (version, message) => {
     const { client, gets, posts } = recordingClient();
     await expect(invokeWorkflow({ workflowId: "wf1", version }, ctxWith(client))).rejects.toThrow(
-      new GalaxyValidationError(`version must be 0 or greater (got ${version})`),
+      new GalaxyValidationError(message),
     );
     expect(gets).toEqual([]);
     expect(posts).toEqual([]);
