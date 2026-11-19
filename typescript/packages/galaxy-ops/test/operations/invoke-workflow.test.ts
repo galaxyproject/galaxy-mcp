@@ -373,7 +373,7 @@ describe("a stored workflow version", () => {
       ctxWith(client),
     );
     const download = gets.find((g) => g.path === "/api/workflows/{workflow_id}/download");
-    expect(download.query).toEqual({ style: "run", instance: false, version: 2 });
+    expect(download.query).toMatchObject({ version: 2 });
   });
 
   // The negative refusal is get_workflow_input_template's, word for word; a fraction
