@@ -383,8 +383,9 @@ def test_http_caller_key_needs_the_url_named(http, galaxy_instance, monkeypatch,
         monkeypatch.setattr(server, "auth_provider", Mock())
         monkeypatch.setattr(server, "_get_request_connection_state", lambda: {"connected": False})
         monkeypatch.setattr(server, "_untracked_remote_request", lambda: False)
-    with pytest.raises(ValueError, match="not with an api_key passed"):
+    with pytest.raises(ValueError, match="not with an api_key passed") as refused:
         connect_fn(api_key="caller-key")
+    assert str(http) not in str(refused.value)
     assert _sent(galaxy_instance) == []
     connect_fn(url=DOTENV_URL, api_key="caller-key")
     assert _sent(galaxy_instance) == [(DOTENV_URL, "caller-key")]

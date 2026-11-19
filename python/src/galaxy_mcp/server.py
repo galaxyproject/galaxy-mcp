@@ -17,6 +17,7 @@ import typing
 from collections.abc import Callable, Sequence
 from contextvars import ContextVar
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from functools import lru_cache, wraps
 from pathlib import Path
 from typing import Any, Literal, TypeVar, cast
@@ -987,7 +988,7 @@ class _Dotenv:
     """A .env as read, kept apart from os.environ."""
 
     path: str | None = None
-    values: typing.Mapping[str, str] = types.MappingProxyType({})
+    values: typing.Mapping[str, str] = dataclass_field(default_factory=dict)
 
 
 def _read_dotenv() -> _Dotenv:
@@ -1551,8 +1552,10 @@ def _resolve_connect_credentials(
         url_from_dotenv = not url and configured.url_from == "dotenv"
 
     if api_key and url_from_dotenv:
+        # A remote caller isn't told where the server's .env lives.
+        where = _Dotenv() if remote_caller_possible() else dotenv
         raise _ConnectRefusedError(
-            f"{_dotenv_url_only_with_its_key(dotenv)}, not with an api_key passed to "
+            f"{_dotenv_url_only_with_its_key(where)}, not with an api_key passed to "
             "connect(). Pass url as well, or set GALAXY_URL in the environment."
         )
     if api_key:
