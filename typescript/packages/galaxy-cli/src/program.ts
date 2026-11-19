@@ -6,11 +6,11 @@ import {
   createGalaxyContext,
   type GalaxyContext,
 } from "@galaxyproject/galaxy-ops";
-import { resolveConnection, loadSources, type Connection } from "./config";
+import { resolveConnection, loadSources, CredentialScopeError, type Connection } from "./config";
 import { applyInputs } from "./flags-apply";
 import { buildInput, inCliNames, keptPositionals } from "./flags";
 import { render, type Format } from "./render";
-import { exitCodeFor, EX_USAGE, EX_SOFTWARE } from "./exit";
+import { exitCodeFor, EX_USAGE, EX_SOFTWARE, EX_NOPERM } from "./exit";
 
 export interface CliDeps {
   makeContext?: (conn: Connection, signal: AbortSignal) => GalaxyContext;
@@ -51,7 +51,7 @@ export function buildProgram(deps: CliDeps = {}): Command {
           conn = resolveConnection({ url: globals.url, apiKey: globals.apiKey, profile: globals.profile }, loadSources());
         } catch (e) {
           console.error((e as Error).message);
-          process.exitCode = EX_USAGE;
+          process.exitCode = e instanceof CredentialScopeError ? EX_NOPERM : EX_USAGE;
           return;
         }
       }
