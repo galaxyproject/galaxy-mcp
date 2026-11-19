@@ -115,7 +115,7 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `get_workflow_details` |  | `5` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_workflow_input_template` |  | `11` | `read (tag)` | `read (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Same gap before invoke_workflow: no template, no run guide, no input validation on that side. |
 | `import_workflow_from_iwc` |  | `4` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
-| `invoke_workflow` |  | `8` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
+| `invoke_workflow` |  | `9` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
 | `invoke_workflow` | `inputs` |  | `type=anyOf<object\|string> required=false default=none` | `type=anyOf<object\|string> required=false default=none` | `type=object required=false default=none` | `vs built-in: type-mismatch` | `unreviewed-gap` | Ours also accepts the JSON text of the object, because that is what a CLI flag and some clients send; Galaxy's takes the object only. |
 | `invoke_workflow` | `inputs_by` |  | `type=string required=false default="step_index"` | `type=string required=false default="step_index"` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours lets the caller say how inputs are keyed (step index, step id, name); Galaxy's uses the API default. |
 | `invoke_workflow` | `parameters` |  | -- | -- | `type=object required=false default=none` | `vs built-in: missing-py-param` | `unreviewed-gap` | One parameter map under two names: `parameters` there, `params` here. |

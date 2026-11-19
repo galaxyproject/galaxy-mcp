@@ -3835,6 +3835,23 @@ def invoke_workflow_cases(add: AddCase) -> None:
             )
         ],
     )
+    # 0 is the oldest version and also falsy, the classic way an optional index gets
+    # dropped on its way into a payload.
+    add(
+        "invoke_workflow",
+        "oldest_version",
+        "version 0, the oldest stored one: the POST answers only when the 0 is in it",
+        {"workflow_id": "wf000001", "history_id": "h0000", "version": 0},
+        lambda: invoke_workflow_fn("wf000001", history_id="h0000", version=0),
+        [
+            route(
+                "/api/workflows/wf000001/invocations",
+                invocation,
+                method="POST",
+                json_body={"version": 0},
+            )
+        ],
+    )
     # The preflight has to check the version being run. The latest one here takes only
     # BAM, so reading its slots instead would refuse the FASTQ before anything is posted.
     latest_run_model = {
