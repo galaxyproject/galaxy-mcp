@@ -323,6 +323,26 @@ def test_stdio_ignores_an_oauth_provider(stdio, galaxy_instance, monkeypatch):
     assert _sent(galaxy_instance) == [(DOTENV_URL, DOTENV_KEY)]
 
 
+@pytest.mark.parametrize(
+    "at_startup", [True, False], ids=["dotenv at startup", "dotenv written after startup"]
+)
+def test_stdio_session_sees_the_pairing_refusal(stdio, galaxy_instance, monkeypatch, at_startup):
+    # A stdio client has an MCP session, and an argument-less connect() from a session that
+    # isn't connected stops early; it should still say why rather than "no connection".
+    monkeypatch.setattr(server, "_get_current_session_id", lambda: "stdio-session")
+    _start(monkeypatch, stdio, KEY_E, URL_D, at_startup=at_startup)
+    with pytest.raises(ValueError, match=PAIRING):
+        connect_fn()
+    assert _sent(galaxy_instance) == []
+
+
+def test_http_session_is_not_told_about_the_dotenv(http, galaxy_instance, monkeypatch):
+    _start(monkeypatch, http, KEY_E, URL_D)
+    with pytest.raises(ValueError, match="No Galaxy connection is available"):
+        connect_fn()
+    assert _sent(galaxy_instance) == []
+
+
 def test_refusal_names_the_dotenv_and_how_to_proceed(stdio, galaxy_instance, monkeypatch):
     _start(monkeypatch, stdio, KEY_E, URL_D, at_startup=False)
     with pytest.raises(ValueError) as refused:

@@ -1641,6 +1641,12 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
             )
 
         if session_id and not url and not api_key and not state["connected"]:
+            # Over stdio the caller is the operator, who needs to know why nothing connected;
+            # an HTTP caller isn't told where the server's .env lives.
+            if not remote_caller_possible():
+                refusal = _configured_credentials(os.environ, _read_dotenv()).refusal
+                if refusal:
+                    raise _ConnectRefusedError(refusal)
             raise _ConnectRefusedError(
                 "No Galaxy connection is available for this MCP session. "
                 "It may not have been configured yet, or it may have been evicted from the "
