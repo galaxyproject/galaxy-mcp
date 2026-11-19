@@ -314,7 +314,8 @@ export const invokeWorkflowOp: Operation<typeof input, InvokeWorkflowResult> = {
   // data either way.
   project: (_out, i) => ({ message: `Invoked workflow '${i.workflowId}'` }),
   // server.py, invoke_workflow: a bioblend write, with every argument that decides where the
-  // run went in the context.
+  // run went in the context. The version joins it only when one was asked for, so an
+  // unpinned run fails in exactly the words it did before the parameter existed.
   failure: {
     shape: "bioblend-write",
     action: "Invoke workflow",
@@ -323,6 +324,7 @@ export const invokeWorkflowOp: Operation<typeof input, InvokeWorkflowResult> = {
       history_id: i.historyId,
       history_name: i.historyName,
       inputs_by: i.inputsBy ?? "step_index",
+      ...(i.version == null ? {} : { version: i.version }),
     }),
   },
 };

@@ -4204,9 +4204,12 @@ def fail(
     *,
     method: str = "GET",
     query: dict[str, str] | None = None,
+    json_body: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """A route that answers with an error, byte for byte."""
-    return route(path, None, status=status, method=method, query=query, body_text=body)
+    return route(
+        path, None, status=status, method=method, query=query, json_body=json_body, body_text=body
+    )
 
 
 def failure_cases(add: AddFailure) -> None:
@@ -4550,6 +4553,24 @@ def more_http_failure_cases(add: AddFailure) -> None:
         "every argument that decides where the run went is in the context",
         {"workflow_id": "w0000400", "history_id": "h0001"},
         [fail("/api/workflows/w0000400/invocations", 400, DENIED, method="POST")],
+    )
+    # A stored version the workflow does not have is Galaxy's 400 on the POST, and the
+    # context names the version asked for -- only when one was, as the template's does.
+    # No run-model route answers, so the Python-only slot hint stays empty.
+    add(
+        "invoke_workflow",
+        "version_out_of_range",
+        "a stored version Galaxy does not have, refused on the POST; the context names it",
+        {"workflow_id": "wf000001", "history_id": "h0000", "version": 7},
+        [
+            fail(
+                "/api/workflows/wf000001/invocations",
+                400,
+                NO_SUCH_VERSION,
+                method="POST",
+                json_body={"version": 7},
+            )
+        ],
     )
     add(
         "create_user_tool",

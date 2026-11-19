@@ -5313,19 +5313,17 @@ def invoke_workflow(
             hint = "\n\nWorkflow input slots:\n" + json.dumps(
                 build_workflow_input_template(slots)["slots"], indent=2, default=str
             )
-        raise ValueError(
-            format_error(
-                "Invoke workflow",
-                e,
-                {
-                    "workflow_id": workflow_id,
-                    "history_id": history_id,
-                    "history_name": history_name,
-                    "inputs_by": inputs_by,
-                },
-            )
-            + hint
-        ) from e
+        # The version joins the context only when one was asked for, so an unpinned run
+        # fails in exactly the words it did before the parameter existed.
+        context: dict[str, Any] = {
+            "workflow_id": workflow_id,
+            "history_id": history_id,
+            "history_name": history_name,
+            "inputs_by": inputs_by,
+        }
+        if version is not None:
+            context["version"] = version
+        raise ValueError(format_error("Invoke workflow", e, context) + hint) from e
 
 
 @mcp.tool(tags={"workflows", "write", "extended"})

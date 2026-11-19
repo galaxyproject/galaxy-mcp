@@ -359,6 +359,7 @@ const EXIT_CODES: Record<string, number> = {
   "import_workflow_from_iwc/manifest_refused": 69,
   "import_workflow_from_iwc/refused_by_galaxy": 69,
   "invoke_workflow/refused_by_galaxy": 69,
+  "invoke_workflow/version_out_of_range": 69,
   "list_history_ids/server_error": 69,
   "list_jobs/malformed_history_id": 69,
   "list_user_tools/server_error": 69,
