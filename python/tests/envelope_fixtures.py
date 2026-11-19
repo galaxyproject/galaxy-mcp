@@ -54,6 +54,7 @@ from .test_helpers import (
     create_page_fn,
     create_user_tool_fn,
     delete_user_tool_fn,
+    extract_workflow_from_history_fn,
     get_collection_details_fn,
     get_dataset_details_fn,
     get_histories_fn,
@@ -3841,6 +3842,59 @@ def invocation_mutation_cases(add: AddCase) -> None:
             route("/api/workflows", imported, method="POST"),
         ],
     )
+    # StoredWorkflow.to_dict("collection") plus the url the controller adds: what Galaxy
+    # answers POST /api/workflows with when the payload names from_history_id. No step
+    # count is in it.
+    extracted = {
+        "model_class": "StoredWorkflow",
+        "id": "wf00000e",
+        "latest_workflow_id": "lw00000e",
+        "name": "Per-sample QC",
+        "create_time": "2026-01-02T03:04:05.000000",
+        "update_time": "2026-01-02T03:04:05.000000",
+        "published": False,
+        "importable": False,
+        "deleted": False,
+        "hidden": False,
+        "latest_workflow_uuid": "0d1c7b9c-5a19-4a8e-9f8e-2d4c6c6f3f11",
+        "creator_deleted": False,
+        "url": "/api/workflows/wf00000e",
+    }
+    add(
+        "extract_workflow_from_history",
+        "jobs_and_inputs",
+        "two jobs, a dataset and a collection named by hid, one of them as the digits a "
+        "command line hands over; Galaxy's record carries no step count, so none is invented",
+        {
+            "history_id": "h0001",
+            "workflow_name": "Per-sample QC",
+            "job_ids": ["j0000001", "j0000002"],
+            "dataset_hids": [3, "4"],
+            "collection_hids": [12],
+        },
+        lambda: extract_workflow_from_history_fn(
+            "h0001",
+            "Per-sample QC",
+            job_ids=["j0000001", "j0000002"],
+            dataset_hids=[3, "4"],
+            collection_hids=[12],
+        ),
+        [route("/api/workflows", extracted, method="POST")],
+    )
+    add(
+        "extract_workflow_from_history",
+        "jobs_only_with_a_step_count",
+        "nothing named but a job, and a reply that does carry number_of_steps",
+        {"history_id": "h0001", "workflow_name": "One step", "job_ids": ["j0000001"]},
+        lambda: extract_workflow_from_history_fn("h0001", "One step", job_ids=["j0000001"]),
+        [
+            route(
+                "/api/workflows",
+                {**extracted, "name": "One step", "number_of_steps": 1},
+                method="POST",
+            )
+        ],
+    )
 
 
 def revision_cases(add: AddCase) -> None:
@@ -4073,6 +4127,8 @@ NO_SUCH_VERSION = '{"err_msg": "Version does not exist", "err_code": 400008}'
 # What GET /api/tools/{id} says about an id the toolbox has at no version (v26.1.1
 # services/tools.py _get_tool). A version it lacks for an id it has is not an error
 # there: the newest installed version is served instead, and the refusal is ours.
+# workflow/extract.py, extract_steps: a RequestParameterInvalidException, so a 400.
+NOT_A_COLLECTION = '{"err_msg": "hid 12 does not appear to be a collection", "err_code": 400008}'
 NO_SUCH_TOOL = '{"err_msg": "Could not find tool with id \'nope\'.", "err_code": 404001}'
 
 
@@ -4378,6 +4434,25 @@ def more_http_failure_cases(add: AddFailure) -> None:
         "and format_error's, for a status it has nothing of its own to say about",
         {"collection_id": "c0000403"},
         [fail("/api/dataset_collections/c0000403", 403, DENIED)],
+    )
+    add(
+        "extract_workflow_from_history",
+        "hid_is_not_a_collection",
+        "Galaxy's own 400 for what was named, quoted by format_error with the history and the name",
+        {
+            "history_id": "h0001",
+            "workflow_name": "QC",
+            "job_ids": ["j0000001"],
+            "collection_hids": [12],
+        },
+        [fail("/api/workflows", 400, NOT_A_COLLECTION, method="POST")],
+    )
+    add(
+        "extract_workflow_from_history",
+        "history_not_accessible",
+        "and a status that is not about what was named",
+        {"history_id": "h0000403", "workflow_name": "QC", "job_ids": ["j0000001"]},
+        [fail("/api/workflows", 403, DENIED, method="POST")],
     )
     add(
         "create_history",
@@ -4862,6 +4937,20 @@ def refusal_cases(add: AddFailure) -> None:
     These sentences are the server's own from end to end -- no exception text, no hint and
     no context -- so they are the ones a port has to get exactly right on its own.
     """
+    add(
+        "extract_workflow_from_history",
+        "nothing_named",
+        "an extraction naming no job and no input, which Galaxy would store as an empty workflow",
+        {"history_id": "h0001", "workflow_name": "empty"},
+        [],
+    )
+    add(
+        "extract_workflow_from_history",
+        "encoded_id_where_a_hid_belongs",
+        "Galaxy's dataset_ids are hids; an encoded id there is refused here, with the value quoted",
+        {"history_id": "h0001", "workflow_name": "QC", "dataset_hids": ["f2db41e1fa331b3e"]},
+        [],
+    )
     add(
         "list_workflows",
         "limit_above_the_ceiling",

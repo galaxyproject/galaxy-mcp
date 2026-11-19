@@ -1,0 +1,39 @@
+{
+  "data": {
+    "workflow_id": "wf00000e",
+    "name": "One step",
+    "number_of_steps": 1,
+    "steps_requested": {
+      "tool_steps": 1,
+      "dataset_inputs": 0,
+      "collection_inputs": 0
+    },
+    "history_id": "h0001",
+    "job_ids": [
+      "j0000001"
+    ],
+    "dataset_hids": [],
+    "collection_hids": [],
+    "workflow": {
+      "model_class": "StoredWorkflow",
+      "id": "wf00000e",
+      "latest_workflow_id": "lw00000e",
+      "name": "One step",
+      "create_time": "2026-01-02T03:04:05.000000",
+      "update_time": "2026-01-02T03:04:05.000000",
+      "published": false,
+      "importable": false,
+      "deleted": false,
+      "hidden": false,
+      "latest_workflow_uuid": "0d1c7b9c-5a19-4a8e-9f8e-2d4c6c6f3f11",
+      "creator_deleted": false,
+      "url": "/api/workflows/wf00000e",
+      "number_of_steps": 1
+    },
+    "next_steps": "To run it on other inputs, call get_workflow_input_template with workflow_id 'wf00000e' to see its input slots, fill them with the new datasets or collections, and invoke_workflow -- once for every set of inputs, instead of re-running the tools one by one."
+  },
+  "success": true,
+  "message": "Extracted workflow 'One step' (id wf00000e) from history h0001: 1 tool step(s) from the listed jobs, 0 dataset input(s) and 0 collection input(s). To run it on other inputs, call get_workflow_input_template with workflow_id 'wf00000e' to see its input slots, fill them with the new datasets or collections, and invoke_workflow -- once for every set of inputs, instead of re-running the tools one by one.",
+  "count": null,
+  "pagination": null
+}

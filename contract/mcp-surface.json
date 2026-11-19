@@ -1,7 +1,7 @@
 {
   "$comment": "Generated snapshot of the Galaxy MCP tool surface -- do not edit by hand. Regenerate with `uv run python -m tests.surface_manifest`.",
   "source": "python/src/galaxy_mcp/server.py",
-  "toolCount": 49,
+  "toolCount": 50,
   "tools": [
     {
       "name": "cancel_workflow_invocation",
@@ -249,6 +249,92 @@
         },
         "required": [
           "dataset_id"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "extract_workflow_from_history",
+      "tags": [
+        "extended",
+        "workflows",
+        "write"
+      ],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "history_id": {
+            "type": "string",
+            "description": "Encoded id of the history to extract from"
+          },
+          "workflow_name": {
+            "type": "string",
+            "description": "Name for the new stored workflow"
+          },
+          "job_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Encoded ids of the jobs that become tool steps, in the order to extract\n     them; get_job_details and list_jobs report them. A job not from\n     history_id is refused. Without any, the workflow has no tool steps."
+          },
+          "dataset_hids": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "History item numbers (the hid get_history_contents lists, not encoded\n          ids) of the datasets that become the workflow's dataset inputs -- the\n          ones the jobs read that another run would replace. A dataset a listed\n          job reads that is neither here nor produced by a listed job is left as\n          an unconnected step input."
+          },
+          "collection_hids": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "History item numbers (hid) of the dataset collections that become\n             the workflow's collection inputs; a hid that is not a collection is\n             refused by Galaxy."
+          }
+        },
+        "required": [
+          "history_id",
+          "workflow_name"
         ],
         "type": "object"
       }

@@ -140,6 +140,14 @@
         "reason": "Both cap the elements returned and the caps differ: 100 here, 500 there."
       },
       {
+        "tool": "extract_workflow_from_history",
+        "param": null,
+        "kind": "missing-builtin-tool",
+        "observed": "python=write (tag) params=[collection_hids type=array&items<anyOf<integer|string>> required=false default=none; dataset_hids type=array&items<anyOf<integer|string>> required=false default=none; history_id type=string required=true default=none; job_ids type=array&items<string> required=false default=none; workflow_name type=string required=true default=none]",
+        "status": "intentional",
+        "reason": "Only here, and on purpose: POST /api/workflows with from_history_id, which turns jobs already run in a history into a stored workflow so one chain of tools can be invoked on every remaining input instead of being re-submitted tool call by tool call. Galaxy's server can run and invoke but has no way to make a workflow out of what an agent has just done by hand. The form's dataset_ids and dataset_collection_ids are hids (workflow/extract.py reads them with int()), which is why the parameters here are dataset_hids and collection_hids; a built-in version would do well to keep that naming."
+      },
+      {
         "tool": "get_dataset_details",
         "param": "include_preview",
         "kind": "missing-builtin-param",

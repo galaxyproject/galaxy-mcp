@@ -237,6 +237,9 @@ describe("the CLI's json envelope is the Python server's", () => {
 const EXIT_CODES: Record<string, number> = {
   // EX_USAGE 64 -- validation: the caller has to change something, and a retry cannot help
   "get_dataset_details/is_a_collection": 64,
+  "extract_workflow_from_history/encoded_id_where_a_hid_belongs": 64,
+  "extract_workflow_from_history/hid_is_not_a_collection": 64,
+  "extract_workflow_from_history/nothing_named": 64,
   "get_history_contents/limit_below_one": 64,
   "get_job_details/both_ids_given": 64,
   "get_job_details/neither_id_given": 64,
@@ -331,6 +334,7 @@ const EXIT_CODES: Record<string, number> = {
   "create_page/galaxy_too_old": 76,
   // EX_NOPERM 77 -- auth: a 401 or a 403
   "delete_user_tool/permission_denied_with_an_empty_body": 77,
+  "extract_workflow_from_history/history_not_accessible": 77,
   "get_collection_details/permission_denied": 77,
   "get_history_contents/permission_denied": 77,
   "get_tool_details/unauthorized": 77,
