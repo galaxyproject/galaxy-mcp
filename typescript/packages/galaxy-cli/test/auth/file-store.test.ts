@@ -236,6 +236,49 @@ describe("refusing what is not a plain file or directory of ours", () => {
   });
 });
 
+describe("a hosts.yml the file system refuses", () => {
+  // A mode that keeps us out is not something root notices, and Windows has no such modes.
+  const posixNonRoot = process.platform !== "win32" && process.getuid?.() !== 0;
+
+  // Before, the raw EACCES reached the command, which reported it as "Unexpected error" and exit
+  // 70, a bug in gxy. It is the person's file to fix, so it is the store's refusal: a message that
+  // names the file and what to try, and the store's exit code.
+  it.skipIf(!posixNonRoot)("names the file it cannot read, and what to try", async () => {
+    const s = new FileStore(dirOf());
+    await s.put(rec());
+    await chmod(s.path, 0o200);
+    const message = new RegExp(
+      `^Cannot read ${s.path}: permission denied\\. Check that you can read it and ${s.dir}, or set GXY_CONFIG_DIR`,
+    );
+    await expect(s.list()).rejects.toMatchObject(refused(message));
+    await expect(s.get(HOST)).rejects.toMatchObject(refused(message));
+    await expect(s.put(rec({ baseUrl: OTHER }))).rejects.toMatchObject(refused(message));
+  });
+
+  it.skipIf(!posixNonRoot)(
+    "names the file it cannot write, says it is unchanged, and leaves it so",
+    async () => {
+      const s = new FileStore(dirOf());
+      await s.put(rec());
+      const before = await readFile(s.path, "utf8");
+      await chmod(s.dir, 0o500);
+      try {
+        const message = new RegExp(
+          `^Cannot write ${s.path}: permission denied\\. It has not been changed\\. Check that you can write to ${s.dir}, or set GXY_CONFIG_DIR`,
+        );
+        await expect(s.put(rec({ baseUrl: OTHER }))).rejects.toMatchObject(refused(message));
+        await expect(s.delete(HOST)).rejects.toMatchObject(refused(message));
+        // Reading still works: only writing needs the directory.
+        expect(await s.list()).toHaveLength(1);
+      } finally {
+        await chmod(s.dir, 0o700);
+      }
+      expect(await readFile(s.path, "utf8")).toBe(before);
+      expect(await readdir(s.dir)).toEqual(["hosts.yml"]);
+    },
+  );
+});
+
 describe("a corrupt hosts.yml", () => {
   // Every variant below puts a canary token in a field the YAML parser might quote back in its
   // error, so a message that repeated the file's text would repeat the token. Each test therefore
