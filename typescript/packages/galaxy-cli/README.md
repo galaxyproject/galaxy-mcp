@@ -82,10 +82,13 @@ rather than that you are not logged in. Each refusal exits 65 (not 77, which wou
 again, and that meets the same refusal), names the file and what to do, and changes nothing.
 
 If the credential store cannot be read (a corrupt `hosts.yml`, a config directory that is a
-symlink, a login a newer `gxy` wrote for the Galaxy in question), an operation with `--api-key`, a
-profile key or `GALAXY_API_KEY` does not read it at all. One that has only a `.env` key still runs,
-with a warning on each run; any other fails, and the error names the problem. Fix or remove the
-store, or set `GXY_CONFIG_DIR` somewhere it can be read, to stop it.
+symlink), an operation with `--api-key`, a profile key or `GALAXY_API_KEY` does not read it at all.
+One that has only a `.env` key still runs, with a warning on each run; any other fails, and the error
+names the problem. Fix or remove the store, or set `GXY_CONFIG_DIR` somewhere it can be read, to stop
+it. A stored login for the Galaxy being used that cannot be used (it has expired, or a newer `gxy`
+wrote it) is different: the `.env` key is never used in its place, since that would run you as the
+`.env`'s account against the Galaxy you logged in to. The run stops as it would with no `.env` key
+(77 for an expired login, 64 otherwise) and says the key was passed over.
 
 ### Which key and which Galaxy an operation uses
 

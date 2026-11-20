@@ -35,6 +35,11 @@ export interface Sources {
   dotenvPath?: string;
   /** Set when the credential store could not be read (corrupt file). */
   storeProblem?: string;
+  /**
+   * A login is stored for the Galaxy being used but cannot be read (one a newer gxy wrote); the
+   * reason is in `storeProblem`. The `.env` key is not used in its place.
+   */
+  unreadableStored?: BaseUrl;
 }
 
 /** A key from outside .env was about to go to a Galaxy that the .env chose. Exits EX_NOPERM. */
@@ -198,13 +203,17 @@ export function resolveConnection(flags: GlobalFlags, src: Sources, commandName 
     // (which may carry a query or an odd path) that merely normalises to it.
     return finish({ baseUrl: login.baseUrl, apiKey: login.token, keySource: "stored" });
   }
+  // A stored login that cannot be used (expired, or unreadable) is not handed over to another key.
+  // Every key that outranks a stored login was tried above, so the only one left is a `.env`'s, and
+  // that would run you as the account of whoever wrote the `.env` against the Galaxy you logged in
+  // to. The answer is the one there would be with no `.env` key, saying that key was passed over.
+  const notUsed = dotenvKey ? ` GALAXY_API_KEY in ${dotenvFile} is not used in its place.` : "";
   if (login) {
     const expired = `Your login to ${login.baseUrl} ${describeExpiry(login.expiresAt!, now)}`;
-    // The only other key that can be used is one for a host somebody named.
-    if (dotenvKey && named) {
-      return sendTo(dotenvKey, "dotenv", `${expired}; using another key instead. Run ${commandName} auth login --host ${login.baseUrl} to renew it.`);
-    }
-    throw new AuthError("not_logged_in", `${expired}; run ${commandName} auth login --host ${login.baseUrl}`);
+    throw new AuthError("not_logged_in", `${expired}; run ${commandName} auth login --host ${login.baseUrl}.${notUsed}`);
+  }
+  if (picked && src.unreadableStored && isGalaxy(picked.url, src.unreadableStored)) {
+    throw new Error(`${noCredentials().message}${notUsed}`);
   }
   if (dotenvKey) return sendTo(dotenvKey, "dotenv", src.storeProblem);
   throw noCredentials();
@@ -212,11 +221,15 @@ export function resolveConnection(flags: GlobalFlags, src: Sources, commandName 
 
 /** The stored login, if it is for this very Galaxy: compared as normalised, never as typed. */
 function matchingLogin(baseUrl: string, login: StoredLogin | undefined): StoredLogin | undefined {
-  if (!login) return undefined;
+  return login && isGalaxy(baseUrl, login.baseUrl) ? login : undefined;
+}
+
+/** Whether `url` is the Galaxy stored as `stored`: compared as normalised; an unparsable URL never is. */
+function isGalaxy(url: string, stored: BaseUrl): boolean {
   try {
-    return normalizeBaseUrl(baseUrl) === login.baseUrl ? login : undefined;
+    return normalizeBaseUrl(url) === stored;
   } catch {
-    return undefined;
+    return false;
   }
 }
 
@@ -255,7 +268,14 @@ export async function loadSourcesAsync(
     // Asked of the store for any named Galaxy, not only a listed one: the list leaves out a login this
     // version cannot read (one a newer gxy wrote), and `get` is what says so (as the store problem) instead of
     // leaving a plain "no credentials". For a Galaxy with no login at all it returns null: no token is read.
-    const storedLogin = target ? ((await store.get(target)) ?? undefined) : undefined;
+    let storedLogin: StoredLogin | undefined;
+    try {
+      storedLogin = target ? ((await store.get(target)) ?? undefined) : undefined;
+    } catch (e) {
+      // A login for this very Galaxy that cannot be read: `resolveConnection` must not use the
+      // `.env` key in its place, as it may for a store it cannot read at all.
+      return { ...src, storedBaseUrls, now, storeProblem: e instanceof Error ? e.message : String(e), unreadableStored: target };
+    }
     return { ...src, storedBaseUrls, ...(storedLogin ? { storedLogin } : {}), now };
   } catch (e) {
     return { ...src, now, storeProblem: e instanceof Error ? e.message : String(e) };

@@ -125,6 +125,15 @@ describe("credential errors exit by kind", () => {
     expect(r.exitCode).toBe(77);
     expect(r.stderr).toMatch(/expired at 2020-01-01 00:00 UTC; run (gxy|galaxy-cli) auth login --host https:\/\/galaxy\.example\.org/);
   });
+  // A `.env` key is the only one left below a stored login, and it would run you as the `.env`'s
+  // account against your own Galaxy: 77 as with no other key, not a warning and a run.
+  it("an expired login with a .env key for the same Galaxy still exits 77, and the key is not used", async () => {
+    await writeFile(join(tmp.path, ".env"), "GALAXY_URL=https://galaxy.example.org\nGALAXY_API_KEY=DOT-KEY\n");
+    const r = await run(host("https://galaxy.example.org", "2020-01-01T00:00:00.000Z"));
+    expect(r.exitCode).toBe(77);
+    expect(r.stderr).toMatch(/expired at 2020-01-01 00:00 UTC; run (gxy|galaxy-cli) auth login --host https:\/\/galaxy\.example\.org\. GALAXY_API_KEY in .*\.env is not used in its place\./);
+    expect(r.stderr).not.toContain("DOT-KEY");
+  });
   // The list leaves out a login a newer gxy wrote; for the Galaxy that was asked for, the error says so
   // and still exits 64, instead of only advising a login that would be refused.
   it("names a login a newer gxy wrote for the Galaxy asked for", async () => {
@@ -136,6 +145,19 @@ describe("credential errors exit by kind", () => {
     expect(r.exitCode).toBe(64);
     expect(r.stderr).toContain("written by a newer version of gxy");
     expect(r.stderr).toContain("https://galaxy.example.org");
+  });
+  // The same with a .env that names that Galaxy and has a key: the .env key is not used in place of
+  // the login, so the exit is the same, and the message says the key was passed over.
+  it("does not use a .env key in place of a login a newer gxy wrote for that Galaxy", async () => {
+    await writeFile(join(tmp.path, ".env"), "GALAXY_URL=https://galaxy.example.org\nGALAXY_API_KEY=DOT-KEY\n");
+    const r = await run(
+      "",
+      'hosts:\n  https://galaxy.example.org:\n    username: alice\n    method: pasted\n    storage: vault\n    obtained_at: "2026-01-01T00:00:00.000Z"\n',
+    );
+    expect(r.exitCode).toBe(64);
+    expect(r.stderr).toContain("written by a newer version of gxy");
+    expect(r.stderr).toMatch(/GALAXY_API_KEY in .*\.env is not used in its place\./);
+    expect(r.stderr).not.toContain("DOT-KEY");
   });
   it("several stored logins and no URL exits 64", async () => {
     const r = await run(host("https://a.example.org", null) + host("https://b.example.org", null));

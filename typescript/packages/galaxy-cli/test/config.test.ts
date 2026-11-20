@@ -133,11 +133,12 @@ describe("resolveConnection with stored logins", () => {
       expect(() => resolveConnection({}, src({ storedLogin: login({ expiresAt: at(30_000) }) }))).toThrow(/about to expire/);
       expect(resolveConnection({}, src({ storedLogin: login({ expiresAt: at(120_000) }) })).apiKey).toBe("STORED");
     });
-    it("hands over to another key with a warning", () => {
-      const s = src({ storedLogin: login({ expiresAt: "2026-05-01T00:00:00.000Z" }), dotenv: { GALAXY_URL: url, GALAXY_API_KEY: "DOT" } });
-      const conn = resolveConnection({}, s);
-      expect(conn.apiKey).toBe("DOT");
-      expect(conn.warning).toMatch(/expired/);
+    // The only key left below a stored login is a `.env`'s, and using it would run you as that
+    // file's account against your own Galaxy: fail (77) and say so, rather than warn and go on.
+    it("does not hand over to a .env key, and says that key is not used", () => {
+      const s = src({ storedLogin: login({ expiresAt: "2026-05-01T00:00:00.000Z" }), dotenv: { GALAXY_URL: url, GALAXY_API_KEY: "DOT" }, dotenvPath: "/work/.env" });
+      expect(() => resolveConnection({}, s)).toThrow(expect.objectContaining({ kind: "not_logged_in", message: expect.stringMatching(/expired at 2026-05-01.*gxy auth login --host https:\/\/galaxy\.example\.org\. GALAXY_API_KEY in \/work\/\.env is not used in its place\.$/) }));
+      expect(() => resolveConnection({}, s)).not.toThrow(/DOT\b/);
     });
   });
 
@@ -145,10 +146,9 @@ describe("resolveConnection with stored logins", () => {
     it("is not read as non-expiring", () => {
       expect(() => resolveConnection({}, src({ storedLogin: login({ expiresAt: "tomorrow" }) }))).toThrow(/unreadable expiry/);
     });
-    it("hands over to another key with a warning", () => {
-      const conn = resolveConnection({}, src({ storedLogin: login({ expiresAt: "tomorrow" }), dotenv: { GALAXY_URL: url, GALAXY_API_KEY: "OTHER" } }));
-      expect(conn.apiKey).toBe("OTHER");
-      expect(conn.warning).toMatch(/unreadable expiry/);
+    it("does not hand over to a .env key either", () => {
+      const s = src({ storedLogin: login({ expiresAt: "tomorrow" }), dotenv: { GALAXY_URL: url, GALAXY_API_KEY: "OTHER" } });
+      expect(() => resolveConnection({}, s)).toThrow(expect.objectContaining({ kind: "not_logged_in", message: expect.stringMatching(/unreadable expiry.*GALAXY_API_KEY in \.env is not used/) }));
     });
   });
 });
@@ -309,10 +309,8 @@ describe("resolveConnection: keys and hosts", () => {
     it("an expired login for the only host cannot lend its host to a .env key", () => {
       expect(() => asExpired({}, keys.dotenv)).toThrow(expect.objectContaining({ kind: "not_logged_in" }));
     });
-    it("an expired login hands over to a .env key for a host that was named", () => {
-      const conn = asExpired({}, { dotenv: { GALAXY_URL: url, GALAXY_API_KEY: "DOTKEY" } });
-      expect(conn).toMatchObject({ apiKey: "DOTKEY", baseUrl: url });
-      expect(conn.warning).toMatch(/expired/);
+    it("an expired login does not hand over to a .env key, even for a host that was named", () => {
+      expect(() => asExpired({}, { dotenv: { GALAXY_URL: url, GALAXY_API_KEY: "DOTKEY" } })).toThrow(expect.objectContaining({ kind: "not_logged_in", message: expect.stringMatching(/is not used in its place/) }));
     });
   });
 
@@ -341,7 +339,7 @@ describe("resolveConnection: keys and hosts", () => {
       expect(who({}, named, keys.dotenv)).toEqual(["STORED", "stored"]);
     });
     it("the .env key is last: used when nothing else has a key for it", () => {
-      const conn = asExpired({}, named, keys.dotenv);
+      const conn = resolveConnection({}, merge(named, keys.dotenv));
       expect([conn.apiKey, conn.keySource]).toEqual(["DOTKEY", "dotenv"]);
     });
     // The two places where this differs from before stored logins, when the order was flag, env, .env, profile.
@@ -364,7 +362,7 @@ describe("resolveConnection: keys and hosts", () => {
   describe("saying where a .env was used", () => {
     const dir = { dotenvPath: "/work/repo/.env" };
     it("names the file's directory when its key is used", () => {
-      const conn = asExpired({}, dir, { dotenv: { GALAXY_URL: url, GALAXY_API_KEY: "DOTKEY" } });
+      const conn = resolveConnection({}, merge(dir, { dotenv: { GALAXY_URL: url, GALAXY_API_KEY: "DOTKEY" } }));
       expect(conn.note).toBe("Using GALAXY_API_KEY and GALAXY_URL from /work/repo/.env.");
     });
     it("names it when only its GALAXY_URL chose the Galaxy, and says nothing of a key it did not use", () => {
@@ -486,6 +484,29 @@ describe("loadSourcesAsync", () => {
     expect(() => resolveConnection({}, s)).toThrow(/No Galaxy credentials.*written by a newer version of gxy/);
     const other = await loadSourcesAsync({}, { store, base: base({ env: { GALAXY_URL: "https://other.example.org" } }) });
     expect(other.storeProblem).toBeUndefined();
+  });
+  // As for an expired login: the .env key is the only one left below a stored login, and would run
+  // you as the .env's account against the Galaxy you logged in to. So a login for that Galaxy that
+  // cannot be read refuses as it would with no .env key, and says the key was passed over. A store
+  // that cannot be read at all says nothing about this Galaxy, so there the .env key still runs.
+  it("does not use the .env key in place of a login it cannot read for that Galaxy", async () => {
+    const store = new FakeStore();
+    store.get = async (u) => {
+      if (u === url) throw new AuthError("store", "The login for https://galaxy.example.org was written by a newer version of gxy.");
+      return null;
+    };
+    const pair = { dotenv: { GALAXY_URL: url, GALAXY_API_KEY: "DOTKEY" }, dotenvPath: "/repo/.env" };
+    const s = await loadSourcesAsync({}, { store, base: base(pair) });
+    expect(s.unreadableStored).toBe(url);
+    expect(() => resolveConnection({}, s)).toThrow(/No Galaxy credentials.*written by a newer version of gxy.*GALAXY_API_KEY in \/repo\/\.env is not used in its place\.$/);
+    // A .env pair for another Galaxy is not this login's business.
+    const elsewhere = await loadSourcesAsync({}, { store, base: base({ dotenv: { GALAXY_URL: "https://other.example.org", GALAXY_API_KEY: "DOTKEY" } }) });
+    expect(resolveConnection({}, elsewhere)).toMatchObject({ apiKey: "DOTKEY", baseUrl: "https://other.example.org" });
+    // A store that cannot be listed at all: the .env key runs, with the problem as a warning.
+    const broken = new FakeStore();
+    broken.list = async () => { throw new Error("hosts.yml is not valid"); };
+    const conn = resolveConnection({}, await loadSourcesAsync({}, { store: broken, base: base(pair) }));
+    expect(conn).toMatchObject({ apiKey: "DOTKEY", warning: expect.stringMatching(/not valid/) as unknown });
   });
   it("leaves an unparsable URL with no stored login, which is not an error here", async () => {
     const s = await loadSourcesAsync({}, { store: seeded(), base: base({ env: { GALAXY_URL: "not a url" } }) });

@@ -77,8 +77,8 @@ export function buildProgram(deps: CliDeps = {}): Command {
         try {
           const flags = { url: globals.url, apiKey: globals.apiKey, profile: globals.profile };
           conn = resolveConnection(flags, await loadSourcesAsync(flags), program.name());
-          // A key was found but something is off (an unreadable store, an expired login with
-          // another key used instead): worth a line, not a failure.
+          // A key was found but something is off (an unreadable store, with a `.env` key used
+          // instead): worth a line, not a failure.
           if (conn.warning) console.error(`Warning: ${conn.warning}`);
           if (conn.note && !globals.quiet) console.error(conn.note);
         } catch (e) {
