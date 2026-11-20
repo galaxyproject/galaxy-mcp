@@ -1,6 +1,6 @@
 import { normalizeBaseUrl } from "../base-url";
 import { AuthError, type AuthDeps, type BaseUrl } from "../types";
-import { fail, hostOf, requireLogin, requireLoginAt } from "./common";
+import { fail, hostOf, requireLoginAt } from "./common";
 
 export interface HeadersOptions {
   host?: string;
@@ -38,30 +38,38 @@ function galaxyOfMcpUrl(serverUrl: string): BaseUrl {
  *
  * The header is `x-api-key`, the one galaxy-ops sends for every operation. The MCP authorization
  * spec has clients send `Authorization: Bearer`, which Galaxy's API reads only when no key is
- * given; this does not send it. Run by hand, with no server named, it picks a host by the
- * ordinary rule (`--host`, `GALAXY_URL`, the only stored login).
+ * given; this does not send it.
+ *
+ * With no server named it refuses, rather than pick a host by the ordinary rule: that would hand
+ * the only stored login's token to whatever server asked, which is the one thing this check is
+ * for. `--host` alone is not enough either, since a project's `.mcp.json` can set the helper
+ * command as well as the URL. To print a token by hand, `gxy auth token` is the command.
  */
 export async function headersCommand(opts: HeadersOptions, deps: AuthDeps): Promise<number> {
   try {
     const serverUrl = deps.env.CLAUDE_CODE_MCP_SERVER_URL;
-    let login;
-    // `!== undefined`: a server that is named but blank is still named, and is refused below.
-    if (serverUrl !== undefined) {
-      const target = galaxyOfMcpUrl(serverUrl);
-      // `--host` may agree with the server Claude Code named but never move the token to another.
-      if (opts.host) {
-        const named = await deps.resolveHost(opts.host);
-        if (named !== target) {
-          throw new AuthError(
-            "not_logged_in",
-            `Refusing to print a token: --host ${hostOf(named)} is not the server Claude Code is connecting to (${hostOf(target)}).`,
-          );
-        }
-      }
-      login = await requireLoginAt(deps, target);
-    } else {
-      login = await requireLogin(deps, opts.host);
+    // `=== undefined` only: a server that is named but blank is still named, and is refused by
+    // `galaxyOfMcpUrl`.
+    if (serverUrl === undefined) {
+      throw new AuthError(
+        "not_logged_in",
+        `Refusing to print a token: CLAUDE_CODE_MCP_SERVER_URL is not set, so there is no server to check it against. ` +
+          `\`${deps.commandName} auth headers\` is for an MCP headersHelper, which Claude Code runs with it set; ` +
+          `\`${deps.commandName} auth token\` prints a token.`,
+      );
     }
+    const target = galaxyOfMcpUrl(serverUrl);
+    // `--host` may agree with the server Claude Code named but never move the token to another.
+    if (opts.host) {
+      const named = await deps.resolveHost(opts.host);
+      if (named !== target) {
+        throw new AuthError(
+          "not_logged_in",
+          `Refusing to print a token: --host ${hostOf(named)} is not the server Claude Code is connecting to (${hostOf(target)}).`,
+        );
+      }
+    }
+    const login = await requireLoginAt(deps, target);
     deps.io.stdout.write(`${JSON.stringify({ "x-api-key": login.token })}\n`);
     return 0;
   } catch (e) {

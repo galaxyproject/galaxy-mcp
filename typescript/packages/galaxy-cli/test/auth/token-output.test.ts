@@ -7,14 +7,14 @@ import { describe, it, expect } from "vitest";
 import { tokenCommand } from "../../src/auth/commands/token";
 import { envCommand, quoteFor } from "../../src/auth/commands/env";
 import { headersCommand } from "../../src/auth/commands/headers";
-import { DAY, FAKE_TOKEN, HOST, OTHER, SOON, fakeLogin, harness } from "./harness";
+import { DAY, FAKE_TOKEN, HOST, OTHER, SOON, asHelperFor, fakeLogin, harness } from "./harness";
 
 type H = ReturnType<typeof harness>;
 const commands: [string, (h: H) => Promise<number>][] = [
   ["token", (h) => tokenCommand({}, h.deps)],
   ["token --json", (h) => tokenCommand({ json: true }, h.deps)],
   ["env", (h) => envCommand({}, h.deps)],
-  ["headers", (h) => headersCommand({}, h.deps)],
+  ["headers", (h) => headersCommand({}, asHelperFor(h).deps)],
 ];
 
 describe("auth token", () => {
@@ -170,10 +170,24 @@ describe("auth env", () => {
 
 describe("auth headers", () => {
   it("prints the x-api-key header object", async () => {
-    const h = harness({ stored: [fakeLogin()] });
+    const h = asHelperFor(harness({ stored: [fakeLogin()] }));
     expect(await headersCommand({}, h.deps)).toBe(0);
     expect(h.cap.out).toBe(`{"x-api-key":"${FAKE_TOKEN}"}\n`);
     expect(h.cap.err).toBe("");
+  });
+
+  // Run with no server named, the ordinary host rule would hand the only stored login's token to
+  // whatever server asked. `--host` does not stand in for it: a project's `.mcp.json` sets the
+  // helper command as well as the URL.
+  it("refuses with 77 and prints nothing when CLAUDE_CODE_MCP_SERVER_URL is not set", async () => {
+    for (const opts of [{}, { host: HOST }]) {
+      const h = harness({ stored: [fakeLogin()], hostFromEnv: HOST });
+      expect(await headersCommand(opts, h.deps)).toBe(77);
+      expect(h.cap.out).toBe("");
+      expect(h.cap.err).toContain("CLAUDE_CODE_MCP_SERVER_URL is not set");
+      expect(h.cap.err).toContain("`gxy auth token` prints a token");
+      expect(h.cap.err).not.toContain(FAKE_TOKEN);
+    }
   });
 
   // Claude Code names the MCP server it is asking for headers for, in `CLAUDE_CODE_MCP_SERVER_URL`

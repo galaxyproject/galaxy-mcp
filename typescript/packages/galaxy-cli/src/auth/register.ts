@@ -20,9 +20,9 @@ export function registerAuth(program: Command, makeDeps: (commandName: string) =
     .command("auth")
     .description("Log in to a Galaxy and manage stored credentials");
   // `--api-key` belongs to the operations; `auth` takes its key from the store or from stdin.
-  // `--profile` is the same for `login` alone: the other subcommands use it to find the host (and
-  // `status` to say which key an operation would send), but a login never takes its host from a
-  // profile. `status` also reports on `--api-key` (what operations would use), so it is the one
+  // `--profile` is the same for `login` and `headers`: the other subcommands use it to find the
+  // host (and `status` to say which key an operation would send), but a login never takes its host
+  // from a profile, and `headers` takes it only from the server Claude Code names. `status` also reports on `--api-key` (what operations would use), so it is the one
   // command that takes it. A flag that does not apply is a usage error
   // (64), as in `gh` and `aws`, and not a warning: `login --profile prod --with-token` would
   // otherwise send the key piped on stdin to a Galaxy other than prod's before anyone could
@@ -37,6 +37,11 @@ export function registerAuth(program: Command, makeDeps: (commandName: string) =
     if (g.profile !== undefined && action.name() === "login") {
       problems.push(
         `--profile does not apply to \`${name}\`: login takes its Galaxy from --host, --url or GALAXY_URL in the environment.`,
+      );
+    }
+    if (g.profile !== undefined && action.name() === "headers") {
+      problems.push(
+        `--profile does not apply to \`${name}\`: it takes its Galaxy from CLAUDE_CODE_MCP_SERVER_URL.`,
       );
     }
     if (g.apiKey !== undefined && action.name() !== "status") {
@@ -145,7 +150,7 @@ export function registerAuth(program: Command, makeDeps: (commandName: string) =
   auth
     .command("headers")
     .description("Print the request headers as JSON, for an MCP headersHelper")
-    .addOption(host())
+    .addOption(host("the Galaxy CLAUDE_CODE_MCP_SERVER_URL names, which it must match"))
     .action((o: HeadersOptions) => run((deps) => headersCommand(o, deps)));
 
   auth

@@ -242,7 +242,10 @@ describe("auth, end to end", () => {
     expect(env.stdout).toContain(`GALAXY_URL='${galaxy.baseUrl}'`);
     expect(env.stdout).toContain(`GALAXY_API_KEY='${token}'`);
 
-    expect(JSON.parse((await run(["auth", "headers"])).stdout)).toEqual({ "x-api-key": token });
+    const headers = await run(["auth", "headers"], {
+      env: { CLAUDE_CODE_MCP_SERVER_URL: `${galaxy.baseUrl}/api/mcp` },
+    });
+    expect(JSON.parse(headers.stdout)).toEqual({ "x-api-key": token });
 
     // An existing operation uses the stored login with no flags.
     const user = await run(["--format", "json", "get_user"]);
@@ -586,6 +589,15 @@ describe("auth, end to end", () => {
       expect(other.exitCode).toBe(77);
       expect(other.stdout).toBe("");
       expect(other.stdout + other.stderr).not.toContain(token);
+
+      // With no server named, the one stored login is not handed to whoever asked, even with --host.
+      for (const args of [["auth", "headers"], ["auth", "headers", "--host", galaxy.baseUrl]]) {
+        const unnamed = await run(args);
+        expect(unnamed.exitCode, unnamed.stderr).toBe(77);
+        expect(unnamed.stdout).toBe("");
+        expect(unnamed.stderr).toContain("CLAUDE_CODE_MCP_SERVER_URL is not set");
+        expect(unnamed.stdout + unnamed.stderr).not.toContain(token);
+      }
     }, 60_000);
   });
 

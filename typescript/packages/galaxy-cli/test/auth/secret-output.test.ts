@@ -10,7 +10,7 @@ import { logoutCommand } from "../../src/auth/commands/logout";
 import { statusCommand } from "../../src/auth/commands/status";
 import { tokenCommand } from "../../src/auth/commands/token";
 import { AuthError } from "../../src/auth/types";
-import { FAKE_TOKEN, HOST, fakeLogin, harness } from "./harness";
+import { FAKE_TOKEN, HOST, asHelperFor, fakeLogin, harness } from "./harness";
 
 const HOST_ARG = "https://dev.galaxy.example.org";
 /** The harness's fakes for one run: `cap.out` and `cap.err` hold everything written to each stream. */
@@ -29,7 +29,7 @@ describe("a stored, valid login", () => {
     ["env", true, (h) => envCommand({}, h.deps)],
     ["env --shell fish", true, (h) => envCommand({ shell: "fish" }, h.deps)],
     ["env --shell powershell", true, (h) => envCommand({ shell: "powershell" }, h.deps)],
-    ["headers", true, (h) => headersCommand({}, h.deps)],
+    ["headers", true, (h) => headersCommand({}, asHelperFor(h).deps)],
     ["status --show-token", true, (h) => statusCommand({ showToken: true }, h.deps)],
     [
       "status --json --show-token",
@@ -74,7 +74,7 @@ describe("when there is no usable login or the server fails", () => {
     ["token", (h) => tokenCommand({}, h.deps)],
     ["token --json", (h) => tokenCommand({ json: true }, h.deps)],
     ["env", (h) => envCommand({}, h.deps)],
-    ["headers", (h) => headersCommand({}, h.deps)],
+    ["headers", (h) => headersCommand({}, asHelperFor(h).deps)],
     ["logout", (h) => logoutCommand({}, h.deps)],
   ];
   const withServer: [string, Run][] = [

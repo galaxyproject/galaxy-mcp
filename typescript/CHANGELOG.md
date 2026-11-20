@@ -51,7 +51,8 @@ still works for operations but is deprecated, since the key shows in the process
 operation run with the same flags and environment would use (`key_source` in `--json`), or why
 operations would be refused (a `.env` Galaxy with another key). `gxy auth
 env` prints `GALAXY_URL` and `GALAXY_API_KEY` assignments for `eval`, and `gxy auth headers` prints
-`{"x-api-key": ...}` as JSON, for an MCP `headersHelper`. Both write only to stdout, so a pipe
+`{"x-api-key": ...}` as JSON, for an MCP `headersHelper`, only for the Galaxy that Claude Code's
+`CLAUDE_CODE_MCP_SERVER_URL` names: without it, it refuses. Both write only to stdout, so a pipe
 reads them and nothing else.
 
 ### galaxy-cli: a `.env` URL is only used with the `.env` key

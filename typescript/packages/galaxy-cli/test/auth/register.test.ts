@@ -125,8 +125,28 @@ describe("the auth commands", () => {
       },
     );
 
+    // `headers` takes its Galaxy only from CLAUDE_CODE_MCP_SERVER_URL, so a --profile there could
+    // only mislead: refused like login's, for any name, before anything is read.
+    it("refuse --profile for auth headers: exit 64, nothing run, even with --quiet", async () => {
+      const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+      try {
+        for (const quiet of [[], ["--quiet"]]) {
+          write.mockClear();
+          const { h, code, makeAuthDeps } = await run([...quiet, "--profile", "p", "auth", "headers"]);
+          expect(code).toBe(64);
+          expect(write.mock.calls.map((c) => String(c[0])).join("")).toBe(
+            "--profile does not apply to `gxy auth headers`: it takes its Galaxy from CLAUDE_CODE_MCP_SERVER_URL.\n",
+          );
+          expect(makeAuthDeps).not.toHaveBeenCalled();
+          expect(h.cap.out).toBe("");
+        }
+      } finally {
+        write.mockRestore();
+      }
+    });
+
     it("leave --profile to the commands that use it to find the host", async () => {
-      for (const cmd of ["token", "logout", "env", "headers", "status"]) {
+      for (const cmd of ["token", "logout", "env", "status"]) {
         const { code, makeAuthDeps } = await run(["--profile", "p", "auth", cmd]);
         expect(code).toBe(0);
         expect(makeAuthDeps).toHaveBeenCalled();
@@ -173,7 +193,9 @@ describe("the auth commands", () => {
     ["token", ["auth", "token"], "Unknown --profile"],
     ["logout", ["auth", "logout"], "Unknown --profile"],
     ["env", ["auth", "env"], "Unknown --profile"],
-    ["headers", ["auth", "headers"], "Unknown --profile"],
+    // `headers` takes its Galaxy only from the server Claude Code names, so --profile is refused
+    // outright, as for login.
+    ["headers", ["auth", "headers"], "does not apply to `gxy auth headers`"],
   ])("refuse an unknown --profile for auth %s with exit 64", async (cmd, argv, message) => {
     const h = harness({ stored: [fakeLogin()], stdinText: `${FAKE_TOKEN}\n` });
     const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);

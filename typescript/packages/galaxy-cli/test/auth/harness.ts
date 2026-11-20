@@ -194,3 +194,12 @@ export async function authErrorOf(p: Promise<unknown>): Promise<AuthError> {
     );
   return e;
 }
+
+/**
+ * `auth headers` refuses unless Claude Code names the MCP server it is for, so the cases that run
+ * it alongside `token` and `env` name `HOST`'s, as Claude Code would for that Galaxy.
+ */
+export function asHelperFor(h: Harness): Harness {
+  h.deps.env.CLAUDE_CODE_MCP_SERVER_URL ??= `${HOST}/api/mcp`;
+  return h;
+}

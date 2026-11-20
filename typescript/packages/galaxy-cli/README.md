@@ -193,14 +193,21 @@ printf %s "$KEY" | NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://proxy.example.org:312
 ### Keeping tokens away from agents
 
 `gxy auth env` puts the token in the environment of every process started from that shell,
-and `gxy auth token` prints it where a transcript can keep it. Agents should run
+and `gxy auth token`, `gxy auth headers` and `gxy auth status --show-token` print it where a
+transcript can keep it. Agents should run
 `gxy <operation>` and let it read the stored login, rather than handling tokens themselves.
 In Claude Code you can say so in `.claude/settings.json`:
 
 ```json
 {
   "permissions": {
-    "deny": ["Bash(gxy auth token*)", "Bash(gxy auth env*)", "Read(~/.config/gxy/**)"]
+    "deny": [
+      "Bash(gxy auth token*)",
+      "Bash(gxy auth env*)",
+      "Bash(gxy auth headers*)",
+      "Bash(gxy auth status*--show-token*)",
+      "Read(~/.config/gxy/**)"
+    ]
   }
 }
 ```
@@ -224,6 +231,12 @@ in the config file:
   }
 }
 ```
+
+Claude Code runs the helper with `CLAUDE_CODE_MCP_SERVER_URL` set to the server's URL, and `gxy auth
+headers` prints the token only for the stored login of that very Galaxy. Without that variable it
+refuses (exit 77) rather than fall back to the only stored login, which would hand that token to
+whichever server asked. `--host` may agree with the server but never stands in for it, and
+`--profile` does not apply. Use `gxy auth token` to print a token yourself.
 
 ## Documentation
 
