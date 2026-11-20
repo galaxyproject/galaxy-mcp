@@ -12,16 +12,16 @@ import { AuthError, type BaseUrl } from "./types";
  * Trailing `/api` segments are dropped too, however many: people paste the API root, and
  * `https://x/api` and `https://x` are the same Galaxy. Stripping them all keeps the result a
  * fixed point (`normalizeBaseUrl(normalizeBaseUrl(u)) === normalizeBaseUrl(u)`), which matters
- * because the result is a credential key and a stored key is normalised again when it is looked
- * up: with one `/api` stripped per pass, `.../api/api` would be stored under one key and looked
- * up under another. A segment that merely contains `api` (`/apiary`) is a different Galaxy and
- * stays.
+ * because the result is a credential key and `resolveHost` normalises a stored key again: with
+ * one `/api` stripped per pass, `.../api/api` would be stored under one key and looked up by
+ * `logout` and `status` under another. A segment that merely contains `api` (`/apiary`) is a
+ * different Galaxy and stays.
  *
  * The key is exact: `https://x//galaxy` and `https://x/galaxy` are two keys, and `example.org.` (a
  * trailing dot) is not `example.org`. Nothing here guesses that they are the same Galaxy.
  *
- * A URL from anywhere is compared as `normalizeBaseUrl(url) === login.baseUrl`, so
- * `https://X/api/` finds the login stored for `x`.
+ * Operations (`config.ts`) compare `normalizeBaseUrl(url) === login.baseUrl` and send the key
+ * to the stored form, so `GALAXY_URL=https://X/api/` finds the login made with `--host x`.
  *
  * The Python server's `normalize_galaxy_url` refuses the same schemes, credentials, whitespace
  * and control characters; it refuses a query or fragment where this drops them, and has no
@@ -86,7 +86,7 @@ export function normalizeBaseUrl(input: string): BaseUrl {
  * `127.0.0.1.example.org` or `localhost.example.org` is somebody else's server and would
  * otherwise be trusted with a token in the clear. `0.0.0.0` is not loopback either.
  */
-function isLoopback(hostname: string): boolean {
+export function isLoopback(hostname: string): boolean {
   const h = hostname.replace(/^\[|\]$/g, "");
   return h === "localhost" || h === "::1" || /^127(?:\.\d{1,3}){3}$/.test(h);
 }

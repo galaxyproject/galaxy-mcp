@@ -19,9 +19,9 @@ import { AuthError, type BaseUrl, type LoginSummary } from "./types";
 
 const STALE_TEMP_MS = 60 * 60 * 1000;
 
-/** One host's entry in `hosts.yml`: the login's details and its token. */
+/** One host's entry in `hosts.yml`. `token` is present only when `storage` is `file`. */
 export interface HostRecord extends LoginSummary {
-  token: string;
+  token?: string;
 }
 
 /**
@@ -33,9 +33,9 @@ export interface HostRecord extends LoginSummary {
  *   *skipped* on a read, with a warning, so one such entry cannot lock out the others.
  * - It is never *dropped*: a write carries it back out unchanged, as it does unknown fields on
  *   other hosts' entries that we do read and unknown top-level keys. `put` and `delete` for that
- *   very host refuse instead of replacing it, because that would discard a login we could not
- *   read. (`put` for a host we can read writes its entry afresh, so unknown fields on that one
- *   entry are replaced.)
+ *   very host refuse instead of replacing it, because that would discard a login (and maybe a
+ *   keyring secret) we could not read. (`put` for a host we can read writes its entry afresh, so
+ *   unknown fields on that one entry are replaced.)
  * - A file with nothing we can place at all is *corrupt*, and every read and write refuses it: not
  *   a mapping, `hosts` not a mapping, a non-empty mapping with no `hosts` key (a misspelt key, or
  *   another layout), or a recognised entry with a bad field. Reading any of those as empty would
@@ -51,7 +51,7 @@ interface Doc {
   extra: Map<string, unknown>;
 }
 
-/** Keys of a host entry that this build reads. */
+/** Keys of a host entry that this build reads or deliberately drops (`token` for keyring storage). */
 const KNOWN_FIELDS = new Set([
   "username",
   "email",
@@ -64,8 +64,9 @@ const KNOWN_FIELDS = new Set([
 ]);
 
 /**
- * `hosts.yml`: per-host logins, token and all. The name and the keying by host are gh's; the key
- * here is the whole base URL (see `normalizeBaseUrl`) because a Galaxy can live under a path prefix.
+ * `hosts.yml`: per-host login metadata, plus the token itself when the system keyring is
+ * not used. The name, the keying by host and the plaintext fallback are gh's; the key here is
+ * the whole base URL (see `normalizeBaseUrl`) because a Galaxy can live under a path prefix.
  *
  * The directory is 0700 and the file 0600, enforced on every write (and repaired, with a
  * warning, on a read too when an existing one is looser), because the file can hold a bearer token that
@@ -85,11 +86,12 @@ const KNOWN_FIELDS = new Set([
  * and the rename carries the temp file's mode over.
  *
  * Read-modify-write is not locked across processes: two simultaneous logins can lose one
- * update. This file is only written when a login is stored or removed, which is rare and interactive; that is
- * why it is accepted. (gh serialises its writes with a lock file.)
+ * update. There are no refresh tokens, so this file is only written at login and logout, which
+ * are rare and interactive; that is why it is accepted. (gh serialises login, logout and
+ * refresh with a lock file.)
  */
 export class FileStore {
-  /** Entries already warned about, so a store that reads twice warns once. */
+  /** Entries already warned about, so a command that reads twice warns once. */
   private readonly warned = new Set<string>();
 
   constructor(
@@ -143,7 +145,7 @@ export class FileStore {
     );
   }
 
-  /** Warn once per entry and file, however many times the store is read. */
+  /** Warn once per entry and file, however many times a command reads the store. */
   private warnSkipped(url: string, why: string): void {
     const key = `${this.path}\0${url}`;
     if (this.warned.has(key)) return;
@@ -249,7 +251,7 @@ export class FileStore {
    * entry, not surface later as a `TypeError`, or as a file login with no token. What is not
    * recognised at all becomes an `unknown` entry (see `Doc`); what is recognised but wrong is
    * corrupt. An `expires_at` that is a string but not a date is let through here and judged by
-   * whoever uses it.
+   * `checkExpiry`, which treats it as expired.
    */
   private decode(url: string, raw: unknown): Entry {
     if (!isObject(raw)) throw this.corrupt(`entry for ${show(url)} is not a mapping`);
@@ -268,18 +270,18 @@ export class FileStore {
     const word = (k: string): string | undefined =>
       typeof raw[k] === "string" && raw[k] ? raw[k] : undefined;
     const storageWord = word("storage");
-    if (storageWord !== undefined && storageWord !== "file")
+    if (storageWord !== undefined && storageWord !== "keyring" && storageWord !== "file")
       return { kind: "unknown", raw, why: "unknown storage" };
     const methodWord = word("method");
-    if (methodWord !== undefined && methodWord !== "pasted")
+    if (methodWord !== undefined && methodWord !== "device" && methodWord !== "pasted")
       return { kind: "unknown", raw, why: "unknown method" };
     const str = (k: string): string => {
       const v = raw[k];
       if (typeof v !== "string" || !v) throw this.corrupt(`entry for ${show(url)} has no \`${k}\``);
       return v;
     };
-    const storage = str("storage") as "file";
-    const method = str("method") as "pasted";
+    const storage = str("storage") as "keyring" | "file";
+    const method = str("method") as "device" | "pasted";
     const scopes = raw.scopes ?? [];
     if (!Array.isArray(scopes) || scopes.some((s) => typeof s !== "string")) {
       throw this.corrupt(`entry for ${show(url)} has invalid scopes`);
@@ -296,9 +298,9 @@ export class FileStore {
       expiresAt: expires ?? null,
       obtainedAt: str("obtained_at"),
       storage,
-      token: str("token"),
     };
     if (typeof raw.email === "string") rec.email = raw.email;
+    if (storage === "file") rec.token = str("token");
     const extra = Object.fromEntries(Object.entries(raw).filter(([k]) => !KNOWN_FIELDS.has(k)));
     return { kind: "known", record: rec, extra };
   }
@@ -311,6 +313,10 @@ export class FileStore {
     );
   }
 
+  /**
+   * The token is written only for `storage: file`, so a record that points at the keyring can
+   * never leave a stale plaintext copy behind when a login moves there.
+   */
   private encode(doc: Doc): string {
     const hosts = new Map<string, unknown>();
     for (const [url, entry] of doc.hosts) {
@@ -327,7 +333,7 @@ export class FileStore {
         expires_at: r.expiresAt,
         obtained_at: r.obtainedAt,
         storage: r.storage,
-        token: r.token,
+        ...(r.storage === "file" && r.token !== undefined ? { token: r.token } : {}),
         ...entry.extra,
       });
     }
@@ -469,7 +475,7 @@ function isObject(v: unknown): v is Record<string, unknown> {
 }
 
 /** File-supplied text for a message: no control characters (they could drive the terminal), bounded. */
-function show(text: string): string {
+export function show(text: string): string {
   const clean = sanitize(text);
   return clean.length > 120 ? `${clean.slice(0, 120)}...` : clean;
 }

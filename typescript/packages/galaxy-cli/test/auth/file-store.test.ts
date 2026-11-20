@@ -61,6 +61,12 @@ describe("reading and writing", () => {
     expect((await s.get(HOST))?.expiresAt).toBeNull();
   });
 
+  it("omits the token from the file for keyring storage", async () => {
+    const s = new FileStore(dirOf());
+    await s.put({ ...rec(), storage: "keyring", token: undefined });
+    expect(await readFile(s.path, "utf8")).not.toMatch(/token/);
+  });
+
   it("deletes, and lists sorted by URL", async () => {
     const s = new FileStore(dirOf());
     // OTHER goes in first and sorts last, so the order read back is not the order written.
@@ -405,7 +411,7 @@ describe("entries this build does not recognise", () => {
     expect(await readFile(s.path, "utf8")).toContain("handle: opaque-123");
   });
 
-  // Replacing it would discard a login that cannot be read.
+  // Replacing it would discard a login (and maybe a keyring secret) that cannot be read.
   it("refuses to replace or delete the skipped host, and leaves the file as it was", async () => {
     const { s } = await open(fileWith(futureEntry()));
     const before = await readFile(s.path, "utf8");

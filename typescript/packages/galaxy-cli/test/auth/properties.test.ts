@@ -1,15 +1,17 @@
 // Property tests (fast-check) where a canonical form or a round trip is the contract.
 // Fixed seed and bounded runs keep them deterministic and quick; a failure prints the
 // counterexample and the seed, so it can be replayed and then pinned as an example.
+import { spawnSync } from "node:child_process";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { normalizeBaseUrl } from "../../src/auth/base-url";
+import { quoteFor } from "../../src/auth/commands/env";
 import { sanitize } from "../../src/auth/sanitize";
 import { AuthError } from "../../src/auth/types";
 
 // The seed is fixed, so a failure on one machine is a failure on every machine and can be replayed
 // from the seed in the report. Two hundred runs is enough to cover the generators below in well
-// under a second.
+// under a second; the shell test is lower still because it starts a process per run.
 const params = { seed: 20260707, numRuns: 200 };
 
 // Small generators: a mix of well-formed URLs and the awkward pieces that matter to the key.
@@ -84,6 +86,30 @@ describe("normalizeBaseUrl properties", () => {
       params,
     );
   });
+});
+
+describe("quoteFor", () => {
+  // The expectation is the input itself, printed back by a real `sh`: a re-implementation of shell
+  // quoting in the test would agree with the code by construction. Printable ASCII is the domain
+  // because that is all a token may contain. It spawns a real sh per run, so the run count is lower.
+  it.skipIf(process.platform === "win32")(
+    "sh quoting round-trips any printable ASCII through a real sh",
+    () => {
+      const printable = fc.string({
+        unit: fc.integer({ min: 0x20, max: 0x7e }).map((c) => String.fromCharCode(c)),
+        maxLength: 40,
+      });
+      fc.assert(
+        fc.property(printable, (value) => {
+          const r = spawnSync("sh", ["-c", `printf %s ${quoteFor("sh", value)}`], {
+            encoding: "utf8",
+          });
+          expect(r.stdout).toBe(value);
+        }),
+        { ...params, numRuns: 50 },
+      );
+    },
+  );
 });
 
 describe("sanitize", () => {
