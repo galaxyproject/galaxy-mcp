@@ -17,6 +17,7 @@ import typing
 from collections.abc import Callable, Sequence
 from contextvars import ContextVar
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from functools import lru_cache, wraps
 from pathlib import Path
 from typing import Any, Literal, TypeVar, cast
@@ -25,10 +26,11 @@ from urllib.parse import quote, urlsplit
 import bioblend
 import pydantic_core
 import requests
-from dotenv import find_dotenv, load_dotenv
+from dotenv import dotenv_values, find_dotenv
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_context
 from mcp.server.auth.middleware.auth_context import get_access_token
+from mcp.types.version import HANDSHAKE_PROTOCOL_VERSIONS
 from pydantic import BaseModel, Field
 from starlette.requests import Request
 
@@ -110,7 +112,23 @@ class SessionGalaxyConnection:
     connected: bool = True
 
 
-_session_connections: dict[str, SessionGalaxyConnection] = {}
+class _ProcessConnectionKey:
+    """Names the one connection a sessionless stdio or in-memory caller shares.
+
+    Deliberately not a string: a client can pick any string as its session id through the
+    mcp-session-id header, and none of them may ever name the operator's connection.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "<process connection>"
+
+
+_PROCESS_CONNECTION_KEY = _ProcessConnectionKey()
+ConnectionKey = str | _ProcessConnectionKey
+
+_session_connections: dict[ConnectionKey, SessionGalaxyConnection] = {}
 
 
 def _prune_session_connections() -> None:
@@ -145,14 +163,79 @@ def _make_thread_safe(gi: GalaxyInstance) -> GalaxyInstance:
     return gi
 
 
-def _get_current_session_id() -> str | None:
+def _is_sessionless(ctx: Any) -> bool:
+    """True when the request came over a protocol era with no session to key on.
+
+    The 2026-07-28 era mints a fresh session id for every request, so a connection stored
+    under it is gone by the next call. Anything outside the handshake eras counts as
+    sessionless, which keeps an unknown future revision from silently dropping state.
+    """
     try:
-        return get_context().session_id
+        request_context = ctx.request_context
+    except Exception:
+        return False
+    version = getattr(request_context, "protocol_version", None) if request_context else None
+    return version is not None and version not in HANDSHAKE_PROTOCOL_VERSIONS
+
+
+def _lacks_negotiated_http_session(ctx: Any) -> bool:
+    """True for a streamable-HTTP request with no session the server issued.
+
+    A stateless HTTP server issues none, and fastmcp then takes the session id from the
+    client's own mcp-session-id header or makes up a new one per request: either the caller
+    picks the key or it is gone by the next call. The SDK keeps the negotiated id on the
+    session's connection; if that ever moves, this fails closed.
+    """
+    if getattr(ctx, "transport", None) != "streamable-http":
+        return False
+    try:
+        session = ctx.request_context.session
+    except Exception:
+        return True
+    connection = getattr(session, "_connection", None)
+    return getattr(connection, "session_id", None) is None
+
+
+def _untracked_remote_request() -> bool:
+    """True when a remote caller's request carries nothing that ties it to its next call.
+
+    That is any sessionless (2026-07-28) request that may be remote, and a handshake-era
+    request to a stateless HTTP server. There is no safe place to keep a connection made
+    with connect() for either.
+    """
+    try:
+        ctx = get_context()
+    except Exception:
+        return False
+    if _is_sessionless(ctx):
+        transport = getattr(ctx, "transport", None)
+        return transport in ("sse", "streamable-http") or remote_caller_possible()
+    return _lacks_negotiated_http_session(ctx)
+
+
+def _get_current_session_id() -> ConnectionKey | None:
+    """The key the current caller's connect() connection is stored under.
+
+    Handshake-era connections key on the MCP session. A sessionless (2026-07-28) request
+    over stdio or in-memory has exactly one client, the operator, so it shares one
+    process-wide key. A request that may be remote and carries no session the server
+    issued gets no key at all.
+    """
+    try:
+        ctx = get_context()
     except Exception:
         return None
+    if _untracked_remote_request():
+        return None
+    if not _is_sessionless(ctx):
+        try:
+            return ctx.session_id
+        except Exception:
+            return None
+    return _PROCESS_CONNECTION_KEY
 
 
-def _get_session_connection(session_id: str) -> SessionGalaxyConnection | None:
+def _get_session_connection(session_id: ConnectionKey) -> SessionGalaxyConnection | None:
     with _session_state_lock:
         session_connection = _session_connections.get(session_id)
         if not session_connection:
@@ -162,7 +245,12 @@ def _get_session_connection(session_id: str) -> SessionGalaxyConnection | None:
 
 
 def _set_session_connection(
-    session_id: str, *, url: str, api_key: str, gi: GalaxyInstance, connected: bool = True
+    session_id: ConnectionKey,
+    *,
+    url: str,
+    api_key: str,
+    gi: GalaxyInstance,
+    connected: bool = True,
 ) -> None:
     with _session_state_lock:
         now = time.monotonic()
@@ -176,7 +264,7 @@ def _set_session_connection(
         _prune_session_connections()
 
 
-def _clear_session_connection(session_id: str) -> None:
+def _clear_session_connection(session_id: ConnectionKey) -> None:
     with _session_state_lock:
         _session_connections.pop(session_id, None)
 
@@ -892,14 +980,96 @@ def _format_tool_input_error(
     )
 
 
-# Try to load environment variables from .env file
-dotenv_path = find_dotenv(usecwd=True)
-if dotenv_path:
-    load_dotenv(dotenv_path)
-    print(f"Loaded environment variables from {dotenv_path}")
+_CREDENTIAL_VARS = ("GALAXY_URL", "GALAXY_API_KEY")
+
+
+@dataclass(frozen=True)
+class _Dotenv:
+    """A .env as read, kept apart from os.environ."""
+
+    path: str | None = None
+    values: typing.Mapping[str, str] = dataclass_field(default_factory=dict)
+
+
+def _read_dotenv() -> _Dotenv:
+    """The nearest .env, in this directory or a parent, unless PYTHON_DOTENV_DISABLED is set.
+
+    GALAXY_URL and GALAXY_API_KEY are read literally: expanding ${...} in them would let the
+    file copy an exported value, such as the exported key, into its own credentials.
+    """
+    if os.environ.get("PYTHON_DOTENV_DISABLED", "").casefold() in {"1", "true", "t", "yes", "y"}:
+        return _Dotenv()
+    path = find_dotenv(usecwd=True)
+    if not path:
+        return _Dotenv()
+    literal = dotenv_values(path, interpolate=False)
+    expanded = dotenv_values(path)
+    values = {name: (literal if name in _CREDENTIAL_VARS else expanded)[name] for name in literal}
+    return _Dotenv(path, {name: value for name, value in values.items() if value is not None})
+
+
+@dataclass(frozen=True)
+class _ConfiguredCredentials:
+    url: str | None
+    url_from: Literal["environment", "dotenv"] | None
+    api_key: str | None
+    refusal: str | None = None
+
+
+def _configured_credentials(
+    exported: typing.Mapping[str, str], dotenv: _Dotenv
+) -> _ConfiguredCredentials:
+    """Pair GALAXY_URL with GALAXY_API_KEY from the environment and the .env, exported first.
+
+    A .env belongs to the directory rather than to whoever runs the server here, so its
+    GALAXY_URL is only used with the GALAXY_API_KEY from that same file, never an exported one.
+    An exported variable, even an empty one, shadows the .env's, as load_dotenv() would.
+    """
+
+    def pick(name: str) -> tuple[str | None, Literal["environment", "dotenv"] | None]:
+        if name in exported:
+            return exported[name] or None, "environment"
+        if dotenv.values.get(name):
+            return dotenv.values[name], "dotenv"
+        return None, None
+
+    url, url_from = pick("GALAXY_URL")
+    api_key, key_from = pick("GALAXY_API_KEY")
+    if url_from == "dotenv" and key_from == "environment" and api_key:
+        return _ConfiguredCredentials(
+            url,
+            url_from,
+            None,
+            refusal=(
+                f"{_dotenv_url_only_with_its_key(dotenv)}, not with GALAXY_API_KEY from the "
+                "environment. Set GALAXY_URL in the environment, or call "
+                "connect(url=..., api_key=...), to use that key with this Galaxy."
+            ),
+        )
+    return _ConfiguredCredentials(url, url_from, api_key)
+
+
+def _dotenv_url_only_with_its_key(dotenv: _Dotenv) -> str:
+    return (
+        f"GALAXY_URL from {dotenv.path or '.env'} is only used with the GALAXY_API_KEY in the "
+        "same file"
+    )
+
+
+# GALAXY_URL and GALAXY_API_KEY from .env stay out of os.environ, so os.environ only ever holds
+# what was exported. Every other .env setting is applied once, here, without overriding.
+startup_dotenv = _read_dotenv()
+if startup_dotenv.path:
+    for _name, _value in startup_dotenv.values.items():
+        if _name not in _CREDENTIAL_VARS:
+            os.environ.setdefault(_name, _value)
+    print(f"Loaded environment variables from {startup_dotenv.path}")
 
 # Configure Galaxy target and client state
-raw_galaxy_url = os.environ.get("GALAXY_URL")
+startup_credentials = _configured_credentials(os.environ, startup_dotenv)
+if startup_credentials.refusal:
+    logger.warning(startup_credentials.refusal)
+raw_galaxy_url = startup_credentials.url
 normalized_galaxy_url = normalize_galaxy_url(raw_galaxy_url) if raw_galaxy_url else None
 extra_allowed_galaxy_urls = tuple(
     normalize_galaxy_url(value.strip())
@@ -908,7 +1078,7 @@ extra_allowed_galaxy_urls = tuple(
 )
 galaxy_state: dict[str, Any] = {
     "url": normalized_galaxy_url,
-    "api_key": os.environ.get("GALAXY_API_KEY"),
+    "api_key": startup_credentials.api_key,
     "gi": None,
     "connected": False,
 }
@@ -1021,7 +1191,7 @@ script and `return` the final answer to avoid round-trips.
 
 `search` indexes the MCP tools (above), NOT Galaxy's full tool catalog. To
 find a Galaxy tool like FastQC, call
-`await call_tool('search_tools_by_name', {'name': 'fastqc'})` from inside
+`await call_tool('search_tools_by_name', {'query': 'fastqc'})` from inside
 `run_galaxy_tool`.
 """
 
@@ -1080,6 +1250,9 @@ class _OAuthPublicRoutes:
 
 
 def _http_app_with_security(self, *args, **kwargs):
+    # Whoever serves the app (run_http_server, `fastmcp run`, a host mounting it), this
+    # process now takes remote callers, so no call may pass for the operator's.
+    mark_serving_http()
     app = _original_http_app(self, *args, **kwargs)
     app.add_middleware(
         HTTPSecurityMiddleware,
@@ -1333,17 +1506,23 @@ class _ConnectRefusedError(ValueError):
 
 
 def _resolve_connect_credentials(
-    url: str | None, api_key: str | None
+    url: str | None,
+    api_key: str | None,
+    dotenv: _Dotenv | None = None,
 ) -> tuple[str | None, str | None]:
-    """Fill in connect() arguments from the environment, where that is safe.
+    """Fill in connect() arguments from the environment and the .env, where that is safe.
 
     Over HTTP the caller is not the operator, so the destination has to be one the operator
     configured -- GALAXY_URL or GALAXY_MCP_EXTRA_ALLOWED_URLS, matched exactly -- or
     connect(url=...) would make this server fetch whatever URL it is handed. Over stdio the
-    caller is the operator, and any Galaxy is fair game. Either way the environment's API key
-    only goes to the environment's URL, and OAuth deployments never lend out the operator's
-    credentials at all.
+    caller is the operator, and any Galaxy is fair game. Either way the configured API key only
+    goes to the configured URL, a GALAXY_URL from .env only with the key from that .env (see
+    _configured_credentials), and OAuth deployments never lend out the operator's credentials.
+
+    ``dotenv`` is the .env to read, as from _read_dotenv(); the one found at startup by default.
     """
+    dotenv = dotenv or startup_dotenv
+    configured = _configured_credentials(os.environ, dotenv)
     if remote_caller_possible():
         env_url = normalized_galaxy_url
         if not env_url:
@@ -1363,25 +1542,36 @@ def _resolve_connect_credentials(
             )
             if use_url is None:
                 raise _ConnectRefusedError("Galaxy URL is not allowed by this server.")
-        if auth_provider:
+        url_from_dotenv = url is None and startup_credentials.url_from == "dotenv"
+        # OAuth never lends out the configured key, so a caller's own key is all there is.
+        if auth_provider and not (api_key and url_from_dotenv):
             return use_url, api_key
     else:
-        env_url = os.environ.get("GALAXY_URL")
+        env_url = configured.url
         use_url = url or env_url
+        url_from_dotenv = not url and configured.url_from == "dotenv"
 
-    # A .env reloaded after startup can change GALAXY_API_KEY without changing the allowlist,
-    # so the key also has to belong to the GALAXY_URL in the environment right now.
-    live_env_url = os.environ.get("GALAXY_URL")
-    use_api_key = api_key
+    if api_key and url_from_dotenv:
+        # A remote caller isn't told where the server's .env lives.
+        where = _Dotenv() if remote_caller_possible() else dotenv
+        raise _ConnectRefusedError(
+            f"{_dotenv_url_only_with_its_key(where)}, not with an api_key passed to "
+            "connect(). Pass url as well, or set GALAXY_URL in the environment."
+        )
+    if api_key:
+        return use_url, api_key
+
+    # The allowlist is fixed at startup while the environment and .env can change after it,
+    # so the key also has to belong to the GALAXY_URL configured right now.
+    use_api_key = None
     if (
-        not use_api_key
-        and use_url
+        use_url
         and env_url
-        and live_env_url
+        and configured.url
         and _same_galaxy_url(use_url, env_url)
-        and _same_galaxy_url(use_url, live_env_url)
+        and _same_galaxy_url(use_url, configured.url)
     ):
-        use_api_key = os.environ.get("GALAXY_API_KEY")
+        use_api_key = configured.api_key
     return use_url, use_api_key
 
 
@@ -1435,7 +1625,31 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
                 message=f"Connected to Galaxy at {state['url']} via {state['source']}",
             )
 
+        # Validating here and keeping nothing would report success, then let the next call
+        # quietly run against the operator's GALAXY_URL instead.
+        if (url or api_key or not state["connected"]) and _untracked_remote_request():
+            if state.get("source") == "oauth":
+                raise _ConnectRefusedError(
+                    f"This client is already signed in through OAuth to {state['url']}; "
+                    "call connect() without a URL or API key to use that connection. A "
+                    "different Galaxy URL or key cannot be kept for this client, since nothing "
+                    "on its HTTP requests ties one call to the next."
+                )
+            raise _ConnectRefusedError(
+                "connect() cannot keep a Galaxy connection for this client: nothing on its "
+                "HTTP requests ties one call to the next (it speaks the sessionless 2026-07-28 "
+                "MCP protocol, or this server runs stateless HTTP). Sign in through OAuth if "
+                "this server offers it, or ask the server operator to set GALAXY_URL and "
+                "GALAXY_API_KEY."
+            )
+
         if session_id and not url and not api_key and not state["connected"]:
+            # Over stdio the caller is the operator, who needs to know why nothing connected;
+            # an HTTP caller isn't told where the server's .env lives.
+            if not remote_caller_possible():
+                refusal = _configured_credentials(os.environ, _read_dotenv()).refusal
+                if refusal:
+                    raise _ConnectRefusedError(refusal)
             raise _ConnectRefusedError(
                 "No Galaxy connection is available for this MCP session. "
                 "It may not have been configured yet, or it may have been evicted from the "
@@ -1448,16 +1662,17 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
 
         # Check if we have the necessary credentials
         if not use_url or not use_api_key:
-            # Try to reload from .env file in case it was added after startup
-            dotenv_path = find_dotenv(usecwd=True)
-            if dotenv_path:
-                load_dotenv(dotenv_path, override=True)
-                # Check again after loading .env
-                use_url, use_api_key = _resolve_connect_credentials(url, api_key)
+            # The .env may have been written or changed after startup, so read it again
+            dotenv = _read_dotenv()
+            if dotenv.path:
+                use_url, use_api_key = _resolve_connect_credentials(url, api_key, dotenv)
 
             # If still missing credentials, report error
             if not use_url or not use_api_key:
-                if url and not api_key and os.environ.get("GALAXY_API_KEY"):
+                configured = _configured_credentials(os.environ, dotenv)
+                if not url and not api_key and configured.refusal:
+                    raise _ConnectRefusedError(configured.refusal)
+                if url and not api_key and (configured.api_key or os.environ.get("GALAXY_API_KEY")):
                     raise _ConnectRefusedError(
                         "The configured GALAXY_API_KEY is only used with the configured "
                         "GALAXY_URL. Pass api_key explicitly to connect to a different server."

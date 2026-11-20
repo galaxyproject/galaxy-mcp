@@ -78,8 +78,20 @@ How you authenticate depends on your transport:
   authentication, though -- without OAuth, anything that can reach the listener can call every
   tool. See [Serving over HTTP](#serving-over-http) before exposing the server to anyone else.
 
+  That only works for clients on the handshake MCP protocols (2025-11-25 and earlier). A client
+  on the sessionless 2026-07-28 protocol, which FastMCP 4 and MCP SDK v2 clients use by default,
+  has no session to keep the connection in, so over HTTP `connect()` with a URL or key is
+  refused and points the caller at OAuth or the server's `GALAXY_URL` / `GALAXY_API_KEY`. The
+  same goes for any client when the server runs stateless HTTP (`FASTMCP_STATELESS_HTTP`),
+  which issues no sessions at all. Over stdio the server has one client, so a `connect()`
+  connection lasts for the whole process.
+
 You can also steer the transport with `GALAXY_MCP_TRANSPORT` (`stdio`, `streamable-http`, or `sse`).
-All variables can be placed in a `.env` file for convenience.
+All variables can be placed in a `.env` file for convenience (the server uses the nearest one,
+in the working directory or a parent). The one limit: a `GALAXY_URL` from `.env` is only used
+with the `GALAXY_API_KEY` from the same file, and `${...}` is not expanded in those two. If the
+URL comes from `.env` and the key is exported, the server doesn't connect; export `GALAXY_URL`
+too, or call `connect(url=..., api_key=...)`. `PYTHON_DOTENV_DISABLED=1` turns `.env` off.
 
 ## Usage
 

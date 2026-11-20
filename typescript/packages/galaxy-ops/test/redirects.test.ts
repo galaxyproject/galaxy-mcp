@@ -1,5 +1,5 @@
 import { createServer, type IncomingHttpHeaders, type Server, type ServerResponse } from "node:http";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
@@ -279,8 +279,14 @@ describe("an unfollowed 3xx on the surfaces", () => {
 });
 
 describe("tus upload: the key only goes to the configured Galaxy", () => {
+  const dirs: string[] = [];
+  afterEach(() => {
+    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+
   const file = () => {
     const dir = mkdtempSync(join(tmpdir(), "tus-redirect-"));
+    dirs.push(dir);
     const path = join(dir, "f.txt");
     writeFileSync(path, "abc");
     return path;

@@ -47,7 +47,8 @@ def _annotations(tool: Tool) -> dict[str, Any]:
     """
     if tool.annotations is None:
         return {}
-    return tool.annotations.model_dump(exclude_none=True)
+    # By alias, so the snapshot spells the hints the way the wire does (readOnlyHint).
+    return tool.annotations.model_dump(by_alias=True, exclude_none=True)
 
 
 # The largest integer a JSON number survives as itself. Anything past it is read

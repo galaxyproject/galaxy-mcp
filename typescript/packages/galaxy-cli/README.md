@@ -8,7 +8,7 @@ output and meaningful exit codes. Built on
 ## Install
 
 ```bash
-npm install -g @galaxyproject/galaxy-cli   # provides the `galaxy-cli` command
+npm install -g @galaxyproject/galaxy-cli   # provides `galaxy-cli` and `gxy` (the same program, shorter name)
 # or run without installing:
 npx @galaxyproject/galaxy-cli --help
 ```
@@ -31,7 +31,12 @@ galaxy-cli invoke_workflow <workflowId> --inputs @inputs.json --history-name "WF
 
 Credentials resolve from (first match wins): `--url`/`--api-key` flags, the
 `GALAXY_URL`/`GALAXY_API_KEY` environment variables, a `.env` file in the current
-directory, or a planemo profile (`--profile <name>`). Output is a table by
+directory, or a planemo profile (`--profile <name>`). The one limit on that: a
+`GALAXY_URL` from `.env` is only used with the `GALAXY_API_KEY` in the same `.env`. If the
+Galaxy came from a `.env` file and the key from anywhere else (`--api-key`, the environment or
+a profile), the run stops with exit code `77` and says so, so a `.env` in a cloned repository
+can't send your key elsewhere. Set `GALAXY_URL` in the environment or pass `--url` to use that
+Galaxy with your key. Output is a table by
 default; `--format json` prints the full result envelope for scripting. Exit
 codes follow `sysexits.h` conventions (e.g. `77` for auth failures).
 

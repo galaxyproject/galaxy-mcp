@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { type ZodTypeAny } from "zod";
 import { buildProgram } from "../src/program";
 import { classifyField, inCliNames } from "../src/flags";
@@ -42,7 +45,7 @@ function invocationsContext(asked: string[]) {
     createGalaxyContext({
       baseUrl: "https://g.example",
       apiKey: "K",
-      fetchImpl: (async (input: RequestInfo | URL) => {
+      fetchImpl: (async (input: Request | string | URL) => {
         const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         asked.push(url);
         const body = url.includes("/api/invocations/")
@@ -66,7 +69,7 @@ function recordingContext(asked: string[], body: unknown = []) {
     createGalaxyContext({
       baseUrl: "https://g.example",
       apiKey: "K",
-      fetchImpl: (async (input: RequestInfo | URL) => {
+      fetchImpl: (async (input: Request | string | URL) => {
         const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         asked.push(url);
         const payload = url.includes("/api/version")
@@ -239,7 +242,7 @@ describe("buildProgram", () => {
       createGalaxyContext({
         baseUrl: "https://g.example",
         apiKey: "K",
-        fetchImpl: (async (input: RequestInfo | URL) => {
+        fetchImpl: (async (input: Request | string | URL) => {
           const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
           asked.push(url);
           const body = url.includes("get_content_as_text")
@@ -329,6 +332,18 @@ describe("buildProgram", () => {
     expect(out.mock.calls.flat().join("")).toContain('"success": true');
     expect(process.exitCode === 0 || process.exitCode === undefined).toBe(true);
     out.mockRestore();
+  });
+});
+
+/**
+ * The name the program prints in usage is the one the entry file passes (`dist/gxy.js` is `gxy`,
+ * `dist/index.js` is `galaxy-cli`). It is not read from `process.argv[1]`: pnpm and Windows shims
+ * run the entry file, never the command name.
+ */
+describe("the program name", () => {
+  it("is galaxy-cli unless the entry says otherwise", () => {
+    expect(buildProgram().name()).toBe("galaxy-cli");
+    expect(buildProgram({ invokedAs: "gxy" }).name()).toBe("gxy");
   });
 });
 
@@ -458,5 +473,28 @@ describe("the names the CLI gives an op's inputs", () => {
     expect((commands.get("get_history_details")?.registeredArguments ?? []).map((a) => a.name())).toEqual([
       "historyId",
     ]);
+  });
+});
+
+describe("credential scoping through the real source loader", () => {
+  it("exits 77 and sends nothing when the environment's key meets a .env host", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gxy-scope-"));
+    writeFileSync(join(dir, ".env"), "GALAXY_URL=https://galaxy.attacker.example\n");
+    const cwd = vi.spyOn(process, "cwd").mockReturnValue(dir);
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("fetch must not be called"));
+    vi.stubEnv("GALAXY_API_KEY", "ENVKEY");
+    vi.stubEnv("GALAXY_URL", undefined);
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    process.exitCode = 0;
+    try {
+      await buildProgram().parseAsync(["node", "galaxy-cli", "get_user"]);
+      expect(process.exitCode).toBe(77);
+      expect(err.mock.calls.flat().join("")).toContain("GALAXY_URL from " + join(dir, ".env"));
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      process.exitCode = 0;
+      err.mockRestore(); fetchSpy.mockRestore(); cwd.mockRestore(); vi.unstubAllEnvs();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

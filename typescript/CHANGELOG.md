@@ -17,6 +17,31 @@ schema both workflow ops use.
 `invoke_workflow` takes `allowToolStateCorrections` (`allow_tool_state_corrections` on the wire)
 and now always sends it, false by default, as bioblend does for the Python server.
 
+### galaxy-cli: a `.env` URL is only used with the `.env` key
+
+Behaviour change. A `GALAXY_URL` from a `.env` file in the current directory is now only used with
+the `GALAXY_API_KEY` from that same file. When the Galaxy comes from `.env` and the key from
+`--api-key`, the environment or a `--profile`, `galaxy-cli` refuses with exit code 77 and a message
+saying how to proceed (set `GALAXY_URL` or pass `--url`), rather than sending the key to a host a
+cloned repository chose. Previously `--profile` with a `.env` `GALAXY_URL` sent the profile's key to
+the `.env` URL, since that outranked the profile's own. A `.env` with both URL and key, and every
+combination where the Galaxy comes from `--url`, the environment or a profile, work as before.
+
+### galaxy-mcp can show cards (MCP Apps)
+
+With `GALAXY_MCP_APPS=1` (or `buildServer(ctx, { apps: true })`), `galaxy-mcp` serves
+[MCP Apps](https://github.com/modelcontextprotocol/ext-apps) cards and three tools that open them:
+
+- `show_histories` returns what `get_histories` returns, beside a card of the user's histories.
+- `show_history` returns what `get_history_contents` returns, beside a card of one history.
+- `show_datasets` shows only the datasets an agent chose.
+
+Each card shows five rows and can show more, show less and collapse, and its rows open in
+place. A card pages through the read tool with the arguments it was opened with.
+`@galaxyproject/galaxy-ops` exports the read behind `show_datasets` as `getSelectedDatasets`.
+That is a helper, not an operation, so it adds no tool. Cards are off by default, so the tool
+list and the parity report are unchanged unless they are turned on.
+
 ### galaxy-mcp serves Streamable HTTP
 
 `galaxy-mcp --transport streamable-http` (or `GALAXY_MCP_TRANSPORT=streamable-http`) serves the
@@ -38,6 +63,16 @@ contract, and every MCP client we know of reads both, but a consumer that patter
 old `anyOf` will see the new spelling in the input schemas `galaxy-mcp` advertises and in what
 `galaxy-ops` hands out. The parity comparison reads the list as the union it is, so the report
 against the Python server is unchanged.
+
+### `@galaxyproject/galaxy-api-client` 26.1
+
+`galaxy-ops` moves from `galaxy-api-client ^26.0.1` to `^26.1.2`, and the response types it
+re-exports follow Galaxy 26.1's schema. A user tool's `representation` may now also be a plain
+`{ [key: string]: unknown }` object, so code that reached into `representation.inputs` needs to
+narrow first, and a job's `job_messages` gains an output-collection security message type. 26.1
+also adds `representation_errors` and `representation_status` to a user tool; a 26.0 server
+does not send them, so `UserToolRecord` keeps both optional rather than promising fields that
+can be missing at runtime.
 
 ## 0.5.0 (2026-10-20)
 

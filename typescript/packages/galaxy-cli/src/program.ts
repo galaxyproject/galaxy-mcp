@@ -6,20 +6,27 @@ import {
   createGalaxyContext,
   type GalaxyContext,
 } from "@galaxyproject/galaxy-ops";
-import { resolveConnection, loadSources, type Connection } from "./config";
+import { resolveConnection, loadSources, CredentialScopeError, type Connection } from "./config";
 import { applyInputs } from "./flags-apply";
 import { buildInput, inCliNames, keptPositionals } from "./flags";
 import { render, type Format } from "./render";
-import { exitCodeFor, EX_USAGE, EX_SOFTWARE } from "./exit";
+import { exitCodeFor, EX_USAGE, EX_SOFTWARE, EX_NOPERM } from "./exit";
 
 export interface CliDeps {
   makeContext?: (conn: Connection, signal: AbortSignal) => GalaxyContext;
+  /**
+   * The name the program prints in usage: `gxy` or `galaxy-cli`. Each name has its own entry file
+   * (`gxy.ts`, `index.ts`) that passes it, because the name a person typed is not available at run
+   * time: pnpm and Windows shims run `node dist/<file>.js`, so `process.argv[1]` is the file and
+   * never the command.
+   */
+  invokedAs?: string;
 }
 
 export function buildProgram(deps: CliDeps = {}): Command {
   const program = new Command();
   program
-    .name("galaxy-cli")
+    .name(deps.invokedAs ?? "galaxy-cli")
     .description("Galaxy agent operations on the command line")
     .option("--url <url>", "Galaxy base URL")
     .option("--api-key <key>", "Galaxy API key")
@@ -51,7 +58,7 @@ export function buildProgram(deps: CliDeps = {}): Command {
           conn = resolveConnection({ url: globals.url, apiKey: globals.apiKey, profile: globals.profile }, loadSources());
         } catch (e) {
           console.error((e as Error).message);
-          process.exitCode = EX_USAGE;
+          process.exitCode = e instanceof CredentialScopeError ? EX_NOPERM : EX_USAGE;
           return;
         }
       }

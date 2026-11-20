@@ -22,6 +22,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `get_history_contents` rows are the contents index's summary view. Dataset rows are
   unchanged; collection rows gain `type_id` and `store_times_summary` and lose
   `model_class`, `populated` and `column_definitions`.
+- Behaviour change: a `GALAXY_URL` from a `.env` file (in the working directory or any parent)
+  is only used with the `GALAXY_API_KEY` from that same file. An exported `GALAXY_API_KEY` is
+  only sent to an exported `GALAXY_URL`, or to a `url` passed to `connect()` along with a key.
+  When the Galaxy would come from `.env` and the key from the environment, the server doesn't
+  connect at startup and `connect()` refuses, saying to set `GALAXY_URL` in the environment or
+  call `connect(url=..., api_key=...)`. That includes a `.env` holding both a URL and a key
+  while a key is also exported: the exported key used to win and went to the `.env` URL; now
+  it refuses rather than quietly switching keys. `connect(api_key=...)` without a `url` is
+  likewise refused when the URL would come from `.env`, with or without OAuth. `${...}` is no
+  longer expanded in a `.env`'s `GALAXY_URL` or `GALAXY_API_KEY`. `connect()` still reads
+  `.env` again when credentials are missing, but only for those two values: it no longer
+  merges the file into the environment, so it can't replace an exported `GALAXY_URL` or change
+  other settings mid-run. Other settings in `.env` (`GALAXY_MCP_*`) are applied once at startup
+  without overriding the environment; `${...}` in them now resolves from the file first. An
+  exported variable shadows the `.env`'s even when empty, and `PYTHON_DOTENV_DISABLED` is
+  honoured. Unchanged: `GALAXY_URL` and `GALAXY_API_KEY` both in the same `.env`, both
+  exported, an exported URL with the key in `.env`, and `connect(url=..., api_key=...)`.
 
 ### Added
 
@@ -62,6 +79,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   object by something other than an encoded id (a hid, a name). Galaxy already refuses
   those with a 400 when the page is stored, so what changes is the message. A section
   edit on a page authored as HTML is refused the same way.
+- galaxy-mcp runs on FastMCP 4, which also speaks the sessionless 2026-07-28 MCP protocol
+  that FastMCP 4 and MCP SDK v2 clients pick by default. On that protocol every request
+  is its own session, so `connect(url=..., api_key=...)` can no longer keep a connection
+  for the next call the way it does per MCP session. Over stdio there is only one client,
+  so the connection is kept for the whole server process. Over HTTP nothing ties one call
+  to the next, so `connect()` with a URL or key is refused there: sign in through OAuth,
+  or set `GALAXY_URL` and `GALAXY_API_KEY` on the server. Clients on the older handshake
+  protocols see no change, except against a server running stateless HTTP
+  (`FASTMCP_STATELESS_HTTP`): it issues no sessions, so `connect()` with a URL or key is
+  refused there too, where before it reported success and later calls quietly used the
+  server's own `GALAXY_URL`. The TypeScript server has no `connect` tool and was never
+  affected.
 
 ### Fixed
 
@@ -70,6 +99,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no substring of any one of them, such as `count occurrences` for Count ("occurrences
   of each record"), found nothing. Punctuation around a word is ignored; a query with a
   single-character word finds no more.
+- The code-mode instructions' `search_tools_by_name` example passed `name`; the parameter
+  is `query`, so a model copying the example got a validation error.
 
 ## [1.12.0] - 2026-10-19
 
