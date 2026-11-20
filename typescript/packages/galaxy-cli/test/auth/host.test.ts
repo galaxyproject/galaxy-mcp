@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { normalizeBaseUrl } from "../../src/auth/base-url";
-import { pickHost, resolveHost } from "../../src/auth/host";
+import { NoLoginHostError, pickHost, resolveHost } from "../../src/auth/host";
 import { FakeStore, fakeLogin } from "./harness";
 
 const storeOf = (...urls: string[]) => {
@@ -44,8 +44,10 @@ describe("pickHost: one precedence", () => {
     });
   });
 
-  it("for login, never takes the host from the profile or .env, whatever else is set", () => {
-    expect(pickHost({ ...all, flag: undefined, env: {}, forLogin: true }).source).toBe("stored");
+  it("for login, never takes the host from the profile, .env or a stored login", () => {
+    expect(() => pickHost({ ...all, flag: undefined, env: {}, forLogin: true })).toThrow(
+      NoLoginHostError,
+    );
   });
 
   it("is ambiguous with several stored logins and none named, and a usage error with none", () => {
@@ -64,12 +66,22 @@ describe("pickHost: one precedence", () => {
 
   // `login` sends a key to the host it picks, so it never takes one from files
   // in the working or home directory: a repository must not be able to choose where your credentials go.
-  it("for login, ignores .env and the profile but still takes the flag and the environment", () => {
+  // Nor from the only stored login: login takes a new key, and with a login for A stored, a key
+  // for B piped into a bare `auth login --with-token` would go to A.
+  it("for login, ignores .env, the profile and stored logins but takes the flag and the environment", () => {
     const l = { ...all, flag: undefined, env: {}, forLogin: true };
-    expect(pickHost(l).source).toBe("stored");
-    expect(() => pickHost({ ...l, storedBaseUrls: [] })).toThrow(
-      expect.objectContaining({ kind: "usage" }),
-    );
+    for (const storedBaseUrls of [
+      [],
+      stored("https://a.example"),
+      stored("https://a.example", "https://b.example"),
+    ]) {
+      expect(() => pickHost({ ...l, storedBaseUrls })).toThrow(
+        expect.objectContaining({
+          kind: "usage",
+          message: expect.stringMatching(/^No Galaxy named\. Pass --host <url>/) as unknown,
+        }),
+      );
+    }
     expect(pickHost({ ...l, env: { GALAXY_URL: "https://env.example" } }).source).toBe("env");
     expect(pickHost({ ...l, flag: "https://flag.example" }).source).toBe("flag");
   });
@@ -124,7 +136,7 @@ describe("resolveHost (gxy auth *)", () => {
     ).rejects.toMatchObject({ kind: "insecure" });
   });
 
-  it("for login, never takes the host from .env or the profile", async () => {
+  it("for login, never takes the host from .env, the profile or a stored login", async () => {
     const input = {
       env: {},
       dotenv: { GALAXY_URL: "https://evil.example" },
@@ -134,8 +146,8 @@ describe("resolveHost (gxy auth *)", () => {
     await expect(resolveHost({ ...input, store: storeOf() })).rejects.toMatchObject({
       kind: "usage",
     });
-    expect(await resolveHost({ ...input, store: storeOf("https://s.example") })).toBe(
-      "https://s.example",
+    await expect(resolveHost({ ...input, store: storeOf("https://s.example") })).rejects.toThrow(
+      NoLoginHostError,
     );
     expect(
       await resolveHost({ ...input, env: { GALAXY_URL: "https://env.example" }, store: storeOf() }),
@@ -151,5 +163,16 @@ describe("resolveHost (gxy auth *)", () => {
     expect(
       await resolveHost({ explicit: "https://flag.example", env: {}, dotenv: {}, store }),
     ).toBe("https://flag.example");
+  });
+
+  // Login has no use for the stored logins, so a hosts.yml it cannot read never stops one.
+  it("does not list the store for login, even when nothing names the host", async () => {
+    const store = storeOf("https://s.example");
+    store.list = async () => {
+      throw new Error("the store should not be read");
+    };
+    await expect(resolveHost({ env: {}, dotenv: {}, forLogin: true, store })).rejects.toThrow(
+      NoLoginHostError,
+    );
   });
 });

@@ -74,7 +74,8 @@ export type AuthErrorKind =
   | "insecure"
   /**
    * `hosts.yml` cannot be used as it is, and nothing was changed: it is corrupt, a symlink,
-   * another user's, writable by others, or the login asked for was written by a newer gxy. The
+   * another user's, writable by others, one the file system will not let us read or write, or the
+   * login asked for was written by a newer gxy. The
    * message says which, and what to do about it.
    */
   | "store"
@@ -124,10 +125,12 @@ export interface AuthDeps {
   whoami(baseUrl: BaseUrl, token: string, signal?: AbortSignal): Promise<WhoAmI>;
   /**
    * Which Galaxy a command means: `--host`/`--url`, the `--profile` URL, `GALAXY_URL` (env, then
-   * `.env`), then the only stored login (see `pickHost`). With `purpose: "login"` the
-   * `.env` and profile are never consulted, so a repository cannot choose where a key goes.
-   * Rejects with `AuthError("ambiguous_host")` listing the stored hosts when several are stored
-   * and none was named, and `AuthError("usage")` when none is stored.
+   * `.env`), then the only stored login (see `pickHost`). With `purpose: "login"` only the
+   * flag and `GALAXY_URL` in the environment count: never `.env` or a profile, so a repository
+   * cannot choose where a key goes, and never a stored login, so a new key cannot go to the
+   * Galaxy of an old one. Rejects with `AuthError("ambiguous_host")` listing the stored hosts when
+   * several are stored and none was named, and `AuthError("usage")` when none is stored (for
+   * login, whenever nothing names a Galaxy).
    */
   resolveHost(explicit?: string, purpose?: "login"): Promise<BaseUrl>;
   /**

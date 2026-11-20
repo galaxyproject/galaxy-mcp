@@ -48,10 +48,10 @@ const AUTH_MAP: Record<AuthErrorKind, number> = {
   // key or an admin key was refused (`--insecure-storage` allows it).
   not_logged_in: EX_NOPERM,
   denied: EX_NOPERM,
-  // `hosts.yml` is the input that cannot be used (corrupt, loose, a link, another user's, or a login
-  // a newer gxy wrote), so EX_DATAERR, as for a tool request whose input is rejected. Not 77: a
-  // script reads that as "log in", and logging in meets the same refusal. Not 70: that says gxy has
-  // a bug, and the message says what to do.
+  // `hosts.yml` is the input that cannot be used (corrupt, loose, a link, another user's, unreadable
+  // or unwritable, or a login a newer gxy wrote), so EX_DATAERR, as for a tool request whose input
+  // is rejected. Not 77: a script reads that as "log in", and logging in meets the same refusal.
+  // Not 70: that says gxy has a bug, and the message says what to do.
   store: EX_DATAERR,
 };
 

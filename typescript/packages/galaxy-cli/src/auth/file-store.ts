@@ -153,7 +153,38 @@ export class FileStore {
     );
   }
 
-  private async readAll(): Promise<Doc> {
+  /**
+   * A read or write the file system refuses (no permission, a read-only mount, a full disk) is
+   * the person's to fix, like a corrupt file, so it is an `AuthError` that names the file and
+   * what to try, not a raw errno error that a command would report as a bug in gxy. Errors that
+   * are already ours, and anything without an errno code, pass through as they are.
+   */
+  private async fsGuard<T>(op: "read" | "write", run: () => Promise<T>): Promise<T> {
+    try {
+      return await run();
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException | undefined)?.code;
+      if (e instanceof AuthError || typeof code !== "string") throw e;
+      const why = ERRNO_WHY[code] ?? code;
+      throw new AuthError(
+        "store",
+        op === "read"
+          ? `Cannot read ${this.path}: ${why}. Check that you can read it and ${this.dir}, or set GXY_CONFIG_DIR to another directory.`
+          : `Cannot write ${this.path}: ${why}. It has not been changed. Check that you can write to ${this.dir}, or set GXY_CONFIG_DIR to another directory.`,
+        { cause: e },
+      );
+    }
+  }
+
+  private readAll(): Promise<Doc> {
+    return this.fsGuard("read", () => this.readAllUnguarded());
+  }
+
+  private writeAll(doc: Doc): Promise<void> {
+    return this.fsGuard("write", () => this.writeAllUnguarded(doc));
+  }
+
+  private async readAllUnguarded(): Promise<Doc> {
     await this.assertSafe();
     await this.tightenDir(false);
     let text: string;
@@ -334,7 +365,7 @@ export class FileStore {
     return stringifyYaml(new Map<string, unknown>([["hosts", hosts], ...doc.extra]));
   }
 
-  private async writeAll(doc: Doc): Promise<void> {
+  private async writeAllUnguarded(doc: Doc): Promise<void> {
     await this.assertSafe();
     await mkdir(this.dir, { recursive: true, mode: 0o700 });
     // Again, because the first pass skips what does not exist yet: this one checks the
@@ -463,6 +494,17 @@ export class FileStore {
     }
   }
 }
+
+/** Plain words for the errno codes a person can meet here; any other code is shown as it is. */
+const ERRNO_WHY: Record<string, string> = {
+  EACCES: "permission denied",
+  EPERM: "operation not permitted",
+  EROFS: "the file system is read-only",
+  ENOSPC: "no space left on the device",
+  EDQUOT: "disk quota exceeded",
+  EIO: "an I/O error",
+  ENOTDIR: "a part of the path is not a directory",
+};
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);

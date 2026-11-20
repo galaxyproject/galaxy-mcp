@@ -43,8 +43,9 @@ export function registerAuth(program: Command, makeDeps: (commandName: string) =
     process.stderr.write(`${problems.join("\n")}\n`);
     process.exitCode = EX_USAGE;
   });
-  const host = () =>
-    new Option("--host <url>", "Galaxy base URL (default: GALAXY_URL, or the only stored login)");
+  // Login takes a new key, so it never falls back to a stored login (see pickHost) and says so.
+  const host = (fallback = "GALAXY_URL, or the only stored login") =>
+    new Option("--host <url>", `Galaxy base URL (default: ${fallback})`);
 
   const run = async (fn: (deps: AuthDeps) => Promise<number>): Promise<void> => {
     if (refused) return;
@@ -64,7 +65,7 @@ export function registerAuth(program: Command, makeDeps: (commandName: string) =
   auth
     .command("login")
     .description("Store an API key read from stdin")
-    .addOption(host())
+    .addOption(host("GALAXY_URL"))
     .option("--with-token", "read the API key from stdin")
     .option(
       "--insecure-storage",

@@ -9,6 +9,21 @@ class NoHostError extends AuthError {
   }
 }
 
+/**
+ * `login` with no Galaxy named. A `usage` error. It never falls back to the only stored login:
+ * a login takes a fresh key, and with one stored login for A, `printf %s "$KEY_FOR_B" | gxy auth
+ * login --with-token` would send B's key to A.
+ */
+export class NoLoginHostError extends AuthError {
+  constructor() {
+    super(
+      "usage",
+      "No Galaxy named. Pass --host <url> (or --url), or set GALAXY_URL: login never picks a stored login, so a key only goes to the Galaxy you name.",
+    );
+    this.name = "NoLoginHostError";
+  }
+}
+
 type HostSource = "flag" | "env" | "dotenv" | "profile" | "stored";
 
 interface PickHostInput {
@@ -25,7 +40,9 @@ interface PickHostInput {
    * `login` sends a key to the host it picks, so it never takes one from files in the working
    * directory or the home directory (`.env`, a profile): a repository must not be able to choose
    * where your credentials go. Everything else only uses a host that must match a stored login to
-   * get a token, so the files are safe there.
+   * get a token, so the files are safe there. For the same reason `login` never falls back to
+   * the only stored login either (`NoLoginHostError`): the key it sends is a new one, and need not
+   * belong to that Galaxy.
    *
    * The Python galaxy-mcp server holds to the same line from the other side: its
    * `GALAXY_API_KEY` is only used with the `GALAXY_URL` it was configured with.
@@ -38,7 +55,7 @@ interface PickHostInput {
  * the `--profile` URL, then `GALAXY_URL` in the environment, then in `.env`, then the only stored
  * login. The command line beats the environment, which beats files, and a profile names its
  * Galaxy, so its URL comes right after the flag. `login` (`forLogin`) takes the flag and the
- * environment only. Returns the URL as named (not normalised).
+ * environment only, with no stored-login fallback. Returns the URL as named (not normalised).
  */
 export function pickHost(input: PickHostInput): { url: string; source: HostSource } {
   const named: [HostSource, string | undefined][] = input.forLogin
@@ -53,6 +70,7 @@ export function pickHost(input: PickHostInput): { url: string; source: HostSourc
         ["dotenv", input.dotenv.GALAXY_URL],
       ];
   for (const [source, url] of named) if (url) return { url, source };
+  if (input.forLogin) throw new NoLoginHostError();
   const stored = input.storedBaseUrls;
   const [only] = stored;
   if (stored.length === 1 && only !== undefined) return { url: only, source: "stored" };
@@ -72,11 +90,9 @@ interface ResolveHostInput extends Omit<PickHostInput, "flag" | "storedBaseUrls"
 /** `pickHost` for `gxy auth *`: lists the stored logins (only if needed) and normalises the result. */
 export async function resolveHost(input: ResolveHostInput): Promise<BaseUrl> {
   const { explicit, store, ...rest } = input;
-  const needsStore = !(
-    explicit ||
-    input.env.GALAXY_URL ||
-    (!input.forLogin && (input.dotenv.GALAXY_URL || input.profileUrl))
-  );
+  const needsStore =
+    !input.forLogin &&
+    !(explicit || input.env.GALAXY_URL || input.dotenv.GALAXY_URL || input.profileUrl);
   const storedBaseUrls = needsStore ? (await store.list()).map((s) => s.baseUrl) : [];
   return normalizeBaseUrl(pickHost({ ...rest, flag: explicit, storedBaseUrls }).url);
 }

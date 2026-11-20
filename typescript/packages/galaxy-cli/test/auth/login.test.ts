@@ -7,7 +7,7 @@ import { loginCommand } from "../../src/auth/commands/login";
 import { markAnswered } from "../../src/auth/network";
 import { createWhoami } from "../../src/auth/whoami";
 import { AuthError } from "../../src/auth/types";
-import { FAKE_TOKEN, HOST, harness } from "./harness";
+import { FAKE_TOKEN, HOST, OTHER, fakeLogin, harness } from "./harness";
 
 const HOST_ARG = "https://dev.galaxy.example.org";
 const never = <T>() => new Promise<T>(() => {});
@@ -34,6 +34,31 @@ describe("naming the Galaxy", () => {
     const h = harness();
     expect(await loginCommand({ withToken: true }, h.deps)).toBe(64);
     expect(h.cap.err).toContain("--host");
+  });
+
+  // A login takes a new key, which need not belong to the Galaxy already stored: with a login for A,
+  // `printf %s "$KEY_FOR_B" | gxy auth login --with-token` must not send B's key to A. So login
+  // never falls back to the only stored login, as `token`, `logout` and `status` may.
+  it("does not fall back to the only stored login: exits 64 before the key is read or sent", async () => {
+    const h = withKey({ stored: [fakeLogin({ baseUrl: OTHER })] });
+    expect(await loginCommand({ withToken: true }, h.deps)).toBe(64);
+    expect(h.cap.err).toMatch(/^No Galaxy named\. Pass --host <url> \(or --url\), or set GALAXY_URL/m);
+    expect(h.cap.err).not.toContain("Logging in to");
+    expect(h.whoamiCalls).toEqual([]);
+    expect(h.store.putCalls).toEqual([]);
+    expect(h.stdin.readableLength).toBeGreaterThan(0);
+  });
+
+  // When `.env` is the only thing that names a Galaxy, the refusal alone would leave the person
+  // wondering why their GALAXY_URL was not used.
+  it("names an ignored .env GALAXY_URL when it refuses for want of a Galaxy", async () => {
+    const h = withKey({
+      ignoredLoginHost: { source: "dotenv", url: "https://other.example.org" },
+    });
+    expect(await loginCommand({ withToken: true }, h.deps)).toBe(64);
+    const note = h.cap.err.indexOf("Ignoring GALAXY_URL from .env (https://other.example.org)");
+    expect(note).toBeGreaterThanOrEqual(0);
+    expect(note).toBeLessThan(h.cap.err.indexOf("No Galaxy named"));
   });
 
   // Login never takes its host from `.env` or a profile (`pickHost`): a repository must not choose where

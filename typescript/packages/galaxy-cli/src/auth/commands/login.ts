@@ -4,6 +4,7 @@ import { AuthError, type AuthDeps, type BaseUrl, type StoredLogin, type WhoAmI }
 import { fail, hostOf, sanitize } from "./common";
 import { show } from "../file-store";
 import { untilAborted } from "../abort";
+import { NoLoginHostError } from "../host";
 
 export interface LoginOptions {
   host?: string;
@@ -49,10 +50,11 @@ function adminWarning(host: string, who: WhoAmI): string | undefined {
 /**
  * Store an API key read from stdin (`--with-token`).
  *
- * The Galaxy comes only from `--host`, `GALAXY_URL` in the environment or the one stored login,
- * never `.env` or a profile, and the person is told where the login is going before a key is
- * read. `gh auth login --with-token` reads stdin the same way, and the key is never an argument:
- * it would sit in shell history and `ps`, which is why `--api-key` is deprecated.
+ * The Galaxy comes only from `--host` (or `--url`) or `GALAXY_URL` in the environment: never
+ * `.env` or a profile, and never the one stored login, since the key need not be that Galaxy's.
+ * The person is told where the login is going before a key is read. `gh auth login --with-token`
+ * reads stdin the same way, and the key is never an argument: it would sit in shell history
+ * and `ps`.
  *
  * The key goes through `whoami` before it is stored, so a key that Galaxy does not accept is
  * never kept, and `whoami` runs the `/api/version` probe, so a key is only sent to something
@@ -71,18 +73,24 @@ export async function loginCommand(opts: LoginOptions, deps: AuthDeps): Promise<
         `${deps.commandName} auth login needs --with-token: pipe your Galaxy API key in on stdin, ` +
           `\`printf %s "$KEY" | ${deps.commandName} auth login --host <url> --with-token\``,
       );
-    // 1. Which Galaxy.
-    const baseUrl: BaseUrl = await untilAborted(deps.resolveHost(opts.host, "login"), signal);
-    const host = hostOf(baseUrl);
-    // Login never takes its host from `.env` (see pickHost); say so when it disagrees.
-    if (!opts.host) {
-      const ignored = deps.ignoredLoginHost?.();
-      if (ignored && !sameGalaxy(ignored.url, baseUrl)) {
+    // 1. Which Galaxy. Login never takes its host from `.env` (see pickHost); say so when it
+    // disagrees, or when it is the only Galaxy named and login refuses for want of one.
+    const ignored = opts.host ? undefined : deps.ignoredLoginHost?.();
+    const sayIgnored = () => {
+      if (ignored)
         err(
           `Ignoring GALAXY_URL from .env (${safeUrl(ignored.url)}): login only uses --host, --url or GALAXY_URL from the environment.`,
         );
-      }
+    };
+    let baseUrl: BaseUrl;
+    try {
+      baseUrl = await untilAborted(deps.resolveHost(opts.host, "login"), signal);
+    } catch (e) {
+      if (e instanceof NoLoginHostError) sayIgnored();
+      throw e;
     }
+    const host = hostOf(baseUrl);
+    if (ignored && !sameGalaxy(ignored.url, baseUrl)) sayIgnored();
     // Before a key is read: the person sees where it is going.
     err(`Logging in to ${host}`);
 
