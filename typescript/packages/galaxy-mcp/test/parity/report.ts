@@ -388,6 +388,12 @@ export function renderReport(input: ReportInput): string {
     );
   };
   const [first, second] = pairs;
+  const builtinRuledOn = (pair: (typeof pairs)[number]): string => {
+    const { held, total } = counter(pair);
+    const ruled = total - held(RATCHETED_STATUS);
+    if (ruled === 0) return "Nothing here has been ruled on yet.";
+    return `${ruled === 1 ? "One has" : `${ruled} have`} been ruled on so far; the rest have not.`;
+  };
 
   return [
     "# Surface parity",
@@ -454,7 +460,7 @@ export function renderReport(input: ReportInput): string {
           "These are counted apart and ratcheted apart -- at " +
             `${builtin.ratchet} -- because they are not this repository's to close on its own: ` +
             "each one is a rename, an addition or a removal somebody has to agree with " +
-            "galaxyproject/galaxy. Nothing here has been ruled on yet.",
+            `galaxyproject/galaxy. ${builtinRuledOn(second)}`,
           "",
         ]
       : []),

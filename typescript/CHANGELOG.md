@@ -43,6 +43,21 @@ guards: it binds to loopback unless `--allow-unauthenticated` is given, checks t
 command-line arguments are now refused rather than ignored, and an address that cannot be
 listened on (a port in use, say) is reported in one line instead of a stack trace.
 
+### `invoke_workflow` takes a workflow `version`
+
+All three surfaces take an optional `version` (`--version` on the CLI) to run one stored
+version of the workflow instead of the latest -- numbered from 0, oldest first, the same
+number `get_workflow_details` reports and accepts. It goes into the invocation POST, and the
+input preflight reads that version's run model, so inputs that suit it aren't refused against
+the newest version's slots. A negative version is refused before anything is sent, since
+Galaxy would read it as a list index counted from the newest end. Without `version` the request
+is unchanged. A pinned run that fails names the version in its error. Three new golden cases,
+`invoke_workflow/with_version`, `invoke_workflow/oldest_version` and
+`invoke_workflow/inputs_checked_against_that_version`, are answered only when `version` reaches
+the request, so a surface dropping it fails the replay; `invoke_workflow/negative_version` pins
+the refusal and `invoke_workflow/version_out_of_range` Galaxy's 400. The fixture route table can
+now narrow a write on keys in its JSON body, which is what those cases need.
+
 ### zod 4.6
 
 All three packages move from `zod ^4.3.0` to `^4.6.7`. The one visible change is in the JSON
