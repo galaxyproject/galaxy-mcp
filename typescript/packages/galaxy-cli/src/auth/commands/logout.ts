@@ -1,4 +1,4 @@
-import type { AuthDeps } from "../types";
+import { AuthError, type AuthDeps } from "../types";
 import { fail, hostOf, sanitize } from "./common";
 
 export interface LogoutOptions {
@@ -36,6 +36,9 @@ export async function logoutCommand(opts: LogoutOptions, deps: AuthDeps): Promis
     try {
       removed = await deps.store.delete(baseUrl);
     } catch (e) {
+      // Refused before anything was removed (the keyring is switched off): a usage error, not a
+      // half-done logout.
+      if (e instanceof AuthError && e.kind === "usage") throw e;
       deleteProblem = sanitize(e instanceof Error ? e.message : String(e), { keepNewlines: true });
     }
     // Another logout can remove the entry between the list and here; then there is nothing left

@@ -103,10 +103,12 @@ it is doing). The warning when a token goes to `hosts.yml` instead says why. `GX
 skips the keyring entirely. If the keyring cannot be read, `auth logout` still removes the stored
 record (it says the secret may remain in the keyring, and exits 1) and `auth status`
 reports that host as "token unavailable" and exits 1. Logging in again over a login that is in the
-keyring, when `gxy` cannot use the keyring to remove the old secret (`GXY_NO_KEYRING`, or a keyring
-that does not answer), stores the new login and warns that the old secret may remain, naming the
-entry (`gxy:<url>`) to remove with your keyring's own tool. `auth logout` names the entry the same
-way when the keyring could not confirm the removal. A login over one that is in the keyring puts the
+keyring, when the keyring does not answer to remove the old secret, stores the new login and warns
+that the old secret may remain, naming the entry (`gxy:<url>`) to remove with your keyring's own
+tool. `auth logout` names the entry the same way when the keyring could not confirm the removal.
+When the keyring is only switched off by `GXY_NO_KEYRING`, though, `auth login` and `auth logout`
+for a login kept there change nothing and exit 64, asking you to rerun without `GXY_NO_KEYRING`,
+rather than leave a secret that nothing points at. A login over one that is in the keyring puts the
 old secret back if it fails or is cancelled; if it cannot, it says the earlier login may no longer
 work and that logging in again will fix it.
 
@@ -193,7 +195,7 @@ exits non-zero.
 | Variable | Does |
 | --- | --- |
 | `GXY_CONFIG_DIR` | Where `hosts.yml` lives (see above). A relative path is ignored, so the file does not follow the working directory |
-| `GXY_NO_KEYRING` | `1` never touches the system keyring: tokens go to `hosts.yml`, with a warning. Use it on a box whose keyring is broken or locked, to skip the wait. A login already stored in the keyring then cannot be read (`auth token` exits 77, `auth status` shows "token unavailable"), and `auth logout` removes its record but leaves the secret in the keyring |
+| `GXY_NO_KEYRING` | `1` never touches the system keyring: tokens go to `hosts.yml`, with a warning. Use it on a box whose keyring is broken or locked, to skip the wait. A login already stored in the keyring then cannot be read (`auth token` exits 77, `auth status` shows "token unavailable"), and `auth login` and `auth logout` for it refuse (exit 64) until you rerun them without `GXY_NO_KEYRING` |
 
 Behind a proxy, set `NODE_USE_ENV_PROXY=1` along with `HTTPS_PROXY` (and `NO_PROXY` for a Galaxy on
 your own network). Node's `fetch` ignores the proxy variables without it, and reads it only at

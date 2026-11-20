@@ -8,6 +8,8 @@ import { describe, it, expect, vi } from "vitest";
 import { loginCommand } from "../../src/auth/commands/login";
 import { markAnswered } from "../../src/auth/network";
 import { createWhoami } from "../../src/auth/whoami";
+import { KeyringStore, noKeyringBackend } from "../../src/auth/keyring-store";
+import { CombinedStore } from "../../src/auth/store";
 import { AuthError } from "../../src/auth/types";
 import {
   FAKE_TOKEN,
@@ -515,6 +517,27 @@ describe("login --with-token", () => {
 // An admin token is never written to the plaintext file unless `--insecure-storage` asks for it
 // (login.ts), since a stolen one carries full admin rights. With no keyring it is refused with 77,
 // after the warning, rather than quietly saved to a file.
+// A login over one kept in the keyring, with the keyring switched off: replacing the record would
+// orphan the old token, so login refuses (64), says how to proceed, and says nothing of success.
+describe("over a keyring login while GXY_NO_KEYRING is set", () => {
+  const tmp = useTempDir("gxy-nk-");
+  it("exits 64, stores nothing and leaves the old login as it was", async () => {
+    const kr = new FakeKeyring();
+    const { file, store } = realStore(tmp.path, kr);
+    await store.put(fakeLogin());
+    const before = await readFile(file.path, "utf8");
+    const h = harness({ stdinText: "fake-token-second-0123456789\n" });
+    h.deps.store = new CombinedStore(file, new KeyringStore(noKeyringBackend, 50));
+    expect(await loginCommand({ host: HOST_ARG, withToken: true }, h.deps)).toBe(64);
+    expect(h.cap.err).toContain("which GXY_NO_KEYRING switches off, so nothing was stored");
+    expect(h.cap.err).toContain("Rerun without GXY_NO_KEYRING.");
+    expect(h.cap.err).not.toMatch(/Logged in|plain text/);
+    expect(h.cap.err + h.cap.out).not.toContain("fake-token-second");
+    expect(await readFile(file.path, "utf8")).toBe(before);
+    expect(kr.data.size).toBe(1);
+  });
+});
+
 describe("tokens that carry admin rights", () => {
   const admin = { username: "root", isAdmin: true };
 

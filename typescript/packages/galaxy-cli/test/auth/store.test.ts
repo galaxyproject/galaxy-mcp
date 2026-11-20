@@ -186,20 +186,31 @@ describe("replacing a login", () => {
 
   // The old secret is out of reach (the keyring is off, or will not confirm the delete), so no record
   // points at it and `logout` could never remove it: the login says it remains, and which entry.
-  it("says the old keyring secret may remain when GXY_NO_KEYRING stops it being removed", async () => {
-    await store.put(fakeLogin());
+  // Switched off is not broken: rerunning without GXY_NO_KEYRING replaces both, so replacing the
+  // record now would orphan a token nothing points at. Nothing is stored, with or without
+  // --insecure-storage, and the old login is left as it was.
+  it.each([false, true])(
+    "refuses to replace a keyring login while GXY_NO_KEYRING is set (--insecure-storage %s)",
+    async (insecureStorage) => {
+      await store.put(fakeLogin());
+      const before = await readFile(file.path, "utf8");
+      const off = new CombinedStore(file, new KeyringStore(noKeyringBackend, 50));
+      const err = (await off.put(fakeLogin({ token: SECOND_TOKEN }), { insecureStorage }).catch((e: unknown) => e)) as Error;
+      expect(err).toMatchObject({ kind: "usage" });
+      expect(err.message).toBe(
+        `The login for ${HOST} (user aioue) keeps its token in the system keyring, which GXY_NO_KEYRING switches off, so nothing was stored: replacing it now would leave that token behind. Rerun without GXY_NO_KEYRING.`,
+      );
+      expect(await readFile(file.path, "utf8")).toBe(before);
+      expect(kr.data.get(entryKey)).toBe(FAKE_TOKEN);
+    },
+  );
+
+  it("still replaces a file login while GXY_NO_KEYRING is set", async () => {
+    kr.mode = "throw";
+    await store.put(fakeLogin(), { insecureStorage: true });
     const off = new CombinedStore(file, new KeyringStore(noKeyringBackend, 50));
-    const put = await off.put(fakeLogin({ token: SECOND_TOKEN }));
-    expect(put.storage).toBe("file");
-    expect(put.warning).toMatch(/GXY_NO_KEYRING is set; token saved in plain text/);
-    expect(put.warning).toMatch(/may still be in the system keyring/);
-    expect(put.warning).toContain(`"gxy:${HOST}" for that user`);
-    expect(put.warning).toContain("user aioue");
-    expect(put.warning).not.toContain(FAKE_TOKEN);
-    expect(put.warning).not.toContain(SECOND_TOKEN);
-    // The new login is stored, and the old secret is where it was.
+    expect((await off.put(fakeLogin({ token: SECOND_TOKEN }))).storage).toBe("file");
     expect((await file.get(HOST))?.token).toBe(SECOND_TOKEN);
-    expect(kr.data.get(entryKey)).toBe(FAKE_TOKEN);
   });
 
   it("says so too when the keyring will not confirm the old secret is gone, with no other warning", async () => {

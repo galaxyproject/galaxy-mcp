@@ -63,6 +63,15 @@ export class CombinedStore implements CredentialStore {
     const { token, ...summary } = login;
     // Read first: what the old record points at decides what must be cleaned up afterwards.
     const prior = await this.file.get(login.baseUrl);
+    // The old token is in a keyring that GXY_NO_KEYRING switches off: replacing the record would
+    // leave that token where nothing points at it, when rerunning without the variable replaces
+    // both. So nothing is stored, as for `delete`, whatever `--insecure-storage` says.
+    if (prior?.storage === "keyring" && this.keyring.disabled) {
+      throw new AuthError(
+        "usage",
+        `The login for ${login.baseUrl} (user ${sanitize(prior.username)}) keeps its token in the system keyring, which GXY_NO_KEYRING switches off, so nothing was stored: replacing it now would leave that token behind. Rerun without GXY_NO_KEYRING.`,
+      );
+    }
     // The same user's earlier login is in the keyring: the write below replaces that very entry.
     const samePrior = prior?.storage === "keyring" && prior.username === login.username;
     // Read before overwriting, so a put that fails can put it back. Only on this path: a first
@@ -160,7 +169,8 @@ export class CombinedStore implements CredentialStore {
     }
     // Clean up what the new record no longer points at. The new login is stored either way, but a
     // secret that no record points at is one `logout` can never find, so when it cannot be removed
-    // (the keyring is off by GXY_NO_KEYRING, locked, or not answering) the person is told it remains.
+    // (the keyring is locked or not answering) the person is told it remains. (With the keyring
+    // switched off by GXY_NO_KEYRING the put was refused above.)
     let leftover: string | undefined;
     if (prior?.storage === "keyring" && (storage === "file" || prior.username !== login.username)) {
       try {
@@ -177,6 +187,15 @@ export class CombinedStore implements CredentialStore {
   async delete(baseUrl: BaseUrl): Promise<boolean> {
     const rec = await this.file.get(baseUrl);
     if (!rec) return false;
+    // With the keyring switched off rather than broken, removing the record alone would orphan a
+    // token that nothing points at, when rerunning without GXY_NO_KEYRING would remove both. So
+    // nothing is removed, and the person is told how to log out.
+    if (rec.storage === "keyring" && this.keyring.disabled) {
+      throw new AuthError(
+        "usage",
+        `The token for ${baseUrl} (user ${sanitize(rec.username)}) is in the system keyring, which GXY_NO_KEYRING switches off, so nothing was removed. Rerun without GXY_NO_KEYRING to log out.`,
+      );
+    }
     let leftover: unknown;
     if (rec.storage === "keyring") {
       try {

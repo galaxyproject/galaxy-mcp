@@ -6,19 +6,6 @@ entry covers all three; where something only affects one surface, it says which.
 
 ## Unreleased
 
-### galaxy-cli keeps tokens in the OS keyring (#221)
-
-`gxy auth login` now stores the token in the operating system's keyring (Secret Service on Linux,
-the platform keyring elsewhere), through `@napi-rs/keyring` run in a child process, and keeps only
-the login's details in `hosts.yml`. Where there is no keyring it falls back to the plaintext
-`hosts.yml`, with a warning. `GXY_NO_KEYRING` skips the keyring.
-
-`--insecure-storage` now applies to any token, and an admin token goes in the keyring or, with no
-keyring, only with `--insecure-storage`.
-
-`gxy auth status` reports a login whose token cannot be read as `token unavailable` (`status:
-"unavailable"` in `--json`), and a Ctrl-C during the check ends it with "Cancelled." and 130.
-
 ### galaxy-cli installs a `gxy` command (#214)
 
 `@galaxyproject/galaxy-cli` now provides `gxy` as well as `galaxy-cli`. They are the same program;
@@ -67,6 +54,20 @@ env` prints `GALAXY_URL` and `GALAXY_API_KEY` assignments for `eval`, and `gxy a
 `{"x-api-key": ...}` as JSON, for an MCP `headersHelper`, only for the Galaxy that Claude Code's
 `CLAUDE_CODE_MCP_SERVER_URL` names: without it, it refuses. Both write only to stdout, so a pipe
 reads them and nothing else.
+
+### galaxy-cli keeps tokens in the OS keyring (#221)
+
+`gxy auth login` now stores the token in the operating system's keyring (Secret Service on Linux,
+the platform keyring elsewhere), through `@napi-rs/keyring` run in a child process, and keeps only
+the login's details in `hosts.yml`. Where there is no keyring it falls back to the plaintext
+`hosts.yml`, with a warning. `GXY_NO_KEYRING` skips the keyring; `gxy auth login` and `logout` for a
+login kept in the keyring then refuse (64) and change nothing, rather than leave the secret behind.
+
+`--insecure-storage` now applies to any token, and an admin token goes in the keyring or, with no
+keyring, only with `--insecure-storage`.
+
+`gxy auth status` reports a login whose token cannot be read as `token unavailable` (`status:
+"unavailable"` in `--json`), and a Ctrl-C during the check ends it with "Cancelled." and 130.
 
 ### galaxy-cli: a `.env` URL is only used with the `.env` key
 

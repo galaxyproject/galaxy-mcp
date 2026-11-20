@@ -2,7 +2,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { beforeEach, describe, expect, it } from "vitest";
 import { logoutCommand } from "../../src/auth/commands/logout";
 import type { FileStore } from "../../src/auth/file-store";
-import type { CombinedStore } from "../../src/auth/store";
+import { KeyringStore, noKeyringBackend } from "../../src/auth/keyring-store";
+import { CombinedStore } from "../../src/auth/store";
 import {
   FAKE_TOKEN,
   HOST,
@@ -133,5 +134,35 @@ describe("logout over the real store", () => {
     expect(h.cap.err).not.toContain("✓ Removed");
     expect(h.cap.err).toContain("Could not remove the stored API key for dev.galaxy.example.org");
     expect(h.cap.err).toContain("not revoked"); // the note on a pasted key is kept
+  });
+
+  // Switched off is not broken: rerunning without GXY_NO_KEYRING removes both, so removing only
+  // the record would orphan a token nothing will ever point at again. Nothing is removed, and the
+  // person is told how to log out. A file login is unaffected.
+  it("refuses with 64 and removes nothing for a keyring login when GXY_NO_KEYRING is set", async () => {
+    await store.put(fakeLogin());
+    const off = new CombinedStore(file, new KeyringStore(noKeyringBackend, 50));
+    const h = logoutHarness();
+    h.deps.store = off;
+    expect(await logoutCommand({}, h.deps)).toBe(64);
+    expect(h.cap.err).toContain(
+      `The token for ${HOST} (user aioue) is in the system keyring, which GXY_NO_KEYRING switches off, so nothing was removed. Rerun without GXY_NO_KEYRING to log out.`,
+    );
+    expect(h.cap.err).not.toMatch(/Removed|not revoked|Could not remove/);
+    expect(h.cap.err).not.toContain(FAKE_TOKEN);
+    expect((await file.list()).map((l) => l.baseUrl)).toEqual([HOST]);
+    expect(keyring.data.size).toBe(1);
+    // And without it, logout removes both.
+    expect(await logoutCommand({}, logoutHarness().deps)).toBe(0);
+    expect(keyring.data.size).toBe(0);
+    expect(await file.list()).toEqual([]);
+  });
+
+  it("still removes a file login when GXY_NO_KEYRING is set", async () => {
+    await store.put(fakeLogin(), { insecureStorage: true });
+    const h = logoutHarness();
+    h.deps.store = new CombinedStore(file, new KeyringStore(noKeyringBackend, 50));
+    expect(await logoutCommand({}, h.deps)).toBe(0);
+    expect(await file.list()).toEqual([]);
   });
 });

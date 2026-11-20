@@ -604,6 +604,9 @@ describe("loadSourcesAsync", () => {
     const s = await loadSourcesAsync({}, { store, base: base() });
     expect(s.storeProblem).toMatch(/keyring is down/);
     expect(() => resolveConnection({}, s)).toThrow(/keyring is down/);
+    // And a .env that names that Galaxy, with a key, is not used in its place.
+    const pair = await loadSourcesAsync({}, { store, base: base({ dotenv: { GALAXY_URL: url, GALAXY_API_KEY: "DOTKEY" } }) });
+    expect(() => resolveConnection({}, pair)).toThrow(/keyring is down.*GALAXY_API_KEY in \.env is not used in its place\.$/);
   });
   it("leaves an unparsable URL with no stored login, which is not an error here", async () => {
     const s = await loadSourcesAsync({}, { store: seeded(), base: base({ env: { GALAXY_URL: "not a url" } }) });
