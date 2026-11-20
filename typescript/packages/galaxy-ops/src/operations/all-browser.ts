@@ -27,6 +27,7 @@ import "./get-iwc-workflows";
 import "./get-iwc-workflow-details";
 import "./search-iwc-workflows";
 import "./recommend-iwc-workflows";
+import "./import-workflow";
 import "./import-workflow-from-iwc";
 import "./list-user-tools";
 import "./get-user-tool";

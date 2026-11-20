@@ -1,7 +1,7 @@
 {
   "$comment": "Generated snapshot of the Galaxy MCP tool surface -- do not edit by hand. Regenerate with `uv run python -m tests.surface_manifest`.",
   "source": "python/src/galaxy_mcp/server.py",
-  "toolCount": 49,
+  "toolCount": 50,
   "tools": [
     {
       "name": "cancel_workflow_invocation",
@@ -1013,6 +1013,41 @@
       }
     },
     {
+      "name": "import_workflow",
+      "tags": [
+        "extended",
+        "workflows",
+        "write"
+      ],
+      "annotations": {},
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "definition": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "description": "The workflow as Galaxy's native .ga dict or a Format2 (gxformat2) dict, the\nsame as a JSON object string, or Format2 YAML text (class: GalaxyWorkflow).\nEmbedded user-defined tools are created if the user is allowed to."
+          },
+          "fill_defaults": {
+            "default": false,
+            "type": "boolean",
+            "description": "Have Galaxy fill each tool parameter the definition leaves unset with\nits default while storing it, so the stored workflow carries complete tool state;\nwithout it, running the workflow may need allow_tool_state_corrections on\ninvoke_workflow for those parameters."
+          }
+        },
+        "required": [
+          "definition"
+        ],
+        "type": "object"
+      }
+    },
+    {
       "name": "import_workflow_from_iwc",
       "tags": [
         "iwc",
@@ -1114,6 +1149,11 @@
             "default": false,
             "type": "boolean",
             "description": "Whether parameters are already in normalized format"
+          },
+          "allow_tool_state_corrections": {
+            "default": false,
+            "type": "boolean",
+            "description": "Let Galaxy fill in or correct tool state it would\notherwise refuse with \"Workflow step has upgrade messages\", e.g. a parameter a\nworkflow written outside the editor leaves unset"
           }
         },
         "required": [

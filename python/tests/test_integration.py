@@ -93,7 +93,7 @@ class TestIntegration:
             mock_iwc_response.raise_for_status.return_value = None
 
             with patch("requests.get", return_value=mock_iwc_response):
-                mock_galaxy_instance.workflows.import_workflow_dict.return_value = {
+                mock_galaxy_instance.make_post_request.return_value = {
                     "id": "imported_workflow_1",
                     "name": "RNA-seq Pipeline",
                 }

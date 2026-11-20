@@ -76,6 +76,7 @@ from .test_helpers import (
     get_user_tool_fn,
     get_workflow_details_fn,
     get_workflow_input_template_fn,
+    import_workflow_fn,
     import_workflow_from_iwc_fn,
     invoke_workflow_fn,
     list_history_ids_fn,
@@ -3816,10 +3817,6 @@ def invocation_mutation_cases(add: AddCase) -> None:
             )
         ],
     )
-    # bioblend posts an imported definition to /api/workflows/upload where the other
-    # side posts it to /api/workflows. Both are the same create to Galaxy, and this
-    # table answers questions rather than replaying a log, so the record is registered
-    # under both spellings.
     imported = {
         "id": "wf000009",
         "name": "Workflow 0",
@@ -3837,8 +3834,92 @@ def invocation_mutation_cases(add: AddCase) -> None:
         lambda: import_workflow_from_iwc_fn("#workflow/github.com/iwc-workflows/wf0/main"),
         [
             route(IWC_MANIFEST_URL, iwc_manifest(2)),
-            route("/api/workflows/upload", imported, method="POST"),
             route("/api/workflows", imported, method="POST"),
+        ],
+    )
+    # What Galaxy answers a create with: the stored workflow, its step count, its owner.
+    # It leaves out the tools it does not have, which the export's step errors carry.
+    definition = {
+        "a_galaxy_workflow": "true",
+        "format-version": "0.1",
+        "name": "Concatenate",
+        "annotation": "",
+        "steps": {
+            "0": {"id": 0, "type": "data_input", "tool_state": '{"name": "input"}'},
+            "1": {
+                "id": 1,
+                "type": "tool",
+                "tool_id": "cat1",
+                "input_connections": {"input1": {"id": 0, "output_name": "output"}},
+            },
+        },
+    }
+    stored = {
+        "id": "wf000010",
+        "name": "Concatenate",
+        "owner": "curator",
+        "number_of_steps": 2,
+        "published": False,
+        "deleted": False,
+        "model_class": "StoredWorkflow",
+    }
+    export = {
+        "a_galaxy_workflow": "true",
+        "format-version": "0.1",
+        "name": "Concatenate",
+        "steps": {
+            "0": {"id": 0, "type": "data_input", "tool_id": None, "errors": None},
+            "1": {"id": 1, "type": "tool", "tool_id": "cat1", "errors": None},
+        },
+    }
+    add(
+        "import_workflow",
+        "imported",
+        "a .ga definition POSTed to Galaxy, and its export read back for missing tools",
+        {"definition": definition},
+        lambda: import_workflow_fn(definition),
+        [
+            route("/api/workflows", stored, method="POST"),
+            route("/api/workflows/wf000010/download", export, query={"style": "ga"}),
+        ],
+    )
+    yaml_text = (
+        "class: GalaxyWorkflow\n"
+        "label: Trim\n"
+        "inputs:\n"
+        "  reads: data\n"
+        "steps:\n"
+        "  trim:\n"
+        "    tool_id: toolshed.g2.bx.psu.edu/repos/iuc/fastp/fastp/1.0.1+galaxy3\n"
+        "    in:\n"
+        "      single_paired|in1: reads\n"
+    )
+    add(
+        "import_workflow",
+        "missing_tools",
+        "Format2 YAML text Galaxy converts and stores although one tool is not installed",
+        {"definition": yaml_text, "fill_defaults": True},
+        lambda: import_workflow_fn(yaml_text, fill_defaults=True),
+        [
+            route("/api/workflows", {**stored, "id": "wf000011", "name": "Trim"}, method="POST"),
+            route(
+                "/api/workflows/wf000011/download",
+                query={"style": "ga"},
+                body={
+                    "a_galaxy_workflow": "true",
+                    "format-version": "0.1",
+                    "name": "Trim",
+                    "steps": {
+                        "0": {"id": 0, "type": "data_input", "tool_id": None, "errors": None},
+                        "1": {
+                            "id": 1,
+                            "type": "tool",
+                            "tool_id": "toolshed.g2.bx.psu.edu/repos/iuc/fastp/fastp/1.0.1+galaxy3",
+                            "errors": "Tool is not installed",
+                        },
+                    },
+                },
+            ),
         ],
     )
 
@@ -4073,6 +4154,10 @@ NO_SUCH_VERSION = '{"err_msg": "Version does not exist", "err_code": 400008}'
 # What GET /api/tools/{id} says about an id the toolbox has at no version (v26.1.1
 # services/tools.py _get_tool). A version it lacks for an id it has is not an error
 # there: the newest installed version is served instead, and the refusal is ours.
+# managers/workflows.py, __module_from_dict: ObjectAttributeMissingException (400005).
+NO_STEP_ID = (
+    '{"err_msg": "Workflow step is missing required \'id\' attribute.", "err_code": 400005}'
+)
 NO_SUCH_TOOL = '{"err_msg": "Could not find tool with id \'nope\'.", "err_code": 404001}'
 
 
@@ -4846,13 +4931,25 @@ def iwc_failure_cases(add: AddFailure) -> None:
         "refused_by_galaxy",
         "the import itself refused, which is a bioblend write",
         {"trs_id": "#workflow/github.com/iwc-workflows/wf0/main"},
-        # Registered under both spellings of the same create, as the success cases are:
-        # bioblend posts to /api/workflows/upload and the other side to /api/workflows.
         [
             route(IWC_MANIFEST_URL, iwc_manifest(2)),
-            fail("/api/workflows/upload", 400, DENIED, method="POST"),
             fail("/api/workflows", 400, DENIED, method="POST"),
         ],
+    )
+    add(
+        "import_workflow",
+        "refused_by_galaxy",
+        "a step without the id Galaxy connects steps by, refused as a bioblend write",
+        {
+            "definition": {
+                "a_galaxy_workflow": "true",
+                "format-version": "0.1",
+                "name": "Concatenate",
+                "annotation": "",
+                "steps": {"0": {"type": "tool", "tool_id": "cat1"}},
+            }
+        },
+        [fail("/api/workflows", 400, NO_STEP_ID, method="POST")],
     )
 
 
@@ -4980,6 +5077,13 @@ def order_of_refusal_cases(add: AddFailure) -> None:
 
 def argument_refusal_cases(add: AddFailure) -> None:
     """Arguments this server refuses on its own terms, before it asks Galaxy anything."""
+    add(
+        "import_workflow",
+        "empty_definition",
+        "an empty object is no workflow, so nothing is posted",
+        {"definition": {}},
+        [],
+    )
     # Galaxy indexes its stored versions with a plain list subscript, so a negative one
     # is not a 400 there but some other version, served quietly. Refused here instead.
     add(

@@ -682,5 +682,17 @@ describe("invoke_workflow JSON-string arguments", () => {
     await invokeWorkflow({ workflowId: "wf1" }, ctxWith(client));
     expect(capturedBody.inputs_by).toBe("step_index");
     expect(capturedBody.parameters_normalized).toBe(false);
+    expect(capturedBody.allow_tool_state_corrections).toBe(false);
+  });
+
+  it("passes allow_tool_state_corrections when asked", async () => {
+    let capturedBody: any = null;
+    const client = buildPreflightClient({
+      postSpy: (_path, init) => {
+        capturedBody = init?.body;
+      },
+    });
+    await invokeWorkflow({ workflowId: "wf1", allowToolStateCorrections: true }, ctxWith(client));
+    expect(capturedBody.allow_tool_state_corrections).toBe(true);
   });
 });
