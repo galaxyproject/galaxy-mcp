@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { createGalaxyContext, invokeWorkflowOp, runWithEnvelope } from "@galaxyproject/galaxy-ops";
-import { exitCodeFor, EX_USAGE, EX_SOFTWARE, EX_PROTOCOL, EX_UNAVAILABLE } from "../src/exit";
+import {
+  exitCodeFor,
+  exitCodeForAuthError,
+  EX_USAGE,
+  EX_SOFTWARE,
+  EX_PROTOCOL,
+  EX_UNAVAILABLE,
+} from "../src/exit";
 
 describe("exitCodeFor", () => {
   it("maps error kinds to BSD sysexits", () => {
@@ -21,6 +28,25 @@ describe("exitCodeFor", () => {
   it("keeps a too-old server apart from an unreachable one", () => {
     // Both are the server's fault, but only one is worth retrying.
     expect(exitCodeFor("version")).not.toBe(exitCodeFor("connection"));
+  });
+});
+
+describe("exitCodeForAuthError", () => {
+  // Plain http to a remote host is refused as `insecure`, 76 like a Galaxy's untrustworthy
+  // endpoints, and a wrong flag is 64: a script can tell the two apart.
+  it("keeps an insecure Galaxy (76) apart from a flag to fix (64) and from no answer (69)", () => {
+    expect(exitCodeForAuthError("insecure")).toBe(EX_PROTOCOL);
+    expect(exitCodeForAuthError("usage")).toBe(EX_USAGE);
+    expect(exitCodeForAuthError("network")).toBe(EX_UNAVAILABLE);
+  });
+
+  // The credential file is what cannot be used: 65 (the input is wrong), not 77, which a script
+  // reads as "log in" when logging in would meet the same refusal, and not 70, which says gxy
+  // has a bug.
+  it("keeps a credential file that cannot be used (65) apart from not logged in (77) and a bug (70)", () => {
+    expect(exitCodeForAuthError("store")).toBe(65);
+    expect(exitCodeForAuthError("store")).not.toBe(exitCodeForAuthError("not_logged_in"));
+    expect(exitCodeForAuthError("store")).not.toBe(EX_SOFTWARE);
   });
 });
 
