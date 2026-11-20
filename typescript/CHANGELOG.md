@@ -6,6 +6,69 @@ entry covers all three; where something only affects one surface, it says which.
 
 ## Unreleased
 
+### galaxy-cli installs a `gxy` command (#214)
+
+`@galaxyproject/galaxy-cli` now provides `gxy` as well as `galaxy-cli`. They are the same program;
+`gxy` is the shorter name that the `gxy auth` commands below are written with.
+
+### galaxy-cli keeps logins in a store of its own (#215)
+
+A login (the Galaxy's address, who it is for and an API key) is kept in `hosts.yml` under
+`$GXY_CONFIG_DIR`, else `$XDG_CONFIG_HOME/gxy`, else `~/.config/gxy`, readable only by the user. A
+file that other users can write to, or an entry that a different version of `gxy` wrote, is refused
+rather than trusted. A `hosts.yml` that gxy can't read or write exits 65 with the file named, not as
+an unexpected error.
+
+### `gxy auth login --with-token` (#216), `token` and `logout` (#218)
+
+`gxy auth login --with-token` reads an API key from stdin (piped, or typed without echo at a
+terminal), checks with the Galaxy that it works and stores it. It needs `--host`, `--url` or
+`GALAXY_URL`: it never takes the Galaxy from a stored login, since the key it reads need not be that
+Galaxy's. `gxy auth token` prints the stored token and `gxy auth logout` deletes the login. Ctrl-C at
+any point cancels and stores nothing.
+
+### galaxy-cli operations use stored logins, and `--api-key` is deprecated (#219)
+
+With no flag or variable naming a key or a Galaxy, an operation finds both in the stored logins.
+The key order is now `--api-key`, `--profile`, `GALAXY_API_KEY`, the stored login, then `.env`'s
+key; the Galaxy order is `--url`, the `--profile` URL, `GALAXY_URL`, `.env`'s `GALAXY_URL`, then the
+only stored login. For someone with no stored login, a `--profile` key now beats `GALAXY_API_KEY`
+and a `.env` key, and a profile's `galaxy_url` beats `GALAXY_URL` and `.env`'s. A key that is not
+from a stored login goes only to a Galaxy that something named, and an operation that uses a `.env`
+key or Galaxy says so on stderr (`--quiet` silences it). A stored login for the Galaxy being used
+that can't be used (expired, or unreadable) is never replaced by the `.env` key below it: the run
+stops as it would with no `.env` key. A `GALAXY_URL` from `.env` is only used
+with the key from that `.env`: with any other key the run stops with exit 77. The exception is a
+profile with its own `galaxy_url`: that Galaxy outranks `.env`'s, so the profile's key goes there
+rather than being refused, as the `.env` entry below would suggest. A `--profile` that is not in
+`~/.planemo.yml` is a usage error (64). The `gxy auth` commands refuse `--api-key` (`status`
+reports on it instead), and `login` refuses `--profile` too, with a usage error (64). `--api-key`
+still works for operations but is deprecated, since the key shows in the process list.
+
+### `gxy auth status`, `env` and `headers` (#220)
+
+`gxy auth status` lists the stored logins, checked against each Galaxy, and says which key an
+operation run with the same flags and environment would use (`key_source` in `--json`), or why
+operations would be refused (a `.env` Galaxy with another key). `gxy auth
+env` prints `GALAXY_URL` and `GALAXY_API_KEY` assignments for `eval`, and `gxy auth headers` prints
+`{"x-api-key": ...}` as JSON, for an MCP `headersHelper`, only for the Galaxy that Claude Code's
+`CLAUDE_CODE_MCP_SERVER_URL` names: without it, it refuses. Both write only to stdout, so a pipe
+reads them and nothing else.
+
+### galaxy-cli keeps tokens in the OS keyring (#221)
+
+`gxy auth login` now stores the token in the operating system's keyring (Secret Service on Linux,
+the platform keyring elsewhere), through `@napi-rs/keyring` run in a child process, and keeps only
+the login's details in `hosts.yml`. Where there is no keyring it falls back to the plaintext
+`hosts.yml`, with a warning. `GXY_NO_KEYRING` skips the keyring; `gxy auth login` and `logout` for a
+login kept in the keyring then refuse (64) and change nothing, rather than leave the secret behind.
+
+`--insecure-storage` now applies to any token, and an admin token goes in the keyring or, with no
+keyring, only with `--insecure-storage`.
+
+`gxy auth status` reports a login whose token cannot be read as `token unavailable` (`status:
+"unavailable"` in `--json`), and a Ctrl-C during the check ends it with "Cancelled." and 130.
+
 ### galaxy-cli: a `.env` URL is only used with the `.env` key
 
 Behaviour change. A `GALAXY_URL` from a `.env` file in the current directory is now only used with

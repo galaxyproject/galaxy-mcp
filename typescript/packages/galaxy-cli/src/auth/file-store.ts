@@ -19,9 +19,9 @@ import { AuthError, type BaseUrl, type LoginSummary } from "./types";
 
 const STALE_TEMP_MS = 60 * 60 * 1000;
 
-/** One host's entry in `hosts.yml`: the login's details and its token. */
+/** One host's entry in `hosts.yml`. `token` is present only when `storage` is `file`. */
 export interface HostRecord extends LoginSummary {
-  token: string;
+  token?: string;
 }
 
 /**
@@ -33,9 +33,9 @@ export interface HostRecord extends LoginSummary {
  *   *skipped* on a read, with a warning, so one such entry cannot lock out the others.
  * - It is never *dropped*: a write carries it back out unchanged, as it does unknown fields on
  *   other hosts' entries that we do read and unknown top-level keys. `put` and `delete` for that
- *   very host refuse instead of replacing it, because that would discard a login we could not
- *   read. (`put` for a host we can read writes its entry afresh, so unknown fields on that one
- *   entry are replaced.)
+ *   very host refuse instead of replacing it, because that would discard a login (and maybe a
+ *   keyring secret) we could not read. (`put` for a host we can read writes its entry afresh, so
+ *   unknown fields on that one entry are replaced.)
  * - A file with nothing we can place at all is *corrupt*, and every read and write refuses it: not
  *   a mapping, `hosts` not a mapping, a non-empty mapping with no `hosts` key (a misspelt key, or
  *   another layout), or a recognised entry with a bad field. Reading any of those as empty would
@@ -51,7 +51,7 @@ interface Doc {
   extra: Map<string, unknown>;
 }
 
-/** Keys of a host entry that this build reads. */
+/** Keys of a host entry that this build reads or deliberately drops (`token` for keyring storage). */
 const KNOWN_FIELDS = new Set([
   "username",
   "email",
@@ -64,8 +64,9 @@ const KNOWN_FIELDS = new Set([
 ]);
 
 /**
- * `hosts.yml`: per-host logins, token and all. The name and the keying by host are gh's; the key
- * here is the whole base URL (see `normalizeBaseUrl`) because a Galaxy can live under a path prefix.
+ * `hosts.yml`: per-host login metadata, plus the token itself when the system keyring is
+ * not used. The name, the keying by host and the plaintext fallback are gh's; the key here is
+ * the whole base URL (see `normalizeBaseUrl`) because a Galaxy can live under a path prefix.
  *
  * The directory is 0700 and the file 0600, enforced on every write (and repaired, with a
  * warning, on a read too when an existing one is looser), because the file can hold a bearer token that
@@ -85,11 +86,11 @@ const KNOWN_FIELDS = new Set([
  * and the rename carries the temp file's mode over.
  *
  * Read-modify-write is not locked across processes: two simultaneous logins can lose one
- * update. This file is only written when a login is stored or removed, which is rare and interactive; that is
+ * update. This file is only written at login and logout, which are rare and interactive; that is
  * why it is accepted. (gh serialises its writes with a lock file.)
  */
 export class FileStore {
-  /** Entries already warned about, so a store that reads twice warns once. */
+  /** Entries already warned about, so a command that reads twice warns once. */
   private readonly warned = new Set<string>();
 
   constructor(
@@ -143,7 +144,7 @@ export class FileStore {
     );
   }
 
-  /** Warn once per entry and file, however many times the store is read. */
+  /** Warn once per entry and file, however many times a command reads the store. */
   private warnSkipped(url: string, why: string): void {
     const key = `${this.path}\0${url}`;
     if (this.warned.has(key)) return;
@@ -153,7 +154,38 @@ export class FileStore {
     );
   }
 
-  private async readAll(): Promise<Doc> {
+  /**
+   * A read or write the file system refuses (no permission, a read-only mount, a full disk) is
+   * the person's to fix, like a corrupt file, so it is an `AuthError` that names the file and
+   * what to try, not a raw errno error that a command would report as a bug in gxy. Errors that
+   * are already ours, and anything without an errno code, pass through as they are.
+   */
+  private async fsGuard<T>(op: "read" | "write", run: () => Promise<T>): Promise<T> {
+    try {
+      return await run();
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException | undefined)?.code;
+      if (e instanceof AuthError || typeof code !== "string") throw e;
+      const why = ERRNO_WHY[code] ?? code;
+      throw new AuthError(
+        "store",
+        op === "read"
+          ? `Cannot read ${this.path}: ${why}. Check that you can read it and ${this.dir}, or set GXY_CONFIG_DIR to another directory.`
+          : `Cannot write ${this.path}: ${why}. It has not been changed. Check that you can write to ${this.dir}, or set GXY_CONFIG_DIR to another directory.`,
+        { cause: e },
+      );
+    }
+  }
+
+  private readAll(): Promise<Doc> {
+    return this.fsGuard("read", () => this.readAllUnguarded());
+  }
+
+  private writeAll(doc: Doc): Promise<void> {
+    return this.fsGuard("write", () => this.writeAllUnguarded(doc));
+  }
+
+  private async readAllUnguarded(): Promise<Doc> {
     await this.assertSafe();
     await this.tightenDir(false);
     let text: string;
@@ -249,7 +281,7 @@ export class FileStore {
    * entry, not surface later as a `TypeError`, or as a file login with no token. What is not
    * recognised at all becomes an `unknown` entry (see `Doc`); what is recognised but wrong is
    * corrupt. An `expires_at` that is a string but not a date is let through here and judged by
-   * whoever uses it.
+   * `checkExpiry`, which treats it as expired.
    */
   private decode(url: string, raw: unknown): Entry {
     if (!isObject(raw)) throw this.corrupt(`entry for ${show(url)} is not a mapping`);
@@ -268,7 +300,7 @@ export class FileStore {
     const word = (k: string): string | undefined =>
       typeof raw[k] === "string" && raw[k] ? raw[k] : undefined;
     const storageWord = word("storage");
-    if (storageWord !== undefined && storageWord !== "file")
+    if (storageWord !== undefined && storageWord !== "keyring" && storageWord !== "file")
       return { kind: "unknown", raw, why: "unknown storage" };
     const methodWord = word("method");
     if (methodWord !== undefined && methodWord !== "pasted")
@@ -278,7 +310,7 @@ export class FileStore {
       if (typeof v !== "string" || !v) throw this.corrupt(`entry for ${show(url)} has no \`${k}\``);
       return v;
     };
-    const storage = str("storage") as "file";
+    const storage = str("storage") as "keyring" | "file";
     const method = str("method") as "pasted";
     const scopes = raw.scopes ?? [];
     if (!Array.isArray(scopes) || scopes.some((s) => typeof s !== "string")) {
@@ -296,9 +328,9 @@ export class FileStore {
       expiresAt: expires ?? null,
       obtainedAt: str("obtained_at"),
       storage,
-      token: str("token"),
     };
     if (typeof raw.email === "string") rec.email = raw.email;
+    if (storage === "file") rec.token = str("token");
     const extra = Object.fromEntries(Object.entries(raw).filter(([k]) => !KNOWN_FIELDS.has(k)));
     return { kind: "known", record: rec, extra };
   }
@@ -311,6 +343,10 @@ export class FileStore {
     );
   }
 
+  /**
+   * The token is written only for `storage: file`, so a record that points at the keyring can
+   * never leave a stale plaintext copy behind when a login moves there.
+   */
   private encode(doc: Doc): string {
     const hosts = new Map<string, unknown>();
     for (const [url, entry] of doc.hosts) {
@@ -327,14 +363,14 @@ export class FileStore {
         expires_at: r.expiresAt,
         obtained_at: r.obtainedAt,
         storage: r.storage,
-        token: r.token,
+        ...(r.storage === "file" && r.token !== undefined ? { token: r.token } : {}),
         ...entry.extra,
       });
     }
     return stringifyYaml(new Map<string, unknown>([["hosts", hosts], ...doc.extra]));
   }
 
-  private async writeAll(doc: Doc): Promise<void> {
+  private async writeAllUnguarded(doc: Doc): Promise<void> {
     await this.assertSafe();
     await mkdir(this.dir, { recursive: true, mode: 0o700 });
     // Again, because the first pass skips what does not exist yet: this one checks the
@@ -464,12 +500,23 @@ export class FileStore {
   }
 }
 
+/** Plain words for the errno codes a person can meet here; any other code is shown as it is. */
+const ERRNO_WHY: Record<string, string> = {
+  EACCES: "permission denied",
+  EPERM: "operation not permitted",
+  EROFS: "the file system is read-only",
+  ENOSPC: "no space left on the device",
+  EDQUOT: "disk quota exceeded",
+  EIO: "an I/O error",
+  ENOTDIR: "a part of the path is not a directory",
+};
+
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
 /** File-supplied text for a message: no control characters (they could drive the terminal), bounded. */
-function show(text: string): string {
+export function show(text: string): string {
   const clean = sanitize(text);
   return clean.length > 120 ? `${clean.slice(0, 120)}...` : clean;
 }
