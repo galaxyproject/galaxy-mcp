@@ -375,6 +375,29 @@ describe("auth, end to end", () => {
     );
   }, 90_000);
 
+  // `token` may fall back to the only stored login, but `login` takes a fresh key that need not be
+  // that Galaxy's: with a login for A stored, B's key piped into a bare `auth login --with-token`
+  // must never reach A, and A's login must come out unchanged.
+  test("never sends a key piped in with no --host to the only stored login", async ({
+    galaxy,
+    galaxyWith,
+    run,
+    pasteLogin,
+  }) => {
+    expect((await pasteLogin(galaxy)).exitCode).toBe(0);
+    const [keyForA] = galaxy.issuedTokens();
+    const before = galaxy.requests.length;
+    const other = await galaxyWith();
+    const keyForB = other.issueToken();
+    const login = await run(["auth", "login", "--with-token"], { input: `${keyForB}\n` });
+    expect(login.exitCode, login.stderr).toBe(64);
+    expect(login.stderr).toContain("No Galaxy named");
+    expect(login.stdout + login.stderr).not.toContain(keyForB);
+    expect(galaxy.requests.length).toBe(before);
+    expect(other.requests).toEqual([]);
+    expect((await run(["auth", "token"])).stdout.trim()).toBe(keyForA);
+  }, 60_000);
+
   // A hosts.yml gxy will not use is the person's file to fix, not a bug in gxy: exit 65 (EX_DATAERR) with
   // the reason, never "Unexpected error" and 70, and the file is left as it was. A login a newer gxy
   // wrote is not "not logged in" (77) or "nothing to remove" (0) for its own Galaxy either.
@@ -423,6 +446,24 @@ describe("auth, end to end", () => {
       expect(r.stdout).toBe("");
       expect((await stat(path)).mode & 0o777).toBe(0o666);
     }, 30_000);
+
+    // Before, the raw EACCES surfaced as "Unexpected error" and 70, a bug in gxy. A mode that keeps
+    // us out means nothing to root, and Windows has no such modes.
+    test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+      "a hosts.yml gxy cannot read: exit 65 naming the file, not an unexpected error",
+      async ({ galaxy, run, configDir }) => {
+        await mkdir(configDir, { mode: 0o700 });
+        const path = join(configDir, "hosts.yml");
+        await writeFile(path, `hosts: {}\n`, { mode: 0o600 });
+        await chmod(path, 0o200);
+        const r = await run(["auth", "token", "--host", galaxy.baseUrl]);
+        expect(r.exitCode, r.stderr).toBe(65);
+        expect(r.stderr).toContain(`Cannot read ${path}: permission denied`);
+        expect(r.stderr).not.toContain("Unexpected error");
+        expect(r.stdout).toBe("");
+      },
+      30_000,
+    );
   });
 
   test("lets `auth token | head -c1` end quietly with 0, when the output is more than the pipe holds", async ({
