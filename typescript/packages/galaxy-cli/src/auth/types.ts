@@ -77,6 +77,14 @@ export interface CredentialStore {
     login: StoredLogin,
     opts?: { insecureStorage?: boolean; requireKeyring?: boolean; signal?: AbortSignal },
   ): Promise<PutResult>;
+  /**
+   * Reject now with what `put` would reject with for this Galaxy for a reason that exists before
+   * any token does: a `hosts.yml` that cannot be read or used, a login a newer gxy wrote, or a
+   * keyring login that GXY_NO_KEYRING stops being replaced. Changes nothing and reads no token. A
+   * flow that mints a token (the device flow) asks first, so it does not issue one that it
+   * already knows cannot be kept.
+   */
+  preflight(baseUrl: BaseUrl): Promise<void>;
   /** Remove the login for this Galaxy from every place it is kept. Returns false if there was none. */
   delete(baseUrl: BaseUrl): Promise<boolean>;
   /** Every stored login, without tokens, sorted by base URL. */

@@ -75,6 +75,9 @@ export class FakeStore implements CredentialStore {
   keyringAvailable = true;
   /** Set to make `put` throw this instead (a failed write). */
   putError: Error | undefined;
+  /** Set to make `preflight` throw this: what `put` would refuse for before any token exists. */
+  preflightError: Error | undefined;
+  preflightCalls: string[] = [];
 
   seed(login: StoredLogin, storage: StorageKind = "keyring"): this {
     this.logins.set(login.baseUrl, { ...login, storage });
@@ -95,6 +98,10 @@ export class FakeStore implements CredentialStore {
     const storage: StorageKind = opts?.insecureStorage ? "file" : this.nextStorage;
     this.logins.set(login.baseUrl, { ...login, storage });
     return { storage, ...(this.nextWarning ? { warning: this.nextWarning } : {}) };
+  }
+  async preflight(baseUrl: BaseUrl): Promise<void> {
+    this.preflightCalls.push(baseUrl);
+    if (this.preflightError) throw this.preflightError;
   }
   async delete(baseUrl: BaseUrl) {
     return this.logins.delete(baseUrl);

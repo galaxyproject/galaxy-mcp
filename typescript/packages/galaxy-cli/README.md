@@ -64,7 +64,9 @@ If the Galaxy has the device flow switched off (`gxy` says it "does not offer de
 and prints the command to use), or you already have a key, pipe it in:
 `printf %s "$KEY" | gxy auth login --host <url> --with-token`. At a terminal, `--with-token` asks
 for the key without echoing it. If stdin is a terminal but stderr is redirected, where the prompt
-would go unseen, it refuses (exit 64) and asks you to pipe the key in. `auth logout` does not revoke
+would go unseen, it refuses (exit 64) and asks you to pipe the key in. `--scopes` and `--no-browser`
+belong to the device flow, so with `--with-token` they are a usage error (exit 64), as is an empty
+`--scopes`. `auth logout` does not revoke
 a pasted API key, because it may be in use elsewhere: it keeps working until you revoke it in
 Galaxy's user preferences, and `auth logout` says so.
 
@@ -121,7 +123,11 @@ that the old secret may remain, naming the entry (`gxy:<url>`) to remove with yo
 tool. `auth logout` names the entry the same way when the keyring could not confirm the removal.
 When the keyring is only switched off by `GXY_NO_KEYRING`, though, `auth login` and `auth logout`
 for a login kept there change nothing and exit 64, asking you to rerun without `GXY_NO_KEYRING`,
-rather than leave a secret that nothing points at. A login over one that is in the keyring puts the
+rather than leave a secret that nothing points at. The device flow finds that out, and a login that a
+newer `gxy` wrote or a `hosts.yml` that cannot be read (exit 65), before it asks Galaxy for a code, so
+no token is issued that could not be kept. If one cannot be kept after all (the write fails, or an
+admin's token has no keyring and no `--insecure-storage`), `gxy` revokes it and says so; if that
+fails too, it says to revoke it in Galaxy's user preferences. A login over one that is in the keyring puts the
 old secret back if it fails or is cancelled; if it cannot, it says the earlier login may no longer
 work and that logging in again will fix it.
 

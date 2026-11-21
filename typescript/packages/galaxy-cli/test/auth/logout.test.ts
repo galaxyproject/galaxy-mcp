@@ -324,4 +324,53 @@ describe("logout with the Galaxy down, over the real store", () => {
     expect(await logoutCommand({}, h.deps)).toBe(0);
     expect(await file.list()).toEqual([]);
   });
+
+  // The refusal comes before any attempt on the server: with the keyring off the token cannot be
+  // read, so nothing could be revoked, and a token the server still honours is not left behind by
+  // a half-done logout either.
+  it("tries no revocation when it refuses over GXY_NO_KEYRING, and says nothing of one", async () => {
+    await store.put(fakeLogin());
+    const h = logoutHarness();
+    h.deps.store = new CombinedStore(file, new KeyringStore(noKeyringBackend, 50));
+    let discovered = 0;
+    h.deps.discover = async () => {
+      discovered += 1;
+      return h.server;
+    };
+    expect(await logoutCommand({}, h.deps)).toBe(64);
+    expect(discovered).toBe(0);
+    expect(h.server.revoked).toEqual([]);
+    expect(h.cap.err).not.toMatch(/revoke/i);
+    expect(h.cap.out).toBe("");
+  });
+
+  it("revokes a device login that is kept in the file, even when GXY_NO_KEYRING is set", async () => {
+    await store.put(fakeLogin(), { insecureStorage: true });
+    const h = harness();
+    h.deps.store = new CombinedStore(file, new KeyringStore(noKeyringBackend, 50));
+    h.deps.resolveHost = async () => HOST;
+    expect(await logoutCommand({}, h.deps)).toBe(0);
+    expect(h.server.revoked).toEqual([FAKE_TOKEN]);
+    expect(await file.list()).toEqual([]);
+    expect(await readFile(file.path, "utf8")).not.toContain(FAKE_TOKEN);
+  });
+
+  // A hosts.yml gxy cannot use is the person's file to fix: exit 65 naming it, nothing contacted
+  // and nothing removed, never "Unexpected error".
+  it("exits 65 naming the file when hosts.yml is not YAML, and contacts nobody", async () => {
+    await mkdir(file.dir, { mode: 0o700 });
+    await writeFile(file.path, "hosts: [this, is: not valid\n", { mode: 0o600 });
+    const before = await readFile(file.path, "utf8");
+    const h = logoutHarness();
+    let discovered = 0;
+    h.deps.discover = async () => {
+      discovered += 1;
+      return h.server;
+    };
+    expect(await logoutCommand({}, h.deps)).toBe(65);
+    expect(h.cap.err).toContain(file.path);
+    expect(h.cap.err).not.toContain("Unexpected error");
+    expect(discovered).toBe(0);
+    expect(await readFile(file.path, "utf8")).toBe(before);
+  });
 });

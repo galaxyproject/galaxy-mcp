@@ -81,6 +81,11 @@ environment, never from a stored login, `.env` or a profile: the token it gets i
 only where you named. With no Galaxy named and a person at the terminal, `login` asks for the Galaxy
 URL (it suggests nothing); otherwise it exits 64 naming `--host`.
 
+The device flow checks that the login could be kept before it asks Galaxy for a code: a login a newer
+`gxy` wrote or a `hosts.yml` that cannot be read (65), and a keyring login while `GXY_NO_KEYRING` is
+set (64), stop it with nothing issued. `--scopes` and `--no-browser` with `--with-token` are usage
+errors (64), as is an empty `--scopes`.
+
 `gxy auth logout` revokes a device login where the server allows it. A Galaxy with no device login
 ends `login` with exit 76 and a hint to use `--with-token`. `gxy auth status` shows `device login`
 and the scopes that were granted.

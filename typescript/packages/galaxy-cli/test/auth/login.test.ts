@@ -3,7 +3,7 @@
  * branch can be reached and each run's output read back. The one block that uses real discovery
  * says so. The real binary, a real SIGINT and real terminals are in e2e.int.test.ts.
  */
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { describe, it, expect, vi } from "vitest";
 import { loginCommand } from "../../src/auth/commands/login";
 import { discover } from "../../src/auth/oauth";
@@ -139,13 +139,39 @@ describe("login (device flow)", () => {
     // different codes.
     it.each([
       ["denied", 77],
+      ["expired", 77],
+      ["not_logged_in", 77],
       ["network", 69],
+      ["unsupported", 76],
+      ["protocol", 76],
+      ["insecure", 76],
+      ["store", 65],
+      ["usage", 64],
     ] as const)("exits %s -> %i, relays the message and stores nothing", async (kind, exit) => {
       const h = harness();
       h.server.pending.outcome = new AuthError(kind, `it was ${kind}`);
       expect(await loginCommand({ host: HOST_ARG }, h.deps)).toBe(exit);
       expect(h.cap.err).toContain(`it was ${kind}`);
       expect(h.store.putCalls).toEqual([]);
+    });
+
+    // The same for what whoami or the store say once the token exists: the exit code follows the
+    // kind, and the token is taken back whichever it was.
+    it.each([
+      ["whoami", "store", 65],
+      ["whoami", "network", 69],
+      ["put", "store", 65],
+      ["put", "denied", 77],
+      ["put", "usage", 64],
+    ] as const)("%s failing with %s exits %i and revokes the token", async (where, kind, exit) => {
+      const h = harness();
+      const error = new AuthError(kind, `it was ${kind}`);
+      if (where === "whoami") h.knobs.whoami = error;
+      else h.store.putError = error;
+      expect(await loginCommand({ host: HOST_ARG }, h.deps)).toBe(exit);
+      expect(h.cap.err).toContain(`it was ${kind}`);
+      expect(h.server.revoked).toEqual([FAKE_TOKEN]);
+      expect(h.cap.err + h.cap.out).not.toContain(FAKE_TOKEN);
     });
 
     it("revokes the token it was just given when the login cannot be stored", async () => {
@@ -194,6 +220,71 @@ describe("login (device flow)", () => {
       expect(await loginCommand({ host: HOST_ARG }, h.deps)).not.toBe(0);
       expect(h.server.revoked).toEqual([]);
       expect(h.cap.err).toContain("cannot be revoked from here");
+    });
+  });
+
+  // A flag that does not apply is a usage error, as `--profile` is (register.ts), and is found
+  // before anything is asked, read or sent.
+  describe("flags that do not apply", () => {
+    it.each([
+      ["--scopes", { scopes: ["histories:read"] }],
+      ["--no-browser", { browser: false }],
+      ["--scopes and --no-browser", { scopes: ["histories:read"], browser: false }],
+    ])("%s with --with-token: exits 64 before the key is read or sent", async (flags, opts) => {
+      const h = harness({ stdinText: `${FAKE_TOKEN}\n` });
+      expect(await loginCommand({ host: HOST_ARG, withToken: true, ...opts }, h.deps)).toBe(64);
+      expect(h.cap.err).toContain(`${flags} `);
+      expect(h.cap.err).toMatch(/not apply with --with-token/);
+      expect(h.cap.err).not.toContain("Logging in to");
+      expect(h.whoamiCalls).toEqual([]);
+      expect(h.store.putCalls).toEqual([]);
+      expect(h.stdin.readableLength).toBeGreaterThan(0);
+    });
+
+    it("an empty --scopes is a usage error that asks the server for nothing", async () => {
+      const h = harness();
+      expect(await loginCommand({ host: HOST_ARG, scopes: [] }, h.deps)).toBe(64);
+      expect(h.cap.err).toContain("--scopes needs at least one scope");
+      expect(h.server.startedWith).toEqual([]);
+    });
+
+    it("are refused before the Galaxy URL is asked for", async () => {
+      const h = harness({ interactive: true });
+      expect(await loginCommand({ withToken: true, scopes: ["a"] }, h.deps)).toBe(64);
+      expect(h.cap.err).not.toContain("Galaxy URL (");
+    });
+  });
+
+  // `--quiet` drops this command's own warning that GALAXY_API_KEY outranks the login and nothing
+  // else: a refusal is the result of the command, not a warning, and must reach a wrapper that
+  // reads stderr.
+  describe("with --quiet", () => {
+    it("still says why when no Galaxy is named", async () => {
+      const h = harness();
+      expect(await loginCommand({ quiet: true }, h.deps)).toBe(64);
+      expect(h.cap.err).toContain("No Galaxy named");
+    });
+
+    it("still says why when the store refuses before a token is issued", async () => {
+      const h = harness();
+      h.store.preflightError = new AuthError("usage", "nothing was stored: rerun it");
+      expect(await loginCommand({ host: HOST_ARG, quiet: true }, h.deps)).toBe(64);
+      expect(h.cap.err).toContain("nothing was stored: rerun it");
+    });
+
+    it("still says the token was revoked when it could not be kept", async () => {
+      const h = harness();
+      h.store.putError = new AuthError("store", "cannot write hosts.yml");
+      expect(await loginCommand({ host: HOST_ARG, quiet: true }, h.deps)).toBe(65);
+      expect(h.cap.err).toContain("cannot write hosts.yml");
+      expect(h.cap.err).toContain("so it was revoked");
+    });
+
+    it("still prints the code to approve, and drops only the GALAXY_API_KEY warning", async () => {
+      const h = harness({ env: { GALAXY_API_KEY: "irrelevant" } });
+      expect(await loginCommand({ host: HOST_ARG, quiet: true }, h.deps)).toBe(0);
+      expect(h.cap.err).toContain("WDJB-MJHT");
+      expect(h.cap.err).not.toContain("GALAXY_API_KEY is set");
     });
   });
 
@@ -1040,6 +1131,108 @@ describe("over a keyring login while GXY_NO_KEYRING is set", () => {
     expect(h.cap.err + h.cap.out).not.toContain("fake-token-second");
     expect(await readFile(file.path, "utf8")).toBe(before);
     expect(kr.data.size).toBe(1);
+  });
+});
+
+// What would stop a login being kept is found before the device flow issues a token, so none is
+// issued and then revoked (or, if the revocation fails, left valid). Over the real store, since what
+// the store refuses is its own rule. Each case checks that the server was asked for nothing and
+// that `hosts.yml` and the keyring are as they were.
+describe("a device login that the store would refuse", () => {
+  const tmp = useTempDir("gxy-pf-");
+
+  function overRealStore() {
+    const kr = new FakeKeyring();
+    const { file, store } = realStore(tmp.path, kr);
+    const h = harness();
+    h.deps.store = store;
+    return { h, kr, file, store };
+  }
+  const nothingAsked = (h: ReturnType<typeof harness>) => {
+    expect(h.server.startedWith).toEqual([]);
+    expect(h.server.revoked).toEqual([]);
+    expect(h.whoamiCalls).toEqual([]);
+  };
+
+  it("over a keyring login while GXY_NO_KEYRING is set: exits 64 and asks the server for nothing", async () => {
+    const { h, kr, file, store } = overRealStore();
+    await store.put(fakeLogin());
+    const before = await readFile(file.path, "utf8");
+    h.deps.store = new CombinedStore(file, new KeyringStore(noKeyringBackend, 50));
+    expect(await loginCommand({ host: HOST_ARG }, h.deps)).toBe(64);
+    expect(h.cap.err).toContain("which GXY_NO_KEYRING switches off, so nothing was stored");
+    expect(h.cap.err).toContain("Rerun without GXY_NO_KEYRING.");
+    expect(h.cap.err).not.toMatch(/WDJB|Requesting access|Logged in|plain text/);
+    nothingAsked(h);
+    expect(await readFile(file.path, "utf8")).toBe(before);
+    expect(kr.data.size).toBe(1);
+  });
+
+  it("over a file login while GXY_NO_KEYRING is set: goes ahead", async () => {
+    const { h, file, store } = overRealStore();
+    await store.put(fakeLogin(), { insecureStorage: true });
+    h.deps.store = new CombinedStore(file, new KeyringStore(noKeyringBackend, 50));
+    expect(await loginCommand({ host: HOST_ARG }, h.deps)).toBe(0);
+    expect(h.server.startedWith).toHaveLength(1);
+  });
+
+  it("over a login a newer gxy wrote: exits 65, says so, and asks the server for nothing", async () => {
+    const { h, file } = overRealStore();
+    await mkdir(file.dir, { mode: 0o700 });
+    await writeFile(
+      file.path,
+      `hosts:\n  ${HOST}:\n    username: u\n    method: pasted\n    storage: vault\n    obtained_at: "2026-11-06T10:44:00.000Z"\n`,
+      { mode: 0o600 },
+    );
+    const before = await readFile(file.path, "utf8");
+    expect(await loginCommand({ host: HOST_ARG }, h.deps)).toBe(65);
+    expect(h.cap.err).toContain("written by a newer version of gxy");
+    nothingAsked(h);
+    expect(await readFile(file.path, "utf8")).toBe(before);
+  });
+
+  it("with a hosts.yml that is not YAML: exits 65 naming the file, and asks the server for nothing", async () => {
+    const { h, file } = overRealStore();
+    await mkdir(file.dir, { mode: 0o700 });
+    await writeFile(file.path, "hosts: [this, is: not valid\n", { mode: 0o600 });
+    expect(await loginCommand({ host: HOST_ARG }, h.deps)).toBe(65);
+    expect(h.cap.err).toContain(file.path);
+    expect(h.cap.err).not.toContain("Unexpected error");
+    nothingAsked(h);
+  });
+
+  it("is asked before discovery, so nothing reaches the network either", async () => {
+    const h = harness();
+    h.store.preflightError = new AuthError("store", "cannot read hosts.yml");
+    let discovered = 0;
+    h.deps.discover = async () => {
+      discovered += 1;
+      return h.server;
+    };
+    expect(await loginCommand({ host: HOST_ARG }, h.deps)).toBe(65);
+    expect(discovered).toBe(0);
+    expect(h.store.preflightCalls).toEqual([HOST]);
+    expect(h.cap.err).toContain("cannot read hosts.yml");
+  });
+
+  it("is not asked for a pasted key, whose key exists already", async () => {
+    const h = harness({ stdinText: `${FAKE_TOKEN}\n` });
+    expect(await loginCommand({ host: HOST_ARG, withToken: true }, h.deps)).toBe(0);
+    expect(h.store.preflightCalls).toEqual([]);
+  });
+
+  it("a Ctrl-C while it is being asked ends the command with 130", async () => {
+    const h = harness();
+    const ac = new AbortController();
+    h.deps.store.preflight = () => new Promise(() => undefined);
+    const p = loginCommand({ host: HOST_ARG, signal: ac.signal }, h.deps);
+    await vi.waitFor(() => {
+      expect(h.cap.err).toContain("Logging in to");
+    });
+    ac.abort();
+    expect(await p).toBe(130);
+    expect(h.cap.err).toContain("Cancelled.");
+    nothingAsked(h);
   });
 });
 

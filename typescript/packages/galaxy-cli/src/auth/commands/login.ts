@@ -259,6 +259,11 @@ async function loginWithToken(ctx: LoginContext): Promise<number> {
 /** The device flow (RFC 8628). */
 async function loginWithDeviceFlow(ctx: LoginContext): Promise<number> {
   const { deps, opts, signal, baseUrl, host, err, session } = ctx;
+  // This flow issues a token before it can store one, so what would stop it being stored is
+  // found first: a login a newer gxy wrote for this Galaxy, a `hosts.yml` that cannot be read, a
+  // keyring login that GXY_NO_KEYRING stops being replaced. Otherwise a token would be issued and
+  // revoked straight away, and left valid if the revocation failed.
+  await untilAborted(deps.store.preflight(baseUrl), signal);
   let server: AuthServer;
   try {
     server = await untilAborted(deps.discover(baseUrl, signal), signal);
@@ -357,6 +362,31 @@ async function loginWithDeviceFlow(ctx: LoginContext): Promise<number> {
 }
 
 /**
+ * A flag that does not apply is a usage error, not a quiet no-op (as for `--profile`, register.ts):
+ * a pasted key has no scopes and no approval page, so `--scopes` or `--no-browser` with
+ * `--with-token` means the command is not the one the person thinks it is. Checked before anything
+ * is asked, read or sent.
+ */
+function refuseInapplicableFlags(opts: LoginOptions, deps: AuthDeps): void {
+  if (opts.withToken) {
+    const flags = [
+      ...(opts.scopes !== undefined ? ["--scopes"] : []),
+      ...(opts.browser === false ? ["--no-browser"] : []),
+    ];
+    if (flags.length)
+      throw new AuthError(
+        "usage",
+        `${flags.join(" and ")} ${flags.length > 1 ? "do" : "does"} not apply with --with-token: a pasted key has no scopes and no approval page. Drop ${flags.length > 1 ? "them" : "it"}, or drop --with-token for the device flow (${deps.commandName} auth login --host <url>).`,
+      );
+  }
+  if (opts.scopes !== undefined && opts.scopes.length === 0)
+    throw new AuthError(
+      "usage",
+      "--scopes needs at least one scope, such as --scopes histories:read. Leave it out to ask for the server's default.",
+    );
+}
+
+/**
  * Log in by the device flow (RFC 8628), or with `--with-token` store a key from stdin.
  *
  * The Galaxy comes only from `--host` (or `--url`) or `GALAXY_URL` in the environment: never
@@ -380,6 +410,7 @@ export async function loginCommand(opts: LoginOptions, deps: AuthDeps): Promise<
   const signal = opts.signal ?? new AbortController().signal;
   const session: LoginSession = { cancelled: false, promptOpen: false };
   try {
+    refuseInapplicableFlags(opts, deps);
     // 1. Which Galaxy. Login never takes its host from `.env` (see pickHost); say so when it
     // disagrees, or when it is the only Galaxy named and login has to ask or refuse for want of one.
     const ignored = opts.host ? undefined : deps.ignoredLoginHost?.();

@@ -527,6 +527,28 @@ describe("auth, end to end", () => {
     expect((await run(["auth", "token"])).stdout.trim()).toBe(keyForA);
   }, 60_000);
 
+  // Flags that do not apply to a pasted key are usage errors, found before the key is read: the
+  // key never reaches the Galaxy named, and nothing is stored.
+  test("--scopes and --no-browser with --with-token exit 64 before the key is read or sent", async ({
+    galaxy,
+    run,
+    configDir,
+  }) => {
+    for (const flag of [["--scopes", "histories:read"], ["--no-browser"]]) {
+      const key = galaxy.issueToken();
+      const r = await run(["auth", "login", "--host", galaxy.baseUrl, "--with-token", ...flag], {
+        input: `${key}\n`,
+      });
+      expect(r.exitCode, r.stderr).toBe(64);
+      expect(r.stderr).toContain(`${flag[0]} does not apply with --with-token`);
+      expect(r.stdout + r.stderr).not.toContain(key);
+    }
+    expect(galaxy.requests).toEqual([]);
+    await expect(readFile(join(configDir, "hosts.yml"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  }, 60_000);
+
   // A hosts.yml gxy will not use is the person's file to fix, not a bug in gxy: exit 65 (EX_DATAERR) with
   // the reason, never "Unexpected error" and 70, and the file is left as it was. A login a newer gxy
   // wrote is not "not logged in" (77) or "nothing to remove" (0) for its own Galaxy either.
@@ -556,6 +578,57 @@ describe("auth, end to end", () => {
         expect(r.stderr, what).not.toMatch(/Unexpected error|Not logged in|nothing to remove/);
         expect(r.stdout, what).toBe("");
       }
+      expect(await readFile(path, "utf8")).toBe(before);
+    }, 60_000);
+
+    // The device flow issues a token before it can store one, so for a Galaxy whose login it would
+    // refuse to replace it must stop before it asks for a code: nothing issued, nothing to revoke.
+    test("a device login over a login a newer gxy wrote exits 65 without asking Galaxy for a code", async ({
+      galaxy,
+      run,
+      configDir,
+    }) => {
+      await mkdir(configDir, { mode: 0o700 });
+      const path = join(configDir, "hosts.yml");
+      await writeFile(path, newerEntry(galaxy.baseUrl), { mode: 0o600 });
+      const before = await readFile(path, "utf8");
+      const r = await run(["auth", "login", "--host", galaxy.baseUrl]);
+      expect(r.exitCode, r.stderr).toBe(65);
+      expect(r.stderr).toContain("written by a newer version of gxy");
+      expect(r.stdout).toBe("");
+      expect(galaxy.pendingCodes()).toEqual([]);
+      expect(galaxy.requests).toEqual([]);
+      expect(await readFile(path, "utf8")).toBe(before);
+    }, 60_000);
+
+    // Every run here has GXY_NO_KEYRING set. A login recorded as kept in the keyring is then one
+    // that login and logout must not touch: replacing or removing the record would orphan the token.
+    test("with GXY_NO_KEYRING set, login and logout over a keyring login exit 64 and change nothing", async ({
+      galaxy,
+      run,
+      configDir,
+    }) => {
+      await mkdir(configDir, { mode: 0o700 });
+      const path = join(configDir, "hosts.yml");
+      await writeFile(
+        path,
+        `hosts:\n  ${galaxy.baseUrl}:\n    username: fake-user\n    method: device\n    storage: keyring\n    obtained_at: "2026-11-06T10:44:00.000Z"\n`,
+        { mode: 0o600 },
+      );
+      const before = await readFile(path, "utf8");
+      for (const args of [
+        ["auth", "login", "--host", galaxy.baseUrl],
+        ["auth", "logout", "--host", galaxy.baseUrl],
+      ]) {
+        const r = await run(args);
+        const what = args.slice(0, 2).join(" ");
+        expect(r.exitCode, `${what}: ${r.stderr}`).toBe(64);
+        expect(r.stderr, what).toContain("GXY_NO_KEYRING");
+        expect(r.stderr, what).toContain("Rerun without GXY_NO_KEYRING");
+        expect(r.stdout, what).toBe("");
+      }
+      expect(galaxy.pendingCodes()).toEqual([]);
+      expect(galaxy.requests).toEqual([]);
       expect(await readFile(path, "utf8")).toBe(before);
     }, 60_000);
 
