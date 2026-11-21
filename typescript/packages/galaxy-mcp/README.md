@@ -39,6 +39,27 @@ For example, in Claude Desktop's `claude_desktop_config.json`:
 Every operation is registered as an MCP tool; read-only operations are flagged
 with `readOnlyHint`.
 
+## Use as a library
+
+A program that builds the server itself, for example to serve it behind its own
+authentication, imports it instead of running the command:
+
+```ts
+import { createGalaxyContext } from "@galaxyproject/galaxy-ops";
+import { buildServer, createHttpHandler } from "@galaxyproject/galaxy-mcp";
+
+const ctx = createGalaxyContext({ baseUrl: "https://usegalaxy.org", apiKey });
+const handle = createHttpHandler({
+  path: "/mcp",
+  allowedHosts: new Set(["mcp.example.org"]),
+  allowedOrigins: new Set(),
+  newServer: () => buildServer(ctx, { allowLocalFiles: false }),
+});
+```
+
+`buildServer` returns an MCP server for one Galaxy context; `createHttpHandler` answers
+Streamable HTTP requests with the guards described below.
+
 ## Serving over HTTP
 
 ```bash
