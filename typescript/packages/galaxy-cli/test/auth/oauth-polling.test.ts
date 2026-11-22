@@ -70,7 +70,15 @@ async function connect() {
 /** Slack on top of an interval, so a step lands just after the timer it means to fire. */
 const JUST_AFTER = 100;
 
-/** Start waiting under fake timers. `tick(ms)` moves the clock, then waits for any poll it fired to be answered. */
+/**
+ * Start waiting under fake timers. `tick(ms)` moves the clock, then waits for any poll it fired to be answered.
+ *
+ * The fake `setTimeout` is the one Node's own `fetch` (undici) sees too. Before it sends a request on a socket
+ * it has used already, the undici in Node 26.8 (8.10.x; 26.13's 8.12.x no longer does) waits for a
+ * `setTimeout(0)`. When a step ends on the very timer that starts a poll, the clock has stopped by the time
+ * undici sets that one, so it is due a millisecond ahead and the request would wait for a clock nobody moves.
+ * So `tick` moves the clock one more millisecond before it waits.
+ */
 function startWaiting(
   pending: PendingDeviceLogin,
   net: { idle: () => boolean },
@@ -82,6 +90,7 @@ function startWaiting(
     done,
     async tick(ms: number) {
       await vi.advanceTimersByTimeAsync(ms);
+      await vi.advanceTimersByTimeAsync(1);
       await until(net.idle, "the poll to be answered");
       await turn();
       await turn();
