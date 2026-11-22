@@ -76,6 +76,14 @@
     },
     "divergences": [
       {
+        "tool": "evaluate_user_tool_preflight",
+        "param": null,
+        "kind": "missing-builtin-tool",
+        "observed": "python=read (tag) params=[job_id type=string required=true default=none; safety_factor type=number required=false default=1.5; tool_uuid type=string required=true default=none]",
+        "status": "pending-port",
+        "reason": "This repository can combine an owned UDT definition, its completed job and safe job metrics into a resource recommendation. Galaxy's built-in MCP server exposes none of that orchestration yet."
+      },
+      {
         "tool": "connect",
         "param": "api_key",
         "kind": "missing-builtin-param",
