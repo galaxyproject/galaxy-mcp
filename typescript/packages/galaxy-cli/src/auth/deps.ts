@@ -1,4 +1,4 @@
-import { loadSources } from "../config";
+import { loadSources, requireProfile } from "../config";
 import { resolveHost } from "./host";
 import { createCredentialStore } from "./store";
 import type { AuthDeps } from "./types";
@@ -18,11 +18,13 @@ export function createAuthDeps(
   return {
     store,
     whoami: createWhoami(),
-    // The global `--url` counts as the flag and `--profile` supplies its planemo URL; login
-    // ignores `.env` (see pickHost) and refuses `--profile` before it gets here (register.ts).
-    resolveHost: (explicit, purpose) => {
+    // The rule operations use (config.ts), so the two cannot pick different Galaxies. The global
+    // `--url` counts as the flag and `--profile` supplies its planemo URL; login ignores `.env`
+    // (see pickHost) and refuses `--profile` before it gets here (register.ts).
+    resolveHost: async (explicit, purpose) => {
       const g = globals();
       const src = loadSources();
+      requireProfile(g, src);
       return resolveHost({
         explicit: explicit ?? g.url,
         env,
