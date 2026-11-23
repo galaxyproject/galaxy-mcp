@@ -5219,6 +5219,7 @@ def invoke_workflow(
     history_name: str | None = None,
     inputs_by: str = "step_index",
     parameters_normalized: bool = False,
+    version: int | None = None,
 ) -> GalaxyResult:
     """
     Invoke (run) a workflow with specified inputs and parameters
@@ -5237,10 +5238,22 @@ def invoke_workflow(
         inputs_by: How to identify workflow inputs - 'step_index', 'step_uuid', 'name', or
                   'step_index|step_uuid' (recommended; matches get_workflow_input_template)
         parameters_normalized: Whether parameters are already in normalized format
+        version: Which stored version of the workflow to run (optional; the latest when
+                omitted). Versions are numbered from 0, oldest first -- the number
+                get_workflow_details reports as `version` and accepts back. Galaxy
+                refuses a number past the newest with "Version does not exist". Must be
+                0 or greater.
 
     Returns:
         GalaxyResult with workflow invocation information including invocation ID in data field
     """
+    # Galaxy indexes its version list with this number, so a negative one would
+    # silently run a version counted from the newest end rather than fail.
+    if version is not None and version < 0:
+        raise ValueError(
+            f"version must be 0 or greater (got {version}); 0 is the oldest stored "
+            "version and get_workflow_details counts up from there"
+        )
     state = ensure_connected()
 
     inputs = _coerce_optional_json_dict(inputs, "inputs")
@@ -5252,7 +5265,7 @@ def invoke_workflow(
         # Preflight: validate supplied inputs against the workflow's slots.
         if inputs:
             try:
-                slots, _prov, _run = _resolve_workflow_slots(gi, workflow_id, history_id)
+                slots, _prov, _run = _resolve_workflow_slots(gi, workflow_id, history_id, version)
                 mapping = _get_datatypes_mapping(gi)
                 supplied = _enrich_supplied_inputs(gi, inputs)
                 verdict = validate_inputs(slots, supplied, mapping)
@@ -5287,6 +5300,7 @@ def invoke_workflow(
             history_name=history_name,
             inputs_by=resolved_inputs_by,
             parameters_normalized=parameters_normalized,
+            version=version,
         )
         return GalaxyResult(
             data=invocation,
@@ -5298,23 +5312,21 @@ def invoke_workflow(
     except Exception as e:
         hint = ""
         with contextlib.suppress(Exception):
-            slots, _, _ = _resolve_workflow_slots(gi, workflow_id, history_id)
+            slots, _, _ = _resolve_workflow_slots(gi, workflow_id, history_id, version)
             hint = "\n\nWorkflow input slots:\n" + json.dumps(
                 build_workflow_input_template(slots)["slots"], indent=2, default=str
             )
-        raise ValueError(
-            format_error(
-                "Invoke workflow",
-                e,
-                {
-                    "workflow_id": workflow_id,
-                    "history_id": history_id,
-                    "history_name": history_name,
-                    "inputs_by": inputs_by,
-                },
-            )
-            + hint
-        ) from e
+        # The version joins the context only when one was asked for, so an unpinned run
+        # fails in exactly the words it did before the parameter existed.
+        context: dict[str, Any] = {
+            "workflow_id": workflow_id,
+            "history_id": history_id,
+            "history_name": history_name,
+            "inputs_by": inputs_by,
+        }
+        if version is not None:
+            context["version"] = version
+        raise ValueError(format_error("Invoke workflow", e, context) + hint) from e
 
 
 @mcp.tool(tags={"workflows", "write", "extended"})
