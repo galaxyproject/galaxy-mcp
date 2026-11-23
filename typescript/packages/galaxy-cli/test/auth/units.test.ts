@@ -1,5 +1,6 @@
-// Small pure modules of the credential store, one section each.
+// Small pure modules of the auth surface, one section each.
 import { describe, expect, it } from "vitest";
+import { abortReason } from "../../src/auth/abort";
 import { configDir } from "../../src/auth/paths";
 import { normalizeBaseUrl } from "../../src/auth/base-url";
 import { AuthError } from "../../src/auth/types";
@@ -50,7 +51,7 @@ describe("normalizeBaseUrl", () => {
     expect(normalizeBaseUrl(input)).toBe(expected);
   });
 
-  // The result is a credential key and a stored key is normalised again when it is looked up, so it must be a
+  // The result is a credential key and `resolveHost` normalises a stored key again, so it must be a
   // fixed point. A doubled `/api` once normalised to a single `/api`, and that to the bare host, so
   // a login was looked up under a key that was never stored; a longer run of the idempotence
   // property in properties.test.ts found it, and the examples pin it here. The last row shows
@@ -158,5 +159,29 @@ describe("normalizeBaseUrl", () => {
     ["http://127.0.0.1@evil.example", "usage"], // refused for the userinfo first, refused either way
   ])("refuses plain http to a host that only looks like loopback: %s", (input, kind) => {
     expect(() => normalizeBaseUrl(input)).toThrow(expect.objectContaining({ kind }));
+  });
+});
+
+describe("abortReason", () => {
+  it("passes an Error reason through as it is, so callers can still match on it", () => {
+    const reason = new Error("ctrl-c");
+    const controller = new AbortController();
+    controller.abort(reason);
+    expect(abortReason(controller.signal)).toBe(reason);
+  });
+
+  it("gives the AbortError of a plain abort()", () => {
+    const controller = new AbortController();
+    controller.abort();
+    expect(abortReason(controller.signal)).toBeInstanceOf(Error);
+    expect(abortReason(controller.signal).name).toBe("AbortError");
+  });
+
+  it("wraps a reason that is not an Error, keeping it as the cause", () => {
+    const controller = new AbortController();
+    controller.abort("stop");
+    const error = abortReason(controller.signal);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.cause).toBe("stop");
   });
 });
