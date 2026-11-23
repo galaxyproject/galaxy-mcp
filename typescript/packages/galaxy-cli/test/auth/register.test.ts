@@ -30,9 +30,16 @@ function contained(command: Command): Command {
 // tested is the registration (which command, which option reaches it, when deps are built), not the
 // commands' behaviour, which their own files cover.
 describe("the auth commands", () => {
-  it("are the three subcommands of `auth`", () => {
+  it("are the six subcommands of `auth`", () => {
     const auth = buildProgram().commands.find((c) => c.name() === "auth")!;
-    expect(auth.commands.map((c) => c.name()).sort()).toEqual(["login", "logout", "token"]);
+    expect(auth.commands.map((c) => c.name()).sort()).toEqual([
+      "env",
+      "headers",
+      "login",
+      "logout",
+      "status",
+      "token",
+    ]);
   });
 
   it("run through the injected deps, with the program's name, and set the exit code", async () => {
@@ -93,9 +100,10 @@ describe("the auth commands", () => {
   });
 
   // The other auth commands: `--profile` finds their host (an unknown name is refused by
-  // `requireProfile`, not here), and `--api-key` is ignored by all of them, so it is refused too.
+  // `requireProfile`, not here), and `--api-key` is ignored by all of them but `status`, so it is
+  // refused too. `status` reports on the key operations would use, `--api-key` included.
   describe("refuse --api-key for the commands that never use it", () => {
-    it.each([["token"], ["logout"]])(
+    it.each([["token"], ["logout"], ["env"], ["headers"]])(
       "auth %s: exit 64, nothing run, even with --quiet",
       async (cmd) => {
         const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
@@ -117,11 +125,45 @@ describe("the auth commands", () => {
       },
     );
 
-    it("leave --profile to token and logout, which use it to find the host", async () => {
-      for (const cmd of ["token", "logout"]) {
+    // `headers` takes its Galaxy only from CLAUDE_CODE_MCP_SERVER_URL, so a --profile there could
+    // only mislead: refused like login's, for any name, before anything is read.
+    it("refuse --profile for auth headers: exit 64, nothing run, even with --quiet", async () => {
+      const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+      try {
+        for (const quiet of [[], ["--quiet"]]) {
+          write.mockClear();
+          const { h, code, makeAuthDeps } = await run([...quiet, "--profile", "p", "auth", "headers"]);
+          expect(code).toBe(64);
+          expect(write.mock.calls.map((c) => String(c[0])).join("")).toBe(
+            "--profile does not apply to `gxy auth headers`: it takes its Galaxy from CLAUDE_CODE_MCP_SERVER_URL.\n",
+          );
+          expect(makeAuthDeps).not.toHaveBeenCalled();
+          expect(h.cap.out).toBe("");
+        }
+      } finally {
+        write.mockRestore();
+      }
+    });
+
+    it("leave --profile to the commands that use it to find the host", async () => {
+      for (const cmd of ["token", "logout", "env", "status"]) {
         const { code, makeAuthDeps } = await run(["--profile", "p", "auth", cmd]);
         expect(code).toBe(0);
         expect(makeAuthDeps).toHaveBeenCalled();
+      }
+    });
+
+    it("leave --api-key to status, which reports on it, even with --quiet", async () => {
+      const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+      try {
+        for (const quiet of [[], ["--quiet"]]) {
+          const { code, makeAuthDeps } = await run([...quiet, "--api-key", "K", "auth", "status"]);
+          expect(code).toBe(0);
+          expect(makeAuthDeps).toHaveBeenCalled();
+        }
+        expect(write.mock.calls.map((c) => String(c[0])).join("")).toBe("");
+      } finally {
+        write.mockRestore();
       }
     });
   });
@@ -150,6 +192,10 @@ describe("the auth commands", () => {
     ],
     ["token", ["auth", "token"], "Unknown --profile"],
     ["logout", ["auth", "logout"], "Unknown --profile"],
+    ["env", ["auth", "env"], "Unknown --profile"],
+    // `headers` takes its Galaxy only from the server Claude Code names, so --profile is refused
+    // outright, as for login.
+    ["headers", ["auth", "headers"], "does not apply to `gxy auth headers`"],
   ])("refuse an unknown --profile for auth %s with exit 64", async (cmd, argv, message) => {
     const h = harness({ stored: [fakeLogin()], stdinText: `${FAKE_TOKEN}\n` });
     const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
@@ -176,6 +222,44 @@ describe("the auth commands", () => {
     expect(h.whoamiCalls).toEqual([]);
     expect(await h.store.list()).toHaveLength(1); // still only the seeded login
     if (cmd === "login") expect(h.stdin.readableLength).toBeGreaterThan(0);
+  });
+
+  // `status` lists every stored login and resolves no host unless `--host` is given, so it needs the
+  // profile check of its own (`checkProfile`, the real one from `createAuthDeps`): before it lists or
+  // checks anything, with or without `--host`, and with `--json` nothing goes to stdout.
+  it.each([
+    ["no --host", []],
+    ["--host", ["--host", HOST_ARG]],
+    ["--json", ["--json"]],
+    ["--json and --host", ["--json", "--host", HOST_ARG]],
+  ])("refuses an unknown --profile for auth status with exit 64 (%s)", async (_name, extra) => {
+    const h = harness({ stored: [fakeLogin()] });
+    const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    process.exitCode = 0;
+    let printed = "";
+    try {
+      const program = buildProgram({
+        invokedAs: "gxy",
+        makeAuthDeps: (name) => {
+          const real = createAuthDeps(name, () => program.opts());
+          return {
+            ...h.deps,
+            resolveHost: (explicit, purpose) => real.resolveHost(explicit, purpose),
+            checkProfile: () => real.checkProfile?.(),
+          };
+        },
+      });
+      await program.parseAsync(["node", "gxy", "--profile", "typo", "auth", "status", ...extra]);
+      printed = write.mock.calls.map((c) => String(c[0])).join("");
+    } finally {
+      write.mockRestore();
+    }
+    const code = process.exitCode;
+    process.exitCode = 0;
+    expect(code).toBe(64);
+    expect(printed + h.cap.err).toContain("Unknown --profile typo");
+    expect(h.cap.out).toBe("");
+    expect(h.whoamiCalls).toEqual([]);
   });
 
   // Building the deps opens the credential store. `--help` and the operations
@@ -215,6 +299,22 @@ describe("the auth commands", () => {
 });
 
 describe("options", () => {
+  it("--host, --json and --show-token reach status", async () => {
+    const { h } = await run(["auth", "status", "--host", HOST_ARG, "--json", "--show-token"]);
+    expect((JSON.parse(h.cap.out) as { token?: string }[])[0]?.token).toBe(FAKE_TOKEN);
+  });
+
+  it("--shell reaches env, and a value that is not a shell is refused", async () => {
+    const { h } = await run(["auth", "env", "--shell", "fish"]);
+    expect(h.cap.out).toContain("set -gx GALAXY_API_KEY");
+
+    // One validator: `envCommand`'s, so the exit is the usage code 64 and not commander's 1.
+    const bad = await run(["auth", "env", "--shell", "csh"]);
+    expect(bad.code).toBe(64);
+    expect(bad.h.cap.out).toBe("");
+    expect(bad.h.cap.err).toContain('Unknown shell "csh"');
+  });
+
   it("--with-token and --insecure-storage reach login", async () => {
     const h = loggingIn();
     const { code } = await run([...loginArgv, "--insecure-storage"], h);

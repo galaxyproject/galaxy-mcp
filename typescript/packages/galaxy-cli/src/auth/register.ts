@@ -2,7 +2,10 @@ import type { Command } from "commander";
 import { Option } from "commander";
 import type { AuthDeps } from "./types";
 import { loginCommand, type LoginOptions } from "./commands/login";
+import { statusCommand, type StatusOptions } from "./commands/status";
 import { tokenCommand, type TokenOptions } from "./commands/token";
+import { envCommand, SHELLS, type EnvOptions } from "./commands/env";
+import { headersCommand, type HeadersOptions } from "./commands/headers";
 import { logoutCommand, type LogoutOptions } from "./commands/logout";
 import { EX_SOFTWARE, EX_USAGE } from "../exit";
 import { exitQuietlyOnEpipe } from "./epipe";
@@ -17,8 +20,10 @@ export function registerAuth(program: Command, makeDeps: (commandName: string) =
     .command("auth")
     .description("Log in to a Galaxy and manage stored credentials");
   // `--api-key` belongs to the operations; `auth` takes its key from the store or from stdin.
-  // `--profile` is the same for `login` alone: the other subcommands use it to find the host, but
-  // a login never takes its host from a profile. A flag that does not apply is a usage error
+  // `--profile` is the same for `login` and `headers`: the other subcommands use it to find the
+  // host (and `status` to say which key an operation would send), but a login never takes its host
+  // from a profile, and `headers` takes it only from the server Claude Code names. `status` also reports on `--api-key` (what operations would use), so it is the one
+  // command that takes it. A flag that does not apply is a usage error
   // (64), as in `gh` and `aws`, and not a warning: `login --profile prod --with-token` would
   // otherwise send the key piped on stdin to a Galaxy other than prod's before anyone could
   // react. `--quiet` does not silence it. The hook runs before the action, so nothing is read,
@@ -34,7 +39,12 @@ export function registerAuth(program: Command, makeDeps: (commandName: string) =
         `--profile does not apply to \`${name}\`: login takes its Galaxy from --host, --url or GALAXY_URL in the environment.`,
       );
     }
-    if (g.apiKey !== undefined) {
+    if (g.profile !== undefined && action.name() === "headers") {
+      problems.push(
+        `--profile does not apply to \`${name}\`: it takes its Galaxy from CLAUDE_CODE_MCP_SERVER_URL.`,
+      );
+    }
+    if (g.apiKey !== undefined && action.name() !== "status") {
       problems.push(
         action.name() === "login"
           ? `--api-key does not apply to \`${name}\`: pipe the key in with --with-token instead.`
@@ -97,11 +107,51 @@ export function registerAuth(program: Command, makeDeps: (commandName: string) =
     );
 
   auth
+    .command("status")
+    .description("Show stored logins and check them against Galaxy")
+    .addOption(host())
+    .option(
+      "--json",
+      "print JSON to stdout; exits 0 once the list is printed (each entry's status says how its check went)",
+    )
+    .option("--show-token", "do not mask tokens")
+    .action((o: StatusOptions) =>
+      run(async (deps) => {
+        const ac = new AbortController();
+        const onSig = () => {
+          ac.abort();
+        };
+        process.once("SIGINT", onSig);
+        try {
+          return await statusCommand({ ...o, signal: ac.signal }, deps);
+        } finally {
+          process.removeListener("SIGINT", onSig);
+        }
+      }),
+    );
+
+  auth
     .command("token")
     .description("Print the stored token (stdout)")
     .addOption(host())
     .option("--json", "print a JSON object with the token and its expiry")
     .action((o: TokenOptions) => run((deps) => tokenCommand(o, deps)));
+
+  auth
+    .command("env")
+    .description("Print GALAXY_URL and GALAXY_API_KEY assignments, for eval")
+    .addOption(host())
+    .addOption(
+      // Checked by `envCommand`, so a bad value is a usage error (64) like the other commands'.
+      new Option("--shell <shell>", `shell syntax: ${SHELLS.join(", ")}`).default("sh"),
+    )
+    .action((o: EnvOptions) => run((deps) => envCommand(o, deps)));
+
+  auth
+    .command("headers")
+    .description("Print the request headers as JSON, for an MCP headersHelper")
+    .addOption(host("the Galaxy CLAUDE_CODE_MCP_SERVER_URL names, which it must match"))
+    .action((o: HeadersOptions) => run((deps) => headersCommand(o, deps)));
 
   auth
     .command("logout")

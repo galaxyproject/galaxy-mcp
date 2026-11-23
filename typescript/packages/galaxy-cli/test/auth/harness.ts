@@ -99,8 +99,9 @@ export function useTempDir(prefix = "gxy-test-"): { readonly path: string } {
 /**
  * What a command wrote, kept as two strings. Commands write through `deps.io` and never to
  * `console`, so nothing needs spying on and each run's output is its own. stdout and stderr stay
- * apart because that split is the contract: stdout is what a script consumes (a token, `--json`)
- * and stderr is everything a person reads, so most tests assert that one of them is empty.
+ * apart because that split is the contract: stdout is what a script consumes (a token, `env`
+ * exports, headers, `--json`) and stderr is everything a person reads, so most tests assert that
+ * one of them is empty.
  */
 export class Capture {
   out = "";
@@ -145,7 +146,10 @@ export function harness(
   }
   const whoamiCalls: { baseUrl: string; token: string }[] = [];
   const knobs: Harness["knobs"] = { whoami: { username: "aioue", email: "a@example.org" } };
-  const env = { ...(opts.hostFromEnv ? { GALAXY_URL: opts.hostFromEnv } : {}), ...opts.env };
+  const env: Record<string, string | undefined> = {
+    ...(opts.hostFromEnv ? { GALAXY_URL: opts.hostFromEnv } : {}),
+    ...opts.env,
+  };
   const deps: AuthDeps = {
     store,
     async whoami(baseUrl, token) {
@@ -165,6 +169,11 @@ export function harness(
         forLogin: purpose === "login",
       }),
     ignoredLoginHost: () => opts.ignoredLoginHost,
+    // `GALAXY_API_KEY` outranks a stored login; flags, profiles and `.env` are not in play here.
+    keySourceFor: () =>
+      env.GALAXY_API_KEY
+        ? { id: "env", label: "GALAXY_API_KEY" }
+        : { id: "stored", label: "stored login" },
     now,
     env,
     io: { stdin, stdout: cap.stdout, stderr: cap.stderr, interactive: opts.interactive ?? false },
@@ -184,4 +193,13 @@ export async function authErrorOf(p: Promise<unknown>): Promise<AuthError> {
       `expected an AuthError, got ${e === undefined ? "a resolved promise" : e instanceof Error ? e.message : JSON.stringify(e)}`,
     );
   return e;
+}
+
+/**
+ * `auth headers` refuses unless Claude Code names the MCP server it is for, so the cases that run
+ * it alongside `token` and `env` name `HOST`'s, as Claude Code would for that Galaxy.
+ */
+export function asHelperFor(h: Harness): Harness {
+  h.deps.env.CLAUDE_CODE_MCP_SERVER_URL ??= `${HOST}/api/mcp`;
+  return h;
 }
