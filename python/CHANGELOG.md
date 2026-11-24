@@ -22,6 +22,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `get_history_contents` rows are the contents index's summary view. Dataset rows are
   unchanged; collection rows gain `type_id` and `store_times_summary` and lose
   `model_class`, `populated` and `column_definitions`.
+- Behaviour change: a `GALAXY_URL` from a `.env` file (in the working directory or any parent)
+  is only used with the `GALAXY_API_KEY` from that same file. An exported `GALAXY_API_KEY` is
+  only sent to an exported `GALAXY_URL`, or to a `url` passed to `connect()` along with a key.
+  When the Galaxy would come from `.env` and the key from the environment, the server doesn't
+  connect at startup and `connect()` refuses, saying to set `GALAXY_URL` in the environment or
+  call `connect(url=..., api_key=...)`. That includes a `.env` holding both a URL and a key
+  while a key is also exported: the exported key used to win and went to the `.env` URL; now
+  it refuses rather than quietly switching keys. `connect(api_key=...)` without a `url` is
+  likewise refused when the URL would come from `.env`, with or without OAuth. `${...}` is no
+  longer expanded in a `.env`'s `GALAXY_URL` or `GALAXY_API_KEY`. `connect()` still reads
+  `.env` again when credentials are missing, but only for those two values: it no longer
+  merges the file into the environment, so it can't replace an exported `GALAXY_URL` or change
+  other settings mid-run. Other settings in `.env` (`GALAXY_MCP_*`) are applied once at startup
+  without overriding the environment; `${...}` in them now resolves from the file first. An
+  exported variable shadows the `.env`'s even when empty, and `PYTHON_DOTENV_DISABLED` is
+  honoured. Unchanged: `GALAXY_URL` and `GALAXY_API_KEY` both in the same `.env`, both
+  exported, an exported URL with the key in `.env`, and `connect(url=..., api_key=...)`.
 
 ### Added
 
@@ -43,6 +60,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `failed`, `cancelled`, `completed`), read from its jobs summary with one more request:
   Galaxy's `state` describes scheduling and reports `completed` for a run whose jobs
   failed. Listings are unchanged.
+- `invoke_workflow(version=...)` runs a specific stored version of the workflow instead of the
+  latest. Versions are numbered from 0, oldest first, which is the `version` that
+  `get_workflow_details` reports and accepts. The input preflight reads that version's slots
+  too, so inputs that are right for an older version aren't refused against the newest one's.
+  A negative version is refused before anything is sent, since Galaxy would read it as a list
+  index counted from the newest end. Without `version` the request is unchanged. A pinned run
+  that fails names the version in its error.
 
 ### Changed
 
@@ -76,6 +100,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no substring of any one of them, such as `count occurrences` for Count ("occurrences
   of each record"), found nothing. Punctuation around a word is ignored; a query with a
   single-character word finds no more.
+- The code-mode instructions' `search_tools_by_name` example passed `name`; the parameter
+  is `query`, so a model copying the example got a validation error.
 
 ## [1.12.0] - 2026-10-19
 

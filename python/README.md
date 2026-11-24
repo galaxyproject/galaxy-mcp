@@ -87,7 +87,11 @@ How you authenticate depends on your transport:
   connection lasts for the whole process.
 
 You can also steer the transport with `GALAXY_MCP_TRANSPORT` (`stdio`, `streamable-http`, or `sse`).
-All variables can be placed in a `.env` file for convenience.
+All variables can be placed in a `.env` file for convenience (the server uses the nearest one,
+in the working directory or a parent). The one limit: a `GALAXY_URL` from `.env` is only used
+with the `GALAXY_API_KEY` from the same file, and `${...}` is not expanded in those two. If the
+URL comes from `.env` and the key is exported, the server doesn't connect; export `GALAXY_URL`
+too, or call `connect(url=..., api_key=...)`. `PYTHON_DOTENV_DISABLED=1` turns `.env` off.
 
 ## Usage
 
@@ -303,7 +307,7 @@ the same Galaxy tools API as a catalog tool.
 - `list_workflows`: Stored workflows, optionally filtered by name or published state; 50 per page
 - `get_workflow_details`: One workflow's steps and inputs, at a given version
 - `get_workflow_input_template`: A ready-to-fill input template plus a run guide, at a given version; call this before `invoke_workflow`
-- `invoke_workflow`: Run a workflow, validating the inputs against its steps first
+- `invoke_workflow`: Run a workflow, optionally at a given stored version, validating the inputs against its steps first
 - `get_invocations`: Invocations, by invocation, workflow, or history; pages with `limit` (at most 100, Galaxy's cap) and `offset`, sorts by `create_time` or `update_time`, and `include_terminal=False` keeps only the ones still running
 - `cancel_workflow_invocation`: Cancel a running invocation
 - `extract_workflow_from_history`: Turn jobs already run in a history into a stored workflow; `job_ids` become its tool steps and `dataset_hids` / `collection_hids` (history item numbers, not ids) its inputs

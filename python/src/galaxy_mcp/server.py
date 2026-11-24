@@ -17,6 +17,7 @@ import typing
 from collections.abc import Callable, Sequence
 from contextvars import ContextVar
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from functools import lru_cache, wraps
 from pathlib import Path
 from typing import Any, Literal, TypeVar, cast
@@ -25,7 +26,7 @@ from urllib.parse import quote, urlsplit
 import bioblend
 import pydantic_core
 import requests
-from dotenv import find_dotenv, load_dotenv
+from dotenv import dotenv_values, find_dotenv
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_context
 from mcp.server.auth.middleware.auth_context import get_access_token
@@ -979,14 +980,96 @@ def _format_tool_input_error(
     )
 
 
-# Try to load environment variables from .env file
-dotenv_path = find_dotenv(usecwd=True)
-if dotenv_path:
-    load_dotenv(dotenv_path)
-    print(f"Loaded environment variables from {dotenv_path}")
+_CREDENTIAL_VARS = ("GALAXY_URL", "GALAXY_API_KEY")
+
+
+@dataclass(frozen=True)
+class _Dotenv:
+    """A .env as read, kept apart from os.environ."""
+
+    path: str | None = None
+    values: typing.Mapping[str, str] = dataclass_field(default_factory=dict)
+
+
+def _read_dotenv() -> _Dotenv:
+    """The nearest .env, in this directory or a parent, unless PYTHON_DOTENV_DISABLED is set.
+
+    GALAXY_URL and GALAXY_API_KEY are read literally: expanding ${...} in them would let the
+    file copy an exported value, such as the exported key, into its own credentials.
+    """
+    if os.environ.get("PYTHON_DOTENV_DISABLED", "").casefold() in {"1", "true", "t", "yes", "y"}:
+        return _Dotenv()
+    path = find_dotenv(usecwd=True)
+    if not path:
+        return _Dotenv()
+    literal = dotenv_values(path, interpolate=False)
+    expanded = dotenv_values(path)
+    values = {name: (literal if name in _CREDENTIAL_VARS else expanded)[name] for name in literal}
+    return _Dotenv(path, {name: value for name, value in values.items() if value is not None})
+
+
+@dataclass(frozen=True)
+class _ConfiguredCredentials:
+    url: str | None
+    url_from: Literal["environment", "dotenv"] | None
+    api_key: str | None
+    refusal: str | None = None
+
+
+def _configured_credentials(
+    exported: typing.Mapping[str, str], dotenv: _Dotenv
+) -> _ConfiguredCredentials:
+    """Pair GALAXY_URL with GALAXY_API_KEY from the environment and the .env, exported first.
+
+    A .env belongs to the directory rather than to whoever runs the server here, so its
+    GALAXY_URL is only used with the GALAXY_API_KEY from that same file, never an exported one.
+    An exported variable, even an empty one, shadows the .env's, as load_dotenv() would.
+    """
+
+    def pick(name: str) -> tuple[str | None, Literal["environment", "dotenv"] | None]:
+        if name in exported:
+            return exported[name] or None, "environment"
+        if dotenv.values.get(name):
+            return dotenv.values[name], "dotenv"
+        return None, None
+
+    url, url_from = pick("GALAXY_URL")
+    api_key, key_from = pick("GALAXY_API_KEY")
+    if url_from == "dotenv" and key_from == "environment" and api_key:
+        return _ConfiguredCredentials(
+            url,
+            url_from,
+            None,
+            refusal=(
+                f"{_dotenv_url_only_with_its_key(dotenv)}, not with GALAXY_API_KEY from the "
+                "environment. Set GALAXY_URL in the environment, or call "
+                "connect(url=..., api_key=...), to use that key with this Galaxy."
+            ),
+        )
+    return _ConfiguredCredentials(url, url_from, api_key)
+
+
+def _dotenv_url_only_with_its_key(dotenv: _Dotenv) -> str:
+    return (
+        f"GALAXY_URL from {dotenv.path or '.env'} is only used with the GALAXY_API_KEY in the "
+        "same file"
+    )
+
+
+# GALAXY_URL and GALAXY_API_KEY from .env stay out of os.environ, so os.environ only ever holds
+# what was exported. Every other .env setting is applied once, here, without overriding.
+startup_dotenv = _read_dotenv()
+if startup_dotenv.path:
+    for _name, _value in startup_dotenv.values.items():
+        if _name not in _CREDENTIAL_VARS:
+            os.environ.setdefault(_name, _value)
+    print(f"Loaded environment variables from {startup_dotenv.path}")
 
 # Configure Galaxy target and client state
-raw_galaxy_url = os.environ.get("GALAXY_URL")
+startup_credentials = _configured_credentials(os.environ, startup_dotenv)
+if startup_credentials.refusal:
+    logger.warning(startup_credentials.refusal)
+raw_galaxy_url = startup_credentials.url
 normalized_galaxy_url = normalize_galaxy_url(raw_galaxy_url) if raw_galaxy_url else None
 extra_allowed_galaxy_urls = tuple(
     normalize_galaxy_url(value.strip())
@@ -995,7 +1078,7 @@ extra_allowed_galaxy_urls = tuple(
 )
 galaxy_state: dict[str, Any] = {
     "url": normalized_galaxy_url,
-    "api_key": os.environ.get("GALAXY_API_KEY"),
+    "api_key": startup_credentials.api_key,
     "gi": None,
     "connected": False,
 }
@@ -1108,7 +1191,7 @@ script and `return` the final answer to avoid round-trips.
 
 `search` indexes the MCP tools (above), NOT Galaxy's full tool catalog. To
 find a Galaxy tool like FastQC, call
-`await call_tool('search_tools_by_name', {'name': 'fastqc'})` from inside
+`await call_tool('search_tools_by_name', {'query': 'fastqc'})` from inside
 `run_galaxy_tool`.
 """
 
@@ -1423,17 +1506,23 @@ class _ConnectRefusedError(ValueError):
 
 
 def _resolve_connect_credentials(
-    url: str | None, api_key: str | None
+    url: str | None,
+    api_key: str | None,
+    dotenv: _Dotenv | None = None,
 ) -> tuple[str | None, str | None]:
-    """Fill in connect() arguments from the environment, where that is safe.
+    """Fill in connect() arguments from the environment and the .env, where that is safe.
 
     Over HTTP the caller is not the operator, so the destination has to be one the operator
     configured -- GALAXY_URL or GALAXY_MCP_EXTRA_ALLOWED_URLS, matched exactly -- or
     connect(url=...) would make this server fetch whatever URL it is handed. Over stdio the
-    caller is the operator, and any Galaxy is fair game. Either way the environment's API key
-    only goes to the environment's URL, and OAuth deployments never lend out the operator's
-    credentials at all.
+    caller is the operator, and any Galaxy is fair game. Either way the configured API key only
+    goes to the configured URL, a GALAXY_URL from .env only with the key from that .env (see
+    _configured_credentials), and OAuth deployments never lend out the operator's credentials.
+
+    ``dotenv`` is the .env to read, as from _read_dotenv(); the one found at startup by default.
     """
+    dotenv = dotenv or startup_dotenv
+    configured = _configured_credentials(os.environ, dotenv)
     if remote_caller_possible():
         env_url = normalized_galaxy_url
         if not env_url:
@@ -1453,25 +1542,36 @@ def _resolve_connect_credentials(
             )
             if use_url is None:
                 raise _ConnectRefusedError("Galaxy URL is not allowed by this server.")
-        if auth_provider:
+        url_from_dotenv = url is None and startup_credentials.url_from == "dotenv"
+        # OAuth never lends out the configured key, so a caller's own key is all there is.
+        if auth_provider and not (api_key and url_from_dotenv):
             return use_url, api_key
     else:
-        env_url = os.environ.get("GALAXY_URL")
+        env_url = configured.url
         use_url = url or env_url
+        url_from_dotenv = not url and configured.url_from == "dotenv"
 
-    # A .env reloaded after startup can change GALAXY_API_KEY without changing the allowlist,
-    # so the key also has to belong to the GALAXY_URL in the environment right now.
-    live_env_url = os.environ.get("GALAXY_URL")
-    use_api_key = api_key
+    if api_key and url_from_dotenv:
+        # A remote caller isn't told where the server's .env lives.
+        where = _Dotenv() if remote_caller_possible() else dotenv
+        raise _ConnectRefusedError(
+            f"{_dotenv_url_only_with_its_key(where)}, not with an api_key passed to "
+            "connect(). Pass url as well, or set GALAXY_URL in the environment."
+        )
+    if api_key:
+        return use_url, api_key
+
+    # The allowlist is fixed at startup while the environment and .env can change after it,
+    # so the key also has to belong to the GALAXY_URL configured right now.
+    use_api_key = None
     if (
-        not use_api_key
-        and use_url
+        use_url
         and env_url
-        and live_env_url
+        and configured.url
         and _same_galaxy_url(use_url, env_url)
-        and _same_galaxy_url(use_url, live_env_url)
+        and _same_galaxy_url(use_url, configured.url)
     ):
-        use_api_key = os.environ.get("GALAXY_API_KEY")
+        use_api_key = configured.api_key
     return use_url, use_api_key
 
 
@@ -1544,6 +1644,12 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
             )
 
         if session_id and not url and not api_key and not state["connected"]:
+            # Over stdio the caller is the operator, who needs to know why nothing connected;
+            # an HTTP caller isn't told where the server's .env lives.
+            if not remote_caller_possible():
+                refusal = _configured_credentials(os.environ, _read_dotenv()).refusal
+                if refusal:
+                    raise _ConnectRefusedError(refusal)
             raise _ConnectRefusedError(
                 "No Galaxy connection is available for this MCP session. "
                 "It may not have been configured yet, or it may have been evicted from the "
@@ -1556,16 +1662,17 @@ def connect(url: str | None = None, api_key: str | None = None) -> GalaxyResult:
 
         # Check if we have the necessary credentials
         if not use_url or not use_api_key:
-            # Try to reload from .env file in case it was added after startup
-            dotenv_path = find_dotenv(usecwd=True)
-            if dotenv_path:
-                load_dotenv(dotenv_path, override=True)
-                # Check again after loading .env
-                use_url, use_api_key = _resolve_connect_credentials(url, api_key)
+            # The .env may have been written or changed after startup, so read it again
+            dotenv = _read_dotenv()
+            if dotenv.path:
+                use_url, use_api_key = _resolve_connect_credentials(url, api_key, dotenv)
 
             # If still missing credentials, report error
             if not use_url or not use_api_key:
-                if url and not api_key and os.environ.get("GALAXY_API_KEY"):
+                configured = _configured_credentials(os.environ, dotenv)
+                if not url and not api_key and configured.refusal:
+                    raise _ConnectRefusedError(configured.refusal)
+                if url and not api_key and (configured.api_key or os.environ.get("GALAXY_API_KEY")):
                     raise _ConnectRefusedError(
                         "The configured GALAXY_API_KEY is only used with the configured "
                         "GALAXY_URL. Pass api_key explicitly to connect to a different server."
@@ -5254,6 +5361,7 @@ def invoke_workflow(
     history_name: str | None = None,
     inputs_by: str = "step_index",
     parameters_normalized: bool = False,
+    version: int | None = None,
 ) -> GalaxyResult:
     """
     Invoke (run) a workflow with specified inputs and parameters
@@ -5272,10 +5380,22 @@ def invoke_workflow(
         inputs_by: How to identify workflow inputs - 'step_index', 'step_uuid', 'name', or
                   'step_index|step_uuid' (recommended; matches get_workflow_input_template)
         parameters_normalized: Whether parameters are already in normalized format
+        version: Which stored version of the workflow to run (optional; the latest when
+                omitted). Versions are numbered from 0, oldest first -- the number
+                get_workflow_details reports as `version` and accepts back. Galaxy
+                refuses a number past the newest with "Version does not exist". Must be
+                0 or greater.
 
     Returns:
         GalaxyResult with workflow invocation information including invocation ID in data field
     """
+    # Galaxy indexes its version list with this number, so a negative one would
+    # silently run a version counted from the newest end rather than fail.
+    if version is not None and version < 0:
+        raise ValueError(
+            f"version must be 0 or greater (got {version}); 0 is the oldest stored "
+            "version and get_workflow_details counts up from there"
+        )
     state = ensure_connected()
 
     inputs = _coerce_optional_json_dict(inputs, "inputs")
@@ -5287,7 +5407,7 @@ def invoke_workflow(
         # Preflight: validate supplied inputs against the workflow's slots.
         if inputs:
             try:
-                slots, _prov, _run = _resolve_workflow_slots(gi, workflow_id, history_id)
+                slots, _prov, _run = _resolve_workflow_slots(gi, workflow_id, history_id, version)
                 mapping = _get_datatypes_mapping(gi)
                 supplied = _enrich_supplied_inputs(gi, inputs)
                 verdict = validate_inputs(slots, supplied, mapping)
@@ -5322,6 +5442,7 @@ def invoke_workflow(
             history_name=history_name,
             inputs_by=resolved_inputs_by,
             parameters_normalized=parameters_normalized,
+            version=version,
         )
         return GalaxyResult(
             data=invocation,
@@ -5333,23 +5454,21 @@ def invoke_workflow(
     except Exception as e:
         hint = ""
         with contextlib.suppress(Exception):
-            slots, _, _ = _resolve_workflow_slots(gi, workflow_id, history_id)
+            slots, _, _ = _resolve_workflow_slots(gi, workflow_id, history_id, version)
             hint = "\n\nWorkflow input slots:\n" + json.dumps(
                 build_workflow_input_template(slots)["slots"], indent=2, default=str
             )
-        raise ValueError(
-            format_error(
-                "Invoke workflow",
-                e,
-                {
-                    "workflow_id": workflow_id,
-                    "history_id": history_id,
-                    "history_name": history_name,
-                    "inputs_by": inputs_by,
-                },
-            )
-            + hint
-        ) from e
+        # The version joins the context only when one was asked for, so an unpinned run
+        # fails in exactly the words it did before the parameter existed.
+        context: dict[str, Any] = {
+            "workflow_id": workflow_id,
+            "history_id": history_id,
+            "history_name": history_name,
+            "inputs_by": inputs_by,
+        }
+        if version is not None:
+            context["version"] = version
+        raise ValueError(format_error("Invoke workflow", e, context) + hint) from e
 
 
 @mcp.tool(tags={"workflows", "write", "extended"})

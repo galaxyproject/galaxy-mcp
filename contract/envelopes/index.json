@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "python/src/galaxy_mcp/server.py",
-  "caseCount": 293,
-  "failureCaseCount": 103,
+  "caseCount": 298,
+  "failureCaseCount": 105,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -1910,6 +1910,51 @@
     },
     {
       "tool": "invoke_workflow",
+      "case": "with_version",
+      "note": "an earlier stored version run by number: the POST answers only when version is in it",
+      "outcome": "success",
+      "input": {
+        "workflow_id": "wf000001",
+        "history_id": "h0000",
+        "version": 1
+      },
+      "envelope": "invoke_workflow/with_version.json",
+      "replies": "invoke_workflow/with_version.galaxy.json"
+    },
+    {
+      "tool": "invoke_workflow",
+      "case": "oldest_version",
+      "note": "version 0, the oldest stored one: the POST answers only when the 0 is in it",
+      "outcome": "success",
+      "input": {
+        "workflow_id": "wf000001",
+        "history_id": "h0000",
+        "version": 0
+      },
+      "envelope": "invoke_workflow/oldest_version.json",
+      "replies": "invoke_workflow/oldest_version.galaxy.json"
+    },
+    {
+      "tool": "invoke_workflow",
+      "case": "inputs_checked_against_that_version",
+      "note": "the preflight reads the asked-for version's run model, which takes the FASTQ",
+      "outcome": "success",
+      "input": {
+        "workflow_id": "wf000001",
+        "history_id": "h0000",
+        "inputs": {
+          "0": {
+            "id": "d0000001",
+            "src": "hda"
+          }
+        },
+        "version": 1
+      },
+      "envelope": "invoke_workflow/inputs_checked_against_that_version.json",
+      "replies": "invoke_workflow/inputs_checked_against_that_version.galaxy.json"
+    },
+    {
+      "tool": "invoke_workflow",
       "case": "batch_answers_with_a_list",
       "note": "Galaxy expanded the run, so the answer is every invocation it made",
       "outcome": "success",
@@ -2827,6 +2872,19 @@
       "replies": "invoke_workflow/refused_by_galaxy.galaxy.json"
     },
     {
+      "tool": "invoke_workflow",
+      "case": "version_out_of_range",
+      "note": "a stored version Galaxy does not have, refused on the POST; the context names it",
+      "outcome": "failure",
+      "input": {
+        "workflow_id": "wf000001",
+        "history_id": "h0000",
+        "version": 7
+      },
+      "envelope": "invoke_workflow/version_out_of_range.json",
+      "replies": "invoke_workflow/version_out_of_range.galaxy.json"
+    },
+    {
       "tool": "create_user_tool",
       "case": "refused_by_galaxy",
       "note": "the context names the id out of the representation, with dict.get",
@@ -3389,6 +3447,18 @@
         "offset": -1
       },
       "envelope": "search_tools_by_name/negative_offset.json",
+      "replies": "get_invocations/malformed_id.galaxy.json"
+    },
+    {
+      "tool": "invoke_workflow",
+      "case": "negative_version",
+      "note": "a version below 0, which Galaxy would read as counted from the newest end",
+      "outcome": "failure",
+      "input": {
+        "workflow_id": "wf000001",
+        "version": -1
+      },
+      "envelope": "invoke_workflow/negative_version.json",
       "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {

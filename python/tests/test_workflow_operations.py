@@ -537,6 +537,7 @@ class TestWorkflowOperations:
                 history_name=None,
                 inputs_by="step_index",
                 parameters_normalized=False,
+                version=None,
             )
 
     def test_invoke_workflow_fn_with_history_name(self, mock_galaxy_instance):
@@ -567,7 +568,56 @@ class TestWorkflowOperations:
                 history_name="RNA-seq Analysis Results",
                 inputs_by="name",
                 parameters_normalized=False,
+                version=None,
             )
+
+    def test_invoke_workflow_fn_passes_version_through(self, mock_galaxy_instance):
+        """A caller can run the stored version a user approved, not whatever is latest."""
+        mock_galaxy_instance.workflows.invoke_workflow.return_value = {"id": "inv1"}
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            invoke_workflow_fn(workflow_id="workflow1", history_id="h1", version=0)
+
+        assert mock_galaxy_instance.workflows.invoke_workflow.call_args.kwargs["version"] == 0
+
+    def test_invoke_workflow_fn_refuses_a_negative_version(self, mock_galaxy_instance):
+        """Galaxy would read -1 as a list index from the newest end and run that."""
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError, match=r"version must be 0 or greater \(got -1\)"):
+                invoke_workflow_fn(workflow_id="workflow1", version=-1)
+
+        mock_galaxy_instance.workflows.invoke_workflow.assert_not_called()
+
+    def test_invoke_failure_hint_lists_the_asked_for_versions_slots(self, mock_galaxy_instance):
+        """After a pinned run fails, the slot hint is that version's, not the latest's."""
+        mock_galaxy_instance.url = "https://g/api"
+
+        def run_model(url, **_kwargs):
+            label = "old reads" if "version=2" in url else "latest reads"
+            resp = Mock()
+            resp.status_code = 200
+            resp.json.return_value = {
+                "steps": [
+                    {
+                        "step_type": "data_input",
+                        "step_index": 0,
+                        "step_label": label,
+                        "inputs": [{"extensions": ["fastqsanger"], "optional": False}],
+                    }
+                ]
+            }
+            return resp
+
+        mock_galaxy_instance.make_get_request.side_effect = run_model
+        mock_galaxy_instance.workflows.invoke_workflow.side_effect = Exception("refused")
+
+        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
+            with pytest.raises(ValueError) as excinfo:
+                invoke_workflow_fn(workflow_id="workflow1", history_id="h1", version=2)
+
+        hint = str(excinfo.value).split("Workflow input slots:", 1)[1]
+        assert "old reads" in hint
+        assert "latest reads" not in hint
 
     def test_cancel_workflow_invocation_fn(self, mock_galaxy_instance):
         """Test cancelling a workflow invocation"""
