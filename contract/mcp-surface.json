@@ -307,7 +307,7 @@
               }
             ],
             "default": null,
-            "description": "History item numbers (the hid get_history_contents lists, not encoded\n          ids) of the datasets that become the workflow's dataset inputs -- the\n          ones the jobs read that another run would replace. A dataset a listed\n          job reads that is neither here nor produced by a listed job is left as\n          an unconnected step input."
+            "description": "History item numbers (the hid get_history_contents lists, not encoded\n          ids) of the datasets that become the workflow's dataset inputs -- the\n          ones the jobs read that another run would replace. A dataset a listed\n          job reads that is neither here nor produced by a listed job is left as\n          an unconnected step input. Galaxy does not check these: a hid that is\n          not in the history still becomes an input step."
           },
           "collection_hids": {
             "anyOf": [

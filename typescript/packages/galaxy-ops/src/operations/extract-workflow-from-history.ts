@@ -18,15 +18,12 @@ import type { AnyOperation, InputOf, Operation } from "./types";
 export interface ExtractedWorkflowRecord {
   id: string;
   name?: string | null;
-  number_of_steps?: number;
   [k: string]: unknown;
 }
 
 export interface ExtractWorkflowResult {
   workflow_id: string;
   name: string | null;
-  /** Galaxy's step count, when its reply carries one; it does not today. */
-  number_of_steps: number | null;
   /** What was asked for, one step each: Galaxy makes a step per listed job and per listed input. */
   steps_requested: { tool_steps: number; dataset_inputs: number; collection_inputs: number };
   history_id: string;
@@ -35,8 +32,6 @@ export interface ExtractWorkflowResult {
   collection_hids: number[];
   /** Galaxy's record of the new stored workflow, as it answered. */
   workflow: ExtractedWorkflowRecord;
-  /** Where to go next with the id, in one sentence. */
-  next_steps: string;
 }
 
 /**
@@ -63,7 +58,8 @@ const input = {
       "History item numbers (the hid get_history_contents lists, not encoded ids) of the datasets " +
         "that become the workflow's dataset inputs -- the ones the jobs read that another run would " +
         "replace. A dataset a listed job reads that is neither here nor produced by a listed job is " +
-        "left as an unconnected step input.",
+        "left as an unconnected step input. Galaxy does not check these: a hid that is not in the " +
+        "history still becomes an input step.",
     ),
   collectionHids: z
     .array(hid)
@@ -141,14 +137,6 @@ export function extractWorkflowPayload(i: In): ExtractWorkflowPayload {
   };
 }
 
-function nextSteps(workflowId: string): string {
-  return (
-    `To run it on other inputs, call get_workflow_input_template with workflow_id '${workflowId}' to see ` +
-    "its input slots, fill them with the new datasets or collections, and invoke_workflow -- once " +
-    "for every set of inputs, instead of re-running the tools one by one."
-  );
-}
-
 async function run(i: In, ctx: GalaxyContext): Promise<ExtractWorkflowResult> {
   const body = extractWorkflowPayload(i);
   let record: ExtractedWorkflowRecord;
@@ -172,7 +160,6 @@ async function run(i: In, ctx: GalaxyContext): Promise<ExtractWorkflowResult> {
   return {
     workflow_id: workflowId,
     name: typeof record.name === "string" ? record.name : null,
-    number_of_steps: typeof record.number_of_steps === "number" ? record.number_of_steps : null,
     steps_requested: {
       tool_steps: body.job_ids.length,
       dataset_inputs: body.dataset_ids.length,
@@ -183,7 +170,6 @@ async function run(i: In, ctx: GalaxyContext): Promise<ExtractWorkflowResult> {
     dataset_hids: body.dataset_ids,
     collection_hids: body.dataset_collection_ids,
     workflow: record,
-    next_steps: nextSteps(workflowId),
   };
 }
 
@@ -196,8 +182,10 @@ export const extractWorkflowFromHistoryOp: Operation<typeof input, ExtractWorkfl
     "name for the workflow, the jobs that become its tool steps (jobIds, encoded job ids) and " +
     "the datasets or collections that become its inputs (datasetHids and collectionHids, the " +
     "history item numbers). Each listed job and input becomes one step; a job's outputs feed the " +
-    "later listed jobs that read them. Answers with the new workflow's id and name, what was " +
-    "requested, and where to go next: get_workflow_input_template, then invoke_workflow.",
+    "later listed jobs that read them. The steps are made in the order datasetHids, then " +
+    "collectionHids, then jobIds, each as listed; Galaxy does not name an input after its item, " +
+    "so with several inputs that order is all that says which of the workflow's input slots came " +
+    "from which hid. Answers with the new workflow's id and name and what was requested.",
   input,
   readOnly: false,
   run,
@@ -205,7 +193,7 @@ export const extractWorkflowFromHistoryOp: Operation<typeof input, ExtractWorkfl
     message:
       `Extracted workflow '${d.name ?? d.workflow_id}' (id ${d.workflow_id}) from history ${d.history_id}: ` +
       `${d.steps_requested.tool_steps} tool step(s) from the listed jobs, ${d.steps_requested.dataset_inputs} ` +
-      `dataset input(s) and ${d.steps_requested.collection_inputs} collection input(s). ${d.next_steps}`,
+      `dataset input(s) and ${d.steps_requested.collection_inputs} collection input(s).`,
   }),
   // The one request is a POST, worded as a bioblend write with the history and the name in
   // the context; Galaxy's own refusals (a hid that is not a collection, a job not in the

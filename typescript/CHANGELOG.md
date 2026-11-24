@@ -93,9 +93,10 @@ history item numbers, not ids: Galaxy's own form calls them `dataset_ids` and
 are and refuses an encoded id or an extraction that names nothing before anything is sent.
 A 400 from Galaxy -- a hid that is not a collection, a job from another history -- is a
 `validation` failure (exit 64) rather than a `connection` one. It answers with the new
-workflow's id and name, what was requested step by step, Galaxy's record, and one sentence
-pointing at `get_workflow_input_template` and `invoke_workflow`. Galaxy's reply carries no
-step count; `number_of_steps` is null until it does.
+workflow's id and name, what was requested step by step and Galaxy's record. The steps are
+made in the order the datasets, the collections and then the jobs are listed in, which is all
+that tells the workflow's input slots apart: Galaxy does not name an input after its item, and
+does not check that a dataset hid is in the history.
 
 ### galaxy-mcp serves Streamable HTTP
 

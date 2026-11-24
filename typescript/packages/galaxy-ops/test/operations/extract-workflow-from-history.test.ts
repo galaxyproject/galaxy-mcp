@@ -77,30 +77,12 @@ describe("extract_workflow_from_history", () => {
 
     expect(out.workflow_id).toBe("wf42");
     expect(out.name).toBe("Per-sample QC");
-    // StoredWorkflow.to_dict carries no step count, so none is invented.
-    expect(out.number_of_steps).toBeNull();
     expect(out.steps_requested).toEqual({ tool_steps: 2, dataset_inputs: 2, collection_inputs: 1 });
     expect(out.history_id).toBe("h1");
     expect(out.job_ids).toEqual(["j1", "j2"]);
     expect(out.dataset_hids).toEqual([3, 4]);
     expect(out.collection_hids).toEqual([12]);
     expect(out.workflow).toEqual(STORED);
-    expect(out.next_steps).toBe(
-      "To run it on other inputs, call get_workflow_input_template with workflow_id 'wf42' to see its " +
-        "input slots, fill them with the new datasets or collections, and invoke_workflow -- once for " +
-        "every set of inputs, instead of re-running the tools one by one.",
-    );
-  });
-
-  it("reports a step count when Galaxy's reply has one", async () => {
-    const client = mockClient({
-      POST: () => ({ data: { ...STORED, number_of_steps: 3 }, response: { status: 200 } }),
-    });
-    const out = await extractWorkflowFromHistory(
-      { historyId: "h1", workflowName: "x", jobIds: ["j1"] },
-      ctxWith(client),
-    );
-    expect(out.number_of_steps).toBe(3);
   });
 
   it("sends empty lists for what was not named", () => {
@@ -113,7 +95,7 @@ describe("extract_workflow_from_history", () => {
     });
   });
 
-  it("words the message with what was requested and where to go next", async () => {
+  it("words the message with what was requested", async () => {
     const client = mockClient({ POST: () => ({ data: STORED, response: { status: 200 } }) });
     const out = await extractWorkflowFromHistory(
       { historyId: "h1", workflowName: "Per-sample QC", jobIds: ["j1", "j2"], datasetHids: [3] },
@@ -125,8 +107,7 @@ describe("extract_workflow_from_history", () => {
     }).message;
     expect(message).toBe(
       "Extracted workflow 'Per-sample QC' (id wf42) from history h1: 2 tool step(s) from the listed " +
-        "jobs, 1 dataset input(s) and 0 collection input(s). " +
-        out.next_steps,
+        "jobs, 1 dataset input(s) and 0 collection input(s).",
     );
   });
 

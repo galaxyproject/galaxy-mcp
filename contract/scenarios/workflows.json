@@ -1308,10 +1308,6 @@
               "equals": false
             },
             {
-              "path": "data.next_steps",
-              "contains": "get_workflow_input_template"
-            },
-            {
               "path": "count",
               "equals": null
             },

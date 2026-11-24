@@ -1,7 +1,7 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "python/src/galaxy_mcp/server.py",
-  "caseCount": 298,
+  "caseCount": 297,
   "failureCaseCount": 105,
   "cases": [
     {
@@ -2290,7 +2290,7 @@
     {
       "tool": "extract_workflow_from_history",
       "case": "jobs_and_inputs",
-      "note": "two jobs, a dataset and a collection named by hid, one of them as the digits a command line hands over; Galaxy's record carries no step count, so none is invented",
+      "note": "two jobs, a dataset and a collection named by hid, one of them as the digits a command line hands over",
       "outcome": "success",
       "input": {
         "history_id": "h0001",
@@ -2309,21 +2309,6 @@
       },
       "envelope": "extract_workflow_from_history/jobs_and_inputs.json",
       "replies": "extract_workflow_from_history/jobs_and_inputs.galaxy.json"
-    },
-    {
-      "tool": "extract_workflow_from_history",
-      "case": "jobs_only_with_a_step_count",
-      "note": "nothing named but a job, and a reply that does carry number_of_steps",
-      "outcome": "success",
-      "input": {
-        "history_id": "h0001",
-        "workflow_name": "One step",
-        "job_ids": [
-          "j0000001"
-        ]
-      },
-      "envelope": "extract_workflow_from_history/jobs_only_with_a_step_count.json",
-      "replies": "extract_workflow_from_history/jobs_only_with_a_step_count.galaxy.json"
     },
     {
       "tool": "get_page_revision",

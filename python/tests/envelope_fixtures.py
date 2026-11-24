@@ -4002,7 +4002,7 @@ def invocation_mutation_cases(add: AddCase) -> None:
         "extract_workflow_from_history",
         "jobs_and_inputs",
         "two jobs, a dataset and a collection named by hid, one of them as the digits a "
-        "command line hands over; Galaxy's record carries no step count, so none is invented",
+        "command line hands over",
         {
             "history_id": "h0001",
             "workflow_name": "Per-sample QC",
@@ -4018,20 +4018,6 @@ def invocation_mutation_cases(add: AddCase) -> None:
             collection_hids=[12],
         ),
         [route("/api/workflows", extracted, method="POST")],
-    )
-    add(
-        "extract_workflow_from_history",
-        "jobs_only_with_a_step_count",
-        "nothing named but a job, and a reply that does carry number_of_steps",
-        {"history_id": "h0001", "workflow_name": "One step", "job_ids": ["j0000001"]},
-        lambda: extract_workflow_from_history_fn("h0001", "One step", job_ids=["j0000001"]),
-        [
-            route(
-                "/api/workflows",
-                {**extracted, "name": "One step", "number_of_steps": 1},
-                method="POST",
-            )
-        ],
     )
 
 
@@ -4262,11 +4248,11 @@ INVOCATION_MISSING = (
 )
 # What StoredWorkflow.get_internal_version raises for an index past the last stored one.
 NO_SUCH_VERSION = '{"err_msg": "Version does not exist", "err_code": 400008}'
+# workflow/extract.py, extract_steps: a RequestParameterInvalidException, so a 400.
+NOT_A_COLLECTION = '{"err_msg": "hid 12 does not appear to be a collection", "err_code": 400008}'
 # What GET /api/tools/{id} says about an id the toolbox has at no version (v26.1.1
 # services/tools.py _get_tool). A version it lacks for an id it has is not an error
 # there: the newest installed version is served instead, and the refusal is ours.
-# workflow/extract.py, extract_steps: a RequestParameterInvalidException, so a 400.
-NOT_A_COLLECTION = '{"err_msg": "hid 12 does not appear to be a collection", "err_code": 400008}'
 NO_SUCH_TOOL = '{"err_msg": "Could not find tool with id \'nope\'.", "err_code": 404001}'
 
 

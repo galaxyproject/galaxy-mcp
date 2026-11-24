@@ -5006,6 +5006,11 @@ def extract_workflow_from_history(
     Each listed job and each listed input becomes one step; a job's outputs feed the later
     listed jobs that read them.
 
+    The steps are made in this order: the datasets in dataset_hids as listed, then the
+    collections in collection_hids, then the jobs. Galaxy names every dataset input "Input
+    Dataset" and every collection input "Input Dataset Collection", so with several inputs
+    that order is all that says which of the workflow's input slots came from which hid.
+
     Args:
         history_id: Encoded id of the history to extract from
         workflow_name: Name for the new stored workflow
@@ -5016,16 +5021,15 @@ def extract_workflow_from_history(
                       ids) of the datasets that become the workflow's dataset inputs -- the
                       ones the jobs read that another run would replace. A dataset a listed
                       job reads that is neither here nor produced by a listed job is left as
-                      an unconnected step input.
+                      an unconnected step input. Galaxy does not check these: a hid that is
+                      not in the history still becomes an input step.
         collection_hids: History item numbers (hid) of the dataset collections that become
                          the workflow's collection inputs; a hid that is not a collection is
                          refused by Galaxy.
 
     Returns:
         GalaxyResult whose data carries the new workflow's workflow_id and name,
-        number_of_steps (null unless Galaxy's reply has one), steps_requested, what was
-        named, Galaxy's record under workflow, and next_steps: call
-        get_workflow_input_template, then invoke_workflow.
+        steps_requested, what was named, and Galaxy's record under workflow.
     """
     # Checked before connecting, the way the other server checks before sending: Galaxy
     # would accept an extraction that names nothing and store a workflow with no steps.
@@ -5063,20 +5067,10 @@ def extract_workflow_from_history(
         workflow_id = str(workflow["id"])
         recorded_name = workflow.get("name")
         recorded_name = recorded_name if isinstance(recorded_name, str) else None
-        steps = workflow.get("number_of_steps")
-        # Galaxy answers with StoredWorkflow.to_dict, which carries no step count.
-        steps = steps if isinstance(steps, int) and not isinstance(steps, bool) else None
-        next_steps = (
-            "To run it on other inputs, call get_workflow_input_template with workflow_id "
-            f"'{workflow_id}' to see its input slots, fill them with the new datasets or "
-            "collections, and invoke_workflow -- once for every set of inputs, instead of "
-            "re-running the tools one by one."
-        )
         return GalaxyResult(
             data={
                 "workflow_id": workflow_id,
                 "name": recorded_name,
-                "number_of_steps": steps,
                 "steps_requested": {
                     "tool_steps": len(jobs),
                     "dataset_inputs": len(datasets),
@@ -5087,14 +5081,12 @@ def extract_workflow_from_history(
                 "dataset_hids": datasets,
                 "collection_hids": collections,
                 "workflow": workflow,
-                "next_steps": next_steps,
             },
             success=True,
             message=(
                 f"Extracted workflow '{recorded_name or workflow_id}' (id {workflow_id}) from "
                 f"history {history_id}: {len(jobs)} tool step(s) from the listed jobs, "
-                f"{len(datasets)} dataset input(s) and {len(collections)} collection "
-                f"input(s). {next_steps}"
+                f"{len(datasets)} dataset input(s) and {len(collections)} collection input(s)."
             ),
         )
     except Exception as e:

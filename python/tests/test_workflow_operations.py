@@ -1291,8 +1291,6 @@ class TestExtractWorkflowFromHistory:
         assert result.success is True
         assert result.data["workflow_id"] == "wf42"
         assert result.data["name"] == "Per-sample QC"
-        # StoredWorkflow.to_dict carries no step count, so none is invented.
-        assert result.data["number_of_steps"] is None
         assert result.data["steps_requested"] == {
             "tool_steps": 2,
             "dataset_inputs": 2,
@@ -1303,21 +1301,10 @@ class TestExtractWorkflowFromHistory:
         assert result.data["dataset_hids"] == [3, 4]
         assert result.data["collection_hids"] == [12]
         assert result.data["workflow"] == self.STORED
-        assert "get_workflow_input_template with workflow_id 'wf42'" in result.data["next_steps"]
         assert result.message == (
             "Extracted workflow 'Per-sample QC' (id wf42) from history h1: 2 tool step(s) "
-            "from the listed jobs, 2 dataset input(s) and 1 collection input(s). "
-            + result.data["next_steps"]
+            "from the listed jobs, 2 dataset input(s) and 1 collection input(s)."
         )
-
-    def test_reports_a_step_count_galaxy_sends(self, mock_galaxy_instance):
-        mock_galaxy_instance.workflows.extract_workflow_from_history.return_value = {
-            **self.STORED,
-            "number_of_steps": 3,
-        }
-        with patch.dict(galaxy_state, {"connected": True, "gi": mock_galaxy_instance}):
-            result = extract_workflow_from_history_fn("h1", "x", job_ids=["j1"])
-        assert result.data["number_of_steps"] == 3
 
     @pytest.mark.parametrize(
         ("kwargs", "sentence"),

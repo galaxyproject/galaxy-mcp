@@ -72,7 +72,7 @@
     },
     "ratchet": {
       "$comment": "The same down-only counter as above, counted over this section's rows alone. It starts at the number the first run found, because nobody had compared the two surfaces before this one: every row is a difference somebody now has to rule on, and the way the number comes down is a tool changing on one side or somebody reading a row and giving it a reviewed status.",
-      "unreviewedGaps": 53
+      "unreviewedGaps": 54
     },
     "divergences": [
       {
@@ -144,8 +144,8 @@
         "param": null,
         "kind": "missing-builtin-tool",
         "observed": "python=write (tag) params=[collection_hids type=array&items<anyOf<integer|string>> required=false default=none; dataset_hids type=array&items<anyOf<integer|string>> required=false default=none; history_id type=string required=true default=none; job_ids type=array&items<string> required=false default=none; workflow_name type=string required=true default=none]",
-        "status": "intentional",
-        "reason": "Only here, and on purpose: POST /api/workflows with from_history_id, which turns jobs already run in a history into a stored workflow so one chain of tools can be invoked on every remaining input instead of being re-submitted tool call by tool call. Galaxy's server can run and invoke but has no way to make a workflow out of what an agent has just done by hand. The form's dataset_ids and dataset_collection_ids are hids (workflow/extract.py reads them with int()), which is why the parameters here are dataset_hids and collection_hids; a built-in version would do well to keep that naming."
+        "status": "unreviewed-gap",
+        "reason": "Only here: POST /api/workflows with from_history_id, which turns jobs already run in a history into a stored workflow so one chain of tools can be invoked on every remaining input instead of being re-submitted tool call by tool call. Galaxy's server can run and invoke but has no way to make a workflow out of what an agent has just done by hand. The form's dataset_ids and dataset_collection_ids are hids (workflow/extract.py reads them with int()), which is why the parameters here are dataset_hids and collection_hids; a built-in version would do well to keep that naming."
       },
       {
         "tool": "get_dataset_details",
