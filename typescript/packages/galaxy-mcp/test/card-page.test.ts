@@ -124,7 +124,7 @@ describe("the card page", () => {
     expect(card.rows()).toHaveLength(10);
   });
 
-  it("leads a row with its tile when it has one, and names a state as Galaxy's interface does", async () => {
+  it("leads a row with its tile when it has one, and ends it with Galaxy's own word for its state", async () => {
     const card = runPage(cardPage({ ...spec, row: `(item) => ({ name: item.name, kind: kindOf(item.extension), meta: [], state: item.state })` }));
     await card.initialize();
     const rows = [
@@ -136,7 +136,7 @@ describe("the card page", () => {
     await card.open({}, rows, null);
     const texts = (className: string) => card.root.all((n) => n.className.split(" ")[0] === className).map((n) => n.text);
     expect(texts("kind")).toEqual(["FASTQ", "TABLE", "PNG", "DATA"]);
-    expect(texts("state")).toEqual(["ok", "running", "error", "setting metadata"]);
+    expect(texts("state")).toEqual(["ok", "running", "error", "setting_metadata"]);
     expect(card.root.all((n) => n.className === "state error")).toHaveLength(1);
 
     const plain = runCard();

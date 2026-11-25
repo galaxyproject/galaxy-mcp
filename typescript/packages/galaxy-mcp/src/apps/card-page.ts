@@ -34,8 +34,8 @@ export interface CardSpec {
    * `(item) => ({ name, number, kind, meta: [string], state, side: [string], detail: [[label, value]] })`.
    * `number` is the item's place in its history, shown before the name. `kind` is a few letters for
    * the tile that leads the row; rows without one have no tile. `meta` goes under the name; `state`,
-   * shown as Galaxy's own interface names it, and `side` go at the row's end. Rows without `detail`
-   * cannot be opened.
+   * Galaxy's own word for it, and `side` go at the row's end. Rows without `detail` cannot be
+   * opened.
    */
   row: string;
   empty: string;
@@ -236,15 +236,6 @@ export function cardPage(card: CardSpec): string {
     return format === "tabular" ? "TABLE" : format.slice(0, 6).toUpperCase() || "DATA";
   }
 
-  // Where Galaxy's history panel shows a state under another name than the API's
-  // (client/src/components/History/Content/model/states.ts in galaxyproject/galaxy).
-  const STATE_NAMES = { setting_metadata: "setting metadata", upload: "uploading", failed_metadata: "failed metadata" };
-
-  /** A state as Galaxy's own interface names it. */
-  function stateLabel(state) {
-    return Object.hasOwn(STATE_NAMES, state) ? STATE_NAMES[state] : state || "";
-  }
-
   /**
    * Galaxy's mark, drawn here because the page carries no image: two bars and a third that fades
    * out, as in the project's own logo (galaxyLogo.duotone.svg in galaxyproject/galaxy).
@@ -369,7 +360,7 @@ export function cardPage(card: CardSpec): string {
         row.kind ? el("span", { className: "kind", aria: { hidden: "true" } }, row.kind) : null,
         el("span", { className: "name" }, numbered(row), row.name, meta ? el("span", { className: "meta" }, meta) : null),
         el("span", { className: "side" },
-          row.state ? el("span", { className: "state " + row.state }, stateLabel(row.state)) : null,
+          row.state ? el("span", { className: "state " + row.state }, row.state) : null,
           ...(row.side || []).filter(Boolean).map((line) => el("span", {}, line)),
         ),
       ];

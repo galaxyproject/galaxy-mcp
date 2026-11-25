@@ -16,7 +16,7 @@ const paged = (items: string) => `(page) => ({
 })`;
 
 const datasetDetail = `[
-  ["Format", item.extension], ["State", stateLabel(item.state)], ["Size", bytes(item.file_size)],
+  ["Format", item.extension], ["State", item.state], ["Size", bytes(item.file_size)],
   ["Created", galaxyTime(item.create_time)], ["Updated", galaxyTime(item.update_time)],
   ["Deleted", item.deleted ? "yes" : ""], ["Hidden", item.visible === false ? "yes" : ""], ["ID", item.id],
 ]`;
