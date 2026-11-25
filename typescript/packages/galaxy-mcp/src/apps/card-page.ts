@@ -66,7 +66,7 @@ export function cardPage(card: CardSpec, galaxy?: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${card.title}</title>
 <style>
-  /* Quiet and neutral: colour only for what went wrong. */
+  /* Quiet and neutral: colour only for a state. */
   :root {
     color-scheme: light dark;
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "Helvetica Neue", sans-serif;
@@ -77,6 +77,8 @@ export function cardPage(card: CardSpec, galaxy?: string): string {
     --hover: light-dark(rgba(0, 0, 0, .04), rgba(255, 255, 255, .06));
     --line: light-dark(rgba(0, 0, 0, .08), rgba(255, 255, 255, .11));
     --strong: light-dark(rgba(0, 0, 0, .16), rgba(255, 255, 255, .2));
+    --good: light-dark(#248a3d, #30d158);
+    --busy: light-dark(#9a6700, #ffd60a);
     --bad: light-dark(#d70015, #ff453a);
   }
   * { box-sizing: border-box; }
@@ -105,6 +107,9 @@ export function cardPage(card: CardSpec, galaxy?: string): string {
   .meta { display: block; margin-top: 1px; overflow: hidden; color: var(--secondary); font-size: .75rem; font-weight: 400; letter-spacing: 0; text-overflow: ellipsis; }
   .side { flex: none; display: grid; gap: 1px; color: var(--secondary); font-size: .72rem; line-height: 1.25; text-align: right; overflow-wrap: anywhere; }
   .state { font-size: .76rem; font-weight: 500; }
+  /* A state in the colour Galaxy's history panel gives it: done, at work, failed. Waiting stays plain. */
+  .state.ok { color: var(--good); }
+  .state.running, .state.setting_metadata, .state.upload { color: var(--busy); }
   .state.error, .state.failed, .state.discarded { color: var(--bad); }
   p.error { margin-top: 10px; color: var(--bad); font-size: .82rem; line-height: 1.4; }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
