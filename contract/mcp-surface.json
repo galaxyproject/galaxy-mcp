@@ -1511,7 +1511,7 @@
           "inputs": {
             "additionalProperties": true,
             "type": "object",
-            "description": "Tool input parameters. Dataset inputs use this format:\n    {\"input_name\": {\"src\": \"hda\", \"id\": \"dataset_id\"}}\n    To run the tool once per element of a collection, map it over the\n    collection:\n    {\"input_name\": {\"batch\": true, \"values\": [{\"src\": \"hdca\", \"id\": \"collection_id\"}]}}"
+            "description": "Tool input parameters. Dataset inputs use this format:\n    {\"input_name\": {\"src\": \"hda\", \"id\": \"dataset_id\"}}\n    To run the tool once per element of a collection, map it over the\n    collection:\n    {\"input_name\": {\"batch\": true, \"values\": [{\"src\": \"hdca\", \"id\": \"collection_id\"}]}}\n    To map over the sub-collections of a nested collection instead, add\n    \"map_over_type\" next to \"src\" and \"id\", e.g. \"map_over_type\": \"paired\"\n    for each pair of a list:paired.\n    A parameter inside a section, conditional or repeat is one flat key\n    joined with \"|\", e.g. \"reference_source|ref_file\", not nested objects."
           },
           "tool_version": {
             "anyOf": [

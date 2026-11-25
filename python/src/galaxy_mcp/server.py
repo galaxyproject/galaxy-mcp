@@ -2126,6 +2126,11 @@ def run_tool(
                 To run the tool once per element of a collection, map it over the
                 collection:
                 {"input_name": {"batch": true, "values": [{"src": "hdca", "id": "collection_id"}]}}
+                To map over the sub-collections of a nested collection instead, add
+                "map_over_type" next to "src" and "id", e.g. "map_over_type": "paired"
+                for each pair of a list:paired.
+                A parameter inside a section, conditional or repeat is one flat key
+                joined with "|", e.g. "reference_source|ref_file", not nested objects.
         tool_version: Ask Galaxy for a specific version of the tool rather than
                       whichever one it would pick. It is a request, not a guarantee:
                       Galaxy falls back to an installed version when the one asked

@@ -64,7 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `run_tool` input description aligned with galaxy-ops: both list the batch form for
-  mapping over a collection, `{"input_name": {"batch": true, "values": [{"src": "hdca", "id": "..."}]}}`.
+  mapping over a collection, `{"input_name": {"batch": true, "values": [{"src": "hdca", "id": "..."}]}}`,
+  `map_over_type` for mapping over sub-collections, and flat `|`-joined keys for nested parameters.
 - `get_history_contents` asks Galaxy for one filtered, sorted window and the count it
   matched, instead of fetching the whole history; a page over the output budget is cut,
   and its `pagination` names where to continue. A failure quotes the contents URL with

@@ -35,9 +35,10 @@ const input = {
     "Tool input parameters in Galaxy's legacy format: dataset inputs as " +
       "{\"input_name\": {\"src\": \"hda\", \"id\": \"dataset_id\"}}; to run the tool once per " +
       "element of a collection, map it over the collection as {\"input_name\": {\"batch\": true, " +
-      "\"values\": [{\"src\": \"hdca\", \"id\": \"collection_id\"}]}}; a parameter inside a " +
-      "section, conditional or repeat as one flat key joined with '|', e.g. " +
-      "\"reference_source|ref_file\" -- not nested objects.",
+      "\"values\": [{\"src\": \"hdca\", \"id\": \"collection_id\"}]}}, adding \"map_over_type\" " +
+      "next to \"src\" and \"id\" to map over sub-collections, e.g. \"paired\" for each pair of " +
+      "a list:paired; a parameter inside a section, conditional or repeat as one flat key joined " +
+      "with '|', e.g. \"reference_source|ref_file\" -- not nested objects.",
   ),
   toolVersion: z.string().nullish().describe("Optional explicit tool version"),
 };
