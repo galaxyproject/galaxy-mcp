@@ -81,6 +81,9 @@ describe("MCP Apps cards", () => {
     const { tools } = await (await connect(true)).listTools();
     const visibility = (name: string) => (tools.find((t) => t.name === name)!._meta?.ui as { visibility?: string[] } | undefined)?.visibility;
     for (const name of ["get_histories", "get_history_contents", "show_datasets"]) expect(visibility(name), name).toBeUndefined();
+    // Those three are what the cards' own definitions name, which is where the server reads them from.
+    const named = [historiesCard, historyCard, datasetsCard].flatMap((card) => [card.pageTool, card.openTool]).filter(Boolean);
+    expect([...new Set(named)].sort()).toEqual(["get_histories", "get_history_contents", "show_datasets"]);
     for (const tool of tools.filter((t) => !["get_histories", "get_history_contents", "show_datasets"].includes(t.name))) {
       expect(visibility(tool.name), tool.name).toEqual(["model"]);
     }

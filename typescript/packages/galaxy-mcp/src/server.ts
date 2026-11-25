@@ -170,10 +170,15 @@ const readCards: { name: string; operation: string; card: CardSpec; guidance: st
 
 /**
  * With the cards on, a card's frame can call this server's tools. A card only pages through and
- * reopens these reads, so every other tool is kept to the model: a fault in a card's page can then
- * reach nothing that writes.
+ * reopens the reads its own definition names, so every other tool is kept to the model: a fault in
+ * a card's page can then reach nothing that writes. The list is read off the cards, so a card
+ * that pages through another tool is allowed that tool by being defined.
  */
-const CARD_CALLABLE = new Set(["get_histories", "get_history_contents", "show_datasets"]);
+const CARD_CALLABLE = new Set(
+  [...readCards.map(({ card }) => card), datasetsCard]
+    .flatMap((card) => [card.pageTool, card.openTool])
+    .filter((tool): tool is string => tool !== undefined),
+);
 
 /**
  * One MCP server over one Galaxy context. The context is passed in rather than built here so
