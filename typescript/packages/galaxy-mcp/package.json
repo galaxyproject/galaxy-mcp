@@ -26,7 +26,7 @@
   },
   "files": ["dist"],
   "scripts": {
-    "build": "tsc --noEmit && tsup && rollup -c rollup.dts.config.mjs",
+    "build": "tsc --noEmit && tsup && rollup -c rollup.dts.config.mjs && node scripts/check-library.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "parity:report": "tsx test/parity/generate.ts",
