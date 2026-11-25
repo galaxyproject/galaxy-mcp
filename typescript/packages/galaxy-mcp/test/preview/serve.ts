@@ -28,7 +28,7 @@ createServer(async (request, response) => {
   if (request.method === "GET" && path === "/") {
     send(200, "text/html; charset=utf-8", hostPage(Object.entries(cards).map(([name, { label }]) => ({ name, label, ...openings[name]! }))));
   } else if (request.method === "GET" && shown) {
-    send(200, "text/html; charset=utf-8", cardPage(shown.card));
+    send(200, "text/html; charset=utf-8", cardPage(shown.card, "usegalaxy.example"));
   } else if (request.method === "POST" && path === "/call") {
     let body = "";
     for await (const chunk of request) body += chunk;
