@@ -167,14 +167,14 @@ describe("the history card", () => {
     const card = runCard(cardPage(historyCard));
     await card.initialize();
     await card.open({ history_id: "h1", visible: false, order: "create_time-dsc" }, { history_id: "h1", contents }, { total_items: 2, has_next: false, next_offset: null });
-    expect(card.scope()).toBe("Browsing history, without deleted items, sorted by create_time-dsc · Showing 2 of 2");
+    expect(card.scope()).toBe("Including hidden items · Sorted by creation time, newest first · Showing 2 of 2");
   });
 
   it("opens datasets, and names a collection's type without opening it", async () => {
     const card = runCard(cardPage(historyCard));
     await card.initialize();
     await card.open({ history_id: "h1" }, { history_id: "h1", contents }, { total_items: 2, has_next: false, next_offset: null });
-    expect(card.scope()).toBe("Browsing history, without deleted or hidden items · Showing 2 of 2");
+    expect(card.scope()).toBe("Showing 2 of 2");
     expect(card.rows()).toEqual(["reads.fastq", "samples"]);
     expect(card.numbers()).toEqual(["1:", "2:"]);
     expect(card.root.all((n) => n.className === "kind").map((n) => n.text)).toEqual(["FASTQ", "SET"]);
@@ -195,7 +195,7 @@ describe("the history card", () => {
     await card.deliver({ method: "ui/notifications/tool-result", params: shown });
     expect(card.rows()).toEqual(["reads.fastq", "samples"]);
     expect(card.numbers()).toEqual(["1:", "2:"]);
-    expect(card.scope()).toBe("Browsing history, without deleted or hidden items · Showing 2 of 2");
+    expect(card.scope()).toBe("Showing 2 of 2");
   });
 
   it("pages within the same history and filters", async () => {

@@ -50,11 +50,16 @@ export const historyCard: CardSpec = {
   keep: ["history_id", "deleted", "visible", "order"],
   read: `(page, kept) => ({
     ...(${paged("page.data?.contents")})(page),
-    // get_history_contents leaves deleted and hidden items out unless asked for them.
-    scope: ["Browsing history",
-      [kept.deleted ? "" : "deleted", kept.visible === false ? "" : "hidden"].filter(Boolean).join(" or ").replace(/^(.+)$/, "without $1 items"),
-      kept.order && kept.order !== "hid-asc" ? "sorted by " + kept.order : "",
-    ].filter(Boolean).join(", "),
+    // Said only where the list is not the ordinary one: get_history_contents leaves deleted and
+    // hidden items out unless asked for them, and the rows' numbers show an order by number.
+    scope: [
+      [kept.deleted ? "deleted" : "", kept.visible === false ? "hidden" : ""].filter(Boolean).join(" and ").replace(/^(.+)$/, "Including $1 items"),
+      (([key, direction]) => ({
+        name: "Sorted by name" + (direction === "dsc" ? ", Z to A" : ""),
+        create_time: "Sorted by creation time, " + (direction === "dsc" ? "newest first" : "oldest first"),
+        update_time: "Sorted by update time, " + (direction === "dsc" ? "newest first" : "oldest first"),
+      })[key])(String(kept.order || "").split("-")),
+    ].filter(Boolean).join(" \\u00b7 "),
   })`,
   row: `(item) => item.history_content_type === "dataset_collection"
     ? {
