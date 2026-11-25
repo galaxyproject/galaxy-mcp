@@ -23,6 +23,7 @@
     "build": "tsup",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "cards:preview": "tsx watch test/preview/serve.ts",
     "parity:report": "tsx test/parity/generate.ts",
     "parity:report:print": "tsx test/parity/generate.ts --stdout"
   },
