@@ -44,7 +44,21 @@ export interface CardSpec {
 const STEP = 5;
 const FETCH = 20;
 
-export function cardPage(card: CardSpec): string {
+/**
+ * A Galaxy's address as a card shows it: the host, and any path the Galaxy is served under.
+ * Nothing for an address that is not a URL, which a card then leaves out.
+ */
+export function galaxyLabel(baseUrl: string | undefined): string | undefined {
+  try {
+    const url = new URL(baseUrl ?? "");
+    return url.host + url.pathname.replace(/\/+$/, "");
+  } catch {
+    return undefined;
+  }
+}
+
+/** The page for one card. `galaxy` names the Galaxy it shows, under its title. */
+export function cardPage(card: CardSpec, galaxy?: string): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -75,9 +89,9 @@ export function cardPage(card: CardSpec): string {
   .mark svg { display: block; width: 32px; height: auto; }
   .heading { display: grid; min-width: 0; }
   .title { font-size: 1.12rem; font-weight: 600; letter-spacing: -.025em; line-height: 1.25; overflow-wrap: anywhere; }
-  .scope { margin-top: 4px; color: var(--secondary); font-size: .76rem; }
+  .origin { margin-top: 4px; color: var(--secondary); font-size: .76rem; overflow-wrap: anywhere; }
   .header-actions { display: flex; flex: none; align-items: center; gap: 8px; }
-  .message { margin-top: 14px; color: var(--secondary); font-size: .86rem; line-height: 1.45; }
+  .status, .message { margin-top: 14px; color: var(--secondary); font-size: .86rem; line-height: 1.45; }
   .note { margin-top: 14px; padding: 10px 12px; border-radius: 10px; background: var(--row); font-size: .86rem; line-height: 1.45; }
   .note b { margin-right: 8px; font-weight: 600; }
   ul { margin: 16px 0 0; padding: 0; border-top: 1px solid var(--line); list-style: none; }
@@ -122,6 +136,7 @@ export function cardPage(card: CardSpec): string {
   const OPEN_TOOL = ${JSON.stringify(card.openTool ?? null)};
   const KEEP = ${JSON.stringify(card.keep)};
   const TITLE = ${JSON.stringify(card.title)};
+  const GALAXY = ${JSON.stringify(galaxy ?? null)};
   const EMPTY = ${JSON.stringify(card.empty)};
   const read = ${card.read};
   const rowOf = ${card.row};
@@ -330,7 +345,7 @@ export function cardPage(card: CardSpec): string {
         mark(),
         el("div", { className: "heading" },
           el("span", { className: "title" }, TITLE),
-          el("span", { className: "scope" }, view ? view.scope : failure ? "Could not load" : "Waiting for Galaxy\\u2026"),
+          GALAXY ? el("span", { className: "origin" }, GALAXY) : null,
         ),
       ),
       el("div", { className: "header-actions" },
@@ -340,8 +355,11 @@ export function cardPage(card: CardSpec): string {
         el("button", { type: "button", className: "link", aria: { expanded: String(!collapsed) }, onclick: () => { collapsed = !collapsed; render(); } }, collapsed ? "Expand" : "Collapse"),
       ),
     );
-    if (collapsed) return root.replaceChildren(header);
-    root.replaceChildren(header, ...(opened === null ? list() : detail()).filter(Boolean));
+    // What is shown, and how much of it: kept when the card is collapsed.
+    const status = el("p", { className: "status" },
+      view ? [view.scope, counts()].filter(Boolean).join(" \\u00b7 ") : failure ? "Could not load" : "Waiting for Galaxy\\u2026");
+    if (collapsed) return root.replaceChildren(header, status);
+    root.replaceChildren(header, status, ...(opened === null ? list() : detail()).filter(Boolean));
   }
 
   function list() {
@@ -374,7 +392,6 @@ export function cardPage(card: CardSpec): string {
       more || failure ? el("button", { type: "button", className: "link", disabled: loading, onclick: showMore }, loading ? "Loading\\u2026" : failure ? "Retry" : "Show more") : null,
     ].filter(Boolean);
     return [
-      rows.length ? el("p", { className: "message" }, counts()) : null,
       view.caption ? el("p", { className: "note" }, el("b", {}, "Assistant note"), view.caption) : null,
       rows.length ? el("ul", {}, ...rows) : el("p", { className: "message" }, EMPTY),
       failure ? el("p", { className: "error" }, failure) : null,
@@ -428,8 +445,8 @@ export function cardPage(card: CardSpec): string {
 }
 
 /** Serve a card's page. A tool shows it by naming its URI in `_meta.ui.resourceUri`. */
-export function registerCard(server: McpServer, name: string, card: CardSpec): void {
-  const html = cardPage(card);
+export function registerCard(server: McpServer, name: string, card: CardSpec, galaxy?: string): void {
+  const html = cardPage(card, galaxy);
   const meta = { ui: { prefersBorder: false } };
   server.registerResource(name, card.uri, { title: card.title, mimeType: MIME_TYPE, _meta: meta }, (uri) => ({
     contents: [{ uri: uri.href, mimeType: MIME_TYPE, text: html, _meta: meta }],

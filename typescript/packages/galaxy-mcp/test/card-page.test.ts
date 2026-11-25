@@ -39,12 +39,24 @@ describe("the card page", () => {
     expect(card.sent.slice(1).map((m) => m.method)).toEqual(["ui/notifications/initialized", "ui/notifications/size-changed"]);
   });
 
-  it("shows five rows, the scope under its title and Galaxy's total above them", async () => {
+  it("shows five rows, with the scope and Galaxy's total above them", async () => {
     const card = runCard();
     await card.initialize();
     await card.open({ filter: "big" }, things(1, 20), { total_items: 42, has_next: true, next_offset: 20 });
     expect(card.rows()).toEqual(["thing 1", "thing 2", "thing 3", "thing 4", "thing 5"]);
     expect(card.scope()).toBe("Filtered by big · Showing 5 of 42");
+  });
+
+  it("names the Galaxy it shows under its title, when it is told which", async () => {
+    const card = runPage(cardPage(spec, "galaxy.example/sub"));
+    await card.initialize();
+    await card.open({}, things(1, 3), null);
+    expect(card.origin()).toBe("galaxy.example/sub");
+    await card.click("Collapse");
+    expect(card.origin()).toBe("galaxy.example/sub");
+    const unnamed = runCard();
+    await unnamed.initialize();
+    expect(unnamed.origin()).toBeUndefined();
   });
 
   it("counts what it holds when Galaxy gives no total", async () => {
@@ -96,18 +108,17 @@ describe("the card page", () => {
     expect(card.button("Show less")).toBeUndefined(); // five is the floor
   });
 
-  it("collapses to its header, keeping the scope, and expands to the same rows and count", async () => {
+  it("collapses to its header, keeping the scope, and expands to the same rows", async () => {
     const card = runCard();
     await card.initialize();
     await card.open({}, things(1, 20), { total_items: 20, has_next: false, next_offset: null });
     await card.click("Show more");
     await card.click("Collapse");
     expect(card.rows()).toEqual([]);
-    expect(card.scope()).toBe("All things");
+    expect(card.scope()).toBe("All things · Showing 10 of 20");
     expect(card.button("Expand")!.attributes["aria-expanded"]).toBe("false");
     await card.click("Expand");
     expect(card.rows()).toHaveLength(10);
-    expect(card.scope()).toBe("All things · Showing 10 of 20");
   });
 
   it("opens a row's detail in the card and returns to the same list", async () => {

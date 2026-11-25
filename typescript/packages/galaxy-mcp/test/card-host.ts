@@ -90,8 +90,9 @@ export function runCard(html: string) {
     // A row's name, without the number before it or the line under it.
     rows: () => root.all((n) => n.tag === "li").map((li) => li.all((n) => n.className === "name")[0]!.children.find((child) => typeof child === "string")),
     numbers: () => root.all((n) => n.className === "hid").map((n) => n.text),
-    // What the card says it is showing: the scope under its title, then the count above its rows.
-    scope: () => root.all((n) => n.className === "scope" || (n.className === "message" && n.text.startsWith("Showing"))).map((n) => n.text).join(" \u00b7 "),
+    // What the card says it is showing and how much of it: the line under its header.
+    scope: () => root.all((n) => n.className === "status")[0]?.text ?? "",
+    origin: () => root.all((n) => n.className === "origin")[0]?.text,
   };
   return card;
 }

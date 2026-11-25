@@ -9,7 +9,7 @@ import {
   runWithEnvelope,
   type GalaxyContext,
 } from "@galaxyproject/galaxy-ops";
-import { registerCard, type CardSpec } from "./apps/card-page.js";
+import { galaxyLabel, registerCard, type CardSpec } from "./apps/card-page.js";
 import { datasetsCard, historiesCard, historyCard } from "./apps/cards.js";
 import { LaxArgumentsTransport } from "./lax-transport.js";
 import { inWireNames, toOperationInput, wireShape } from "./wire-names.js";
@@ -203,11 +203,11 @@ export function buildServer(ctx: GalaxyContext, { allowLocalFiles = true, apps =
   for (const op of allOperations) register(op.name, op);
   if (apps) {
     for (const { name, operation, card, guidance } of readCards) {
-      registerCard(server, name, card);
+      registerCard(server, name, card, galaxyLabel(ctx.baseUrl));
       const op = allOperations.find((candidate) => candidate.name === operation)!;
       register(name, op, { guidance, _meta: { ui: { resourceUri: card.uri } } });
     }
-    registerCard(server, "show_datasets", datasetsCard);
+    registerCard(server, "show_datasets", datasetsCard, galaxyLabel(ctx.baseUrl));
     shapes.set("show_datasets", showDatasetsShape);
     server.registerTool(
       "show_datasets",

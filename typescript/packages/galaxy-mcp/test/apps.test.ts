@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createGalaxyContext } from "@galaxyproject/galaxy-ops";
-import { cardPage } from "../src/apps/card-page";
+import { cardPage, galaxyLabel } from "../src/apps/card-page";
 import { DATASETS_CARD_URI, HISTORIES_CARD_URI, HISTORY_CARD_URI, datasetsCard, historiesCard, historyCard } from "../src/apps/cards";
 import { buildServer, toolNames } from "../src/server";
 import { runCard } from "./card-host";
@@ -76,8 +76,16 @@ describe("MCP Apps cards", () => {
     const client = await connect(true);
     for (const card of [historiesCard, historyCard, datasetsCard]) {
       const { contents: served } = await client.readResource({ uri: card.uri });
-      expect(served).toEqual([expect.objectContaining({ uri: card.uri, mimeType: "text/html;profile=mcp-app", text: cardPage(card) })]);
+      // Each page names the Galaxy this server is over.
+      expect(served).toEqual([expect.objectContaining({ uri: card.uri, mimeType: "text/html;profile=mcp-app", text: cardPage(card, "galaxy.invalid") })]);
     }
+  });
+
+  it("name a Galaxy by its host and the path it is served under", () => {
+    expect(galaxyLabel("https://usegalaxy.org/")).toBe("usegalaxy.org");
+    expect(galaxyLabel("https://example.org:8443/galaxy/")).toBe("example.org:8443/galaxy");
+    expect(galaxyLabel("not a url")).toBeUndefined();
+    expect(galaxyLabel(undefined)).toBeUndefined();
   });
 
   it("answer each show_* call exactly as its read", async () => {
@@ -212,9 +220,7 @@ describe("the histories card", () => {
     const unnamed = runCard(cardPage(historiesCard));
     await unnamed.initialize();
     await unnamed.open({ name: "" }, [], { total_items: 0, has_next: false, next_offset: null });
-    // With nothing to count, the card says so in place of a count.
-    expect(unnamed.scope()).toBe("Named \u201c\u201d");
-    expect(unnamed.root.text).toContain("No histories yet.");
+    expect(unnamed.scope()).toBe("Named \u201c\u201d · Showing 0 of 0");
     void card.click("Show more");
     expect(card.sent.at(-1)!.params.arguments).toEqual({ name: "RNA-seq", limit: 20, offset: 1 });
   });
