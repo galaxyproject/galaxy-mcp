@@ -33,7 +33,9 @@ const input = {
   historyId: z.string().describe("Encoded history id to run in"),
   inputs: jsonObject().describe(
     "Tool input parameters in Galaxy's legacy format: dataset inputs as " +
-      "{\"input_name\": {\"src\": \"hda\", \"id\": \"dataset_id\"}}; a parameter inside a " +
+      "{\"input_name\": {\"src\": \"hda\", \"id\": \"dataset_id\"}}; to run the tool once per " +
+      "element of a collection, map it over the collection as {\"input_name\": {\"batch\": true, " +
+      "\"values\": [{\"src\": \"hdca\", \"id\": \"collection_id\"}]}}; a parameter inside a " +
       "section, conditional or repeat as one flat key joined with '|', e.g. " +
       "\"reference_source|ref_file\" -- not nested objects.",
   ),

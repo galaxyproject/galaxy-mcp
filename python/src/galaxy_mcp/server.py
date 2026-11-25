@@ -2123,6 +2123,9 @@ def run_tool(
                  - Toolshed: "toolshed.g2.bx.psu.edu/repos/iuc/fastqc/fastqc/0.73"
         inputs: Tool input parameters. Dataset inputs use this format:
                 {"input_name": {"src": "hda", "id": "dataset_id"}}
+                To run the tool once per element of a collection, map it over the
+                collection:
+                {"input_name": {"batch": true, "values": [{"src": "hdca", "id": "collection_id"}]}}
         tool_version: Ask Galaxy for a specific version of the tool rather than
                       whichever one it would pick. It is a request, not a guarantee:
                       Galaxy falls back to an installed version when the one asked

@@ -1511,7 +1511,7 @@
           "inputs": {
             "additionalProperties": true,
             "type": "object",
-            "description": "Tool input parameters. Dataset inputs use this format:\n    {\"input_name\": {\"src\": \"hda\", \"id\": \"dataset_id\"}}"
+            "description": "Tool input parameters. Dataset inputs use this format:\n    {\"input_name\": {\"src\": \"hda\", \"id\": \"dataset_id\"}}\n    To run the tool once per element of a collection, map it over the\n    collection:\n    {\"input_name\": {\"batch\": true, \"values\": [{\"src\": \"hdca\", \"id\": \"collection_id\"}]}}"
           },
           "tool_version": {
             "anyOf": [
