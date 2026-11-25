@@ -16,7 +16,7 @@ const paged = (items: string) => `(page) => ({
 })`;
 
 const datasetDetail = `[
-  ["Format", item.extension], ["State", item.state], ["Size", bytes(item.file_size)],
+  ["Format", item.extension], ["State", stateLabel(item.state)], ["Size", bytes(item.file_size)],
   ["Created", galaxyTime(item.create_time)], ["Updated", galaxyTime(item.update_time)],
   ["Deleted", item.deleted ? "yes" : ""], ["Hidden", item.visible === false ? "yes" : ""], ["ID", item.id],
 ]`;
@@ -33,9 +33,10 @@ export const historiesCard: CardSpec = {
   })`,
   row: `(history) => ({
     name: history.name || "Unnamed history",
-    meta: [
+    meta: [],
+    side: [
+      galaxyDate(history.update_time) && "Updated " + galaxyDate(history.update_time),
       typeof history.count === "number" ? history.count + (history.count === 1 ? " item" : " items") : "",
-      galaxyTime(history.update_time) && "updated " + galaxyTime(history.update_time),
     ],
   })`,
   empty: "No histories yet.",
@@ -57,12 +58,16 @@ export const historyCard: CardSpec = {
   })`,
   row: `(item) => item.history_content_type === "dataset_collection"
     ? {
-        name: item.hid + ": " + (item.name || "Unnamed collection"),
+        name: item.name || "Unnamed collection",
+        number: item.hid,
+        kind: "SET",
         meta: [(item.collection_type || "collection") + (typeof item.element_count === "number" ? ", " + item.element_count + " elements" : "")],
         state: item.populated_state && item.populated_state !== "ok" ? item.populated_state : "",
       }
     : {
-        name: item.hid + ": " + (item.name || "Unnamed dataset"),
+        name: item.name || "Unnamed dataset",
+        number: item.hid,
+        kind: kindOf(item.extension),
         meta: [item.extension, item.deleted ? "deleted" : "", item.visible === false ? "hidden" : ""],
         state: item.state,
         detail: ${datasetDetail},
@@ -88,10 +93,11 @@ export const datasetsCard: CardSpec = {
   }`,
   row: `(entry) => {
     const item = entry.dataset || {};
-    const name = item.hid !== undefined ? item.hid + ": " + (item.name || "Unnamed dataset") : entry.id;
-    if (entry.status === "unavailable") return { name, meta: ["Not available in this history"], state: "" };
-    if (entry.status === "inaccessible") return { name, meta: ["You do not have access to this dataset"], state: "" };
-    return { name: name + (item.name_truncated ? "\\u2026" : ""), meta: [item.extension, bytes(item.file_size)], state: item.state, detail: ${datasetDetail} };
+    const name = item.hid !== undefined ? item.name || "Unnamed dataset" : entry.id;
+    // A dash where the datatype would be, so these rows line up with the ones Galaxy returned.
+    if (entry.status === "unavailable") return { name, number: item.hid, kind: "\\u2013", meta: ["Not available in this history"], state: "" };
+    if (entry.status === "inaccessible") return { name, number: item.hid, kind: "\\u2013", meta: ["You do not have access to this dataset"], state: "" };
+    return { name: name + (item.name_truncated ? "\\u2026" : ""), number: item.hid, kind: kindOf(item.extension), meta: [item.extension, bytes(item.file_size)], state: item.state, detail: ${datasetDetail} };
   }`,
   empty: "No datasets were selected.",
 };

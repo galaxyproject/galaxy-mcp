@@ -75,7 +75,8 @@ With `GALAXY_MCP_APPS=1` (or `buildServer(ctx, { apps: true })`), `galaxy-mcp` s
 - `show_datasets` shows only the datasets an agent chose.
 
 Each card shows five rows and can show more, show less and collapse, and its rows open in
-place. A card pages through the read tool with the arguments it was opened with.
+place. A dataset's row leads with its number in the history and a tile for its datatype. A card
+pages through the read tool with the arguments it was opened with.
 `@galaxyproject/galaxy-ops` exports the read behind `show_datasets` as `getSelectedDatasets`.
 That is a helper, not an operation, so it adds no tool. Cards are off by default, so the tool
 list and the parity report are unchanged unless they are turned on.

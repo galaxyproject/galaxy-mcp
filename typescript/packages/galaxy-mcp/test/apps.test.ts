@@ -145,7 +145,9 @@ describe("the datasets card", () => {
     await card.open({ history_id: "h1" }, { history_id: "h1", selected, available: 1, caption: "Inputs for the next step" }, null);
     expect(card.scope()).toBe("Chosen by the assistant \u00b7 2 unavailable \u00b7 Showing 3 of 3");
     expect(card.root.text).toContain("Assistant noteInputs for the next step");
-    expect(card.rows()).toEqual(["5: counts.tsv", "gone", "9: private.bam"]);
+    expect(card.rows()).toEqual(["counts.tsv", "gone", "private.bam"]);
+    // Galaxy's number for the datasets it returned a record of; the one it did not has none.
+    expect(card.numbers()).toEqual(["5:", "9:"]);
     expect(card.root.text).toContain("Not available in this history");
     expect(card.root.text).toContain("You do not have access to this dataset");
     expect(card.button("Show more")).toBeUndefined();
@@ -165,7 +167,9 @@ describe("the history card", () => {
     await card.initialize();
     await card.open({ history_id: "h1" }, { history_id: "h1", contents }, { total_items: 2, has_next: false, next_offset: null });
     expect(card.scope()).toBe("Browsing history, without deleted or hidden items · Showing 2 of 2");
-    expect(card.rows()).toEqual(["1: reads.fastq", "2: samples"]);
+    expect(card.rows()).toEqual(["reads.fastq", "samples"]);
+    expect(card.numbers()).toEqual(["1:", "2:"]);
+    expect(card.root.all((n) => n.className === "kind").map((n) => n.text)).toEqual(["FASTQ", "SET"]);
     expect(card.root.text).toContain("list, 3 elements");
     const openable = card.root.all((n) => n.tag === "button" && n.className === "row");
     expect(openable).toHaveLength(1);
@@ -181,7 +185,8 @@ describe("the history card", () => {
     await card.initialize();
     await card.deliver({ method: "ui/notifications/tool-input", params: { arguments: args } });
     await card.deliver({ method: "ui/notifications/tool-result", params: shown });
-    expect(card.rows()).toEqual(["1: reads.fastq", "2: samples"]);
+    expect(card.rows()).toEqual(["reads.fastq", "samples"]);
+    expect(card.numbers()).toEqual(["1:", "2:"]);
     expect(card.scope()).toBe("Browsing history, without deleted or hidden items · Showing 2 of 2");
   });
 
@@ -207,7 +212,9 @@ describe("the histories card", () => {
     const unnamed = runCard(cardPage(historiesCard));
     await unnamed.initialize();
     await unnamed.open({ name: "" }, [], { total_items: 0, has_next: false, next_offset: null });
-    expect(unnamed.scope()).toBe("Named \u201c\u201d · Showing 0 of 0");
+    // With nothing to count, the card says so in place of a count.
+    expect(unnamed.scope()).toBe("Named \u201c\u201d");
+    expect(unnamed.root.text).toContain("No histories yet.");
     void card.click("Show more");
     expect(card.sent.at(-1)!.params.arguments).toEqual({ name: "RNA-seq", limit: 20, offset: 1 });
   });
