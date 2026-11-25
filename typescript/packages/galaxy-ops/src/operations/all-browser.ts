@@ -12,6 +12,7 @@ import "./get-collection-details";
 import "./get-history-contents";
 import "./list-workflows";
 import "./get-workflow-details";
+import "./extract-workflow-from-history";
 import "./get-tool-details";
 import "./search-tools-by-name";
 import "./get-tool-panel";
