@@ -145,6 +145,12 @@ also adds `representation_errors` and `representation_status` to a user tool; a 
 does not send them, so `UserToolRecord` keeps both optional rather than promising fields that
 can be missing at runtime.
 
+### `run_tool` input description aligned with galaxy-mcp
+
+The `inputs` description of `run_tool` lists the batch form for mapping over a collection,
+`{"input_name": {"batch": true, "values": [{"src": "hdca", "id": "collection_id"}]}}`, and
+`map_over_type` for mapping over sub-collections, in both galaxy-ops and galaxy-mcp.
+
 ## 0.5.0 (2026-10-20)
 
 ### galaxy-mcp on `@modelcontextprotocol/sdk` 1.32 (#190)
