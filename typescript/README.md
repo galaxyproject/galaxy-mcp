@@ -509,13 +509,8 @@ pnpm -r test         # vitest
 pnpm depcruise       # enforce the surface -> core import boundary
 pnpm -r build        # tsup -> dist/
 pnpm parity:report   # regenerate PARITY.md (see below)
-pnpm cards:preview   # the MCP Apps cards in a browser, on sample data
+pnpm cards:preview   # the MCP Apps cards in a browser, on sample data (no host, no Galaxy)
 ```
-
-`pnpm cards:preview` serves the cards at http://127.0.0.1:5179, framed by a page that plays the
-host and fed made-up results, so a change to a card can be looked at without an MCP host or a
-Galaxy. The page switches between light and dark and between widths. The sample includes every
-state a card treats differently, and names written as HTML to check that a card shows them as text.
 
 ### Parity with the Python server
 
