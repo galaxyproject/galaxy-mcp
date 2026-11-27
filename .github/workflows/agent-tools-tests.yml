@@ -64,6 +64,12 @@ jobs:
       - name: Type check
         run: pnpm -r typecheck
 
+      - name: Lint (ESLint)
+        run: pnpm lint
+
+      - name: Format check (Prettier)
+        run: pnpm format:check
+
       - name: Test
         run: pnpm -r test
 

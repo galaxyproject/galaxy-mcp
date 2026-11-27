@@ -115,7 +115,8 @@ function keyringService(baseUrl: BaseUrl): string {
  * write may have created the item with an empty secret, and the retry replaces it (`set` creates
  * with replace=true), so no empty item is left.
  */
-const TRANSIENT_SESSION_ERROR = /Client public key size is invalid|Crypto error: Unpad Error|Can't find session/i;
+const TRANSIENT_SESSION_ERROR =
+  /Client public key size is invalid|Crypto error: Unpad Error|Can't find session/i;
 
 /**
  * `dbus-secret-service` gives every D-Bus call 2 s (`new_proxy`). A busy gnome-keyring can store
@@ -340,6 +341,7 @@ const CHILD_ENV_KEYS = [
   "SYSTEMROOT",
 ];
 
+// eslint-disable-next-line no-restricted-properties -- the default parameter is the real environment; callers pass `deps.env`
 export function childEnv(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {};
   for (const k of CHILD_ENV_KEYS) if (source[k] !== undefined) out[k] = source[k];

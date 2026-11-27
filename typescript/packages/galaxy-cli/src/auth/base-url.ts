@@ -40,6 +40,7 @@ import { AuthError, type BaseUrl } from "./types";
  * machine.
  */
 export function normalizeBaseUrl(input: string): BaseUrl {
+  // eslint-disable-next-line no-control-regex -- control characters are exactly what this refuses
   if (/[\u0000-\u001f\u007f-\u009f]/.test(input))
     throw new AuthError("usage", "The Galaxy URL contains a control character.");
   const raw = input.trim();
@@ -86,7 +87,7 @@ export function normalizeBaseUrl(input: string): BaseUrl {
  * `127.0.0.1.example.org` or `localhost.example.org` is somebody else's server and would
  * otherwise be trusted with a token in the clear. `0.0.0.0` is not loopback either.
  */
-function isLoopback(hostname: string): boolean {
+export function isLoopback(hostname: string): boolean {
   const h = hostname.replace(/^\[|\]$/g, "");
   return h === "localhost" || h === "::1" || /^127(?:\.\d{1,3}){3}$/.test(h);
 }
