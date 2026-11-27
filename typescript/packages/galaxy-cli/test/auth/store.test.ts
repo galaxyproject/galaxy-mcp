@@ -378,8 +378,25 @@ describe("reading a login", () => {
     kr.data.clear();
     await expect(store.get(HOST)).rejects.toMatchObject({
       kind: "not_logged_in",
-      message: expect.stringContaining("keyring has none") as string,
+      message: expect.stringContaining("did not return it") as string,
     });
+  });
+
+  // A closed KDE wallet answers "no entry" rather than an error. The message must say the keyring
+  // may be locked, and the record must stay, so that unlocking and retrying works.
+  it("names a locked or closed keyring when it returns nothing, and keeps the record", async () => {
+    await store.put(fakeLogin());
+    const before = await readFile(file.path, "utf8");
+    const saved = new Map(kr.data);
+    kr.data.clear(); // what a closed wallet looks like from here
+    await expect(store.get(HOST)).rejects.toMatchObject({
+      kind: "not_logged_in",
+      message: expect.stringMatching(/locked or closed.*unlock it and retry/s) as string,
+    });
+    expect(await readFile(file.path, "utf8")).toBe(before);
+    // Unlocked again: the same record works.
+    for (const [k, v] of saved) kr.data.set(k, v);
+    expect((await store.get(HOST))?.token).toBe(FAKE_TOKEN);
   });
 
   it("explains an unreachable keyring instead of returning a login without a token", async () => {
