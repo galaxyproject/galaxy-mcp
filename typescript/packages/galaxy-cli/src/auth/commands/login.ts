@@ -1,9 +1,11 @@
+import { homedir } from "node:os";
 import { normalizeBaseUrl } from "../base-url";
 import { InputCancelled, isRawCapable, readPiped, readSecret } from "../stdin";
 import { AuthError, type AuthDeps, type BaseUrl, type StoredLogin, type WhoAmI } from "../types";
 import { fail, hostOf, sanitize } from "./common";
 import { show } from "../file-store";
 import { untilAborted } from "../abort";
+import { configDir, fileAccessPhrase } from "../paths";
 import { NoLoginHostError } from "../host";
 
 export interface LoginOptions {
@@ -49,8 +51,8 @@ function adminWarning(host: string, who: WhoAmI): string | undefined {
     : undefined;
 }
 
-function storedMessage(storage: "keyring" | "file"): string {
-  const where = storage === "keyring" ? "the system keyring" : "a file readable only by you";
+function storedMessage(storage: "keyring" | "file", dir: string): string {
+  const where = storage === "keyring" ? "the system keyring" : `a file ${fileAccessPhrase(dir)}`;
   return `✓ Token stored in ${where} (no expiry)`;
 }
 
@@ -167,7 +169,7 @@ export async function loginCommand(opts: LoginOptions, deps: AuthDeps): Promise<
     });
     if (put.warning) err(`! ${put.warning}`);
     err(`✓ Logged in to ${host} as ${sanitize(who.username)}`);
-    err(storedMessage(put.storage));
+    err(storedMessage(put.storage, configDir(deps.env, homedir())));
     err("! This token has no expiry: it works until you revoke it in Galaxy's user preferences.");
     return 0;
   } catch (e) {

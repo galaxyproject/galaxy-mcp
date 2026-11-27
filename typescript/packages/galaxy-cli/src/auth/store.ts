@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { abortReason } from "./abort";
 import { FileStore, type HostRecord } from "./file-store";
 import { KeyringStore, noKeyringBackend } from "./keyring-store";
-import { configDir } from "./paths";
+import { configDir, fileAccessPhrase } from "./paths";
 import { sanitize } from "./sanitize";
 import {
   AuthError,
@@ -46,11 +46,15 @@ export class CombinedStore implements CredentialStore {
       );
     }
     // The record says the token is in the keyring and it is not there: that is a login we
-    // cannot use, not "no login", and callers must not read it as a clean slate.
+    // cannot use, not "no login", and callers must not read it as a clean slate. A locked or
+    // closed keyring can look exactly like a missing entry: keyring-rs unlocks items a search
+    // finds, but KDE's ksecretd (KWallet) returns no match at all while the wallet is closed, so
+    // the read comes back as "no entry" with nothing to tell the two apart. Hence both causes are
+    // named, and `hosts.yml` is left as it is so that unlocking and retrying works.
     if (token === null) {
       throw new AuthError(
         "not_logged_in",
-        `The login record for ${baseUrl} says its token is in the system keyring, but the keyring has none. Log in again to replace it.`,
+        `The login record for ${baseUrl} says its token is in the system keyring, but the keyring did not return it. It may be locked or closed (KDE Wallet looks empty while it is closed): unlock it and retry. If it is unlocked, the entry is gone: log in again to replace it. The login record has not been changed.`,
       );
     }
     return { ...summary, token };
@@ -140,13 +144,13 @@ export class CombinedStore implements CredentialStore {
           // admin token is the one credential never left in plaintext as a side effect.
           throw new AuthError(
             "denied",
-            `${this.keyring.disabled ? "The system keyring is switched off by GXY_NO_KEYRING" : `No system keyring here (${why})`}, so nothing was stored. Rerun with --insecure-storage to keep it in ${this.file.path} (readable only by you), or use GALAXY_API_KEY for this session.${note ? ` ${note}.` : ""}`,
+            `${this.keyring.disabled ? "The system keyring is switched off by GXY_NO_KEYRING" : `No system keyring here (${why})`}, so nothing was stored. Rerun with --insecure-storage to keep it in ${this.file.path} (${fileAccessPhrase(this.file.dir)}), or use GALAXY_API_KEY for this session.${note ? ` ${note}.` : ""}`,
             { cause: e },
           );
         }
         // Said aloud, never silent: a fallback nobody hears about is a plaintext token that the
         // user believes is in the keyring.
-        warning = `${this.keyring.disabled ? "GXY_NO_KEYRING is set" : `No system keyring available (${why})`}; token saved in plain text at ${this.file.path} (readable only by you)${note ? `. ${note}` : ""}`;
+        warning = `${this.keyring.disabled ? "GXY_NO_KEYRING is set" : `No system keyring available (${why})`}; token saved in plain text at ${this.file.path} (${fileAccessPhrase(this.file.dir)})${note ? `. ${note}` : ""}`;
       }
     }
     const record: HostRecord =
@@ -199,8 +203,20 @@ export class CombinedStore implements CredentialStore {
     let leftover: unknown;
     if (rec.storage === "keyring") {
       try {
-        await this.keyring.delete(baseUrl, rec.username);
+        const existed = await this.keyring.delete(baseUrl, rec.username);
+        // The record says there is a secret and the keyring says there was nothing to delete. A
+        // locked or closed keyring looks exactly like that (KDE's ksecretd returns no match while
+        // the wallet is closed), and the record is then the only pointer to the secret. So it is
+        // kept, and logout can be run again once the keyring is open; dropping it would leave a
+        // token that nothing refers to and `logout` can never find.
+        if (!existed) {
+          throw new AuthError(
+            "leftover",
+            `The system keyring found no secret for ${baseUrl} (user ${sanitize(rec.username)}) to remove. It may be locked or closed, in which case the secret may remain there: unlock it and run logout again. The login record was kept for that. If the entry is really gone, delete the entry for ${baseUrl} from ${this.file.path} (or remove "gxy:${baseUrl}" for that user with your keyring's own tool)`,
+          );
+        }
       } catch (e) {
+        if (e instanceof AuthError && e.kind === "leftover") throw e;
         leftover = e;
       }
     }
