@@ -95,7 +95,8 @@ A card shows five rows, and Show more reveals rows it already holds before it fe
 Show less hides rows again, and Collapse leaves only the header with the card's scope and count. Rows
 open into their details within the card, and Full screen appears where the host offers it. A card is a
 self-contained page with no external resources. It reads only through tool calls the host relays,
-so it never holds a Galaxy credential. Hosts without MCP Apps just see the `show_*` tools' results.
+so it never holds a Galaxy credential, and it can call only the reads it pages through. Hosts
+without MCP Apps just see the `show_*` tools' results.
 
 ## Tool arguments
 
