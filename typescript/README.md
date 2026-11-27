@@ -430,6 +430,7 @@ sides under different names.
 | `get_workflow_details` | One stored workflow by id (name, steps, inputs) |
 | `extract_workflow_from_history` *(write)* | Turn jobs already run in a history into a stored workflow: `--job-ids` become its tool steps, `--dataset-hids` / `--collection-hids` (history item numbers, not ids) its inputs; then `get_workflow_input_template` and `invoke_workflow` run it on other inputs |
 | `get_workflow_input_template` | A ready-to-fill input template + run guide, at a given stored version (call before `invoke_workflow`) |
+| `import_workflow` *(write)* | Import a workflow from its `.ga` or Format2 definition (object, JSON or Format2 YAML text); `fillDefaults` has Galaxy complete the tool state, and `missing_tools` names the tools this Galaxy does not have |
 | `invoke_workflow` *(write)* | Invoke a workflow with inputs/parameters, optionally at a given stored version (validates inputs first) |
 | `get_invocations` | One invocation by id (state, steps), or the invocations of a workflow or history; pages with `limit` (at most 100, Galaxy's cap) + `offset`, sorts by `create_time` or `update_time`, and `includeTerminal: false` keeps only the ones still running |
 | `cancel_workflow_invocation` *(write)* | Cancel a running workflow invocation |

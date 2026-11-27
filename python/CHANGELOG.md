@@ -42,6 +42,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `import_workflow` imports a workflow from its definition: a `.ga` or Format2 dict, the
+  same as a JSON object string, or Format2 YAML text. It posts to `POST /api/workflows`,
+  with `fill_defaults` (default false) passed through, and answers with `missing_tools`:
+  the tools the stored workflow uses that this Galaxy does not have, read back from its
+  export, since Galaxy imports such a workflow without saying so. Until now the only way
+  in was `import_workflow_from_iwc`, so a workflow an agent wrote could not be run through
+  the server (#228).
+- `invoke_workflow` takes `allow_tool_state_corrections`, Galaxy's own flag for running a
+  workflow whose steps carry upgrade messages, such as a parameter left unset that Galaxy
+  fills with its default. It defaults to false, as before (#228).
 - `extract_workflow_from_history` turns jobs already run in a history into a stored
   workflow (`POST /api/workflows` with `from_history_id`), so a chain of tools can be invoked
   on other inputs with `invoke_workflow` instead of being re-run sample by sample. `job_ids`
@@ -71,6 +81,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `import_workflow_from_iwc` posts to `POST /api/workflows`, as the TypeScript server
+  does, instead of bioblend's deprecated `/api/workflows/upload`. Galaxy stores the
+  workflow the same way.
 - `run_tool` input description aligned with galaxy-ops: both list the batch form for
   mapping over a collection, `{"input_name": {"batch": true, "values": [{"src": "hdca", "id": "..."}]}}`,
   `map_over_type` for mapping over sub-collections, and flat `|`-joined keys for nested parameters.

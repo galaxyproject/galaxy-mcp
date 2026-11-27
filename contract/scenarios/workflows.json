@@ -13,9 +13,15 @@
     "get_iwc_workflow_details",
     "import_workflow_from_iwc",
     "recommend_iwc_workflows",
+    "import_workflow",
     "extract_workflow_from_history"
   ],
-  "uncovered": [],
+  "uncovered": [
+    {
+      "tool": "import_workflow",
+      "reason": "No live scenario yet: it needs the cat1.ga fixture passed as the definition argument rather than uploaded, and none has been written or run against the test Galaxy. The golden envelopes pin its answer and its refusals on both servers until one is."
+    }
+  ],
   "scenarios": [
     {
       "id": "workflows.list.by_name_paged",

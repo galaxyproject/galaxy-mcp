@@ -1,0 +1,16 @@
+{
+  "data": {
+    "id": "wf000010",
+    "name": "Concatenate",
+    "owner": "curator",
+    "number_of_steps": 2,
+    "published": false,
+    "deleted": false,
+    "model_class": "StoredWorkflow",
+    "missing_tools": []
+  },
+  "success": true,
+  "message": "Imported workflow 'Concatenate'",
+  "count": null,
+  "pagination": null
+}

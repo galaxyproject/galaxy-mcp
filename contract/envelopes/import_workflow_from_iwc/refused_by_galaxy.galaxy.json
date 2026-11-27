@@ -89,14 +89,6 @@
     },
     {
       "method": "POST",
-      "path": "/api/workflows/upload",
-      "query": {},
-      "status": 400,
-      "headers": {},
-      "bodyText": "{\"err_msg\": \"History is not accessible by user\", \"err_code\": 403002}"
-    },
-    {
-      "method": "POST",
       "path": "/api/workflows",
       "query": {},
       "status": 400,

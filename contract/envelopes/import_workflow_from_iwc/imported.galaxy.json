@@ -89,22 +89,6 @@
     },
     {
       "method": "POST",
-      "path": "/api/workflows/upload",
-      "query": {},
-      "status": 200,
-      "headers": {},
-      "body": {
-        "id": "wf000009",
-        "name": "Workflow 0",
-        "owner": "curator",
-        "number_of_steps": 2,
-        "published": false,
-        "deleted": false,
-        "model_class": "StoredWorkflow"
-      }
-    },
-    {
-      "method": "POST",
       "path": "/api/workflows",
       "query": {},
       "status": 200,
