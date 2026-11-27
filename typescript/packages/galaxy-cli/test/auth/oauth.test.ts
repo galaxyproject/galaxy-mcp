@@ -248,9 +248,15 @@ describe("device login", () => {
     galaxy.approve(pending.userCode, { expiresIn: value });
     const e = await authErrorOf(pending.waitForApproval());
     expect(e.kind).toBe("protocol");
-    // The client library already rejects a negative one; zero is ours.
-    expect(e.message).toContain(value === 0 ? "unusable expires_in" : "");
     expect(e.message).not.toContain(galaxy.issuedTokens()[0]!);
+  });
+
+  // The client library already rejects a negative one; zero is ours, so only it has our wording.
+  it("says an expires_in of zero is unusable", async () => {
+    const server = await discover(url());
+    const pending = await server.startDeviceLogin();
+    galaxy.approve(pending.userCode, { expiresIn: 0 });
+    expect((await authErrorOf(pending.waitForApproval())).message).toContain("unusable expires_in");
   });
 
   it("refuses an expires_in that is not a number", async () => {

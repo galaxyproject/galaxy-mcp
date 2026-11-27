@@ -469,7 +469,7 @@ describe("login (device flow)", () => {
         ignoredLoginHost: { source: "dotenv", url: "evil\x1b[2J\x07 host" + "x".repeat(500) },
       });
       await loginCommand({}, h.deps);
-      // eslint-disable-next-line no-control-regex
+      // eslint-disable-next-line no-control-regex -- the point is that no control character survives
       expect(h.cap.err).not.toMatch(/[\x00-\x09\x0b-\x1f\x7f]/);
       expect(h.cap.err).toContain("evil[2J host");
       expect(h.cap.err).not.toContain("x".repeat(200));
