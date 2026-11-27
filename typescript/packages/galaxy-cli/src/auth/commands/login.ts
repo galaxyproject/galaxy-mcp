@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { createInterface } from "node:readline";
 import { normalizeBaseUrl } from "../base-url";
 import { InputCancelled, isRawCapable, readPiped, readSecret } from "../stdin";
@@ -15,6 +16,7 @@ import { fail, formatCountdown, hostOf, sanitize } from "./common";
 import { untilAborted, withDeadline } from "../abort";
 import { formatExpiry } from "../expiry";
 import { show } from "../file-store";
+import { configDir, fileAccessPhrase } from "../paths";
 import { NoLoginHostError } from "../host";
 import { trustedVerificationUri } from "../verification-uri";
 
@@ -100,8 +102,8 @@ function noDeviceLogin(deps: AuthDeps, host: string, baseUrl: string, why: strin
   );
 }
 
-function storedMessage(storage: "keyring" | "file", expiresAt: string | null): string {
-  const where = storage === "keyring" ? "the system keyring" : "a file readable only by you";
+function storedMessage(storage: "keyring" | "file", expiresAt: string | null, dir: string): string {
+  const where = storage === "keyring" ? "the system keyring" : `a file ${fileAccessPhrase(dir)}`;
   return `✓ Token stored in ${where} (${expiresAt ? `expires ${formatExpiry(expiresAt)}` : "no expiry"})`;
 }
 
@@ -200,10 +202,11 @@ function reportLogin(
   who: WhoAmI,
   put: PutResult,
   expiresAt: string | null,
+  dir: string,
 ): void {
   if (put.warning) err(`! ${put.warning}`);
   err(`✓ Logged in to ${host} as ${sanitize(who.username)}`);
-  err(storedMessage(put.storage, expiresAt));
+  err(storedMessage(put.storage, expiresAt, dir));
   for (const w of tokenWarnings(expiresAt)) err(w);
 }
 
@@ -252,7 +255,7 @@ async function loginWithToken(ctx: LoginContext): Promise<number> {
     obtainedAt: deps.now().toISOString(),
   };
   const put = await storeLogin(deps, opts, signal, host, who, login);
-  reportLogin(err, host, who, put, null);
+  reportLogin(err, host, who, put, null, configDir(deps.env, homedir()));
   return 0;
 }
 
@@ -357,7 +360,7 @@ async function loginWithDeviceFlow(ctx: LoginContext): Promise<number> {
     );
     throw e;
   }
-  reportLogin(err, host, who, put, expiresAt);
+  reportLogin(err, host, who, put, expiresAt, configDir(deps.env, homedir()));
   return 0;
 }
 

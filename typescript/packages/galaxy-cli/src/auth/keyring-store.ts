@@ -103,6 +103,23 @@ function keyringService(baseUrl: BaseUrl): string {
   return `gxy:${baseUrl}`;
 }
 
+/**
+ * The Secret Service session handshake sometimes fails on KDE (ksecretd), about once in 256
+ * sessions: the Rust `dbus-secret-service` crate sends its Diffie-Hellman public key without
+ * its leading zero bytes, and KWallet refuses a key that is not 128 bytes ("Client public key
+ * size is invalid"), or the two sides derive different AES keys ("Crypto error: Unpad Error").
+ * Upstream: https://github.com/open-source-cooperative/secret-service-rs/issues/127 (fixed in
+ * secret-service-rs; `dbus-secret-service`, which @napi-rs/keyring uses, still pads nothing).
+ * A new session is a new key pair, so one retry almost always works.
+ */
+const TRANSIENT_SESSION_ERROR = /Client public key size is invalid|Crypto error: Unpad Error/i;
+
+function isTransientSessionError(e: unknown): boolean {
+  if (!(e instanceof KeyringUnavailableError) || e.timedOut) return false;
+  const inner = e.cause instanceof Error ? e.cause.message : "";
+  return TRANSIENT_SESSION_ERROR.test(inner);
+}
+
 interface KeyringStoreOptions {
   /**
    * A person is at the terminal and may be asked to unlock the keyring, so calls get
@@ -183,6 +200,19 @@ export class KeyringStore {
    * login would be noise.
    */
   private async call<T>(what: string, fn: (o: CallOptions) => Promise<T>): Promise<T> {
+    try {
+      return await this.attempt(what, fn);
+    } catch (e) {
+      // One retry, and only for a handshake flake. Each native call is a new helper process and so
+      // a new Secret Service session with a new key pair, so the retry is not the same dice roll.
+      // A timeout is never retried (`wedged` stops it anyway); neither is a locked, cancelled or
+      // missing-entry answer. If the retry also fails, its error is the one reported.
+      if (isTransientSessionError(e)) return await this.attempt(what, fn);
+      throw e;
+    }
+  }
+
+  private async attempt<T>(what: string, fn: (o: CallOptions) => Promise<T>): Promise<T> {
     if (this.wedged) {
       throw new KeyringUnavailableError(
         `The system keyring did not answer earlier, so a ${what} was not tried.`,

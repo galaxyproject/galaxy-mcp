@@ -41,6 +41,72 @@ describe("KeyringStore", () => {
   });
 });
 
+describe("KeyringStore retries a session handshake flake once", () => {
+  const flake = "Platform failure: DBus error: Client public key size is invalid";
+  /** A backend whose first `n` calls fail with `message`, then behaves like a working one. */
+  const flaky = (message: string, n: number) => {
+    const kr = new FakeKeyring();
+    kr.data.set(`gxy:${baseUrl}|alice`, "FAKE");
+    let left = n;
+    // The fake records a call only once it runs, so a call that fails here must record itself.
+    const fail = (op: "get" | "set" | "delete") => {
+      if (left-- > 0) {
+        kr.calls.push(op);
+        throw new Error(message);
+      }
+    };
+    const get = kr.get.bind(kr);
+    const set = kr.set.bind(kr);
+    const del = kr.delete.bind(kr);
+    kr.get = async (...a) => (fail("get"), get(...a));
+    kr.set = async (...a) => (fail("set"), set(...a));
+    kr.delete = async (...a) => (fail("delete"), del(...a));
+    return kr;
+  };
+
+  it.each([flake, "Platform failure: Crypto error: Unpad Error"])(
+    "retries a get, a set and a delete after %s",
+    async (message) => {
+      const kr = flaky(message, 1);
+      expect(await new KeyringStore(kr, 50).get(baseUrl, "alice")).toBe("FAKE");
+      expect(kr.calls).toEqual(["get", "get"]);
+      const kr2 = flaky(message, 1);
+      await new KeyringStore(kr2, 50).set(baseUrl, "alice", "NEW");
+      expect(kr2.calls).toEqual(["set", "set"]);
+      const kr3 = flaky(message, 1);
+      expect(await new KeyringStore(kr3, 50).delete(baseUrl, "alice")).toBe(true);
+      expect(kr3.calls).toEqual(["delete", "delete", "get"]);
+    },
+  );
+  it("gives up after the second failure, with the usual error", async () => {
+    const kr = flaky(flake, 2);
+    await expect(new KeyringStore(kr, 50).get(baseUrl, "alice")).rejects.toThrow(
+      /system keyring failed a read.*Client public key size is invalid/,
+    );
+    expect(kr.calls).toEqual(["get", "get"]);
+  });
+  it.each([
+    "Platform failure: Crypto error: something else",
+    "No matching entry found in secret service",
+    "The keyring is locked",
+    "Prompt dismissed by the user",
+  ])("does not retry %s", async (message) => {
+    const kr = flaky(message, 1);
+    await expect(new KeyringStore(kr, 50).get(baseUrl, "alice")).rejects.toThrow(
+      KeyringUnavailableError,
+    );
+    expect(kr.calls).toEqual(["get"]);
+  });
+  it("does not retry a timeout", async () => {
+    const kr = new FakeKeyring();
+    kr.mode = "hang";
+    await expect(new KeyringStore(kr, 20).get(baseUrl, "alice")).rejects.toThrow(
+      KeyringUnavailableError,
+    );
+    expect(kr.calls).toEqual(["get"]);
+  });
+});
+
 // A person at the terminal can answer a keyring unlock prompt, which blocks the call until they
 // type; 5 s would kill it. The wait is longer then, and the person is told once it is a wait.
 describe("KeyringStore with a person at the terminal", () => {
