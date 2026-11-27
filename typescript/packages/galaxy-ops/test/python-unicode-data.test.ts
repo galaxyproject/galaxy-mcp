@@ -214,7 +214,11 @@ describe("pyLower is the interpreter's lower()", () => {
      * nor a Unicode property class, nor anything else that resolves against this runtime's
      * tables.
      */
-    const text = readFileSync(fileURLToPath(new URL("../src/python-str.ts", import.meta.url)), "utf8");
+    // A Windows checkout may turn the source's line endings into CRLF, which the "\n}\n" search below would miss.
+    const text = readFileSync(
+      fileURLToPath(new URL("../src/python-str.ts", import.meta.url)),
+      "utf8",
+    ).replace(/\r\n/g, "\n");
     const body = (name: string): string => {
       const at = text.indexOf(`function ${name}(`);
       expect(at).toBeGreaterThan(-1);
