@@ -60,6 +60,24 @@ export class CombinedStore implements CredentialStore {
     return { ...summary, token };
   }
 
+  /**
+   * The old token is in a keyring that GXY_NO_KEYRING switches off: replacing the record would
+   * leave that token where nothing points at it, when rerunning without the variable replaces
+   * both. So nothing is stored, as for `delete`, whatever `--insecure-storage` says.
+   */
+  private refuseToOrphan(baseUrl: BaseUrl, prior: HostRecord | null): void {
+    if (prior?.storage === "keyring" && this.keyring.disabled) {
+      throw new AuthError(
+        "usage",
+        `The login for ${baseUrl} (user ${sanitize(prior.username)}) keeps its token in the system keyring, which GXY_NO_KEYRING switches off, so nothing was stored: replacing it now would leave that token behind. Rerun without GXY_NO_KEYRING.`,
+      );
+    }
+  }
+
+  async preflight(baseUrl: BaseUrl): Promise<void> {
+    this.refuseToOrphan(baseUrl, await this.file.get(baseUrl));
+  }
+
   async put(
     login: StoredLogin,
     opts: { insecureStorage?: boolean; requireKeyring?: boolean; signal?: AbortSignal } = {},
@@ -67,15 +85,7 @@ export class CombinedStore implements CredentialStore {
     const { token, ...summary } = login;
     // Read first: what the old record points at decides what must be cleaned up afterwards.
     const prior = await this.file.get(login.baseUrl);
-    // The old token is in a keyring that GXY_NO_KEYRING switches off: replacing the record would
-    // leave that token where nothing points at it, when rerunning without the variable replaces
-    // both. So nothing is stored, as for `delete`, whatever `--insecure-storage` says.
-    if (prior?.storage === "keyring" && this.keyring.disabled) {
-      throw new AuthError(
-        "usage",
-        `The login for ${login.baseUrl} (user ${sanitize(prior.username)}) keeps its token in the system keyring, which GXY_NO_KEYRING switches off, so nothing was stored: replacing it now would leave that token behind. Rerun without GXY_NO_KEYRING.`,
-      );
-    }
+    this.refuseToOrphan(login.baseUrl, prior);
     // The same user's earlier login is in the keyring: the write below replaces that very entry.
     const samePrior = prior?.storage === "keyring" && prior.username === login.username;
     // Read before overwriting, so a put that fails can put it back. Only on this path: a first

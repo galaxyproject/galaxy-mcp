@@ -7,6 +7,9 @@
  * the real implementations are wired together in one place (`deps.ts`).
  */
 
+/** The OAuth client id this CLI presents. Galaxy registers it as a public client (no secret). */
+export const CLIENT_ID = "galaxy-cli";
+
 /**
  * A Galaxy's base URL in the form logins are keyed by: scheme, host, port and path
  * prefix, without a trailing slash or query (`https://usegalaxy.org`,
@@ -24,8 +27,8 @@ export type BaseUrl = string & { readonly __brand: "BaseUrl" };
  */
 export type StorageKind = "keyring" | "file";
 
-/** How a token was obtained. */
-type LoginMethod = "pasted";
+/** How a token was obtained, which decides whether `logout` can revoke it on the server. */
+type LoginMethod = "device" | "pasted";
 
 /** One login to one Galaxy, as stored. */
 export interface StoredLogin {
@@ -74,36 +77,93 @@ export interface CredentialStore {
     login: StoredLogin,
     opts?: { insecureStorage?: boolean; requireKeyring?: boolean; signal?: AbortSignal },
   ): Promise<PutResult>;
+  /**
+   * Reject now with what `put` would reject with for this Galaxy for a reason that exists before
+   * any token does: a `hosts.yml` that cannot be read or used, a login a newer gxy wrote, or a
+   * keyring login that GXY_NO_KEYRING stops being replaced. Changes nothing and reads no token. A
+   * flow that mints a token (the device flow) asks first, so it does not issue one that it
+   * already knows cannot be kept.
+   */
+  preflight(baseUrl: BaseUrl): Promise<void>;
   /** Remove the login for this Galaxy from every place it is kept. Returns false if there was none. */
   delete(baseUrl: BaseUrl): Promise<boolean>;
   /** Every stored login, without tokens, sorted by base URL. */
   list(): Promise<LoginSummary[]>;
 }
 
+/** What the server returned when the user approved. */
+export interface TokenGrant {
+  accessToken: string;
+  /** Seconds, as sent; absent when the server gave no expiry. */
+  expiresIn?: number;
+  /** Granted scopes (the token response's `scope`, split on spaces); may be fewer than requested. */
+  scopes: string[];
+}
+
+/** A device login in progress: what to show the user, and the wait for their approval. */
+export interface PendingDeviceLogin {
+  userCode: string;
+  verificationUri: string;
+  /** When the code stops working. */
+  expiresAt: Date;
+  /**
+   * Poll the token endpoint until the user approves, denies or the code expires,
+   * honouring `interval` and `slow_down`. Rejects with an `AuthError`.
+   */
+  waitForApproval(signal?: AbortSignal): Promise<TokenGrant>;
+}
+
+/** A Galaxy that issues tokens through the device flow (found by RFC 8414 discovery). */
+export interface AuthServer {
+  readonly issuer: string;
+  /** False when the metadata lists no device endpoint (the instance has the device flow off). */
+  readonly supportsDeviceFlow: boolean;
+  /** False when the metadata lists no revocation endpoint. */
+  readonly supportsRevocation: boolean;
+  /** `signal` cancels the code request only; `waitForApproval` takes its own. */
+  startDeviceLogin(scopes?: string[], signal?: AbortSignal): Promise<PendingDeviceLogin>;
+  /**
+   * RFC 7009. Resolves when the server accepted the request. `signal` is the caller's own limit on
+   * this call (see `withDeadline`): the signal that cancelled a login must not be passed here, or
+   * the token it minted could not be taken back.
+   */
+  revoke(token: string, signal?: AbortSignal): Promise<void>;
+}
+
 /**
  * Why an auth command failed. `exitCodeForAuthError` (`exit.ts`) turns each into a sysexits.h
  * code: `usage` and `ambiguous_host` are 64 (EX_USAGE: the command line is wrong or does not
  * say enough), `store` is 65 (EX_DATAERR: the credential file cannot be used as it is), `network`
- * is 69 (EX_UNAVAILABLE), `protocol` and `insecure` are 76 (EX_PROTOCOL: the address,
+ * is 69 (EX_UNAVAILABLE), `unsupported`, `protocol` and `insecure` are 76 (EX_PROTOCOL: the address,
  * or what its server supplied, is not something this can use; plain http is 76 too, though the
- * person typed it, see `exitCodeForAuthError`), and `not_logged_in` and `denied` are 77 (EX_NOPERM:
- * there is no permission to do this).
+ * person typed it, see `exitCodeForAuthError`), `not_logged_in`, `denied` and `expired` are 77
+ * (EX_NOPERM: there is no permission to do this), and `leftover` is 1 (the command ran, but not
+ * everything was removed).
  */
 export type AuthErrorKind =
+  /**
+   * The Galaxy publishes no OAuth metadata, has the device flow switched off, or has no
+   * revocation endpoint.
+   */
+  | "unsupported"
   /**
    * What `CombinedStore.delete` throws when the login record is gone but the keyring would not
    * confirm the secret is: it may remain there. `logout` reports it and exits 1.
    */
   | "leftover"
   /**
-   * `put` refused to keep an admin token in the plaintext file (`requireKeyring`).
+   * Two unrelated sources share this kind, and both are exit 77 on purpose: `put` refused to keep
+   * an admin token in the plaintext file (`requireKeyring`), or the person said no on the approval
+   * page. Callers must not use it to tell them apart.
    */
   | "denied"
+  /** The user code expired before anyone approved it. */
+  | "expired"
   /** No stored login for this Galaxy, or it has expired, or Galaxy rejected the token. */
   | "not_logged_in"
   /** Several stored logins and no way to tell which Galaxy was meant. */
   | "ambiguous_host"
-  /** Plain http to a host other than loopback, or an address that is not a Galaxy. */
+  /** Plain http to a host other than loopback, or an issuer, endpoint or approval page that is not this Galaxy's. */
   | "insecure"
   /**
    * `hosts.yml` cannot be used as it is, and nothing was changed: it is corrupt, a symlink,
@@ -112,7 +172,7 @@ export type AuthErrorKind =
    * message says which, and what to do about it.
    */
   | "store"
-  /** The server answered, but not as a Galaxy does. */
+  /** The server answered, but not as the RFCs say it should. */
   | "protocol"
   /** The server could not be reached. */
   | "network"
@@ -134,7 +194,7 @@ export class AuthError extends Error {
 export interface WhoAmI {
   username: string;
   email?: string;
-  /** Galaxy's `is_admin`. An admin's token carries full, unscoped admin power. */
+  /** Galaxy's `is_admin`. An admin's token carries full, unscoped admin power until scopes exist. */
   isAdmin?: boolean;
 }
 
@@ -153,6 +213,11 @@ export type KeySourceId = "flag" | "profile" | "env" | "stored" | "dotenv";
 
 export interface AuthDeps {
   store: CredentialStore;
+  /**
+   * RFC 8414 discovery against the Galaxy at `baseUrl`. Rejects with an `AuthError`. `signal`
+   * cancels discovery only: each later call on the server takes its own.
+   */
+  discover(baseUrl: BaseUrl, signal?: AbortSignal): Promise<AuthServer>;
   /**
    * Ask Galaxy whose token this is (`GET /api/users/current` through galaxy-ops' `get_user`).
    * Rejects with `AuthError("not_logged_in")` when Galaxy refuses the token or answers with
@@ -191,6 +256,10 @@ export interface AuthDeps {
     login: StoredLogin | undefined,
     stored: readonly BaseUrl[],
   ): { id: KeySourceId | null; label: string };
+  /** Open a URL in the user's browser. Resolves false when there is no browser to open. */
+  openBrowser(url: string): Promise<boolean>;
+  /** Whether `openBrowser` has any chance (a display exists). */
+  canOpenBrowser(): boolean;
   now(): Date;
   env: Record<string, string | undefined>;
   io: AuthIo;

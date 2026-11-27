@@ -86,8 +86,9 @@ const KNOWN_FIELDS = new Set([
  * and the rename carries the temp file's mode over.
  *
  * Read-modify-write is not locked across processes: two simultaneous logins can lose one
- * update. This file is only written at login and logout, which are rare and interactive; that is
- * why it is accepted. (gh serialises its writes with a lock file.)
+ * update. There are no refresh tokens, so this file is only written at login and logout, which
+ * are rare and interactive; that is why it is accepted. (gh serialises login, logout and
+ * refresh with a lock file.)
  */
 export class FileStore {
   /** Entries already warned about, so a command that reads twice warns once. */
@@ -303,7 +304,7 @@ export class FileStore {
     if (storageWord !== undefined && storageWord !== "keyring" && storageWord !== "file")
       return { kind: "unknown", raw, why: "unknown storage" };
     const methodWord = word("method");
-    if (methodWord !== undefined && methodWord !== "pasted")
+    if (methodWord !== undefined && methodWord !== "device" && methodWord !== "pasted")
       return { kind: "unknown", raw, why: "unknown method" };
     const str = (k: string): string => {
       const v = raw[k];
@@ -311,7 +312,7 @@ export class FileStore {
       return v;
     };
     const storage = str("storage") as "keyring" | "file";
-    const method = str("method") as "pasted";
+    const method = str("method") as "device" | "pasted";
     const scopes = raw.scopes ?? [];
     if (!Array.isArray(scopes) || scopes.some((s) => typeof s !== "string")) {
       throw this.corrupt(`entry for ${show(url)} has invalid scopes`);
