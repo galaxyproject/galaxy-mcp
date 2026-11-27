@@ -118,6 +118,19 @@ function keyringService(baseUrl: BaseUrl): string {
 const TRANSIENT_SESSION_ERROR =
   /Client public key size is invalid|Crypto error: Unpad Error|Can't find session/i;
 
+/**
+ * `dbus-secret-service` gives every D-Bus call 2 s (`new_proxy`). A busy gnome-keyring can store
+ * the item and answer after that, so the call fails with "Did not receive a reply" although the
+ * secret is there. Seen on a loaded GNOME guest: the login fell back to the plain-text file while
+ * the keyring held the token.
+ */
+const NO_REPLY = /Did not receive a reply/i;
+
+function isNoReply(e: unknown): boolean {
+  if (!(e instanceof KeyringUnavailableError) || e.timedOut) return false;
+  return NO_REPLY.test(e.cause instanceof Error ? e.cause.message : e.message);
+}
+
 function isTransientSessionError(e: unknown): boolean {
   if (!(e instanceof KeyringUnavailableError) || e.timedOut) return false;
   // A failed call arrives wrapped, with the native error as its cause. A failure to open the
@@ -174,8 +187,21 @@ export class KeyringStore {
     return this.call("read", (o) => this.backend.get(keyringService(baseUrl), account, o));
   }
 
-  set(baseUrl: BaseUrl, account: string, secret: string): Promise<void> {
-    return this.call("write", (o) => this.backend.set(keyringService(baseUrl), account, secret, o));
+  /**
+   * A write whose reply was lost (see `NO_REPLY`) is read back: if the keyring holds this secret,
+   * the write worked. Anything else, the read failing included, reports the write's own error.
+   */
+  async set(baseUrl: BaseUrl, account: string, secret: string): Promise<void> {
+    const service = keyringService(baseUrl);
+    try {
+      await this.call("write", (o) => this.backend.set(service, account, secret, o));
+    } catch (e) {
+      if (!isNoReply(e)) throw e;
+      const stored = await this.call("check after write", (o) =>
+        this.backend.get(service, account, o),
+      ).catch(() => undefined);
+      if (stored !== secret) throw e;
+    }
   }
 
   /**
