@@ -193,6 +193,7 @@ describe("operations and auth pick the same Galaxy", () => {
   const tmp = useTempDir("gxy-same-");
   beforeEach(async () => {
     vi.stubEnv("HOME", tmp.path);
+    vi.stubEnv("USERPROFILE", tmp.path); // `os.homedir()` reads this one on Windows
     vi.stubEnv("GXY_CONFIG_DIR", join(tmp.path, "cfg"));
     vi.stubEnv("GALAXY_URL", "");
     vi.stubEnv("GALAXY_API_KEY", "");

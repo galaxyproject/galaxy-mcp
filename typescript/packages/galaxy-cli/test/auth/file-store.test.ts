@@ -74,82 +74,103 @@ describe("reading and writing", () => {
 });
 
 describe("permissions", () => {
-  it("creates a 0700 directory and a 0600 file, and leaves no temp file", async () => {
-    const s = new FileStore(dirOf());
-    await s.put(rec());
-    // The second put replaces a file that exists, which is where a temp file surviving the
-    // rename would show.
-    await s.put(rec({ username: "bob" }));
-    expect(await mode(s.dir)).toBe(0o700);
-    expect(await mode(s.path)).toBe(0o600);
-    expect(await readdir(s.dir)).toEqual(["hosts.yml"]);
-  });
+  // Windows reports every file as 0o666 and ignores chmod, so these mode checks cannot run there.
+  it.skipIf(process.platform === "win32")(
+    "creates a 0700 directory and a 0600 file, and leaves no temp file",
+    async () => {
+      const s = new FileStore(dirOf());
+      await s.put(rec());
+      // The second put replaces a file that exists, which is where a temp file surviving the
+      // rename would show.
+      await s.put(rec({ username: "bob" }));
+      expect(await mode(s.dir)).toBe(0o700);
+      expect(await mode(s.path)).toBe(0o600);
+      expect(await readdir(s.dir)).toEqual(["hosts.yml"]);
+    },
+  );
 
   // A umask of 000 strips nothing, so a directory made without an explicit 0700 would come out
   // 0777 here. Any wider umask would hide the difference.
-  it("still creates the directory 0700 under a umask of 000", async () => {
-    const s = new FileStore(dirOf());
-    const old = process.umask(0o000);
-    try {
-      await s.put(rec());
-    } finally {
-      process.umask(old);
-    }
-    expect(await mode(s.dir)).toBe(0o700);
-  });
+  // Windows has no POSIX modes or umask, so the directory mode cannot be checked.
+  it.skipIf(process.platform === "win32")(
+    "still creates the directory 0700 under a umask of 000",
+    async () => {
+      const s = new FileStore(dirOf());
+      const old = process.umask(0o000);
+      try {
+        await s.put(rec());
+      } finally {
+        process.umask(old);
+      }
+      expect(await mode(s.dir)).toBe(0o700);
+    },
+  );
 
   // Only a umask that strips bits from 0600 can show a missing `fchmod`: under 000 or 022 the
   // creation mode alone already gives 0600. Under 0277 the new file would be 0400 without it.
   // The directory is made first because 0277 would leave one the store creates 0500, and the temp
   // file could not then be written.
-  it("still writes the file 0600 under a restrictive umask", async () => {
-    const s = new FileStore(dirOf());
-    await mkdir(s.dir, { mode: 0o700 });
-    const old = process.umask(0o277);
-    try {
-      await s.put(rec());
-    } finally {
-      process.umask(old);
-    }
-    expect(await mode(s.path)).toBe(0o600);
-  });
+  // Windows has no POSIX modes or umask, so the file mode cannot be checked.
+  it.skipIf(process.platform === "win32")(
+    "still writes the file 0600 under a restrictive umask",
+    async () => {
+      const s = new FileStore(dirOf());
+      await mkdir(s.dir, { mode: 0o700 });
+      const old = process.umask(0o277);
+      try {
+        await s.put(rec());
+      } finally {
+        process.umask(old);
+      }
+      expect(await mode(s.path)).toBe(0o600);
+    },
+  );
 
   // A looser mode is repaired with a warning, where a symlink or another owner (below) is refused:
   // the file is still ours, only its mode is wrong. Both the file and the directory are fixed on
   // read and on write. `warnings` records what would go to stderr.
-  it("repairs a looser file and directory on read, and a looser directory on write, warning each time", async () => {
-    const warnings: string[] = [];
-    const s = new FileStore(dirOf(), undefined, (m) => warnings.push(m));
-    await s.put(rec());
-    await chmod(s.path, 0o644);
-    await chmod(s.dir, 0o755);
-    await s.list();
-    expect(await mode(s.path)).toBe(0o600);
-    expect(await mode(s.dir)).toBe(0o700);
-    expect(warnings.some((w) => /readable by others.*600/.test(w))).toBe(true);
-    expect(warnings.some((w) => /accessible to others.*700/.test(w))).toBe(true);
-    warnings.length = 0;
-    await chmod(s.dir, 0o755);
-    await s.put(rec());
-    expect(await mode(s.dir)).toBe(0o700);
-    expect(warnings.some((w) => /accessible to others.*700/.test(w))).toBe(true);
-  });
+  // Windows has no POSIX modes, so there is nothing to repair.
+  it.skipIf(process.platform === "win32")(
+    "repairs a looser file and directory on read, and a looser directory on write, warning each time",
+    async () => {
+      const warnings: string[] = [];
+      const s = new FileStore(dirOf(), undefined, (m) => warnings.push(m));
+      await s.put(rec());
+      await chmod(s.path, 0o644);
+      await chmod(s.dir, 0o755);
+      await s.list();
+      expect(await mode(s.path)).toBe(0o600);
+      expect(await mode(s.dir)).toBe(0o700);
+      expect(warnings.some((w) => /readable by others.*600/.test(w))).toBe(true);
+      expect(warnings.some((w) => /accessible to others.*700/.test(w))).toBe(true);
+      warnings.length = 0;
+      await chmod(s.dir, 0o755);
+      await s.put(rec());
+      expect(await mode(s.dir)).toBe(0o700);
+      expect(warnings.some((w) => /accessible to others.*700/.test(w))).toBe(true);
+    },
+  );
 
   // An unparseable file can still hold a token, so its mode is narrowed before the parse is
   // attempted and stays narrow when the parse fails.
-  it("repairs a loose file mode before parsing, even when the content then fails to parse", async () => {
-    await mkdir(dirOf(), { mode: 0o700 });
-    const warnings: string[] = [];
-    const s = new FileStore(dirOf(), undefined, (m) => warnings.push(m));
-    await writeFile(s.path, "hosts: [unclosed");
-    await chmod(s.path, 0o644);
-    await expect(s.list()).rejects.toMatchObject(refused(/not valid/));
-    expect(await mode(s.path)).toBe(0o600);
-    expect(warnings.join()).toMatch(/changed it to 600/);
-  });
+  // Windows has no POSIX modes, so there is nothing to repair.
+  it.skipIf(process.platform === "win32")(
+    "repairs a loose file mode before parsing, even when the content then fails to parse",
+    async () => {
+      await mkdir(dirOf(), { mode: 0o700 });
+      const warnings: string[] = [];
+      const s = new FileStore(dirOf(), undefined, (m) => warnings.push(m));
+      await writeFile(s.path, "hosts: [unclosed");
+      await chmod(s.path, 0o644);
+      await expect(s.list()).rejects.toMatchObject(refused(/not valid/));
+      expect(await mode(s.path)).toBe(0o600);
+      expect(warnings.join()).toMatch(/changed it to 600/);
+    },
+  );
 });
 
-describe("a hosts.yml others can write", () => {
+// Windows has no POSIX modes, so no file is ever writable by others.
+describe.skipIf(process.platform === "win32")("a hosts.yml others can write", () => {
   // Narrowing the mode would not undo an edit someone else may already have made (a login with
   // their token for a real Galaxy URL), so the file is refused, read or write, and left alone.
   it.each([0o666, 0o620, 0o602])(
@@ -169,57 +190,73 @@ describe("a hosts.yml others can write", () => {
     },
   );
 
-  it("still repairs a file that others can only read", async () => {
-    const s = new FileStore(dirOf());
-    await s.put(rec());
-    await chmod(s.path, 0o640);
-    expect(await s.list()).toHaveLength(1);
-    expect(await mode(s.path)).toBe(0o600);
-  });
+  // Windows has no POSIX modes, so there is nothing to repair.
+  it.skipIf(process.platform === "win32")(
+    "still repairs a file that others can only read",
+    async () => {
+      const s = new FileStore(dirOf());
+      await s.put(rec());
+      await chmod(s.path, 0o640);
+      expect(await s.list()).toHaveLength(1);
+      expect(await mode(s.path)).toBe(0o600);
+    },
+  );
 });
 
 describe("refusing what is not a plain file or directory of ours", () => {
   // The target sits outside the config directory and must come out unchanged: a put that followed
   // the link would have written the token to wherever it points. The directory listing then
   // shows that no temp file was left behind either.
-  it("refuses a hosts.yml that is a symlink, reading or writing, and does not touch the target", async () => {
-    const s = new FileStore(dirOf());
-    await mkdir(s.dir, { mode: 0o700 });
-    const target = join(tmp.path, "elsewhere.yml");
-    await writeFile(target, "hosts: {}\n");
-    await symlink(target, s.path);
-    await expect(s.list()).rejects.toMatchObject(refused(/is a symbolic link/));
-    await expect(s.put(rec())).rejects.toMatchObject(refused(/is a symbolic link/));
-    expect(await readFile(target, "utf8")).toBe("hosts: {}\n");
-    expect(await readdir(s.dir)).toEqual(["hosts.yml"]);
-  });
+  // Creating a symlink on Windows needs a privilege most accounts lack (EPERM).
+  it.skipIf(process.platform === "win32")(
+    "refuses a hosts.yml that is a symlink, reading or writing, and does not touch the target",
+    async () => {
+      const s = new FileStore(dirOf());
+      await mkdir(s.dir, { mode: 0o700 });
+      const target = join(tmp.path, "elsewhere.yml");
+      await writeFile(target, "hosts: {}\n");
+      await symlink(target, s.path);
+      await expect(s.list()).rejects.toMatchObject(refused(/is a symbolic link/));
+      await expect(s.put(rec())).rejects.toMatchObject(refused(/is a symbolic link/));
+      expect(await readFile(target, "utf8")).toBe("hosts: {}\n");
+      expect(await readdir(s.dir)).toEqual(["hosts.yml"]);
+    },
+  );
 
   // `real` must stay empty: a write through the linked directory would land a token in it.
-  it("refuses a config directory that is a symlink", async () => {
-    const real = join(tmp.path, "real");
-    await mkdir(real, { mode: 0o700 });
-    const link = join(tmp.path, "link");
-    await symlink(real, link);
-    const s = new FileStore(link);
-    await expect(s.list()).rejects.toMatchObject(refused(/is a symbolic link/));
-    await expect(s.put(rec())).rejects.toMatchObject(refused(/is a symbolic link/));
-    expect(await readdir(real)).toEqual([]);
-  });
+  // Creating a symlink on Windows needs a privilege most accounts lack (EPERM).
+  it.skipIf(process.platform === "win32")(
+    "refuses a config directory that is a symlink",
+    async () => {
+      const real = join(tmp.path, "real");
+      await mkdir(real, { mode: 0o700 });
+      const link = join(tmp.path, "link");
+      await symlink(real, link);
+      const s = new FileStore(link);
+      await expect(s.list()).rejects.toMatchObject(refused(/is a symbolic link/));
+      await expect(s.put(rec())).rejects.toMatchObject(refused(/is a symbolic link/));
+      expect(await readdir(real)).toEqual([]);
+    },
+  );
 
-  it("refuses a directory or file owned by someone else", async () => {
-    // Changing a file's owner needs root, so the test changes the uid the store expects instead:
-    // the files are ours, and the store is told that someone else should own them.
-    const mine = process.getuid!();
-    const s = new FileStore(dirOf(), undefined, undefined, mine + 1);
-    await mkdir(s.dir, { mode: 0o700 });
-    await expect(s.list()).rejects.toMatchObject(refused(/belongs to another user/));
-    await expect(s.put(rec())).rejects.toMatchObject(refused(/belongs to another user/));
-    // The same directory is fine for its real owner, and a file of someone else is refused on its own.
-    await new FileStore(s.dir, undefined, undefined, mine).put(rec());
-    await expect(new FileStore(s.dir, undefined, undefined, mine + 1).list()).rejects.toThrow(
-      /belongs to another user/,
-    );
-  });
+  // `process.getuid` does not exist on Windows.
+  it.skipIf(process.platform === "win32")(
+    "refuses a directory or file owned by someone else",
+    async () => {
+      // Changing a file's owner needs root, so the test changes the uid the store expects instead:
+      // the files are ours, and the store is told that someone else should own them.
+      const mine = process.getuid!();
+      const s = new FileStore(dirOf(), undefined, undefined, mine + 1);
+      await mkdir(s.dir, { mode: 0o700 });
+      await expect(s.list()).rejects.toMatchObject(refused(/belongs to another user/));
+      await expect(s.put(rec())).rejects.toMatchObject(refused(/belongs to another user/));
+      // The same directory is fine for its real owner, and a file of someone else is refused on its own.
+      await new FileStore(s.dir, undefined, undefined, mine).put(rec());
+      await expect(new FileStore(s.dir, undefined, undefined, mine + 1).list()).rejects.toThrow(
+        /belongs to another user/,
+      );
+    },
+  );
 
   it("refuses a hosts.yml that is a directory", async () => {
     const s = new FileStore(dirOf());

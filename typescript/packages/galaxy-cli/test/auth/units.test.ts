@@ -18,21 +18,21 @@ import { AuthError } from "../../src/auth/types";
 describe("configDir", () => {
   it("prefers GXY_CONFIG_DIR, then XDG_CONFIG_HOME, then ~/.config", () => {
     expect(configDir({ GXY_CONFIG_DIR: "/x", XDG_CONFIG_HOME: "/xdg" }, "/home/u")).toBe("/x");
-    expect(configDir({ XDG_CONFIG_HOME: "/xdg" }, "/home/u")).toBe("/xdg/gxy");
-    expect(configDir({}, "/home/u")).toBe("/home/u/.config/gxy");
+    expect(configDir({ XDG_CONFIG_HOME: "/xdg" }, "/home/u")).toBe(join("/xdg", "gxy"));
+    expect(configDir({}, "/home/u")).toBe(join("/home/u", ".config", "gxy"));
   });
   // The XDG spec says a relative path in `XDG_CONFIG_HOME` is invalid and must be ignored, and a
   // relative path would move the credential file with the working directory, possibly into a
   // repository. The same goes for `GXY_CONFIG_DIR`. An empty one counts as unset.
   it("ignores an empty GXY_CONFIG_DIR and a relative XDG_CONFIG_HOME", () => {
     expect(configDir({ GXY_CONFIG_DIR: "", XDG_CONFIG_HOME: "rel" }, "/home/u")).toBe(
-      "/home/u/.config/gxy",
+      join("/home/u", ".config", "gxy"),
     );
   });
   it("ignores a relative GXY_CONFIG_DIR, falling through to the next in order", () => {
-    expect(configDir({ GXY_CONFIG_DIR: "cfg" }, "/home/u")).toBe("/home/u/.config/gxy");
+    expect(configDir({ GXY_CONFIG_DIR: "cfg" }, "/home/u")).toBe(join("/home/u", ".config", "gxy"));
     expect(configDir({ GXY_CONFIG_DIR: "./cfg", XDG_CONFIG_HOME: "/xdg" }, "/home/u")).toBe(
-      "/xdg/gxy",
+      join("/xdg", "gxy"),
     );
   });
 });

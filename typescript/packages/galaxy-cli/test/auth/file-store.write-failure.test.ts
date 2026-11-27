@@ -150,18 +150,22 @@ describe("the temp file", () => {
   // to take. The name is made predictable here to do exactly that, pointing at `victim`. The expected
   // `EEXIST` is the exclusive create refusing an existing path, which a plain open would instead
   // have followed, writing the token into `victim`.
-  it("is never a pre-planted symlink: the write fails rather than follow it", async () => {
-    const dir = join(tmp.path, "cfg");
-    await mkdir(dir, { mode: 0o700 });
-    arm.fixedRandom = [1, 2, 3, 4, 5, 6];
-    const victim = join(tmp.path, "victim");
-    await writeFile(victim, "untouched");
-    await symlink(victim, join(dir, `.hosts.${process.pid}.010203040506.tmp`));
-    const s = new FileStore(dir);
-    await expect(s.put(rec())).rejects.toThrow(/EEXIST/);
-    expect(await readFile(victim, "utf8")).toBe("untouched");
-    expect(await readFile(victim, "utf8")).not.toContain(FAKE_TOKEN);
-  });
+  // Creating a symlink on Windows needs a privilege most accounts lack (EPERM).
+  it.skipIf(process.platform === "win32")(
+    "is never a pre-planted symlink: the write fails rather than follow it",
+    async () => {
+      const dir = join(tmp.path, "cfg");
+      await mkdir(dir, { mode: 0o700 });
+      arm.fixedRandom = [1, 2, 3, 4, 5, 6];
+      const victim = join(tmp.path, "victim");
+      await writeFile(victim, "untouched");
+      await symlink(victim, join(dir, `.hosts.${process.pid}.010203040506.tmp`));
+      const s = new FileStore(dir);
+      await expect(s.put(rec())).rejects.toThrow(/EEXIST/);
+      expect(await readFile(victim, "utf8")).toBe("untouched");
+      expect(await readFile(victim, "utf8")).not.toContain(FAKE_TOKEN);
+    },
+  );
 });
 
 describe("clearing stale temp files", () => {
