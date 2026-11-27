@@ -33,9 +33,10 @@ export const historiesCard: CardSpec = {
   })`,
   row: `(history) => ({
     name: history.name || "Unnamed history",
-    meta: [
+    meta: [],
+    side: [
+      galaxyDate(history.update_time) && "Updated " + galaxyDate(history.update_time),
       typeof history.count === "number" ? history.count + (history.count === 1 ? " item" : " items") : "",
-      galaxyTime(history.update_time) && "updated " + galaxyTime(history.update_time),
     ],
   })`,
   empty: "No histories yet.",
@@ -49,20 +50,29 @@ export const historyCard: CardSpec = {
   keep: ["history_id", "deleted", "visible", "order"],
   read: `(page, kept) => ({
     ...(${paged("page.data?.contents")})(page),
-    // get_history_contents leaves deleted and hidden items out unless asked for them.
-    scope: ["Browsing history",
-      [kept.deleted ? "" : "deleted", kept.visible === false ? "" : "hidden"].filter(Boolean).join(" or ").replace(/^(.+)$/, "without $1 items"),
-      kept.order && kept.order !== "hid-asc" ? "sorted by " + kept.order : "",
-    ].filter(Boolean).join(", "),
+    // Said only where the list is not the ordinary one: get_history_contents leaves deleted and
+    // hidden items out unless asked for them, and the rows' numbers show an order by number.
+    scope: [
+      [kept.deleted ? "deleted" : "", kept.visible === false ? "hidden" : ""].filter(Boolean).join(" and ").replace(/^(.+)$/, "Including $1 items"),
+      (([key, direction]) => ({
+        name: "Sorted by name" + (direction === "dsc" ? ", Z to A" : ""),
+        create_time: "Sorted by creation time, " + (direction === "dsc" ? "newest first" : "oldest first"),
+        update_time: "Sorted by update time, " + (direction === "dsc" ? "newest first" : "oldest first"),
+      })[key])(String(kept.order || "").split("-")),
+    ].filter(Boolean).join(" \\u00b7 "),
   })`,
   row: `(item) => item.history_content_type === "dataset_collection"
     ? {
-        name: item.hid + ": " + (item.name || "Unnamed collection"),
+        name: item.name || "Unnamed collection",
+        number: item.hid,
+        kind: "SET",
         meta: [(item.collection_type || "collection") + (typeof item.element_count === "number" ? ", " + item.element_count + " elements" : "")],
         state: item.populated_state && item.populated_state !== "ok" ? item.populated_state : "",
       }
     : {
-        name: item.hid + ": " + (item.name || "Unnamed dataset"),
+        name: item.name || "Unnamed dataset",
+        number: item.hid,
+        kind: kindOf(item.extension),
         meta: [item.extension, item.deleted ? "deleted" : "", item.visible === false ? "hidden" : ""],
         state: item.state,
         detail: ${datasetDetail},
@@ -88,10 +98,11 @@ export const datasetsCard: CardSpec = {
   }`,
   row: `(entry) => {
     const item = entry.dataset || {};
-    const name = item.hid !== undefined ? item.hid + ": " + (item.name || "Unnamed dataset") : entry.id;
-    if (entry.status === "unavailable") return { name, meta: ["Not available in this history"], state: "" };
-    if (entry.status === "inaccessible") return { name, meta: ["You do not have access to this dataset"], state: "" };
-    return { name: name + (item.name_truncated ? "\\u2026" : ""), meta: [item.extension, bytes(item.file_size)], state: item.state, detail: ${datasetDetail} };
+    const name = item.hid !== undefined ? item.name || "Unnamed dataset" : entry.id;
+    // A dash where the datatype would be, so these rows line up with the ones Galaxy returned.
+    if (entry.status === "unavailable") return { name, number: item.hid, kind: "\\u2013", meta: ["Not available in this history"], state: "" };
+    if (entry.status === "inaccessible") return { name, number: item.hid, kind: "\\u2013", meta: ["You do not have access to this dataset"], state: "" };
+    return { name: name + (item.name_truncated ? "\\u2026" : ""), number: item.hid, kind: kindOf(item.extension), meta: [item.extension, bytes(item.file_size)], state: item.state, detail: ${datasetDetail} };
   }`,
   empty: "No datasets were selected.",
 };

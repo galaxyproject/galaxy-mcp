@@ -39,12 +39,24 @@ describe("the card page", () => {
     expect(card.sent.slice(1).map((m) => m.method)).toEqual(["ui/notifications/initialized", "ui/notifications/size-changed"]);
   });
 
-  it("shows five rows, the scope and Galaxy's total in the header", async () => {
+  it("shows five rows, with the scope and Galaxy's total above them", async () => {
     const card = runCard();
     await card.initialize();
     await card.open({ filter: "big" }, things(1, 20), { total_items: 42, has_next: true, next_offset: 20 });
     expect(card.rows()).toEqual(["thing 1", "thing 2", "thing 3", "thing 4", "thing 5"]);
     expect(card.scope()).toBe("Filtered by big · Showing 5 of 42");
+  });
+
+  it("names the Galaxy it shows under its title, when it is told which", async () => {
+    const card = runPage(cardPage(spec, "galaxy.example/sub"));
+    await card.initialize();
+    await card.open({}, things(1, 3), null);
+    expect(card.origin()).toBe("galaxy.example/sub");
+    await card.click("Collapse");
+    expect(card.origin()).toBe("galaxy.example/sub");
+    const unnamed = runCard();
+    await unnamed.initialize();
+    expect(unnamed.origin()).toBeUndefined();
   });
 
   it("counts what it holds when Galaxy gives no total", async () => {
@@ -121,6 +133,27 @@ describe("the card page", () => {
     expect(card.root.text).toContain("2.0 KB");
     await card.click("Back");
     expect(card.rows()).toHaveLength(10);
+  });
+
+  it("leads a row with its tile when it has one, and ends it with Galaxy's own word for its state", async () => {
+    const card = runPage(cardPage({ ...spec, row: `(item) => ({ name: item.name, kind: kindOf(item.extension), meta: [], state: item.state })` }));
+    await card.initialize();
+    const rows = [
+      { name: "reads", extension: "fastqsanger.gz", state: "ok" },
+      { name: "counts", extension: "tabular", state: "running" },
+      { name: "plot", extension: "png", state: "error" },
+      { name: "new upload", state: "setting_metadata" },
+    ];
+    await card.open({}, rows, null);
+    const texts = (className: string) => card.root.all((n) => n.className.split(" ")[0] === className).map((n) => n.text);
+    expect(texts("kind")).toEqual(["FASTQ", "TABLE", "PNG", "DATA"]);
+    expect(texts("state")).toEqual(["ok", "running", "error", "setting_metadata"]);
+    expect(card.root.all((n) => n.className === "state error")).toHaveLength(1);
+
+    const plain = runCard();
+    await plain.initialize();
+    await plain.open({}, things(1, 2), null);
+    expect(plain.root.all((n) => n.className === "kind")).toEqual([]);
   });
 
   it("keeps its rows when a page fails, and retries", async () => {

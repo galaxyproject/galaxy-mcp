@@ -509,6 +509,7 @@ pnpm -r test         # vitest
 pnpm depcruise       # enforce the surface -> core import boundary
 pnpm -r build        # tsup -> dist/
 pnpm parity:report   # regenerate PARITY.md (see below)
+pnpm cards:preview   # the MCP Apps cards in a browser, on sample data (no host, no Galaxy)
 ```
 
 ### Parity with the Python server

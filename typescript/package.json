@@ -9,6 +9,7 @@
     "typecheck": "pnpm -r typecheck",
     "depcruise": "dependency-cruiser --config .dependency-cruiser.cjs packages/galaxy-ops/src/index.ts packages/galaxy-mcp/src/index.ts packages/galaxy-cli/src/index.ts packages/galaxy-cli/src/gxy.ts packages/galaxy-cli/src/auth/keyring-child.ts",
     "parity:report": "pnpm --filter @galaxyproject/galaxy-mcp parity:report",
+    "cards:preview": "pnpm --filter @galaxyproject/galaxy-mcp cards:preview",
     "parity:report:print": "pnpm --silent --filter @galaxyproject/galaxy-mcp parity:report:print"
   },
   "devDependencies": {

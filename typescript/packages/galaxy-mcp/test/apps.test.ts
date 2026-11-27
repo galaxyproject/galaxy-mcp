@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createGalaxyContext } from "@galaxyproject/galaxy-ops";
-import { cardPage } from "../src/apps/card-page";
+import { cardPage, galaxyLabel } from "../src/apps/card-page";
 import { DATASETS_CARD_URI, HISTORIES_CARD_URI, HISTORY_CARD_URI, datasetsCard, historiesCard, historyCard } from "../src/apps/cards";
 import { buildServer, toolNames } from "../src/server";
 import { runCard } from "./card-host";
@@ -76,8 +76,16 @@ describe("MCP Apps cards", () => {
     const client = await connect(true);
     for (const card of [historiesCard, historyCard, datasetsCard]) {
       const { contents: served } = await client.readResource({ uri: card.uri });
-      expect(served).toEqual([expect.objectContaining({ uri: card.uri, mimeType: "text/html;profile=mcp-app", text: cardPage(card) })]);
+      // Each page names the Galaxy this server is over.
+      expect(served).toEqual([expect.objectContaining({ uri: card.uri, mimeType: "text/html;profile=mcp-app", text: cardPage(card, "galaxy.invalid") })]);
     }
+  });
+
+  it("name a Galaxy by its host and the path it is served under", () => {
+    expect(galaxyLabel("https://usegalaxy.org/")).toBe("usegalaxy.org");
+    expect(galaxyLabel("https://example.org:8443/galaxy/")).toBe("example.org:8443/galaxy");
+    expect(galaxyLabel("not a url")).toBeUndefined();
+    expect(galaxyLabel(undefined)).toBeUndefined();
   });
 
   it("answer each show_* call exactly as its read", async () => {
@@ -145,7 +153,9 @@ describe("the datasets card", () => {
     await card.open({ history_id: "h1" }, { history_id: "h1", selected, available: 1, caption: "Inputs for the next step" }, null);
     expect(card.scope()).toBe("Chosen by the assistant \u00b7 2 unavailable \u00b7 Showing 3 of 3");
     expect(card.root.text).toContain("Assistant noteInputs for the next step");
-    expect(card.rows()).toEqual(["5: counts.tsv", "gone", "9: private.bam"]);
+    expect(card.rows()).toEqual(["counts.tsv", "gone", "private.bam"]);
+    // Galaxy's number for the datasets it returned a record of; the one it did not has none.
+    expect(card.numbers()).toEqual(["5:", "9:"]);
     expect(card.root.text).toContain("Not available in this history");
     expect(card.root.text).toContain("You do not have access to this dataset");
     expect(card.button("Show more")).toBeUndefined();
@@ -157,15 +167,17 @@ describe("the history card", () => {
     const card = runCard(cardPage(historyCard));
     await card.initialize();
     await card.open({ history_id: "h1", visible: false, order: "create_time-dsc" }, { history_id: "h1", contents }, { total_items: 2, has_next: false, next_offset: null });
-    expect(card.scope()).toBe("Browsing history, without deleted items, sorted by create_time-dsc · Showing 2 of 2");
+    expect(card.scope()).toBe("Including hidden items · Sorted by creation time, newest first · Showing 2 of 2");
   });
 
   it("opens datasets, and names a collection's type without opening it", async () => {
     const card = runCard(cardPage(historyCard));
     await card.initialize();
     await card.open({ history_id: "h1" }, { history_id: "h1", contents }, { total_items: 2, has_next: false, next_offset: null });
-    expect(card.scope()).toBe("Browsing history, without deleted or hidden items · Showing 2 of 2");
-    expect(card.rows()).toEqual(["1: reads.fastq", "2: samples"]);
+    expect(card.scope()).toBe("Showing 2 of 2");
+    expect(card.rows()).toEqual(["reads.fastq", "samples"]);
+    expect(card.numbers()).toEqual(["1:", "2:"]);
+    expect(card.root.all((n) => n.className === "kind").map((n) => n.text)).toEqual(["FASTQ", "SET"]);
     expect(card.root.text).toContain("list, 3 elements");
     const openable = card.root.all((n) => n.tag === "button" && n.className === "row");
     expect(openable).toHaveLength(1);
@@ -181,8 +193,9 @@ describe("the history card", () => {
     await card.initialize();
     await card.deliver({ method: "ui/notifications/tool-input", params: { arguments: args } });
     await card.deliver({ method: "ui/notifications/tool-result", params: shown });
-    expect(card.rows()).toEqual(["1: reads.fastq", "2: samples"]);
-    expect(card.scope()).toBe("Browsing history, without deleted or hidden items · Showing 2 of 2");
+    expect(card.rows()).toEqual(["reads.fastq", "samples"]);
+    expect(card.numbers()).toEqual(["1:", "2:"]);
+    expect(card.scope()).toBe("Showing 2 of 2");
   });
 
   it("pages within the same history and filters", async () => {

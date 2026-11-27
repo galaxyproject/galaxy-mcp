@@ -54,6 +54,7 @@ export function runCard(html: string) {
     document: {
       getElementById: () => root,
       createElement: (tag: string) => new Node(tag),
+      createElementNS: (_namespace: string, tag: string) => new Node(tag),
       documentElement: { style: {}, getBoundingClientRect: () => ({ height: 200 }) },
     },
     ResizeObserver: class {
@@ -86,8 +87,12 @@ export function runCard(html: string) {
       await button.listeners.click!();
       await settle();
     },
-    rows: () => root.all((n) => n.tag === "li").map((li) => li.all((n) => n.className === "name")[0]!.children[0]),
-    scope: () => root.all((n) => n.className === "scope")[0]!.text,
+    // A row's name, without the number before it or the line under it.
+    rows: () => root.all((n) => n.tag === "li").map((li) => li.all((n) => n.className === "name")[0]!.children.find((child) => typeof child === "string")),
+    numbers: () => root.all((n) => n.className === "hid").map((n) => n.text),
+    // What the card says it is showing and how much of it: the line under its header.
+    scope: () => root.all((n) => n.className === "status")[0]?.text ?? "",
+    origin: () => root.all((n) => n.className === "origin")[0]?.text,
   };
   return card;
 }

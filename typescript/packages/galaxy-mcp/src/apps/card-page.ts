@@ -30,8 +30,12 @@ export interface CardSpec {
    */
   read: string;
   /**
-   * Page-side JavaScript: `(item) => ({ name, meta: [string], state, detail: [[label, value]] })`.
-   * Rows without `detail` cannot be opened.
+   * Page-side JavaScript:
+   * `(item) => ({ name, number, kind, meta: [string], state, side: [string], detail: [[label, value]] })`.
+   * `number` is the item's place in its history, shown before the name. `kind` is a few letters for
+   * the tile that leads the row; rows without one have no tile. `meta` goes under the name; `state`,
+   * Galaxy's own word for it, and `side` go at the row's end. Rows without `detail` cannot be
+   * opened.
    */
   row: string;
   empty: string;
@@ -40,7 +44,21 @@ export interface CardSpec {
 const STEP = 5;
 const FETCH = 20;
 
-export function cardPage(card: CardSpec): string {
+/**
+ * A Galaxy's address as a card shows it: the host, and any path the Galaxy is served under.
+ * Nothing for an address that is not a URL, which a card then leaves out.
+ */
+export function galaxyLabel(baseUrl: string | undefined): string | undefined {
+  try {
+    const url = new URL(baseUrl ?? "");
+    return url.host + url.pathname.replace(/\/+$/, "");
+  } catch {
+    return undefined;
+  }
+}
+
+/** The page for one card. `galaxy` names the Galaxy it shows, under its title. */
+export function cardPage(card: CardSpec, galaxy?: string): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -48,50 +66,70 @@ export function cardPage(card: CardSpec): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${card.title}</title>
 <style>
+  /* Quiet and neutral: colour only for a state. */
   :root {
     color-scheme: light dark;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", sans-serif;
-    --text: light-dark(#1d2233, #e7eaf3);
-    --secondary: light-dark(#5d6478, #a0a8bd);
-    --surface: light-dark(#fff, #1b2030);
-    --row: light-dark(#eef0f5, #232a3d);
-    --line: light-dark(#d5d9e3, #333b52);
-    --accent: light-dark(#2f4bb8, #8ea4ff);
-    --ok: light-dark(#1d7a46, #6fd39a);
-    --bad: light-dark(#b42c2c, #ff8a8a);
-    --busy: light-dark(#8a5a00, #f0c060);
-    --note: light-dark(#eee9fb, #2c2547);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "Helvetica Neue", sans-serif;
+    --text: light-dark(#1d1d1f, #f5f5f7);
+    --secondary: light-dark(#6e6e73, #a1a1a6);
+    --surface: light-dark(rgba(255, 255, 255, .94), rgba(28, 28, 30, .96));
+    --row: light-dark(rgba(0, 0, 0, .025), rgba(255, 255, 255, .045));
+    --hover: light-dark(rgba(0, 0, 0, .04), rgba(255, 255, 255, .06));
+    --line: light-dark(rgba(0, 0, 0, .08), rgba(255, 255, 255, .11));
+    --strong: light-dark(rgba(0, 0, 0, .16), rgba(255, 255, 255, .2));
+    --good: light-dark(#248a3d, #30d158);
+    --busy: light-dark(#9a6700, #ffd60a);
+    --bad: light-dark(#d70015, #ff453a);
   }
   * { box-sizing: border-box; }
-  body { margin: 0; padding: 4px; color: var(--text); background: transparent; font-size: 14px; }
+  body { margin: 0; padding: 6px; color: var(--text); background: transparent; }
   p { margin: 0; }
-  .card { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
-  header { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
-  .mark { flex: none; width: 22px; height: 22px; border-radius: 6px; background: #f2c200; color: #1d2233; display: grid; place-items: center; font-weight: 700; font-size: 12px; }
-  .heading { display: grid; min-width: 0; flex: 1; }
-  .title { overflow: hidden; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-  .scope { color: var(--secondary); font-size: 12px; }
-  .body { display: grid; gap: 8px; padding: 8px 12px 12px; border-top: 1px solid var(--line); }
-  .note { padding: 7px 10px; border-radius: 8px; background: var(--note); }
-  .note b { margin-right: 6px; }
-  ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
-  .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; width: 100%; padding: 6px 8px; border: 0; border-radius: 8px; background: var(--row); color: inherit; font: inherit; text-align: left; }
+  .card { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 1px 2px light-dark(rgba(0, 0, 0, .04), rgba(0, 0, 0, .3)); overflow: hidden; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .mark { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+  .mark svg { display: block; width: 26px; height: auto; }
+  .heading { display: grid; min-width: 0; }
+  .title { font-size: 1.02rem; font-weight: 600; letter-spacing: -.025em; line-height: 1.25; overflow-wrap: anywhere; }
+  .origin { margin-top: 1px; color: var(--secondary); font-size: .76rem; overflow-wrap: anywhere; }
+  .header-actions { display: flex; flex: none; align-items: center; gap: 8px; }
+  .status, .message { margin-top: 10px; color: var(--secondary); font-size: .82rem; line-height: 1.4; }
+  .note { margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: var(--row); font-size: .82rem; line-height: 1.4; }
+  .note b { margin-right: 8px; font-weight: 600; }
+  ul { margin: 10px 0 0; padding: 0; border-top: 1px solid var(--line); list-style: none; }
+  li { min-width: 0; border-bottom: 1px solid var(--line); }
+  .row { display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; padding: 7px 4px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; }
   button.row { cursor: pointer; }
-  button.row:hover { outline: 1px solid var(--accent); }
-  .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .meta { display: block; color: var(--secondary); font-size: 12px; }
-  .state { font-size: 11px; font-weight: 600; }
-  .state.ok { color: var(--ok); }
-  .state.error, .state.failed { color: var(--bad); }
-  .state.running, .state.queued, .state.new { color: var(--busy); }
-  .error { color: var(--bad); }
-  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
-  button.link { padding: 3px 11px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; }
-  button.link:disabled { color: var(--secondary); cursor: default; }
-  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  dl { display: grid; grid-template-columns: 7em minmax(0, 1fr); gap: 3px 10px; margin: 0; }
+  button.row:hover { background: var(--hover); }
+  .kind { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: var(--row); color: var(--secondary); font: 600 .6rem/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .02em; }
+  .name { flex: 1; min-width: 0; overflow: hidden; font-size: .92rem; font-weight: 550; letter-spacing: -.012em; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+  .hid { margin-right: 6px; color: var(--secondary); font-weight: 400; font-variant-numeric: tabular-nums; }
+  .meta { display: block; margin-top: 1px; overflow: hidden; color: var(--secondary); font-size: .75rem; font-weight: 400; letter-spacing: 0; text-overflow: ellipsis; }
+  .side { flex: none; display: grid; gap: 1px; color: var(--secondary); font-size: .72rem; line-height: 1.25; text-align: right; overflow-wrap: anywhere; }
+  .state { font-size: .76rem; font-weight: 500; }
+  /* A state in the colour Galaxy's history panel gives it: done, at work, failed. Waiting stays plain. */
+  .state.ok { color: var(--good); }
+  .state.running, .state.setting_metadata, .state.upload { color: var(--busy); }
+  .state.error, .state.failed, .state.discarded { color: var(--bad); }
+  p.error { margin-top: 10px; color: var(--bad); font-size: .82rem; line-height: 1.4; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .actions.paging { justify-content: center; }
+  button.link { min-height: 28px; padding: 3px 10px; border: 1px solid var(--strong); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: .78rem; font-weight: 500; cursor: pointer; }
+  button.link:hover:not(:disabled) { background: var(--hover); }
+  button.link:disabled { color: var(--secondary); background: var(--row); cursor: default; }
+  button:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+  .opened { display: block; margin-top: 10px; font-size: .92rem; font-weight: 550; }
+  dl { display: grid; grid-template-columns: 7em minmax(0, 1fr); gap: 4px 12px; margin: 10px 0 0; font-size: .86rem; }
   dt { color: var(--secondary); }
-  dd { margin: 0; overflow-wrap: anywhere; }
+  dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+  /* In a narrow frame the header's buttons drop under the title, and a row's end keeps to its share. */
+  @media (max-width: 520px) {
+    body { padding: 4px; }
+    .card { padding: 12px; border-radius: 14px; }
+    header { flex-wrap: wrap; gap: 8px; }
+    .row { align-items: flex-start; }
+    .side { max-width: 42%; }
+  }
 </style>
 </head>
 <body>
@@ -103,6 +141,7 @@ export function cardPage(card: CardSpec): string {
   const OPEN_TOOL = ${JSON.stringify(card.openTool ?? null)};
   const KEEP = ${JSON.stringify(card.keep)};
   const TITLE = ${JSON.stringify(card.title)};
+  const GALAXY = ${JSON.stringify(galaxy ?? null)};
   const EMPTY = ${JSON.stringify(card.empty)};
   const read = ${card.read};
   const rowOf = ${card.row};
@@ -186,10 +225,19 @@ export function cardPage(card: CardSpec): string {
   }
 
   /** Galaxy writes UTC times without a zone. */
-  function galaxyTime(value) {
-    if (!value) return "";
+  function parseTime(value) {
+    if (!value) return null;
     const time = new Date(/[zZ]|[+-]\\d\\d:?\\d\\d$/.test(value) ? value : value + "Z");
-    return Number.isNaN(time.getTime()) ? "" : time.toLocaleString();
+    return Number.isNaN(time.getTime()) ? null : time;
+  }
+
+  function galaxyTime(value) {
+    return parseTime(value)?.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) ?? "";
+  }
+
+  /** The day alone, for a row. */
+  function galaxyDate(value) {
+    return parseTime(value)?.toLocaleDateString(undefined, { dateStyle: "medium" }) ?? "";
   }
 
   function bytes(value) {
@@ -199,6 +247,32 @@ export function cardPage(card: CardSpec): string {
     let unit = 0;
     while (n >= 1024 && unit < units.length - 1) { n /= 1024; unit++; }
     return (unit === 0 ? n : n.toFixed(1)) + " " + units[unit];
+  }
+
+  /** The tile for a dataset: its datatype in a few letters, without what follows a sequence format. */
+  function kindOf(extension) {
+    const format = String(extension || "").toLowerCase();
+    if (/^fast[aq]/.test(format)) return format.slice(0, 5).toUpperCase();
+    return format === "tabular" ? "TABLE" : format.slice(0, 6).toUpperCase() || "DATA";
+  }
+
+  /**
+   * Galaxy's mark, drawn here because the page carries no image: two bars and a third that fades
+   * out, as in the project's own logo (galaxyLogo.duotone.svg in galaxyproject/galaxy).
+   */
+  function mark() {
+    const shape = (tag, attributes) => {
+      const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
+      for (const [name, value] of Object.entries(attributes)) node.setAttribute(name, String(value));
+      return node;
+    };
+    const bar = (x, y, width, fill, opacity = 1) => shape("rect", { x, y, width, height: 145, rx: 12, fill, opacity });
+    const svg = shape("svg", { viewBox: "0 0 591 469", "aria-hidden": "true" });
+    svg.append(
+      bar(0, 0, 512, "#58585a"), bar(0, 162, 418, "#58585a"), bar(187, 324, 190, "#d1be04"),
+      ...[0.75, 0.55, 0.38, 0.24, 0.12].map((opacity, step) => bar(365 + step * 44, 324, 50, "#d1be04", opacity)),
+    );
+    return el("span", { className: "mark" }, svg);
   }
 
   function counts() {
@@ -272,18 +346,25 @@ export function cardPage(card: CardSpec): string {
 
   function render() {
     const header = el("header", {},
-      el("span", { className: "mark", aria: { hidden: "true" } }, "G"),
-      el("div", { className: "heading" },
-        el("span", { className: "title" }, TITLE),
-        el("span", { className: "scope" }, view ? [view.scope, counts()].filter(Boolean).join(" \\u00b7 ") : failure ? "Could not load" : "Waiting for Galaxy\\u2026"),
+      el("div", { className: "brand" },
+        mark(),
+        el("div", { className: "heading" },
+          el("span", { className: "title" }, TITLE),
+          GALAXY ? el("span", { className: "origin" }, GALAXY) : null,
+        ),
       ),
-      displayModes.includes("fullscreen")
-        ? el("button", { type: "button", className: "link", onclick: toggleFullscreen }, displayMode === "fullscreen" ? "Exit full screen" : "Full screen")
-        : null,
-      el("button", { type: "button", className: "link", aria: { expanded: String(!collapsed) }, onclick: () => { collapsed = !collapsed; render(); } }, collapsed ? "Expand" : "Collapse"),
+      el("div", { className: "header-actions" },
+        displayModes.includes("fullscreen")
+          ? el("button", { type: "button", className: "link", onclick: toggleFullscreen }, displayMode === "fullscreen" ? "Exit full screen" : "Full screen")
+          : null,
+        el("button", { type: "button", className: "link", aria: { expanded: String(!collapsed) }, onclick: () => { collapsed = !collapsed; render(); } }, collapsed ? "Expand" : "Collapse"),
+      ),
     );
-    if (collapsed) return root.replaceChildren(header);
-    root.replaceChildren(header, el("div", { className: "body" }, ...(opened === null ? list() : detail())));
+    // What is shown, and how much of it: kept when the card is collapsed.
+    const status = el("p", { className: "status" },
+      view ? [view.scope, counts()].filter(Boolean).join(" \\u00b7 ") : failure ? "Could not load" : "Waiting for Galaxy\\u2026");
+    if (collapsed) return root.replaceChildren(header, status);
+    root.replaceChildren(header, status, ...(opened === null ? list() : detail()).filter(Boolean));
   }
 
   function list() {
@@ -297,9 +378,14 @@ export function cardPage(card: CardSpec): string {
     }
     const rows = view.items.slice(0, shown).map((item, index) => {
       const row = rowOf(item);
+      const meta = row.meta.filter(Boolean).join(" \\u00b7 ");
       const content = [
-        el("span", { className: "name" }, row.name, el("span", { className: "meta" }, row.meta.filter(Boolean).join(" \\u00b7 "))),
-        el("span", { className: "state " + (row.state || "") }, row.state || ""),
+        row.kind ? el("span", { className: "kind", aria: { hidden: "true" } }, row.kind) : null,
+        el("span", { className: "name" }, numbered(row), row.name, meta ? el("span", { className: "meta" }, meta) : null),
+        el("span", { className: "side" },
+          row.state ? el("span", { className: "state " + row.state }, row.state) : null,
+          ...(row.side || []).filter(Boolean).map((line) => el("span", {}, line)),
+        ),
       ];
       return el("li", {}, row.detail
         ? el("button", { type: "button", className: "row", onclick: () => { opened = index; render(); } }, ...content)
@@ -312,17 +398,22 @@ export function cardPage(card: CardSpec): string {
     ].filter(Boolean);
     return [
       view.caption ? el("p", { className: "note" }, el("b", {}, "Assistant note"), view.caption) : null,
-      rows.length ? el("ul", {}, ...rows) : el("p", { className: "meta" }, EMPTY),
+      rows.length ? el("ul", {}, ...rows) : el("p", { className: "message" }, EMPTY),
       failure ? el("p", { className: "error" }, failure) : null,
-      actions.length ? el("div", { className: "actions" }, ...actions) : null,
+      actions.length ? el("div", { className: "actions paging" }, ...actions) : null,
     ];
+  }
+
+  /** An item's number in its history, before its name, as Galaxy lists it. */
+  function numbered(row) {
+    return typeof row.number === "number" ? el("span", { className: "hid" }, row.number + ":") : null;
   }
 
   function detail() {
     const row = rowOf(view.items[opened]);
     return [
       el("div", { className: "actions" }, el("button", { type: "button", className: "link", onclick: () => { opened = null; render(); } }, "Back")),
-      el("b", {}, row.name),
+      el("b", { className: "opened" }, numbered(row), row.name),
       el("dl", {}, ...row.detail.filter(([, value]) => value !== "" && value !== undefined && value !== null).flatMap(([label, value]) => [el("dt", {}, label), el("dd", {}, String(value))])),
     ];
   }
@@ -359,8 +450,8 @@ export function cardPage(card: CardSpec): string {
 }
 
 /** Serve a card's page. A tool shows it by naming its URI in `_meta.ui.resourceUri`. */
-export function registerCard(server: McpServer, name: string, card: CardSpec): void {
-  const html = cardPage(card);
+export function registerCard(server: McpServer, name: string, card: CardSpec, galaxy?: string): void {
+  const html = cardPage(card, galaxy);
   const meta = { ui: { prefersBorder: false } };
   server.registerResource(name, card.uri, { title: card.title, mimeType: MIME_TYPE, _meta: meta }, (uri) => ({
     contents: [{ uri: uri.href, mimeType: MIME_TYPE, text: html, _meta: meta }],
