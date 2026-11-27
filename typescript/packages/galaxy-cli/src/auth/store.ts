@@ -135,6 +135,13 @@ export class CombinedStore implements CredentialStore {
         // helper with the process group, which looks like an unavailable keyring. It is a cancel:
         // no fallback to the file and no warning, so the caller's abort handling takes over.
         if (opts.signal?.aborted) throw abortReason(opts.signal);
+        // A write that failed can still have created the item, with an empty secret (KDE's
+        // ksecretd does when the session is lost mid-call). Nothing points at it, so `logout`
+        // would never find it. Remove it, best effort: an error here changes nothing the person
+        // sees. Not when an existing record uses the entry (it stays, or is removed below).
+        if (!wrote && !samePrior && !this.keyring.disabled) {
+          await this.keyring.delete(login.baseUrl, login.username).catch(() => undefined);
+        }
         // Why, in the warning: a timeout, a locked store and a missing native module need
         // different fixes, and "no keyring available" for all of them leaves the person guessing.
         const why = sanitize(e instanceof Error ? e.message : String(e)).replace(/\.+$/, "");

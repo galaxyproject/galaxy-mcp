@@ -110,9 +110,12 @@ function keyringService(baseUrl: BaseUrl): string {
  * size is invalid"), or the two sides derive different AES keys ("Crypto error: Unpad Error").
  * Upstream: https://github.com/open-source-cooperative/secret-service-rs/issues/127 (fixed in
  * secret-service-rs; `dbus-secret-service`, which @napi-rs/keyring uses, still pads nothing).
- * A new session is a new key pair, so one retry almost always works.
+ * A new session is a new key pair, so one retry almost always works. The same goes for ksecretd
+ * dropping the session mid-call ("Can't find session /org/freedesktop/secrets/session/N"): the
+ * write may have created the item with an empty secret, and the retry replaces it (`set` creates
+ * with replace=true), so no empty item is left.
  */
-const TRANSIENT_SESSION_ERROR = /Client public key size is invalid|Crypto error: Unpad Error/i;
+const TRANSIENT_SESSION_ERROR = /Client public key size is invalid|Crypto error: Unpad Error|Can't find session/i;
 
 function isTransientSessionError(e: unknown): boolean {
   if (!(e instanceof KeyringUnavailableError) || e.timedOut) return false;

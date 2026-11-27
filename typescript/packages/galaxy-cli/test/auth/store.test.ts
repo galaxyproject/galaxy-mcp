@@ -47,6 +47,32 @@ describe("storing a login", () => {
     },
   );
 
+  // A failed write can leave an empty item behind (KDE, lost session). The fallback removes it, and
+  // whatever the removal does, the person sees the same warning and the same outcome.
+  it("removes a partly created keyring entry when the write fails and the token goes to the file", async () => {
+    const set = kr.set.bind(kr);
+    kr.set = async (...a) => {
+      await set(a[0], a[1], "");
+      throw new Error("Platform failure: DBus error: Can't find session /s/3");
+    };
+    const res = await store.put(fakeLogin());
+    expect(res.storage).toBe("file");
+    expect(res.warning).toMatch(/No system keyring.*Can't find session.*plain text/);
+    expect(kr.data.has(entryKey)).toBe(false);
+  });
+  it("ignores a failing cleanup after a failed keyring write", async () => {
+    kr.set = async () => {
+      throw new Error("write failed");
+    };
+    kr.delete = async () => {
+      throw new Error("delete failed");
+    };
+    const res = await store.put(fakeLogin());
+    expect(res).toMatchObject({ storage: "file" });
+    expect(res.warning).toMatch(/write failed/);
+    expect(res.warning).not.toMatch(/delete failed/);
+  });
+
   // The keyring is set to throw so that a put that did try it would fall back and carry a warning.
   // But a keyring that throws stores nothing either way, so the data it holds says nothing about
   // whether it was asked. The calls it recorded do: there must be none.
@@ -133,11 +159,16 @@ describe("saying why the keyring was not used", () => {
   });
 });
 
-// A `set` that itself failed stored nothing we can see, and a cleanup delete after a timeout would
-// wait on the same wedged keyring again.
+// A `set` that failed may still have created an empty item (KDE), so one best-effort delete follows
+// it. After a timeout there is none: the store is wedged and would wait on the same keyring again.
 describe("cleaning up after a failed keyring write", () => {
-  it("does not delete anything when the write itself failed", async () => {
+  it("makes one best-effort delete when the write itself failed", async () => {
     kr.mode = "throw";
+    await store.put(fakeLogin());
+    expect(kr.calls).toEqual(["set", "delete"]);
+  });
+  it("does not ask a keyring that timed out to delete", async () => {
+    kr.mode = "hang";
     await store.put(fakeLogin());
     expect(kr.calls).toEqual(["set"]);
   });
