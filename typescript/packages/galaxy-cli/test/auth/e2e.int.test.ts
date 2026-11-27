@@ -843,33 +843,33 @@ describe("auth, end to end", () => {
   // reaches it. 130 is 128 plus SIGINT's 2, the shell's convention for a Ctrl-C. Not on Windows:
   // there `child.kill("SIGINT")` ends the process outright, so no handler can run.
   describe("Ctrl-C", () => {
-    test.skipIf(process.platform === "win32")('aborts the wait for approval: exit 130, "Cancelled.", nothing stored, and the process is gone', async ({
-      galaxy,
-      run,
-      configDir,
-    }) => {
-      const child = run(["auth", "login", "--host", galaxy.baseUrl]);
-      try {
-        await vi.waitFor(
-          () => {
-            if (galaxy.pendingCodes().length === 0)
-              throw new Error("the CLI never asked for a device code");
-          },
-          { timeout: 15_000, interval: 20 },
-        );
-        child.kill("SIGINT");
-        const r = await child;
-        expect(r.signal).toBeUndefined(); // handled, not killed by the signal
-        expect(r.exitCode).toBe(130);
-        expect(r.stderr).toContain("Cancelled.");
-        await expect(readFile(join(configDir, "hosts.yml"), "utf8")).rejects.toMatchObject({
-          code: "ENOENT",
-        });
-      } finally {
-        child.kill();
-        await child;
-      }
-    }, 30_000);
+    test.skipIf(process.platform === "win32")(
+      'aborts the wait for approval: exit 130, "Cancelled.", nothing stored, and the process is gone',
+      async ({ galaxy, run, configDir }) => {
+        const child = run(["auth", "login", "--host", galaxy.baseUrl]);
+        try {
+          await vi.waitFor(
+            () => {
+              if (galaxy.pendingCodes().length === 0)
+                throw new Error("the CLI never asked for a device code");
+            },
+            { timeout: 15_000, interval: 20 },
+          );
+          child.kill("SIGINT");
+          const r = await child;
+          expect(r.signal).toBeUndefined(); // handled, not killed by the signal
+          expect(r.exitCode).toBe(130);
+          expect(r.stderr).toContain("Cancelled.");
+          await expect(readFile(join(configDir, "hosts.yml"), "utf8")).rejects.toMatchObject({
+            code: "ENOENT",
+          });
+        } finally {
+          child.kill();
+          await child;
+        }
+      },
+      30_000,
+    );
 
     // The key is read from stdin, where a real SIGINT is not a character in raw mode but a signal,
     // and the read must end with it: no key was ever read, so nothing is stored and nothing lingers.
@@ -910,45 +910,45 @@ describe("auth, end to end", () => {
     // A Ctrl-C after approval must still take the token back (B1): the revocation cannot share the
     // login's signal. The fake never answers `whoami`, so the cancel lands while it is out, with the
     // token already issued.
-    test.skipIf(process.platform === "win32")("after approval revokes the token it was given: exit 130, the token no longer works, nothing stored", async ({
-      galaxy,
-      run,
-      configDir,
-    }) => {
-      const child = run(["auth", "login", "--host", galaxy.baseUrl]);
-      try {
-        await vi.waitFor(
-          () => {
-            if (galaxy.pendingCodes().length === 0)
-              throw new Error("the CLI never asked for a device code");
-          },
-          { timeout: 15_000, interval: 20 },
-        );
-        galaxy.hangUsersCurrent(true);
-        galaxy.approve(galaxy.pendingCodes()[0]!, { expiresIn: 3600 });
-        await vi.waitFor(
-          () => {
-            if (galaxy.requestsTo("/api/users/current").length === 0)
-              throw new Error("whoami never started");
-          },
-          { timeout: 15_000, interval: 20 },
-        );
-        child.kill("SIGINT");
-        const r = await child;
-        expect(r.signal).toBeUndefined();
-        expect(r.exitCode).toBe(130);
-        expect(r.stderr).toContain("Cancelled; the token");
-        const [token] = galaxy.issuedTokens();
-        expect(token).toBeDefined();
-        expect(galaxy.isTokenValid(token!), "the token Galaxy issued was revoked").toBe(false);
-        await expect(readFile(join(configDir, "hosts.yml"), "utf8")).rejects.toMatchObject({
-          code: "ENOENT",
-        });
-      } finally {
-        child.kill();
-        await child;
-      }
-    }, 30_000);
+    test.skipIf(process.platform === "win32")(
+      "after approval revokes the token it was given: exit 130, the token no longer works, nothing stored",
+      async ({ galaxy, run, configDir }) => {
+        const child = run(["auth", "login", "--host", galaxy.baseUrl]);
+        try {
+          await vi.waitFor(
+            () => {
+              if (galaxy.pendingCodes().length === 0)
+                throw new Error("the CLI never asked for a device code");
+            },
+            { timeout: 15_000, interval: 20 },
+          );
+          galaxy.hangUsersCurrent(true);
+          galaxy.approve(galaxy.pendingCodes()[0]!, { expiresIn: 3600 });
+          await vi.waitFor(
+            () => {
+              if (galaxy.requestsTo("/api/users/current").length === 0)
+                throw new Error("whoami never started");
+            },
+            { timeout: 15_000, interval: 20 },
+          );
+          child.kill("SIGINT");
+          const r = await child;
+          expect(r.signal).toBeUndefined();
+          expect(r.exitCode).toBe(130);
+          expect(r.stderr).toContain("Cancelled; the token");
+          const [token] = galaxy.issuedTokens();
+          expect(token).toBeDefined();
+          expect(galaxy.isTokenValid(token!), "the token Galaxy issued was revoked").toBe(false);
+          await expect(readFile(join(configDir, "hosts.yml"), "utf8")).rejects.toMatchObject({
+            code: "ENOENT",
+          });
+        } finally {
+          child.kill();
+          await child;
+        }
+      },
+      30_000,
+    );
   });
 
   // The probe of a Galaxy that accepts the connection and never answers is the one request whose

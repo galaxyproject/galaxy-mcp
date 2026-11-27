@@ -115,7 +115,8 @@ function keyringService(baseUrl: BaseUrl): string {
  * write may have created the item with an empty secret, and the retry replaces it (`set` creates
  * with replace=true), so no empty item is left.
  */
-const TRANSIENT_SESSION_ERROR = /Client public key size is invalid|Crypto error: Unpad Error|Can't find session/i;
+const TRANSIENT_SESSION_ERROR =
+  /Client public key size is invalid|Crypto error: Unpad Error|Can't find session/i;
 
 function isTransientSessionError(e: unknown): boolean {
   if (!(e instanceof KeyringUnavailableError) || e.timedOut) return false;
