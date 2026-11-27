@@ -79,6 +79,13 @@ cloned repository chose. Previously `--profile` with a `.env` `GALAXY_URL` sent 
 the `.env` URL, since that outranked the profile's own. A `.env` with both URL and key, and every
 combination where the Galaxy comes from `--url`, the environment or a profile, work as before.
 
+### galaxy-mcp can be imported
+
+`@galaxyproject/galaxy-mcp` now has a library entry beside its command: `buildServer`,
+`createHttpHandler`, `startHttpServer` and `httpConfig`, with type declarations. A program that
+serves Galaxy tools behind its own authentication can build the server per request instead of
+copying it. The `galaxy-mcp` command is unchanged.
+
 ### galaxy-mcp can show cards (MCP Apps)
 
 With `GALAXY_MCP_APPS=1` (or `buildServer(ctx, { apps: true })`), `galaxy-mcp` serves
