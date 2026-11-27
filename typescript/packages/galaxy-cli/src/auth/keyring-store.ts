@@ -120,7 +120,10 @@ const TRANSIENT_SESSION_ERROR =
 
 function isTransientSessionError(e: unknown): boolean {
   if (!(e instanceof KeyringUnavailableError) || e.timedOut) return false;
-  const inner = e.cause instanceof Error ? e.cause.message : "";
+  // A failed call arrives wrapped, with the native error as its cause. A failure to open the
+  // entry, where KWallet refuses the handshake, comes back from the helper as "unavailable": the
+  // native text is the message itself and there is no cause.
+  const inner = e.cause instanceof Error ? e.cause.message : e.message;
   return TRANSIENT_SESSION_ERROR.test(inner);
 }
 
