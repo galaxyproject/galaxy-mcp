@@ -64,7 +64,9 @@ describe("KeyringStore retries a session handshake flake once", () => {
     return kr;
   };
 
-  it.each([flake, "Platform failure: Crypto error: Unpad Error"])(
+  const lostSession =
+    "Platform failure: DBus error: Can't find session /org/freedesktop/secrets/session/3";
+  it.each([flake, "Platform failure: Crypto error: Unpad Error", lostSession])(
     "retries a get, a set and a delete after %s",
     async (message) => {
       const kr = flaky(message, 1);
