@@ -387,7 +387,11 @@ describe("pyContains", () => {
    * the loop around it looks like.
    */
   it("gets there without asking this runtime for a code-unit search", () => {
-    const text = readFileSync(fileURLToPath(new URL("../src/python-str.ts", import.meta.url)), "utf8");
+    // A Windows checkout may turn the source's line endings into CRLF, which the "\n}\n" search below would miss.
+    const text = readFileSync(
+      fileURLToPath(new URL("../src/python-str.ts", import.meta.url)),
+      "utf8",
+    ).replace(/\r\n/g, "\n");
     const body = (name: string): string => {
       const at = text.indexOf(`function ${name}(`);
       expect(at).toBeGreaterThan(-1);

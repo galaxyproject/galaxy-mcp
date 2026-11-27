@@ -145,6 +145,7 @@ describe("the key and the Galaxy an operation uses, every combination", () => {
       if (envKey) env.GALAXY_API_KEY = tri(envKey, K.env)!;
       cwd.mockReturnValue(cwds.get(`${dotUrl}${dotKey}`)!);
       vi.stubEnv("HOME", homes[shape]!);
+      vi.stubEnv("USERPROFILE", homes[shape]!); // `os.homedir()` reads this one on Windows
       let got: Outcome;
       try {
         // The real readers of `.env` and the profiles, with the environment given here.

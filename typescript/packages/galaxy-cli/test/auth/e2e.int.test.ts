@@ -17,7 +17,7 @@ import { execa, type ResultPromise } from "execa";
 import { spawnSync } from "node:child_process";
 import { chmod, mkdtemp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import { createServer, type Socket } from "node:net";
 import { fileURLToPath } from "node:url";
 import { startFakeGalaxy, type FakeGalaxy } from "../support/fake-galaxy";
@@ -154,7 +154,7 @@ async function filesHolding(root: string, needle: string): Promise<string[]> {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) await walk(path);
       else if (entry.isFile() && (await readFile(path)).includes(needle))
-        found.push(relative(root, path));
+        found.push(relative(root, path).split(sep).join("/"));
     }
   };
   await walk(root);
@@ -219,8 +219,11 @@ describe("auth, end to end", () => {
     expect(login.stdout + login.stderr).not.toContain(token);
 
     // The directory is private to the user, and so is the file that holds the token.
-    expect((await stat(configDir)).mode & 0o777).toBe(0o700);
-    expect((await stat(join(configDir, "hosts.yml"))).mode & 0o777).toBe(0o600);
+    // Windows reports every file as 0o666, so the modes cannot be checked there.
+    if (process.platform !== "win32") {
+      expect((await stat(configDir)).mode & 0o777).toBe(0o700);
+      expect((await stat(join(configDir, "hosts.yml"))).mode & 0o777).toBe(0o600);
+    }
 
     const status = await run(["auth", "status"]);
     expect(status.exitCode, status.stderr).toBe(0);
@@ -348,10 +351,11 @@ describe("auth, end to end", () => {
       expect(login.exitCode, login.stderr).toBe(0);
       expect(login.stderr).toContain("admin rights");
       const path = join(configDir, "hosts.yml");
-      expect((await stat(path)).mode & 0o777).toBe(0o600);
+      // Windows reports every file as 0o666, so the mode cannot be checked there.
+      if (process.platform !== "win32") expect((await stat(path)).mode & 0o777).toBe(0o600);
       await expectTokenOnlyWhereAllowed(token, {
         home,
-        files: [relative(home, path)],
+        files: ["config/hosts.yml"],
         galaxy,
         transcript,
       });
@@ -491,7 +495,8 @@ describe("auth, end to end", () => {
       expect(await readFile(path, "utf8")).toBe(before);
     }, 60_000);
 
-    test("a hosts.yml that others can write: exit 65 naming the file, and nothing is changed", async ({
+    // Windows has no POSIX modes, so no file is ever writable by others.
+    test.skipIf(process.platform === "win32")("a hosts.yml that others can write: exit 65 naming the file, and nothing is changed", async ({
       galaxy,
       run,
       configDir,
@@ -601,7 +606,8 @@ describe("auth, end to end", () => {
     }, 60_000);
   });
 
-  test("lets `auth token | head -c1` end quietly with 0, when the output is more than the pipe holds", async ({
+  // Needs `bash` and `head`, which a Windows machine does not have on its PATH.
+  test.skipIf(process.platform === "win32")("lets `auth token | head -c1` end quietly with 0, when the output is more than the pipe holds", async ({
     galaxy,
     run,
     cliEnv,
@@ -672,7 +678,8 @@ describe("auth, end to end", () => {
 
   // The command tests abort an `AbortController`; only a real process shows that a real SIGINT
   // reaches it. 130 is 128 plus SIGINT's 2, the shell's convention for a Ctrl-C.
-  describe("Ctrl-C", () => {
+  // `child.kill("SIGINT")` ends a Windows process outright, so its SIGINT handler never runs.
+  describe.skipIf(process.platform === "win32")("Ctrl-C", () => {
     // The key is read from stdin, where a real SIGINT is not a character in raw mode but a signal,
     // and the read must end with it: no key was ever read, so nothing is stored and nothing lingers.
     test("aborts the wait for a key on stdin with --with-token: exit 130, nothing stored, and the process is gone", async ({
@@ -713,7 +720,8 @@ describe("auth, end to end", () => {
   // The probe of a Galaxy that accepts the connection and never answers is the one request whose
   // socket outlives the command: after Ctrl-C the login has long said "Cancelled.", but a request
   // left open holds the process until its own timeout (15 s).
-  test("Ctrl-C while a Galaxy never answers the probe: exit 130 at once, not after the timeout", async ({
+  // `child.kill("SIGINT")` ends a Windows process outright, so its SIGINT handler never runs.
+  test.skipIf(process.platform === "win32")("Ctrl-C while a Galaxy never answers the probe: exit 130 at once, not after the timeout", async ({
     run,
     configDir,
     onTestFinished,

@@ -665,6 +665,7 @@ describe("loadSources (the files and environment)", () => {
     for (const [name, text] of Object.entries(files)) await writeFile(join(tmp.path, name), text);
     const cwd = vi.spyOn(process, "cwd").mockReturnValue(tmp.path);
     vi.stubEnv("HOME", tmp.path);
+    vi.stubEnv("USERPROFILE", tmp.path); // `os.homedir()` reads this one on Windows
     try {
       fn();
     } finally {

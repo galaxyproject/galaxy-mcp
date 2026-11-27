@@ -146,7 +146,8 @@ describe("auth env", () => {
   describe("quoting", () => {
     // `auth env` output is meant to be evaluated, so a real `sh` is the judge here: the expectation
     // comes from what sh makes of the quoting, not from the code that wrote it.
-    it("survives a real sh, whatever the value holds", () => {
+    // Windows has no `sh` on its PATH.
+    it.skipIf(process.platform === "win32")("survives a real sh, whatever the value holds", () => {
       const value = `it's "x" $HOME \`id\` \\ end`;
       expect(execFileSync("sh", ["-c", `printf %s ${quoteFor("sh", value)}`]).toString()).toBe(
         value,
