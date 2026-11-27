@@ -378,8 +378,25 @@ describe("reading a login", () => {
     kr.data.clear();
     await expect(store.get(HOST)).rejects.toMatchObject({
       kind: "not_logged_in",
-      message: expect.stringContaining("keyring has none") as string,
+      message: expect.stringContaining("did not return it") as string,
     });
+  });
+
+  // A closed KDE wallet answers "no entry" rather than an error. The message must say the keyring
+  // may be locked, and the record must stay, so that unlocking and retrying works.
+  it("names a locked or closed keyring when it returns nothing, and keeps the record", async () => {
+    await store.put(fakeLogin());
+    const before = await readFile(file.path, "utf8");
+    const saved = new Map(kr.data);
+    kr.data.clear(); // what a closed wallet looks like from here
+    await expect(store.get(HOST)).rejects.toMatchObject({
+      kind: "not_logged_in",
+      message: expect.stringMatching(/locked or closed.*unlock it and retry/s) as string,
+    });
+    expect(await readFile(file.path, "utf8")).toBe(before);
+    // Unlocked again: the same record works.
+    for (const [k, v] of saved) kr.data.set(k, v);
+    expect((await store.get(HOST))?.token).toBe(FAKE_TOKEN);
   });
 
   it("explains an unreachable keyring instead of returning a login without a token", async () => {
@@ -418,6 +435,24 @@ describe("deleting and listing", () => {
       expect(await file.list()).toEqual([]);
     },
   );
+
+  // A closed KDE wallet finds nothing to delete and reports no error. The record is then the only
+  // pointer to the secret, so it stays, and a second logout works once the wallet is open.
+  it("delete keeps the record and says the secret may remain when the keyring finds nothing", async () => {
+    await store.put(fakeLogin());
+    const saved = new Map(kr.data);
+    kr.data.clear(); // what a closed wallet looks like from here
+    const err = (await store.delete(HOST).catch((e: unknown) => e)) as Error;
+    expect(err).toMatchObject({ kind: "leftover" });
+    expect(err.message).toMatch(/may remain/);
+    expect(err.message).toMatch(/unlock it and run logout again/);
+    expect(err.message).toContain(`"gxy:${HOST}" for that user`);
+    expect((await file.list()).map((s) => s.baseUrl)).toEqual([HOST]);
+    for (const [k, v] of saved) kr.data.set(k, v); // unlocked
+    expect(await store.delete(HOST)).toBe(true);
+    expect(kr.data.size).toBe(0);
+    expect(await file.list()).toEqual([]);
+  });
 
   // The keyring is broken here, so a `list` that reached for a token would fail.
   it("list works without reading any secret", async () => {

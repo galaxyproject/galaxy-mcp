@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { checkExpiry, describeExpiry, formatExpiry } from "../expiry";
 import {
   AuthError,
@@ -8,6 +9,7 @@ import {
 } from "../types";
 import { fail, formatTimeLeft, hostOf, maskToken, describeStorage, sanitize } from "./common";
 import { untilAborted } from "../abort";
+import { configDir } from "../paths";
 
 export interface StatusOptions {
   host?: string;
@@ -210,7 +212,7 @@ export async function statusCommand(opts: StatusOptions, deps: AuthDeps): Promis
       else if (c.state === "unavailable")
         err(`  ✗ ${c.problem}. Run: ${deps.commandName} auth login --host ${l.baseUrl}`);
       else err(`  ✗ ${c.problem}`);
-      err(`  Storage  ${describeStorage(l.storage)}`);
+      err(`  Storage  ${describeStorage(l.storage, configDir(deps.env, homedir()))}`);
       err(`  Method   ${l.method === "device" ? "device login" : "pasted API key"}`);
       err(
         `  Scopes   ${l.scopes.length ? sanitize(l.scopes.join(" ")) : l.method === "pasted" ? "full access (API key)" : "server default"}`,
