@@ -44,7 +44,7 @@ describe("KeyringStore", () => {
 describe("KeyringStore retries a session handshake flake once", () => {
   const flake = "Platform failure: DBus error: Client public key size is invalid";
   /** A backend whose first `n` calls fail with `message`, then behaves like a working one. */
-  const flaky = (message: string, n: number) => {
+  const flaky = (message: string, n: number, unavailable = false) => {
     const kr = new FakeKeyring();
     kr.data.set(`gxy:${baseUrl}|alice`, "FAKE");
     let left = n;
@@ -52,7 +52,7 @@ describe("KeyringStore retries a session handshake flake once", () => {
     const fail = (op: "get" | "set" | "delete") => {
       if (left-- > 0) {
         kr.calls.push(op);
-        throw new Error(message);
+        throw unavailable ? new KeyringUnavailableError(message) : new Error(message);
       }
     };
     const get = kr.get.bind(kr);
@@ -80,6 +80,26 @@ describe("KeyringStore retries a session handshake flake once", () => {
       expect(kr3.calls).toEqual(["delete", "delete", "get"]);
     },
   );
+  // The helper reports a handshake refused while opening the entry as "unavailable", so the
+  // store sees a KeyringUnavailableError with the native text as its message and no cause.
+  it.each([flake, lostSession])(
+    "retries %s when the helper reports it as unavailable",
+    async (message) => {
+      const kr = flaky(message, 1, true);
+      expect(await new KeyringStore(kr, 50).get(baseUrl, "alice")).toBe("FAKE");
+      expect(kr.calls).toEqual(["get", "get"]);
+      const kr2 = flaky(message, 1, true);
+      await new KeyringStore(kr2, 50).set(baseUrl, "alice", "NEW");
+      expect(kr2.calls).toEqual(["set", "set"]);
+    },
+  );
+  it("does not retry an unavailable keyring that is not a session flake", async () => {
+    const kr = flaky("the native keyring module could not be loaded: x", 1, true);
+    await expect(new KeyringStore(kr, 50).get(baseUrl, "alice")).rejects.toThrow(
+      KeyringUnavailableError,
+    );
+    expect(kr.calls).toEqual(["get"]);
+  });
   it("gives up after the second failure, with the usual error", async () => {
     const kr = flaky(flake, 2);
     await expect(new KeyringStore(kr, 50).get(baseUrl, "alice")).rejects.toThrow(
