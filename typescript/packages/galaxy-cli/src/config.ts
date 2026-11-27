@@ -33,7 +33,7 @@ export interface Sources {
   now?: Date;
   /** The `.env` file `dotenv` was read from, for saying so. */
   dotenvPath?: string;
-  /** Set when the credential store could not be read (corrupt file). */
+  /** Set when the credential store could not be read (corrupt file, keyring locked). */
   storeProblem?: string;
   /**
    * A login is stored for the Galaxy being used but cannot be read (one a newer gxy wrote); the
@@ -101,9 +101,38 @@ function profileKeyOf(flags: GlobalFlags, src: Sources): string | undefined {
   return prof?.galaxy_user_key ?? prof?.galaxy_admin_key;
 }
 
+/** A Galaxy chosen to talk to, and the part of the rule that chose it. */
+interface PickedHost { url: string; source: HostSource }
+
+/** Why no key can be used. The data is what the message for it needs. */
+export type KeyRefusal =
+  /** The host rule refused (several logins stored and none named, or the like): its own error. */
+  | { reason: "host"; error: unknown }
+  /** Nothing to use; `named` is the Galaxy that was named, if any. */
+  | { reason: "no_credentials"; named: string | undefined }
+  /** `--profile` has a key but no galaxy_url, and no Galaxy is named. */
+  | { reason: "profile_no_url" }
+  /** The Galaxy comes from `.env` and the key does not: only `.env`'s own key goes with its URL. */
+  | { reason: "dotenv_host"; keySource: KeySourceId }
+  /**
+   * The stored login has expired. No key is used in its place: the only one left below it would be
+   * `.env`'s. `expiry` says how, and `dotenvKeyNotUsed` whether a `.env` key was passed over.
+   */
+  | { reason: "login_expired"; baseUrl: BaseUrl; expiry: string; dotenvKeyNotUsed: boolean }
+  /**
+   * The stored login is the one wanted but cannot be read (`unreadableStored`). No key is used in
+   * its place; `dotenvKeyNotUsed` says whether a `.env` key was passed over.
+   */
+  | { reason: "stored_unreadable"; named: string | undefined; dotenvKeyNotUsed: boolean };
+
+/** `picked` is the Galaxy the rule chose, or undefined when nothing was named and nothing is stored. */
+export type KeyChoice =
+  | { ok: true; picked: PickedHost | undefined; baseUrl: string; apiKey: string; keySource: KeySourceId }
+  | ({ ok: false; picked: PickedHost | undefined } & KeyRefusal);
+
 /**
- * Pure resolver -- sources injected so it is fully testable. `commandName` is only for the hints
- * in messages (`gxy`, or `galaxy-cli` for someone who typed that).
+ * The decision behind `resolveConnection`, without the wording: which Galaxy and which key an
+ * operation would use, or why it would use none. Pure; sources are injected.
  *
  * The key, first match: `--api-key`; the `--profile` key; `GALAXY_API_KEY` in the environment;
  * the stored login for the host; `.env`'s key. The command line beats the environment, which
@@ -116,94 +145,37 @@ function profileKeyOf(flags: GlobalFlags, src: Sources): string | undefined {
  * one, when nothing names a host). Any other key goes only to a host somebody named: otherwise a
  * `.env` for some other Galaxy would send its key to wherever you last logged in. The Galaxy is
  * chosen the same way: `--url`, the `--profile` URL, `GALAXY_URL`, `.env`'s, the only stored login.
+ *
+ * `opts.unreadableStored` (or `src.unreadableStored`) says a login is stored for that Galaxy but
+ * cannot be read (`src.storedLogin` is then absent). The `.env` key is not used in its place, any
+ * more than for an expired login: the refusal is `stored_unreadable`, not "no credentials".
+ *
+ * It does not check `--profile` exists: `requireProfile` is the caller's to run first.
  */
-export function resolveConnection(flags: GlobalFlags, src: Sources, commandName = "gxy"): Connection {
-  requireProfile(flags, src);
+export function chooseKey(flags: GlobalFlags, src: Sources, opts: { unreadableStored?: BaseUrl } = {}): KeyChoice {
   // The same rule as `gxy auth *` (auth/host.ts). With nothing named and nothing stored the
-  // generic "no credentials" error below says what to do, so that case is not an error here.
-  let picked: { url: string; source: HostSource } | undefined;
+  // "no credentials" refusal says what to do, so that case is not a refusal of its own.
+  let picked: PickedHost | undefined;
   try {
     picked = pickOperationHost(flags, src);
   } catch (e) {
-    if (!(e instanceof NoHostError)) throw e;
+    if (!(e instanceof NoHostError)) return { ok: false, picked: undefined, reason: "host", error: e };
   }
   const named = picked && picked.source !== "stored" ? picked.url : undefined;
-  const noCredentials = () => {
-    const problem = src.storeProblem ? ` (${src.storeProblem})` : "";
-    // A Galaxy was named, and logins are stored, but none of them is for it: say so, rather than the
-    // generic advice, which reads as if a login existed and were not found. Shown as a URL without
-    // anything a user could have put in it (its credentials, its query): normalised, else the host.
-    if (named && src.storedBaseUrls?.length) {
-      let key: string | undefined;
-      let shown: string;
-      try {
-        key = normalizeBaseUrl(named);
-        shown = key;
-      } catch {
-        try {
-          shown = new URL(named).host;
-        } catch {
-          shown = "the Galaxy named";
-        }
-      }
-      if (!key || !src.storedBaseUrls.includes(key as BaseUrl)) {
-        const logins = src.storedBaseUrls.join(", ");
-        return new Error(
-          `No Galaxy credentials for ${shown}: the stored login${src.storedBaseUrls.length > 1 ? "s are" : " is"} for ${logins}. ` +
-            `Run ${commandName} auth login --host ${shown}, or set GALAXY_API_KEY (env, a .env file, or --api-key) for it.${problem}`,
-        );
-      }
-    }
-    return new Error(
-      "No Galaxy credentials. Set GALAXY_URL and GALAXY_API_KEY (env, a .env file, or --url/--api-key), " +
-        `or pass --profile <name> for a ~/.planemo.yml profile, or run ${commandName} auth login.${problem}`,
-    );
-  };
-  const dotenvFile = src.dotenvPath ?? ".env";
   const dotenvKey = src.dotenv.GALAXY_API_KEY;
-  // A `.env` comes with the directory you are in, often a clone of somebody else's repository, so
-  // say when it chose the Galaxy or the key, and when a login of yours outranked its key.
-  const finish = (conn: Connection): Connection => {
-    const used = [
-      conn.keySource === "dotenv" ? "GALAXY_API_KEY" : "",
-      picked?.source === "dotenv" ? "GALAXY_URL" : "",
-    ].filter(Boolean);
-    const lines = [];
-    if (used.length) lines.push(`Using ${used.join(" and ")} from ${dotenvFile}.`);
-    if (conn.keySource === "stored" && dotenvKey) {
-      lines.push(
-        `The stored login for ${conn.baseUrl} ranks above GALAXY_API_KEY in ${dotenvFile}, so that key is not used.`,
-      );
-    }
-    return lines.length ? { ...conn, note: lines.join("\n") } : conn;
-  };
   // A key that did not come from a stored login goes to a named Galaxy or nowhere, and never to a
   // Galaxy that a `.env` chose unless the key is that `.env`'s own: a `.env` comes with the directory,
   // often a clone of somebody else's repository, and must not say where another key is sent. This
   // depends only on where the Galaxy came from, not on how the keys are ranked. A stored login does
   // not come through here, so a `.env` URL that is a stored login's host still gets that login's token.
-  const sendTo = (apiKey: string, keySource: KeySourceId, warning?: string): Connection => {
+  const sendTo = (apiKey: string, keySource: KeySourceId): KeyChoice => {
     if (!named) {
-      if (keySource === "profile") {
-        throw new Error(
-          `--profile ${flags.profile ?? ""} has a key but no galaxy_url, and no Galaxy is named. ` +
-            "Add galaxy_url to the profile, or pass --url.",
-        );
-      }
-      throw noCredentials();
+      return keySource === "profile"
+        ? { ok: false, picked, reason: "profile_no_url" }
+        : { ok: false, picked, reason: "no_credentials", named };
     }
-    if (picked?.source === "dotenv" && keySource !== "dotenv") {
-      const key =
-        keySource === "flag" ? "--api-key"
-        : keySource === "env" ? "GALAXY_API_KEY from the environment"
-        : `the key of profile "${flags.profile ?? ""}"`;
-      const hint = keySource === "profile" ? ", or add galaxy_url to the profile" : "";
-      throw new CredentialScopeError(
-        `GALAXY_URL from ${dotenvFile} is only used with the GALAXY_API_KEY in the same file, not with ${key}. ` +
-          `Set GALAXY_URL in the environment or pass --url to send that key to this Galaxy${hint}.`,
-      );
-    }
-    return finish({ baseUrl: named, apiKey, keySource, ...(warning ? { warning } : {}) });
+    if (picked?.source === "dotenv" && keySource !== "dotenv") return { ok: false, picked, reason: "dotenv_host", keySource };
+    return { ok: true, picked, baseUrl: named, apiKey, keySource };
   };
 
   if (flags.apiKey) return sendTo(flags.apiKey, "flag");
@@ -217,22 +189,116 @@ export function resolveConnection(flags: GlobalFlags, src: Sources, commandName 
   if (login && !isExpired(login.expiresAt, now)) {
     // The key goes to the vetted form of the URL it was stored for, not to the raw string
     // (which may carry a query or an odd path) that merely normalises to it.
-    return finish({ baseUrl: login.baseUrl, apiKey: login.token, keySource: "stored" });
+    return { ok: true, picked, baseUrl: login.baseUrl, apiKey: login.token, keySource: "stored" };
   }
   // A stored login that cannot be used (expired, or unreadable) is not handed over to another key.
   // Every key that outranks a stored login was tried above, so the only one left is a `.env`'s, and
   // that would run you as the account of whoever wrote the `.env` against the Galaxy you logged in
   // to. The answer is the one there would be with no `.env` key, saying that key was passed over.
-  const notUsed = dotenvKey ? ` GALAXY_API_KEY in ${dotenvFile} is not used in its place.` : "";
   if (login) {
-    const expired = `Your login to ${login.baseUrl} ${describeExpiry(login.expiresAt!, now)}`;
-    throw new AuthError("not_logged_in", `${expired}; run ${commandName} auth login --host ${login.baseUrl}.${notUsed}`);
+    return { ok: false, picked, reason: "login_expired", baseUrl: login.baseUrl, expiry: expiredText(login, now), dotenvKeyNotUsed: Boolean(dotenvKey) };
   }
-  if (picked && src.unreadableStored && isGalaxy(picked.url, src.unreadableStored)) {
-    throw new Error(`${noCredentials().message}${notUsed}`);
+  const unreadable = opts.unreadableStored ?? src.unreadableStored;
+  if (picked && unreadable && isGalaxy(picked.url, unreadable)) {
+    return { ok: false, picked, reason: "stored_unreadable", named, dotenvKeyNotUsed: Boolean(dotenvKey) };
   }
-  if (dotenvKey) return sendTo(dotenvKey, "dotenv", src.storeProblem);
-  throw noCredentials();
+  return dotenvKey ? sendTo(dotenvKey, "dotenv") : { ok: false, picked, reason: "no_credentials", named };
+}
+
+const expiredText = (login: StoredLogin, now: Date) => `Your login to ${login.baseUrl} ${describeExpiry(login.expiresAt!, now)}`;
+
+/** The error for a Galaxy that was named, or none, that no key can be used for. */
+function noCredentialsError(named: string | undefined, src: Sources, commandName: string): Error {
+  const problem = src.storeProblem ? ` (${src.storeProblem})` : "";
+  // A Galaxy was named, and logins are stored, but none of them is for it: say so, rather than the
+  // generic advice, which reads as if a login existed and were not found. Shown as a URL without
+  // anything a user could have put in it (its credentials, its query): normalised, else the host.
+  if (named && src.storedBaseUrls?.length) {
+    let key: string | undefined;
+    let shown: string;
+    try {
+      key = normalizeBaseUrl(named);
+      shown = key;
+    } catch {
+      try {
+        shown = new URL(named).host;
+      } catch {
+        shown = "the Galaxy named";
+      }
+    }
+    if (!key || !src.storedBaseUrls.includes(key as BaseUrl)) {
+      const logins = src.storedBaseUrls.join(", ");
+      return new Error(
+        `No Galaxy credentials for ${shown}: the stored login${src.storedBaseUrls.length > 1 ? "s are" : " is"} for ${logins}. ` +
+          `Run ${commandName} auth login --host ${shown}, or set GALAXY_API_KEY (env, a .env file, or --api-key) for it.${problem}`,
+      );
+    }
+  }
+  return new Error(
+    "No Galaxy credentials. Set GALAXY_URL and GALAXY_API_KEY (env, a .env file, or --url/--api-key), " +
+      `or pass --profile <name> for a ~/.planemo.yml profile, or run ${commandName} auth login.${problem}`,
+  );
+}
+
+/** Why a key that is not `.env`'s is refused for a Galaxy that `.env` chose; the operation's own words. */
+function scopeMessage(keySource: KeySourceId, flags: GlobalFlags, dotenvFile: string): string {
+  const key =
+    keySource === "flag" ? "--api-key"
+    : keySource === "env" ? "GALAXY_API_KEY from the environment"
+    : `the key of profile "${flags.profile ?? ""}"`;
+  const hint = keySource === "profile" ? ", or add galaxy_url to the profile" : "";
+  return (
+    `GALAXY_URL from ${dotenvFile} is only used with the GALAXY_API_KEY in the same file, not with ${key}. ` +
+    `Set GALAXY_URL in the environment or pass --url to send that key to this Galaxy${hint}.`
+  );
+}
+
+/**
+ * Turn `chooseKey`'s answer into a connection, or the error for its refusal. `commandName` is only
+ * for the hints in messages (`gxy`, or `galaxy-cli` for someone who typed that). See `chooseKey`
+ * for which Galaxy and key are chosen.
+ */
+export function resolveConnection(flags: GlobalFlags, src: Sources, commandName = "gxy"): Connection {
+  requireProfile(flags, src);
+  const choice = chooseKey(flags, src);
+  const dotenvFile = src.dotenvPath ?? ".env";
+  if (!choice.ok) {
+    switch (choice.reason) {
+      case "host":
+        throw choice.error;
+      case "no_credentials":
+        throw noCredentialsError(choice.named, src, commandName);
+      case "stored_unreadable": {
+        const e = noCredentialsError(choice.named, src, commandName);
+        throw choice.dotenvKeyNotUsed ? new Error(`${e.message} GALAXY_API_KEY in ${dotenvFile} is not used in its place.`) : e;
+      }
+      case "profile_no_url":
+        throw new Error(
+          `--profile ${flags.profile ?? ""} has a key but no galaxy_url, and no Galaxy is named. ` +
+            "Add galaxy_url to the profile, or pass --url.",
+        );
+      case "dotenv_host":
+        throw new CredentialScopeError(scopeMessage(choice.keySource, flags, dotenvFile));
+      case "login_expired": {
+        const notUsed = choice.dotenvKeyNotUsed ? ` GALAXY_API_KEY in ${dotenvFile} is not used in its place.` : "";
+        throw new AuthError("not_logged_in", `${choice.expiry}; run ${commandName} auth login --host ${choice.baseUrl}.${notUsed}`);
+      }
+    }
+  }
+  // A `.env` comes with the directory you are in, often a clone of somebody else's repository, so
+  // say when it chose the Galaxy or the key, and when a login of yours outranked its key.
+  const { baseUrl, apiKey, keySource } = choice;
+  // A usable key was found, but something the person should know about was not: the store that
+  // could not be read.
+  const warning = keySource === "dotenv" ? src.storeProblem : undefined;
+  const conn: Connection = { baseUrl, apiKey, keySource, ...(warning ? { warning } : {}) };
+  const used = [keySource === "dotenv" ? "GALAXY_API_KEY" : "", choice.picked?.source === "dotenv" ? "GALAXY_URL" : ""].filter(Boolean);
+  const lines = [];
+  if (used.length) lines.push(`Using ${used.join(" and ")} from ${dotenvFile}.`);
+  if (keySource === "stored" && src.dotenv.GALAXY_API_KEY) {
+    lines.push(`The stored login for ${baseUrl} ranks above GALAXY_API_KEY in ${dotenvFile}, so that key is not used.`);
+  }
+  return lines.length ? { ...conn, note: lines.join("\n") } : conn;
 }
 
 /**
@@ -242,39 +308,40 @@ export function resolveConnection(flags: GlobalFlags, src: Sources, commandName 
 type KeySourceReport =
   | { id: KeySourceId }
   | { id: null; reason: "elsewhere"; galaxy: string }
-  | { id: null; reason: "ambiguous" | "refused" }
+  | { id: null; reason: "ambiguous" | "refused" | "unreadable" }
   /** `message` is what the operation's `CredentialScopeError` says. */
   | { id: null; reason: "scope"; message: string };
 
 /**
  * Which source an operation run now, with these flags and this environment, would take its key
- * from for this Galaxy, given its stored login (if any): what `auth status` shows. It runs the real
- * resolver, so it names a source only when the operation would go to this Galaxy. An expired
+ * from for this Galaxy, given its stored login: what `auth status` shows. It reads `chooseKey`'s
+ * decision, so it names a source only when the operation would go to this Galaxy. An expired
  * login still counts as "stored": nothing else would be used for it either, and the operation says
  * why it fails. `src.storedBaseUrls` is every stored login, since several of them make an operation
  * that names no Galaxy ambiguous.
+ *
+ * `login` is undefined when its token cannot be read (a locked keyring), which is how an operation
+ * sees it too: it uses another key if it has one, and otherwise the report says "unreadable" where
+ * the stored login would have been the key.
  */
-export function keySourceFor(baseUrl: BaseUrl, flags: GlobalFlags, src: Sources, login?: StoredLogin): KeySourceReport {
-  const all: Sources = { ...src, storedBaseUrls: src.storedBaseUrls ?? [baseUrl], ...(login ? { storedLogin: login } : {}) };
-  let picked: { url: string };
-  try {
-    picked = pickOperationHost(flags, all);
-  } catch {
-    return { id: null, reason: "ambiguous" };
-  }
+export function keySourceFor(baseUrl: BaseUrl, flags: GlobalFlags, src: Sources, login: StoredLogin | undefined): KeySourceReport {
+  const all: Sources = { ...src, storedBaseUrls: src.storedBaseUrls ?? [baseUrl] };
+  const choice = chooseKey(flags, { ...all, ...(login ? { storedLogin: login } : {}) }, login ? {} : { unreadableStored: baseUrl });
+  if (!choice.picked) return { id: null, reason: "ambiguous" };
   let normalised: string | undefined;
   try {
-    normalised = normalizeBaseUrl(picked.url);
+    normalised = normalizeBaseUrl(choice.picked.url);
   } catch {
     normalised = undefined;
   }
-  if (normalised !== baseUrl) return { id: null, reason: "elsewhere", galaxy: picked.url };
-  try {
-    return { id: resolveConnection(flags, all).keySource };
-  } catch (e) {
-    if (e instanceof CredentialScopeError) return { id: null, reason: "scope", message: e.message };
-    return e instanceof AuthError && e.kind === "not_logged_in" ? { id: "stored" } : { id: null, reason: "refused" };
-  }
+  if (normalised !== baseUrl) return { id: null, reason: "elsewhere", galaxy: choice.picked.url };
+  // `resolveConnection` would stop at an unknown profile before anything else.
+  if (flags.profile && !Object.prototype.hasOwnProperty.call(src.profiles, flags.profile)) return { id: null, reason: "refused" };
+  if (choice.ok) return { id: choice.keySource };
+  if (choice.reason === "dotenv_host") return { id: null, reason: "scope", message: scopeMessage(choice.keySource, flags, src.dotenvPath ?? ".env") };
+  if (choice.reason === "login_expired") return { id: "stored" };
+  if (choice.reason === "stored_unreadable") return { id: null, reason: "unreadable" };
+  return { id: null, reason: "refused" };
 }
 
 /** `describeKeySource`, or for a Galaxy with no source named the reason, as `auth status` words it. */
@@ -294,6 +361,8 @@ export function describeKeyReport(report: KeySourceReport, flags: GlobalFlags = 
       return "none (several logins are stored, and operations need --url to say which)";
     case "refused":
       return "none (operations with these flags stop with an error)";
+    case "unreadable":
+      return "none (the stored token cannot be read)";
     case "scope":
       return `none (operations are refused: ${report.message})`;
   }
@@ -304,7 +373,7 @@ function matchingLogin(baseUrl: string, login: StoredLogin | undefined): StoredL
   return login && isGalaxy(baseUrl, login.baseUrl) ? login : undefined;
 }
 
-/** Whether `url` is the Galaxy stored as `stored`: compared as normalised; an unparsable URL never is. */
+/** Whether `url`, as typed, is this stored (normalised) base URL. */
 function isGalaxy(url: string, stored: BaseUrl): boolean {
   try {
     return normalizeBaseUrl(url) === stored;
@@ -320,7 +389,7 @@ export function loadSources(): Sources {
 
 /**
  * Like `loadSources`, plus the stored login for the Galaxy these flags point at. The store
- * is only touched when no key outranking it is given, so a broken hosts.yml never
+ * is only touched when no key outranking it is given, so a broken keyring or hosts.yml never
  * gets in the way of `--api-key`, `--profile` or `GALAXY_API_KEY`.
  */
 export async function loadSourcesAsync(
@@ -332,7 +401,11 @@ export async function loadSourcesAsync(
   requireProfile(flags, src);
   if (flags.apiKey || profileKeyOf(flags, src) || src.env.GALAXY_API_KEY) return { ...src, now };
   try {
-    const store = opts.store ?? createCredentialStore(src.env);
+    // An operation is run by a person at a terminal as often as by a script: with stderr on a
+    // terminal, a locked keyring may be unlocked at its prompt, as for `auth` (auth/deps.ts).
+    const store =
+      opts.store ??
+      createCredentialStore(src.env, undefined, undefined, { interactive: process.stderr.isTTY === true });
     const summaries = await store.list();
     const storedBaseUrls = summaries.map((s) => s.baseUrl);
     let target: BaseUrl | undefined;

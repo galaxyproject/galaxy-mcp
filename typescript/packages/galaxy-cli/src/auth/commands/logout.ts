@@ -1,5 +1,5 @@
-import type { AuthDeps } from "../types";
-import { fail, hostOf } from "./common";
+import { AuthError, type AuthDeps } from "../types";
+import { fail, hostOf, sanitize } from "./common";
 
 export interface LogoutOptions {
   host?: string;
@@ -18,7 +18,8 @@ export async function logoutCommand(opts: LogoutOptions, deps: AuthDeps): Promis
   try {
     const baseUrl = await deps.resolveHost(opts.host);
     const host = hostOf(baseUrl);
-    // The record (no secret) decides whether there is anything to remove.
+    // The record (no secret) decides whether there is anything to remove. The token is never
+    // read: the keyring may be down or the secret gone, which is when cleaning up matters most.
     const summary = (await deps.store.list()).find((s) => s.baseUrl === baseUrl);
     if (!summary) {
       // The list leaves out a login this version cannot read (one a newer gxy wrote), and that is
@@ -28,16 +29,40 @@ export async function logoutCommand(opts: LogoutOptions, deps: AuthDeps): Promis
       return 0;
     }
 
+    // A failure to remove is reported too: a secret that may remain in the keyring is something
+    // the person must know.
+    let deleteProblem: string | null = null;
+    let removed = false;
+    try {
+      removed = await deps.store.delete(baseUrl);
+    } catch (e) {
+      // Refused before anything was removed (the keyring is switched off): a usage error, not a
+      // half-done logout.
+      if (e instanceof AuthError && e.kind === "usage") throw e;
+      deleteProblem = sanitize(e instanceof Error ? e.message : String(e), { keepNewlines: true });
+    }
     // Another logout can remove the entry between the list and here; then there is nothing left
     // to report as removed.
-    if (!(await deps.store.delete(baseUrl))) {
+    if (!removed && !deleteProblem) {
       err(`Not logged in to ${host}; nothing to remove.`);
       return 0;
     }
-    err(`✓ Removed the stored API key for ${host}`);
+
+    // The removal line says what happened to the stored login: a tick only when it is gone.
+    err(
+      deleteProblem
+        ? `! Could not remove the stored API key for ${host}.`
+        : `✓ Removed the stored API key for ${host}`,
+    );
     err(
       `! The key itself was not revoked, as it may be in use elsewhere. It still works until you revoke it in Galaxy's user preferences: ${baseUrl}/user/api_key`,
     );
+    if (deleteProblem) {
+      // The secret may still be in the keyring, so this is a failure (1) even though the record
+      // is gone.
+      err(`! ${deleteProblem}`);
+      return 1;
+    }
     return 0;
   } catch (e) {
     return fail(deps, e);

@@ -2,8 +2,15 @@ import { exitCodeForAuthError, EX_SOFTWARE } from "../../exit";
 import { describeExpiry, isExpired } from "../expiry";
 import { NoHostError } from "../host";
 import { wasAnswered } from "../network";
+import { fileAccessPhrase } from "../paths";
 import { sanitize } from "../sanitize";
-import { AuthError, type AuthDeps, type BaseUrl, type StoredLogin } from "../types";
+import {
+  AuthError,
+  type AuthDeps,
+  type BaseUrl,
+  type StoredLogin,
+  type StorageKind,
+} from "../types";
 
 export { sanitize };
 
@@ -72,6 +79,12 @@ export function formatTimeLeft(ms: number): string {
  */
 export function maskToken(token: string): string {
   return token.length > 12 ? `${"*".repeat(8)}${token.slice(-4)}` : "*".repeat(8);
+}
+
+export function describeStorage(kind: StorageKind, dir?: string): string {
+  return kind === "keyring"
+    ? "system keyring"
+    : `plaintext file (${dir === undefined ? "readable only by you" : fileAccessPhrase(dir)})`;
 }
 
 /**

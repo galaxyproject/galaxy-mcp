@@ -1,7 +1,7 @@
 // Small pure modules of the auth surface, one section each.
 import { describe, expect, it } from "vitest";
 import { abortReason } from "../../src/auth/abort";
-import { configDir } from "../../src/auth/paths";
+import { configDir, fileAccessPhrase } from "../../src/auth/paths";
 import { EXPIRY_MARGIN_MS, checkExpiry, isExpired } from "../../src/auth/expiry";
 import { DAY } from "./harness";
 import { spawnSync } from "node:child_process";
@@ -194,7 +194,8 @@ describe("normalizeBaseUrl", () => {
     expect(() => normalizeBaseUrl(input)).toThrow(AuthError);
   });
 
-  // A password in the URL would be stored in `hosts.yml`, which is keyed by it.
+  // A password in the URL would be stored in `hosts.yml` and in the keyring's service name, which
+  // is built from this key.
   it("refuses userinfo, whatever the form", () => {
     expect(() => normalizeBaseUrl("https://user:pw@host.example")).toThrow(/credentials/);
     expect(() => normalizeBaseUrl("user@host.example")).toThrow(/credentials/);
@@ -289,5 +290,29 @@ describe("abortReason", () => {
     const error = abortReason(controller.signal);
     expect(error).toBeInstanceOf(Error);
     expect(error.cause).toBe("stop");
+  });
+});
+
+describe("fileAccessPhrase", () => {
+  const phrase = (dir: string, platform: NodeJS.Platform, home: string) =>
+    fileAccessPhrase(dir, platform, home);
+  it("keeps 'readable only by you' on POSIX, wherever the directory is", () => {
+    expect(phrase("/srv/shared/gxy", "linux", "/home/u")).toBe("readable only by you");
+    expect(phrase("/Users/u/.config/gxy", "darwin", "/Users/u")).toBe("readable only by you");
+  });
+  it("keeps it on Windows under the user profile, case-insensitively", () => {
+    expect(phrase("C:\\Users\\u\\.config\\gxy", "win32", "C:\\Users\\u")).toBe(
+      "readable only by you",
+    );
+    expect(phrase("c:\\users\\U\\AppData\\gxy", "win32", "C:\\Users\\u")).toBe(
+      "readable only by you",
+    );
+  });
+  it("does not claim it on Windows outside the profile", () => {
+    for (const dir of ["C:\\gxy-shared\\cfg", "C:\\Users\\other\\gxy", "D:\\Users\\u\\gxy"]) {
+      const p = phrase(dir, "win32", "C:\\Users\\u");
+      expect(p).not.toContain("only by you");
+      expect(p).toContain("other users may be able to read it");
+    }
   });
 });

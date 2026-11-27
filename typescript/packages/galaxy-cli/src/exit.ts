@@ -44,8 +44,11 @@ const AUTH_MAP: Record<AuthErrorKind, number> = {
   // code covers it wherever the address came from.
   protocol: EX_PROTOCOL,
   insecure: EX_PROTOCOL,
+  // A keyring that will not confirm a removal. `logout` catches it, reports it itself and exits
+  // 1 (the command ran, but not everything was removed), so this is the same 1 for any other caller.
+  leftover: 1,
   // As `auth` for an operation: there is no credential Galaxy would take, whether none is stored,
-  // it ran out, or an admin key was refused (`--insecure-storage` allows it).
+  // it ran out, or an admin key may not go in the plaintext file.
   not_logged_in: EX_NOPERM,
   denied: EX_NOPERM,
   // `hosts.yml` is the input that cannot be used (corrupt, loose, a link, another user's, unreadable
