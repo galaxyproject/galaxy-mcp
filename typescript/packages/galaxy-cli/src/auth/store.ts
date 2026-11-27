@@ -203,8 +203,20 @@ export class CombinedStore implements CredentialStore {
     let leftover: unknown;
     if (rec.storage === "keyring") {
       try {
-        await this.keyring.delete(baseUrl, rec.username);
+        const existed = await this.keyring.delete(baseUrl, rec.username);
+        // The record says there is a secret and the keyring says there was nothing to delete. A
+        // locked or closed keyring looks exactly like that (KDE's ksecretd returns no match while
+        // the wallet is closed), and the record is then the only pointer to the secret. So it is
+        // kept, and logout can be run again once the keyring is open; dropping it would leave a
+        // token that nothing refers to and `logout` can never find.
+        if (!existed) {
+          throw new AuthError(
+            "leftover",
+            `The system keyring found no secret for ${baseUrl} (user ${sanitize(rec.username)}) to remove. It may be locked or closed, in which case the secret may remain there: unlock it and run logout again. The login record was kept for that. If the entry is really gone, delete the entry for ${baseUrl} from ${this.file.path} (or remove "gxy:${baseUrl}" for that user with your keyring's own tool)`,
+          );
+        }
       } catch (e) {
+        if (e instanceof AuthError && e.kind === "leftover") throw e;
         leftover = e;
       }
     }

@@ -436,6 +436,24 @@ describe("deleting and listing", () => {
     },
   );
 
+  // A closed KDE wallet finds nothing to delete and reports no error. The record is then the only
+  // pointer to the secret, so it stays, and a second logout works once the wallet is open.
+  it("delete keeps the record and says the secret may remain when the keyring finds nothing", async () => {
+    await store.put(fakeLogin());
+    const saved = new Map(kr.data);
+    kr.data.clear(); // what a closed wallet looks like from here
+    const err = (await store.delete(HOST).catch((e: unknown) => e)) as Error;
+    expect(err).toMatchObject({ kind: "leftover" });
+    expect(err.message).toMatch(/may remain/);
+    expect(err.message).toMatch(/unlock it and run logout again/);
+    expect(err.message).toContain(`"gxy:${HOST}" for that user`);
+    expect((await file.list()).map((s) => s.baseUrl)).toEqual([HOST]);
+    for (const [k, v] of saved) kr.data.set(k, v); // unlocked
+    expect(await store.delete(HOST)).toBe(true);
+    expect(kr.data.size).toBe(0);
+    expect(await file.list()).toEqual([]);
+  });
+
   // The keyring is broken here, so a `list` that reached for a token would fail.
   it("list works without reading any secret", async () => {
     await store.put(fakeLogin());
