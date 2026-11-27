@@ -1,0 +1,28 @@
+{
+  "$comment": "Canned Galaxy replies -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. Matched by method and path; where a route declares a query, every declared parameter must match, and the most specific matching route wins.",
+  "baseUrl": "https://galaxy.example/",
+  "routes": [
+    {
+      "method": "POST",
+      "path": "/api/workflows",
+      "query": {},
+      "status": 200,
+      "headers": {},
+      "body": {
+        "model_class": "StoredWorkflow",
+        "id": "wf00000e",
+        "latest_workflow_id": "lw00000e",
+        "name": "Per-sample QC",
+        "create_time": "2026-01-02T03:04:05.000000",
+        "update_time": "2026-01-02T03:04:05.000000",
+        "published": false,
+        "importable": false,
+        "deleted": false,
+        "hidden": false,
+        "latest_workflow_uuid": "0d1c7b9c-5a19-4a8e-9f8e-2d4c6c6f3f11",
+        "creator_deleted": false,
+        "url": "/api/workflows/wf00000e"
+      }
+    }
+  ]
+}

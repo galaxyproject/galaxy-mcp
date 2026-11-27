@@ -17,6 +17,55 @@ schema both workflow ops use.
 `invoke_workflow` takes `allowToolStateCorrections` (`allow_tool_state_corrections` on the wire)
 and now always sends it, false by default, as bioblend does for the Python server.
 
+### galaxy-cli installs a `gxy` command (#214)
+
+`@galaxyproject/galaxy-cli` now provides `gxy` as well as `galaxy-cli`. They are the same program;
+`gxy` is the shorter name that the `gxy auth` commands below are written with.
+
+### galaxy-cli keeps logins in a store of its own (#215)
+
+A login (the Galaxy's address, who it is for and an API key) is kept in `hosts.yml` under
+`$GXY_CONFIG_DIR`, else `$XDG_CONFIG_HOME/gxy`, else `~/.config/gxy`, readable only by the user. A
+file that other users can write to, or an entry that a different version of `gxy` wrote, is refused
+rather than trusted. A `hosts.yml` that gxy can't read or write exits 65 with the file named, not as
+an unexpected error.
+
+### `gxy auth login --with-token` (#216), `token` and `logout` (#218)
+
+`gxy auth login --with-token` reads an API key from stdin (piped, or typed without echo at a
+terminal), checks with the Galaxy that it works and stores it. It needs `--host`, `--url` or
+`GALAXY_URL`: it never takes the Galaxy from a stored login, since the key it reads need not be that
+Galaxy's. `gxy auth token` prints the stored token and `gxy auth logout` deletes the login. Ctrl-C at
+any point cancels and stores nothing.
+
+### galaxy-cli operations use stored logins, and `--api-key` is deprecated (#219)
+
+With no flag or variable naming a key or a Galaxy, an operation finds both in the stored logins.
+The key order is now `--api-key`, `--profile`, `GALAXY_API_KEY`, the stored login, then `.env`'s
+key; the Galaxy order is `--url`, the `--profile` URL, `GALAXY_URL`, `.env`'s `GALAXY_URL`, then the
+only stored login. For someone with no stored login, a `--profile` key now beats `GALAXY_API_KEY`
+and a `.env` key, and a profile's `galaxy_url` beats `GALAXY_URL` and `.env`'s. A key that is not
+from a stored login goes only to a Galaxy that something named, and an operation that uses a `.env`
+key or Galaxy says so on stderr (`--quiet` silences it). A stored login for the Galaxy being used
+that can't be used (expired, or unreadable) is never replaced by the `.env` key below it: the run
+stops as it would with no `.env` key. A `GALAXY_URL` from `.env` is only used
+with the key from that `.env`: with any other key the run stops with exit 77. The exception is a
+profile with its own `galaxy_url`: that Galaxy outranks `.env`'s, so the profile's key goes there
+rather than being refused, as the `.env` entry below would suggest. A `--profile` that is not in
+`~/.planemo.yml` is a usage error (64). The `gxy auth` commands refuse `--api-key` (`status`
+reports on it instead), and `login` refuses `--profile` too, with a usage error (64). `--api-key`
+still works for operations but is deprecated, since the key shows in the process list.
+
+### `gxy auth status`, `env` and `headers` (#220)
+
+`gxy auth status` lists the stored logins, checked against each Galaxy, and says which key an
+operation run with the same flags and environment would use (`key_source` in `--json`), or why
+operations would be refused (a `.env` Galaxy with another key). `gxy auth
+env` prints `GALAXY_URL` and `GALAXY_API_KEY` assignments for `eval`, and `gxy auth headers` prints
+`{"x-api-key": ...}` as JSON, for an MCP `headersHelper`, only for the Galaxy that Claude Code's
+`CLAUDE_CODE_MCP_SERVER_URL` names: without it, it refuses. Both write only to stdout, so a pipe
+reads them and nothing else.
+
 ### galaxy-cli: a `.env` URL is only used with the `.env` key
 
 Behaviour change. A `GALAXY_URL` from a `.env` file in the current directory is now only used with
@@ -42,6 +91,24 @@ place. A card pages through the read tool with the arguments it was opened with.
 That is a helper, not an operation, so it adds no tool. Cards are off by default, so the tool
 list and the parity report are unchanged unless they are turned on.
 
+### `extract_workflow_from_history`: the tools already run, as a workflow
+
+A new write operation over `POST /api/workflows` with `from_history_id`, on both servers:
+the jobs already run in a history become the tool steps of a new stored workflow, and the
+datasets or collections they read become its inputs, so the same chain can be invoked on
+every remaining sample with `invoke_workflow` instead of being re-submitted one tool call
+at a time. It takes the history, a name, `job_ids` (encoded job ids, which become the tool
+steps -- without any there are none), `dataset_hids` and `collection_hids`. Those two are
+history item numbers, not ids: Galaxy's own form calls them `dataset_ids` and
+`dataset_collection_ids` and reads them as hids, so the operation names them for what they
+are and refuses an encoded id or an extraction that names nothing before anything is sent.
+A 400 from Galaxy -- a hid that is not a collection, a job from another history -- is a
+`validation` failure (exit 64) rather than a `connection` one. It answers with the new
+workflow's id and name, what was requested step by step and Galaxy's record. The steps are
+made in the order the datasets, the collections and then the jobs are listed in, which is all
+that tells the workflow's input slots apart: Galaxy does not name an input after its item, and
+does not check that a dataset hid is in the history.
+
 ### galaxy-mcp serves Streamable HTTP
 
 `galaxy-mcp --transport streamable-http` (or `GALAXY_MCP_TRANSPORT=streamable-http`) serves the
@@ -53,6 +120,21 @@ guards: it binds to loopback unless `--allow-unauthenticated` is given, checks t
 `GALAXY_MCP_ALLOW_LOCAL_FILES` is set. stdio is unchanged, and remains the default. Unknown
 command-line arguments are now refused rather than ignored, and an address that cannot be
 listened on (a port in use, say) is reported in one line instead of a stack trace.
+
+### `invoke_workflow` takes a workflow `version`
+
+All three surfaces take an optional `version` (`--version` on the CLI) to run one stored
+version of the workflow instead of the latest -- numbered from 0, oldest first, the same
+number `get_workflow_details` reports and accepts. It goes into the invocation POST, and the
+input preflight reads that version's run model, so inputs that suit it aren't refused against
+the newest version's slots. A negative version is refused before anything is sent, since
+Galaxy would read it as a list index counted from the newest end. Without `version` the request
+is unchanged. A pinned run that fails names the version in its error. Three new golden cases,
+`invoke_workflow/with_version`, `invoke_workflow/oldest_version` and
+`invoke_workflow/inputs_checked_against_that_version`, are answered only when `version` reaches
+the request, so a surface dropping it fails the replay; `invoke_workflow/negative_version` pins
+the refusal and `invoke_workflow/version_out_of_range` Galaxy's 400. The fixture route table can
+now narrow a write on keys in its JSON body, which is what those cases need.
 
 ### zod 4.6
 
@@ -73,6 +155,12 @@ narrow first, and a job's `job_messages` gains an output-collection security mes
 also adds `representation_errors` and `representation_status` to a user tool; a 26.0 server
 does not send them, so `UserToolRecord` keeps both optional rather than promising fields that
 can be missing at runtime.
+
+### `run_tool` input description aligned with galaxy-mcp
+
+The `inputs` description of `run_tool` lists the batch form for mapping over a collection,
+`{"input_name": {"batch": true, "values": [{"src": "hdca", "id": "collection_id"}]}}`, and
+`map_over_type` for mapping over sub-collections, in both galaxy-ops and galaxy-mcp.
 
 ## 0.5.0 (2026-10-20)
 

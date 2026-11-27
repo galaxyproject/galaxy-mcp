@@ -1,8 +1,8 @@
 {
   "$comment": "Generated golden envelopes from the Python MCP server -- do not edit by hand. Regenerate with `uv run python -m tests.envelope_fixtures`. `input` is spelled in the server's own parameter names, which is what the MCP wire takes. A case whose `outcome` is \"failure\" pins the tool result a failed call answers with instead of an envelope.",
   "source": "python/src/galaxy_mcp/server.py",
-  "caseCount": 291,
-  "failureCaseCount": 101,
+  "caseCount": 301,
+  "failureCaseCount": 107,
   "cases": [
     {
       "tool": "search_tools_by_name",
@@ -1910,6 +1910,51 @@
     },
     {
       "tool": "invoke_workflow",
+      "case": "with_version",
+      "note": "an earlier stored version run by number: the POST answers only when version is in it",
+      "outcome": "success",
+      "input": {
+        "workflow_id": "wf000001",
+        "history_id": "h0000",
+        "version": 1
+      },
+      "envelope": "invoke_workflow/with_version.json",
+      "replies": "invoke_workflow/with_version.galaxy.json"
+    },
+    {
+      "tool": "invoke_workflow",
+      "case": "oldest_version",
+      "note": "version 0, the oldest stored one: the POST answers only when the 0 is in it",
+      "outcome": "success",
+      "input": {
+        "workflow_id": "wf000001",
+        "history_id": "h0000",
+        "version": 0
+      },
+      "envelope": "invoke_workflow/oldest_version.json",
+      "replies": "invoke_workflow/oldest_version.galaxy.json"
+    },
+    {
+      "tool": "invoke_workflow",
+      "case": "inputs_checked_against_that_version",
+      "note": "the preflight reads the asked-for version's run model, which takes the FASTQ",
+      "outcome": "success",
+      "input": {
+        "workflow_id": "wf000001",
+        "history_id": "h0000",
+        "inputs": {
+          "0": {
+            "id": "d0000001",
+            "src": "hda"
+          }
+        },
+        "version": 1
+      },
+      "envelope": "invoke_workflow/inputs_checked_against_that_version.json",
+      "replies": "invoke_workflow/inputs_checked_against_that_version.galaxy.json"
+    },
+    {
+      "tool": "invoke_workflow",
       "case": "batch_answers_with_a_list",
       "note": "Galaxy expanded the run, so the answer is every invocation it made",
       "outcome": "success",
@@ -2287,6 +2332,29 @@
       },
       "envelope": "import_workflow/missing_tools.json",
       "replies": "import_workflow/missing_tools.galaxy.json"
+    },
+    {
+      "tool": "extract_workflow_from_history",
+      "case": "jobs_and_inputs",
+      "note": "two jobs, a dataset and a collection named by hid, one of them as the digits a command line hands over",
+      "outcome": "success",
+      "input": {
+        "history_id": "h0001",
+        "workflow_name": "Per-sample QC",
+        "job_ids": [
+          "j0000001",
+          "j0000002"
+        ],
+        "dataset_hids": [
+          3,
+          "4"
+        ],
+        "collection_hids": [
+          12
+        ]
+      },
+      "envelope": "extract_workflow_from_history/jobs_and_inputs.json",
+      "replies": "extract_workflow_from_history/jobs_and_inputs.galaxy.json"
     },
     {
       "tool": "get_page_revision",
@@ -2738,6 +2806,39 @@
       "replies": "get_collection_details/permission_denied.galaxy.json"
     },
     {
+      "tool": "extract_workflow_from_history",
+      "case": "hid_is_not_a_collection",
+      "note": "Galaxy's own 400 for what was named, quoted by format_error with the history and the name",
+      "outcome": "failure",
+      "input": {
+        "history_id": "h0001",
+        "workflow_name": "QC",
+        "job_ids": [
+          "j0000001"
+        ],
+        "collection_hids": [
+          12
+        ]
+      },
+      "envelope": "extract_workflow_from_history/hid_is_not_a_collection.json",
+      "replies": "extract_workflow_from_history/hid_is_not_a_collection.galaxy.json"
+    },
+    {
+      "tool": "extract_workflow_from_history",
+      "case": "history_not_accessible",
+      "note": "and a status that is not about what was named",
+      "outcome": "failure",
+      "input": {
+        "history_id": "h0000403",
+        "workflow_name": "QC",
+        "job_ids": [
+          "j0000001"
+        ]
+      },
+      "envelope": "extract_workflow_from_history/history_not_accessible.json",
+      "replies": "extract_workflow_from_history/history_not_accessible.galaxy.json"
+    },
+    {
       "tool": "create_history",
       "case": "refused_by_galaxy",
       "note": "the one tool with no try block, so bioblend's text is the whole sentence",
@@ -2800,6 +2901,19 @@
       },
       "envelope": "invoke_workflow/refused_by_galaxy.json",
       "replies": "invoke_workflow/refused_by_galaxy.galaxy.json"
+    },
+    {
+      "tool": "invoke_workflow",
+      "case": "version_out_of_range",
+      "note": "a stored version Galaxy does not have, refused on the POST; the context names it",
+      "outcome": "failure",
+      "input": {
+        "workflow_id": "wf000001",
+        "history_id": "h0000",
+        "version": 7
+      },
+      "envelope": "invoke_workflow/version_out_of_range.json",
+      "replies": "invoke_workflow/version_out_of_range.galaxy.json"
     },
     {
       "tool": "create_user_tool",
@@ -3316,6 +3430,33 @@
       "replies": "import_workflow/refused_by_galaxy.galaxy.json"
     },
     {
+      "tool": "extract_workflow_from_history",
+      "case": "nothing_named",
+      "note": "an extraction naming no job and no input, which Galaxy would store as an empty workflow",
+      "outcome": "failure",
+      "input": {
+        "history_id": "h0001",
+        "workflow_name": "empty"
+      },
+      "envelope": "extract_workflow_from_history/nothing_named.json",
+      "replies": "get_invocations/malformed_id.galaxy.json"
+    },
+    {
+      "tool": "extract_workflow_from_history",
+      "case": "encoded_id_where_a_hid_belongs",
+      "note": "Galaxy's dataset_ids are hids; an encoded id there is refused here, with the value quoted",
+      "outcome": "failure",
+      "input": {
+        "history_id": "h0001",
+        "workflow_name": "QC",
+        "dataset_hids": [
+          "f2db41e1fa331b3e"
+        ]
+      },
+      "envelope": "extract_workflow_from_history/encoded_id_where_a_hid_belongs.json",
+      "replies": "get_invocations/malformed_id.galaxy.json"
+    },
+    {
       "tool": "list_workflows",
       "case": "limit_above_the_ceiling",
       "note": "the page ceiling, with the advice to use offset that a pageable tool gets",
@@ -3359,6 +3500,18 @@
         "offset": -1
       },
       "envelope": "search_tools_by_name/negative_offset.json",
+      "replies": "get_invocations/malformed_id.galaxy.json"
+    },
+    {
+      "tool": "invoke_workflow",
+      "case": "negative_version",
+      "note": "a version below 0, which Galaxy would read as counted from the newest end",
+      "outcome": "failure",
+      "input": {
+        "workflow_id": "wf000001",
+        "version": -1
+      },
+      "envelope": "invoke_workflow/negative_version.json",
       "replies": "get_invocations/malformed_id.galaxy.json"
     },
     {

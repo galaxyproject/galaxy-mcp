@@ -308,9 +308,10 @@ the same Galaxy tools API as a catalog tool.
 - `get_workflow_details`: One workflow's steps and inputs, at a given version
 - `get_workflow_input_template`: A ready-to-fill input template plus a run guide, at a given version; call this before `invoke_workflow`
 - `import_workflow`: Import a workflow from its `.ga` or Format2 definition (a dict, JSON or Format2 YAML text); `fill_defaults` has Galaxy complete the tool state, and `missing_tools` names the tools this Galaxy does not have
-- `invoke_workflow`: Run a workflow, validating the inputs against its steps first; `allow_tool_state_corrections` lets Galaxy fill in tool state it would otherwise refuse
+- `invoke_workflow`: Run a workflow, optionally at a given stored version, validating the inputs against its steps first; `allow_tool_state_corrections` lets Galaxy fill in tool state it would otherwise refuse
 - `get_invocations`: Invocations, by invocation, workflow, or history; pages with `limit` (at most 100, Galaxy's cap) and `offset`, sorts by `create_time` or `update_time`, and `include_terminal=False` keeps only the ones still running
 - `cancel_workflow_invocation`: Cancel a running invocation
+- `extract_workflow_from_history`: Turn jobs already run in a history into a stored workflow; `job_ids` become its tool steps and `dataset_hids` / `collection_hids` (history item numbers, not ids) its inputs
 
 ### IWC catalog
 

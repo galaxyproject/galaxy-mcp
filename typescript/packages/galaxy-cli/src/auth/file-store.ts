@@ -85,11 +85,11 @@ const KNOWN_FIELDS = new Set([
  * and the rename carries the temp file's mode over.
  *
  * Read-modify-write is not locked across processes: two simultaneous logins can lose one
- * update. This file is only written when a login is stored or removed, which is rare and interactive; that is
+ * update. This file is only written at login and logout, which are rare and interactive; that is
  * why it is accepted. (gh serialises its writes with a lock file.)
  */
 export class FileStore {
-  /** Entries already warned about, so a store that reads twice warns once. */
+  /** Entries already warned about, so a command that reads twice warns once. */
   private readonly warned = new Set<string>();
 
   constructor(
@@ -143,7 +143,7 @@ export class FileStore {
     );
   }
 
-  /** Warn once per entry and file, however many times the store is read. */
+  /** Warn once per entry and file, however many times a command reads the store. */
   private warnSkipped(url: string, why: string): void {
     const key = `${this.path}\0${url}`;
     if (this.warned.has(key)) return;
@@ -153,7 +153,38 @@ export class FileStore {
     );
   }
 
-  private async readAll(): Promise<Doc> {
+  /**
+   * A read or write the file system refuses (no permission, a read-only mount, a full disk) is
+   * the person's to fix, like a corrupt file, so it is an `AuthError` that names the file and
+   * what to try, not a raw errno error that a command would report as a bug in gxy. Errors that
+   * are already ours, and anything without an errno code, pass through as they are.
+   */
+  private async fsGuard<T>(op: "read" | "write", run: () => Promise<T>): Promise<T> {
+    try {
+      return await run();
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException | undefined)?.code;
+      if (e instanceof AuthError || typeof code !== "string") throw e;
+      const why = ERRNO_WHY[code] ?? code;
+      throw new AuthError(
+        "store",
+        op === "read"
+          ? `Cannot read ${this.path}: ${why}. Check that you can read it and ${this.dir}, or set GXY_CONFIG_DIR to another directory.`
+          : `Cannot write ${this.path}: ${why}. It has not been changed. Check that you can write to ${this.dir}, or set GXY_CONFIG_DIR to another directory.`,
+        { cause: e },
+      );
+    }
+  }
+
+  private readAll(): Promise<Doc> {
+    return this.fsGuard("read", () => this.readAllUnguarded());
+  }
+
+  private writeAll(doc: Doc): Promise<void> {
+    return this.fsGuard("write", () => this.writeAllUnguarded(doc));
+  }
+
+  private async readAllUnguarded(): Promise<Doc> {
     await this.assertSafe();
     await this.tightenDir(false);
     let text: string;
@@ -249,7 +280,7 @@ export class FileStore {
    * entry, not surface later as a `TypeError`, or as a file login with no token. What is not
    * recognised at all becomes an `unknown` entry (see `Doc`); what is recognised but wrong is
    * corrupt. An `expires_at` that is a string but not a date is let through here and judged by
-   * whoever uses it.
+   * `checkExpiry`, which treats it as expired.
    */
   private decode(url: string, raw: unknown): Entry {
     if (!isObject(raw)) throw this.corrupt(`entry for ${show(url)} is not a mapping`);
@@ -334,7 +365,7 @@ export class FileStore {
     return stringifyYaml(new Map<string, unknown>([["hosts", hosts], ...doc.extra]));
   }
 
-  private async writeAll(doc: Doc): Promise<void> {
+  private async writeAllUnguarded(doc: Doc): Promise<void> {
     await this.assertSafe();
     await mkdir(this.dir, { recursive: true, mode: 0o700 });
     // Again, because the first pass skips what does not exist yet: this one checks the
@@ -464,12 +495,23 @@ export class FileStore {
   }
 }
 
+/** Plain words for the errno codes a person can meet here; any other code is shown as it is. */
+const ERRNO_WHY: Record<string, string> = {
+  EACCES: "permission denied",
+  EPERM: "operation not permitted",
+  EROFS: "the file system is read-only",
+  ENOSPC: "no space left on the device",
+  EDQUOT: "disk quota exceeded",
+  EIO: "an I/O error",
+  ENOTDIR: "a part of the path is not a directory",
+};
+
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
 /** File-supplied text for a message: no control characters (they could drive the terminal), bounded. */
-function show(text: string): string {
+export function show(text: string): string {
   const clean = sanitize(text);
   return clean.length > 120 ? `${clean.slice(0, 120)}...` : clean;
 }

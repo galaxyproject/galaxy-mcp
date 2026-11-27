@@ -52,6 +52,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `invoke_workflow` takes `allow_tool_state_corrections`, Galaxy's own flag for running a
   workflow whose steps carry upgrade messages, such as a parameter left unset that Galaxy
   fills with its default. It defaults to false, as before (#228).
+- `extract_workflow_from_history` turns jobs already run in a history into a stored
+  workflow (`POST /api/workflows` with `from_history_id`), so a chain of tools can be invoked
+  on other inputs with `invoke_workflow` instead of being re-run sample by sample. `job_ids`
+  are encoded job ids and become the tool steps; `dataset_hids` and `collection_hids` are
+  history item numbers, not ids -- Galaxy's form calls them `dataset_ids` and reads them as
+  hids -- and become the inputs. An encoded id where a hid belongs, or an extraction that
+  names nothing, is refused before anything is sent. The workflow's input slots are in the
+  order the datasets and then the collections are listed in.
 - `get_page` answers with `content_hash`, the hash Galaxy's page assistant uses over the
   editable source. Galaxy neither returns nor checks it; it is computed from the page as
   Galaxy sent it.
@@ -63,12 +71,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `failed`, `cancelled`, `completed`), read from its jobs summary with one more request:
   Galaxy's `state` describes scheduling and reports `completed` for a run whose jobs
   failed. Listings are unchanged.
+- `invoke_workflow(version=...)` runs a specific stored version of the workflow instead of the
+  latest. Versions are numbered from 0, oldest first, which is the `version` that
+  `get_workflow_details` reports and accepts. The input preflight reads that version's slots
+  too, so inputs that are right for an older version aren't refused against the newest one's.
+  A negative version is refused before anything is sent, since Galaxy would read it as a list
+  index counted from the newest end. Without `version` the request is unchanged. A pinned run
+  that fails names the version in its error.
 
 ### Changed
 
 - `import_workflow_from_iwc` posts to `POST /api/workflows`, as the TypeScript server
   does, instead of bioblend's deprecated `/api/workflows/upload`. Galaxy stores the
   workflow the same way.
+- `run_tool` input description aligned with galaxy-ops: both list the batch form for
+  mapping over a collection, `{"input_name": {"batch": true, "values": [{"src": "hdca", "id": "..."}]}}`,
+  `map_over_type` for mapping over sub-collections, and flat `|`-joined keys for nested parameters.
 - `get_history_contents` asks Galaxy for one filtered, sorted window and the count it
   matched, instead of fetching the whole history; a page over the output budget is cut,
   and its `pagination` names where to continue. A failure quotes the contents URL with

@@ -30,11 +30,11 @@ Two differences with that server are recorded once here rather than as a row per
 | --- | --- |
 | `intentional` | `12` |
 | `pending-port` | `0` |
-| `pending-decision` | `3` |
-| `unreviewed-gap` | `53` |
-| **total** | `68` |
+| `pending-decision` | `4` |
+| `unreviewed-gap` | `54` |
+| **total** | `70` |
 
-These are counted apart and ratcheted apart -- at 53 -- because they are not this repository's to close on its own: each one is a rename, an addition or a removal somebody has to agree with galaxyproject/galaxy. Nothing here has been ruled on yet.
+These are counted apart and ratcheted apart -- at 54 -- because they are not this repository's to close on its own: each one is a rename, an addition or a removal somebody has to agree with galaxyproject/galaxy. 16 have been ruled on so far; the rest have not.
 
 ## What each surface is missing
 
@@ -44,7 +44,7 @@ Every tool any surface has, against the surfaces that do not have it. A name her
 
 **Missing from TypeScript** (5): `connect`, `get_invocation_details`, `get_job_status`, `list_file_source_templates`, `list_user_file_sources`
 
-**Missing from Built-in** (10): `get_iwc_workflows`, `get_job_logs`, `get_tool_input_template`, `get_user_tool`, `get_workflow_input_template`, `import_workflow`, `list_jobs`, `recommend_iwc_workflows`, `update_history`, `upload_file`
+**Missing from Built-in** (11): `extract_workflow_from_history`, `get_iwc_workflows`, `get_job_logs`, `get_tool_input_template`, `get_user_tool`, `get_workflow_input_template`, `import_workflow`, `list_jobs`, `recommend_iwc_workflows`, `update_history`, `upload_file`
 
 ## Tools
 
@@ -68,6 +68,7 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `download_dataset` | `file_path` |  | `type=string required=false default=none` | `type=string required=false default=none` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours fetches the dataset and can write it to a path on the caller's disk. The built-in returns no bytes at all: its download_dataset hands back a download URL built from galaxy_infrastructure_url, alongside the dataset's name, extension, size and state. So this row is a real difference in what the two tools do rather than a parameter somebody forgot: a server-side tool can point a client at the bytes, and that is all it can do. |
 | `download_dataset` | `require_ok_state` |  | `type=boolean required=false default=true` | `type=boolean required=false default=true` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Both refuse a dataset that is not ok; only ours can be told not to. AgentOperationsManager.download_dataset returns an error and no download URL whenever the state is anything but `ok`, unconditionally -- so what the built-in is missing is the escape hatch, not the guard. Reconciling this one is a question of whether an agent should ever be able to ask for a dataset that is still running or failed, not of adding a check there. |
 | `download_dataset` | `use_default_filename` |  | `type=boolean required=false default=true` | `type=boolean required=false default=true` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours can name the file after the dataset; Galaxy's has no local file to name. |
+| `extract_workflow_from_history` |  | `5` | `write (tag)` | `write (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here: POST /api/workflows with from_history_id, which turns jobs already run in a history into a stored workflow so one chain of tools can be invoked on every remaining input instead of being re-submitted tool call by tool call. Galaxy's server can run and invoke but has no way to make a workflow out of what an agent has just done by hand. The form's dataset_ids and dataset_collection_ids are hids (workflow/extract.py reads them with int()), which is why the parameters here are dataset_hids and collection_hids; a built-in version would do well to keep that naming. |
 | `get_collection_details` |  | `6` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `get_collection_details` | `max_elements` |  | `type=integer required=false default=100` | `type=integer required=false default=100` | `type=integer required=false default=500` | `vs built-in: default-mismatch` | `unreviewed-gap` | Both cap the elements returned and the caps differ: 100 here, 500 there. |
 | `get_dataset_details` |  | `8` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
@@ -116,13 +117,14 @@ A row per tool, then a row per parameter the surfaces disagree about. `--` means
 | `get_workflow_input_template` |  | `11` | `read (tag)` | `read (hint)` | -- | `vs built-in: missing-builtin-tool` | `unreviewed-gap` | Only here. Same gap before invoke_workflow: no template, no run guide, no input validation on that side. |
 | `import_workflow` |  | `4` | `write (tag)` | `write (hint)` | -- | `vs built-in: missing-builtin-tool` | `intentional` | Only here: POST /api/workflows with a definition the agent holds, .ga or Format2 (as a dict, JSON text or YAML text), and fill_defaults passed through. Galaxy's server can import only from IWC (import_workflow_from_iwc); a workflow an agent wrote, such as a Foundry conversion, has no way in there. |
 | `import_workflow_from_iwc` |  | `4` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
-| `invoke_workflow` |  | `4` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
+| `invoke_workflow` |  | `9` | `write (tag)` | `write (hint)` | `write (mcp default)` |  |  |  |
 | `invoke_workflow` | `allow_tool_state_corrections` |  | `type=boolean required=false default=false` | `type=boolean required=false default=false` | -- | `vs built-in: missing-builtin-param` | `intentional` | The invocations API's own flag, passed through. Without it Galaxy refuses a workflow whose steps carry upgrade messages, which a workflow written outside the editor often does (a parameter left unset that Galaxy fills with its default). |
 | `invoke_workflow` | `inputs` |  | `type=anyOf<object\|string> required=false default=none` | `type=anyOf<object\|string> required=false default=none` | `type=object required=false default=none` | `vs built-in: type-mismatch` | `unreviewed-gap` | Ours also accepts the JSON text of the object, because that is what a CLI flag and some clients send; Galaxy's takes the object only. |
 | `invoke_workflow` | `inputs_by` |  | `type=string required=false default="step_index"` | `type=string required=false default="step_index"` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours lets the caller say how inputs are keyed (step index, step id, name); Galaxy's uses the API default. |
 | `invoke_workflow` | `parameters` |  | -- | -- | `type=object required=false default=none` | `vs built-in: missing-py-param` | `unreviewed-gap` | One parameter map under two names: `parameters` there, `params` here. |
 | `invoke_workflow` | `parameters_normalized` |  | `type=boolean required=false default=false` | `type=boolean required=false default=false` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours passes Galaxy's parameters_normalized flag through; Galaxy's does not expose it. |
 | `invoke_workflow` | `params` |  | `type=anyOf<object\|string> required=false default=none` | `type=anyOf<object\|string> required=false default=none` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | One parameter map under two names: `params` here, `parameters` there. |
+| `invoke_workflow` | `version` |  | `type=integer required=false default=none` | `type=integer required=false default=none` | -- | `vs built-in: missing-builtin-param` | `pending-decision` | Ours can run one stored version of the workflow by number, so a caller can invoke the version a user approved rather than whatever is newest when the call lands; Dannon approved adding it on 2026-10-05. Galaxy's invoke_workflow goes through AgentOperationsManager.invoke_workflow (lib/galaxy/agents/operations.py:548), which builds InvokeWorkflowPayload without a version, so it always runs the latest even though the REST endpoint underneath takes one. Read on both sides; whether to propose the same parameter to galaxyproject/galaxy is the call nobody has made yet. |
 | `list_file_source_templates` |  | `0` | -- | -- | `write (mcp default)` | `vs built-in: missing-py-tool` | `unreviewed-gap` | Only Galaxy's: the catalog of remote file-source plugin templates (Dropbox, S3, Zenodo, ...). Nothing here exposes file sources at all. |
 | `list_history_ids` |  | `8` | `read (tag)` | `read (hint)` | `write (mcp default)` |  |  |  |
 | `list_history_ids` | `offset` |  | `type=integer required=false default=0` | `type=integer required=false default=0` | -- | `vs built-in: missing-builtin-param` | `unreviewed-gap` | Ours pages with limit+offset; Galaxy's takes limit only. |

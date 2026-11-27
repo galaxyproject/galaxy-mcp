@@ -157,6 +157,13 @@ const input = {
     .default(DEFAULT_ALLOW_TOOL_STATE_CORRECTIONS)
     .describe(
       "Let Galaxy fill in or correct tool state it would otherwise refuse with 'Workflow step has upgrade messages', e.g. a parameter a workflow written outside the editor leaves unset",
+  ),
+  version: z
+    .number()
+    .int()
+    .nullish()
+    .describe(
+      "Which stored version of the workflow to run (the latest when omitted). Versions are numbered from 0, oldest first -- the version get_workflow_details reports and accepts. Galaxy refuses a number past the newest with 'Version does not exist'. Must be 0 or greater.",
     ),
 };
 
@@ -169,9 +176,23 @@ type In = {
   inputsBy?: string;
   parametersNormalized?: boolean;
   allowToolStateCorrections?: boolean;
+  version?: number | null;
 };
 
 async function run(i: In, ctx: GalaxyContext): Promise<InvokeWorkflowResult> {
+  // Galaxy indexes its version list with this number, so a negative one would silently
+  // run a version counted from the newest end rather than fail. Refused before anything
+  // else, where the other server refuses it, in get_workflow_input_template's words.
+  if (i.version != null && i.version < 0) {
+    throw new GalaxyValidationError(
+      `version must be 0 or greater (got ${i.version}); 0 is the oldest stored ` +
+        "version and get_workflow_details counts up from there",
+    );
+  }
+  // The schema already refuses a fraction; only a caller that skipped it gets here.
+  if (i.version != null && !Number.isInteger(i.version)) {
+    throw new GalaxyValidationError(`version must be a whole number (got ${i.version})`);
+  }
   const inputs = coerceJsonObject(i.inputs, "inputs");
   const params = coerceJsonObject(i.params, "params");
 
@@ -185,7 +206,13 @@ async function run(i: In, ctx: GalaxyContext): Promise<InvokeWorkflowResult> {
     let slots: Awaited<ReturnType<typeof resolveWorkflowSlots>>["slots"] = [];
     let warnings: unknown[] = [];
     try {
-      const resolved = await resolveWorkflowSlots(ctx, i.workflowId, i.historyId ?? undefined);
+      // The version being run, or inputs right for it are refused against the latest's slots.
+      const resolved = await resolveWorkflowSlots(
+        ctx,
+        i.workflowId,
+        i.historyId ?? undefined,
+        i.version ?? undefined,
+      );
       slots = resolved.slots;
       const mapping = await getDatatypesMapping(ctx);
       const enriched = await enrichSuppliedInputs(ctx, inputs);
@@ -227,6 +254,7 @@ async function run(i: In, ctx: GalaxyContext): Promise<InvokeWorkflowResult> {
     allow_tool_state_corrections: i.allowToolStateCorrections ?? DEFAULT_ALLOW_TOOL_STATE_CORRECTIONS,
   };
   if (historyField != null) body["history"] = historyField;
+  if (i.version != null) body["version"] = i.version;
 
   const { data, error, response } = await ctx.client.POST(
     "/api/workflows/{workflow_id}/invocations",
@@ -258,7 +286,8 @@ export const invokeWorkflowOp: Operation<typeof input, InvokeWorkflowResult> = {
   // data either way.
   project: (_out, i) => ({ message: `Invoked workflow '${i.workflowId}'` }),
   // server.py, invoke_workflow: a bioblend write, with every argument that decides where the
-  // run went in the context.
+  // run went in the context. The version joins it only when one was asked for, so an
+  // unpinned run fails in exactly the words it did before the parameter existed.
   failure: {
     shape: "bioblend-write",
     action: "Invoke workflow",
@@ -267,6 +296,7 @@ export const invokeWorkflowOp: Operation<typeof input, InvokeWorkflowResult> = {
       history_id: i.historyId,
       history_name: i.historyName,
       inputs_by: i.inputsBy ?? "step_index",
+      ...(i.version == null ? {} : { version: i.version }),
     }),
   },
 };

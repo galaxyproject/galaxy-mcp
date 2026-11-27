@@ -54,6 +54,7 @@ from .test_helpers import (
     create_page_fn,
     create_user_tool_fn,
     delete_user_tool_fn,
+    extract_workflow_from_history_fn,
     get_collection_details_fn,
     get_dataset_details_fn,
     get_histories_fn,
@@ -123,6 +124,7 @@ def route(
     body: Any,
     *,
     query: dict[str, str] | None = None,
+    json_body: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
     status: int = 200,
     method: str = "GET",
@@ -132,6 +134,12 @@ def route(
 
     ``query`` is only set where a case needs two answers from one path; a route that
     declares none answers any query on that path.
+
+    ``json_body`` narrows a write the same way: every key it names has to be in the
+    JSON request body with that value, and keys it does not name are ignored. It is
+    for a case that has to prove an argument reached the payload, where the two sides
+    otherwise send bodies that differ in fields nobody is checking. Left out of the
+    route entirely when unset, so the tables that never needed it read as before.
 
     ``body_text`` serves those exact bytes instead of a JSON rendering of ``body``, and
     is what every failure route uses. It has to: a failure sentence quotes the reply
@@ -145,6 +153,7 @@ def route(
         "method": method,
         "path": path,
         "query": query or {},
+        **({"json": json_body} if json_body is not None else {}),
         "status": status,
         "headers": headers or {},
         # One or the other, never both: a route whose bytes matter says so, and a reader
@@ -156,6 +165,38 @@ def route(
 # Galaxy 26.1, for the two tools that refuse anything older. Both surfaces ask
 # /api/version before they run one.
 VERSION_ROUTE = route("/api/version", {"version_major": "26.1", "version_minor": "1"})
+
+
+def _same_json(a: Any, b: Any) -> bool:
+    # Python's == says True == 1; the TypeScript replay's isDeepStrictEqual
+    # doesn't, so compare the way JSON (and JavaScript) sees the values.
+    if isinstance(a, bool) or isinstance(b, bool):
+        return type(a) is type(b) and a == b
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_same_json(a[k], b[k]) for k in a)
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_same_json(x, y) for x, y in zip(a, b, strict=True))
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return a == b
+    return type(a) is type(b) and a == b
+
+
+def _json_body_matcher(expected: dict[str, Any]) -> Callable[[Any], tuple[bool, str]]:
+    """Require each key in ``expected`` in the request's JSON body, as the TS replay does."""
+
+    def match(request: Any) -> tuple[bool, str]:
+        try:
+            sent = json.loads(request.body or b"")
+        except ValueError:
+            return False, "request body is not JSON"
+        if not isinstance(sent, dict):
+            return False, "request body is not a JSON object"
+        for key, value in expected.items():
+            if key not in sent or not _same_json(sent[key], value):
+                return False, f"body {key!r} is {sent.get(key)!r}, wanted {value!r}"
+        return True, ""
+
+    return match
 
 
 @dataclass
@@ -3778,6 +3819,104 @@ def invoke_workflow_cases(add: AddCase) -> None:
             invocations_route,
         ],
     )
+    # A stored version by number. Both routes below answer only when `version` reaches
+    # what Galaxy is sent, so a surface that drops it on the way fails the case rather
+    # than quietly running the latest.
+    add(
+        "invoke_workflow",
+        "with_version",
+        "an earlier stored version run by number: the POST answers only when version is in it",
+        {"workflow_id": "wf000001", "history_id": "h0000", "version": 1},
+        lambda: invoke_workflow_fn("wf000001", history_id="h0000", version=1),
+        [
+            route(
+                "/api/workflows/wf000001/invocations",
+                invocation,
+                method="POST",
+                json_body={"version": 1},
+            )
+        ],
+    )
+    # 0 is the oldest version and also falsy, the classic way an optional index gets
+    # dropped on its way into a payload.
+    add(
+        "invoke_workflow",
+        "oldest_version",
+        "version 0, the oldest stored one: the POST answers only when the 0 is in it",
+        {"workflow_id": "wf000001", "history_id": "h0000", "version": 0},
+        lambda: invoke_workflow_fn("wf000001", history_id="h0000", version=0),
+        [
+            route(
+                "/api/workflows/wf000001/invocations",
+                invocation,
+                method="POST",
+                json_body={"version": 0},
+            )
+        ],
+    )
+    # The preflight has to check the version being run. The latest one here takes only
+    # BAM, so reading its slots instead would refuse the FASTQ before anything is posted.
+    latest_run_model = {
+        **run_model_for_invoke,
+        "steps": {
+            "0": {
+                **run_model_for_invoke["steps"]["0"],
+                "inputs": [{"extensions": ["bam"], "optional": False}],
+            }
+        },
+    }
+    add(
+        "invoke_workflow",
+        "inputs_checked_against_that_version",
+        "the preflight reads the asked-for version's run model, which takes the FASTQ",
+        {
+            "workflow_id": "wf000001",
+            "history_id": "h0000",
+            "inputs": {"0": {"id": "d0000001", "src": "hda"}},
+            "version": 1,
+        },
+        lambda: invoke_workflow_fn(
+            "wf000001",
+            inputs={"0": {"id": "d0000001", "src": "hda"}},
+            history_id="h0000",
+            version=1,
+        ),
+        [
+            route("/api/workflows/wf000001/download", latest_run_model, query={"style": "run"}),
+            route(
+                "/api/workflows/wf000001/download",
+                run_model_for_invoke,
+                query={"style": "run", "version": "1"},
+            ),
+            route(
+                "/api/datatypes/types_and_mapping",
+                {
+                    "datatypes_mapping": {
+                        "ext_to_class_name": {
+                            "fastqsanger": "galaxy.datatypes.sequence.FastqSanger",
+                            "bam": "galaxy.datatypes.binary.Bam",
+                        },
+                        "class_to_classes": {
+                            "galaxy.datatypes.sequence.FastqSanger": {
+                                "galaxy.datatypes.sequence.FastqSanger": True
+                            },
+                            "galaxy.datatypes.binary.Bam": {"galaxy.datatypes.binary.Bam": True},
+                        },
+                    }
+                },
+            ),
+            route(
+                "/api/datasets/d0000001",
+                {"id": "d0000001", "name": "reads.fastqsanger", "extension": "fastqsanger"},
+            ),
+            route(
+                "/api/workflows/wf000001/invocations",
+                invocation,
+                method="POST",
+                json_body={"version": 1},
+            ),
+        ],
+    )
     add(
         "invoke_workflow",
         "batch_answers_with_a_list",
@@ -3921,6 +4060,45 @@ def invocation_mutation_cases(add: AddCase) -> None:
                 },
             ),
         ],
+    )
+    # StoredWorkflow.to_dict("collection") plus the url the controller adds: what Galaxy
+    # answers POST /api/workflows with when the payload names from_history_id. No step
+    # count is in it.
+    extracted = {
+        "model_class": "StoredWorkflow",
+        "id": "wf00000e",
+        "latest_workflow_id": "lw00000e",
+        "name": "Per-sample QC",
+        "create_time": "2026-01-02T03:04:05.000000",
+        "update_time": "2026-01-02T03:04:05.000000",
+        "published": False,
+        "importable": False,
+        "deleted": False,
+        "hidden": False,
+        "latest_workflow_uuid": "0d1c7b9c-5a19-4a8e-9f8e-2d4c6c6f3f11",
+        "creator_deleted": False,
+        "url": "/api/workflows/wf00000e",
+    }
+    add(
+        "extract_workflow_from_history",
+        "jobs_and_inputs",
+        "two jobs, a dataset and a collection named by hid, one of them as the digits a "
+        "command line hands over",
+        {
+            "history_id": "h0001",
+            "workflow_name": "Per-sample QC",
+            "job_ids": ["j0000001", "j0000002"],
+            "dataset_hids": [3, "4"],
+            "collection_hids": [12],
+        },
+        lambda: extract_workflow_from_history_fn(
+            "h0001",
+            "Per-sample QC",
+            job_ids=["j0000001", "j0000002"],
+            dataset_hids=[3, "4"],
+            collection_hids=[12],
+        ),
+        [route("/api/workflows", extracted, method="POST")],
     )
 
 
@@ -4151,6 +4329,8 @@ INVOCATION_MISSING = (
 )
 # What StoredWorkflow.get_internal_version raises for an index past the last stored one.
 NO_SUCH_VERSION = '{"err_msg": "Version does not exist", "err_code": 400008}'
+# workflow/extract.py, extract_steps: a RequestParameterInvalidException, so a 400.
+NOT_A_COLLECTION = '{"err_msg": "hid 12 does not appear to be a collection", "err_code": 400008}'
 # What GET /api/tools/{id} says about an id the toolbox has at no version (v26.1.1
 # services/tools.py _get_tool). A version it lacks for an id it has is not an error
 # there: the newest installed version is served instead, and the refusal is ours.
@@ -4168,9 +4348,12 @@ def fail(
     *,
     method: str = "GET",
     query: dict[str, str] | None = None,
+    json_body: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """A route that answers with an error, byte for byte."""
-    return route(path, None, status=status, method=method, query=query, body_text=body)
+    return route(
+        path, None, status=status, method=method, query=query, json_body=json_body, body_text=body
+    )
 
 
 def failure_cases(add: AddFailure) -> None:
@@ -4465,6 +4648,25 @@ def more_http_failure_cases(add: AddFailure) -> None:
         [fail("/api/dataset_collections/c0000403", 403, DENIED)],
     )
     add(
+        "extract_workflow_from_history",
+        "hid_is_not_a_collection",
+        "Galaxy's own 400 for what was named, quoted by format_error with the history and the name",
+        {
+            "history_id": "h0001",
+            "workflow_name": "QC",
+            "job_ids": ["j0000001"],
+            "collection_hids": [12],
+        },
+        [fail("/api/workflows", 400, NOT_A_COLLECTION, method="POST")],
+    )
+    add(
+        "extract_workflow_from_history",
+        "history_not_accessible",
+        "and a status that is not about what was named",
+        {"history_id": "h0000403", "workflow_name": "QC", "job_ids": ["j0000001"]},
+        [fail("/api/workflows", 403, DENIED, method="POST")],
+    )
+    add(
         "create_history",
         "refused_by_galaxy",
         "the one tool with no try block, so bioblend's text is the whole sentence",
@@ -4514,6 +4716,24 @@ def more_http_failure_cases(add: AddFailure) -> None:
         "every argument that decides where the run went is in the context",
         {"workflow_id": "w0000400", "history_id": "h0001"},
         [fail("/api/workflows/w0000400/invocations", 400, DENIED, method="POST")],
+    )
+    # A stored version the workflow does not have is Galaxy's 400 on the POST, and the
+    # context names the version asked for -- only when one was, as the template's does.
+    # No run-model route answers, so the Python-only slot hint stays empty.
+    add(
+        "invoke_workflow",
+        "version_out_of_range",
+        "a stored version Galaxy does not have, refused on the POST; the context names it",
+        {"workflow_id": "wf000001", "history_id": "h0000", "version": 7},
+        [
+            fail(
+                "/api/workflows/wf000001/invocations",
+                400,
+                NO_SUCH_VERSION,
+                method="POST",
+                json_body={"version": 7},
+            )
+        ],
     )
     add(
         "create_user_tool",
@@ -4960,6 +5180,20 @@ def refusal_cases(add: AddFailure) -> None:
     no context -- so they are the ones a port has to get exactly right on its own.
     """
     add(
+        "extract_workflow_from_history",
+        "nothing_named",
+        "an extraction naming no job and no input, which Galaxy would store as an empty workflow",
+        {"history_id": "h0001", "workflow_name": "empty"},
+        [],
+    )
+    add(
+        "extract_workflow_from_history",
+        "encoded_id_where_a_hid_belongs",
+        "Galaxy's dataset_ids are hids; an encoded id there is refused here, with the value quoted",
+        {"history_id": "h0001", "workflow_name": "QC", "dataset_hids": ["f2db41e1fa331b3e"]},
+        [],
+    )
+    add(
         "list_workflows",
         "limit_above_the_ceiling",
         "the page ceiling, with the advice to use offset that a pageable tool gets",
@@ -4985,6 +5219,13 @@ def refusal_cases(add: AddFailure) -> None:
         "negative_offset",
         "the offset floor",
         {"query": "cat", "offset": -1},
+        [],
+    )
+    add(
+        "invoke_workflow",
+        "negative_version",
+        "a version below 0, which Galaxy would read as counted from the newest end",
+        {"workflow_id": "wf000001", "version": -1},
         [],
     )
     add(
@@ -5214,6 +5455,11 @@ def _clear_recommendation_cache() -> None:
         mulled_recommend._cache.clear()
 
 
+def specificity(spec: dict[str, Any]) -> int:
+    """Sort key putting the route that names the most of a request first."""
+    return -(len(spec["query"]) + len(spec.get("json") or {}))
+
+
 def run_case(case: Case, session: LiveMCPSession | None = None) -> GalaxyResult | dict[str, Any]:
     """Answer this case's requests from its table and return what the tool answered.
 
@@ -5234,18 +5480,25 @@ def run_case(case: Case, session: LiveMCPSession | None = None) -> GalaxyResult 
         with responses.RequestsMock(assert_all_requests_are_fired=False) as mock:
             # Most specific first: `responses` takes the first registration that matches,
             # and the TypeScript replay picks the same one by the same rule.
-            for spec in sorted(case.routes, key=lambda r: -len(r["query"])):
+            for spec in sorted(case.routes, key=specificity):
                 body = spec.get("bodyText")
                 mock.add(
                     method=spec["method"],
                     url=absolute(spec["path"]),
                     status=spec["status"],
                     headers=spec["headers"],
-                    match=(
-                        [responses.matchers.query_param_matcher(spec["query"], strict_match=False)]
-                        if spec["query"]
-                        else []
-                    ),
+                    match=[
+                        *(
+                            [
+                                responses.matchers.query_param_matcher(
+                                    spec["query"], strict_match=False
+                                )
+                            ]
+                            if spec["query"]
+                            else []
+                        ),
+                        *([_json_body_matcher(spec["json"])] if spec.get("json") else []),
+                    ],
                     **(
                         {"body": body, "content_type": "application/json"}
                         if body is not None
@@ -5323,6 +5576,14 @@ def replies_json_for(case: Case) -> str:
                     f"`{REGENERATE_COMMAND}`. Matched by method and path; where a route "
                     "declares a query, every declared parameter must match, and the most "
                     "specific matching route wins."
+                    # Said only where it applies, so the tables without one read as before.
+                    + (
+                        " Where a route declares json, the request's JSON body has to carry "
+                        "each of those keys with that value, and a declared key counts "
+                        "toward specificity like a query parameter."
+                        if any(spec.get("json") for spec in case.routes)
+                        else ""
+                    )
                 ),
                 "baseUrl": GALAXY_BASE_URL,
                 "routes": case.routes,
