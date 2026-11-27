@@ -837,9 +837,10 @@ describe("auth, end to end", () => {
   });
 
   // The command tests abort an `AbortController`; only a real process shows that a real SIGINT
-  // reaches it. 130 is 128 plus SIGINT's 2, the shell's convention for a Ctrl-C.
+  // reaches it. 130 is 128 plus SIGINT's 2, the shell's convention for a Ctrl-C. Not on Windows:
+  // there `child.kill("SIGINT")` ends the process outright, so no handler can run.
   describe("Ctrl-C", () => {
-    test('aborts the wait for approval: exit 130, "Cancelled.", nothing stored, and the process is gone', async ({
+    test.skipIf(process.platform === "win32")('aborts the wait for approval: exit 130, "Cancelled.", nothing stored, and the process is gone', async ({
       galaxy,
       run,
       configDir,
@@ -906,7 +907,7 @@ describe("auth, end to end", () => {
     // A Ctrl-C after approval must still take the token back (B1): the revocation cannot share the
     // login's signal. The fake never answers `whoami`, so the cancel lands while it is out, with the
     // token already issued.
-    test("after approval revokes the token it was given: exit 130, the token no longer works, nothing stored", async ({
+    test.skipIf(process.platform === "win32")("after approval revokes the token it was given: exit 130, the token no longer works, nothing stored", async ({
       galaxy,
       run,
       configDir,
