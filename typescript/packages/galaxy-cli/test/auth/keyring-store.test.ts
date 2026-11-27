@@ -129,6 +129,49 @@ describe("KeyringStore retries a session handshake flake once", () => {
   });
 });
 
+describe("KeyringStore reads back a write whose reply was lost", () => {
+  const noReply =
+    "Platform failure: DBus error: Did not receive a reply. Possible causes include: the reply timeout expired";
+  /** A backend whose `set` stores the secret (or not) and then fails as if the reply was lost. */
+  const late = (stores: boolean) => {
+    const kr = new FakeKeyring();
+    kr.set = async (service, account, secret) => {
+      kr.calls.push("set");
+      if (stores) kr.data.set(`${service}|${account}`, secret);
+      throw new Error(noReply);
+    };
+    return kr;
+  };
+  it("treats the write as done when the keyring holds the new secret", async () => {
+    const kr = late(true);
+    await new KeyringStore(kr, 50).set(baseUrl, "alice", "NEW");
+    expect(kr.calls).toEqual(["set", "get"]);
+    expect(kr.data.get(`gxy:${baseUrl}|alice`)).toBe("NEW");
+  });
+  it("reports the write's error when the secret is not there", async () => {
+    const kr = late(false);
+    await expect(new KeyringStore(kr, 50).set(baseUrl, "alice", "NEW")).rejects.toThrow(
+      /system keyring failed a write.*Did not receive a reply/,
+    );
+    expect(kr.calls).toEqual(["set", "get"]);
+  });
+  it("reports the write's error when the keyring still holds an older secret", async () => {
+    const kr = late(false);
+    kr.data.set(`gxy:${baseUrl}|alice`, "OLD");
+    await expect(new KeyringStore(kr, 50).set(baseUrl, "alice", "NEW")).rejects.toThrow(
+      /Did not receive a reply/,
+    );
+  });
+  it("does not read back after any other write error", async () => {
+    const kr = new FakeKeyring();
+    kr.mode = "throw";
+    await expect(new KeyringStore(kr, 50).set(baseUrl, "alice", "NEW")).rejects.toThrow(
+      KeyringUnavailableError,
+    );
+    expect(kr.calls).not.toContain("get");
+  });
+});
+
 // A person at the terminal can answer a keyring unlock prompt, which blocks the call until they
 // type; 5 s would kill it. The wait is longer then, and the person is told once it is a wait.
 describe("KeyringStore with a person at the terminal", () => {
